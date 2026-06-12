@@ -20,6 +20,7 @@ export class Rails {
     this.sleeperGeom = new THREE.BoxGeometry(1.9, 0.12, 0.5);
     this.railMat = new THREE.MeshLambertMaterial({ color: 0x787c84 });
     this.sleeperMat = new THREE.MeshLambertMaterial({ color: 0x4a3a2c });
+    this.skirtMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   }
 
   // nearest chainage to a point — coarse stride scan, it's only for t' window
@@ -82,6 +83,49 @@ export class Rails {
     this.scene.add(rails);
     this.meshes.push(rails);
 
+    // earthwork skirts: smooth banks frae t' ballast edge down to t' land
+    // (embankments), or rock faces up to t' lip (cuttings) — no stepped cubes
+    {
+      const pos = [], col = [];
+      const earth = [0.38, 0.34, 0.26], stone = [0.42, 0.42, 0.40];
+      const vert = (p, c) => { pos.push(p[0], p[1], p[2]); col.push(c[0], c[1], c[2]); };
+      const edgePoint = (pt, nx, nz, side) => {
+        const topX = pt.x + nx * side * 2.3, topZ = pt.z + nz * side * 2.3;
+        const topY = pt.deck + 0.95;
+        const gh = this.geo.height(Math.round(topX + nx * side * 2), Math.round(topZ + nz * side * 2)) + 1.02;
+        const dh = topY - gh;
+        if (Math.abs(dh) < 0.9) return null;
+        const run = Math.min(10, Math.abs(dh)); // ~45 degrees, capped
+        return {
+          top: [topX, topY, topZ],
+          foot: [topX + nx * side * run, gh, topZ + nz * side * run],
+          c: dh > 0 ? earth : stone,
+        };
+      };
+      for (let i = i0; i < i1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        const ds = Math.max(b.s - a.s, 0.001);
+        const nx = (b.z - a.z) / ds, nz = -(b.x - a.x) / ds; // unit-ish perp
+        for (const side of [-1, 1]) {
+          const ea = edgePoint(a, nx, nz, side), eb = edgePoint(b, nx, nz, side);
+          if (!ea || !eb) continue;
+          // two triangles: top-a, top-b, foot-b / top-a, foot-b, foot-a
+          vert(ea.top, ea.c); vert(eb.top, eb.c); vert(eb.foot, eb.c);
+          vert(ea.top, ea.c); vert(eb.foot, eb.c); vert(ea.foot, ea.c);
+        }
+      }
+      if (pos.length) {
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        geom.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+        geom.computeVertexNormals();
+        const skirt = new THREE.Mesh(geom, this.skirtMat);
+        skirt.userData.ownGeometry = true;
+        this.scene.add(skirt);
+        this.meshes.push(skirt);
+      }
+    }
+
     const nSleep = Math.floor((s1 - s0) / SLEEPER_EVERY);
     const sleepers = new THREE.InstancedMesh(this.sleeperGeom, this.sleeperMat, nSleep);
     let si = 0;
@@ -101,7 +145,8 @@ export class Rails {
   clear() {
     for (const mesh of this.meshes) {
       this.scene.remove(mesh);
-      mesh.dispose();
+      if (mesh.userData.ownGeometry) mesh.geometry.dispose();
+      else if (mesh.dispose) mesh.dispose();
     }
     this.meshes = [];
     this.center = null;
@@ -113,5 +158,6 @@ export class Rails {
     this.sleeperGeom.dispose();
     this.railMat.dispose();
     this.sleeperMat.dispose();
+    this.skirtMat.dispose();
   }
 }
