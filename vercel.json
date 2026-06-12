@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/brain/:path*",
+      "destination": "https://moorstead.sovren.xyz/brain/:path*"
+    },
+    {
+      "source": "/dash/:path*",
+      "destination": "https://moorstead.sovren.xyz/dash/:path*"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ]
+}

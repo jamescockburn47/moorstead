@@ -1,0 +1,179 @@
+// Chunk meshing: culled faces with per-vertex AO; opaque, cutout and liquid passes.
+import * as THREE from 'three';
+import { B, BLOCKS, CHUNK, HEIGHT, isOpaque, isLiquid, isCutout } from './defs.js';
+import { tileUV, buildAtlas } from './textures.js';
+
+let materials = null;
+
+export function initMaterials() {
+  const atlas = buildAtlas();
+  materials = {
+    opaque: new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true }),
+    cutout: new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }),
+    liquid: new THREE.MeshLambertMaterial({
+      map: atlas, vertexColors: true, transparent: true, opacity: 0.78,
+      depthWrite: false, side: THREE.DoubleSide,
+    }),
+  };
+  return atlas;
+}
+
+// Face tables (threejs voxel convention): two triangles 0,1,2 / 2,1,3
+const FACES = [
+  { dir: [-1, 0, 0], corners: [[0, 1, 0, 0, 1], [0, 0, 0, 0, 0], [0, 1, 1, 1, 1], [0, 0, 1, 1, 0]] },
+  { dir: [1, 0, 0], corners: [[1, 1, 1, 0, 1], [1, 0, 1, 0, 0], [1, 1, 0, 1, 1], [1, 0, 0, 1, 0]] },
+  { dir: [0, -1, 0], corners: [[1, 0, 1, 1, 0], [0, 0, 1, 0, 0], [1, 0, 0, 1, 1], [0, 0, 0, 0, 1]] },
+  { dir: [0, 1, 0], corners: [[0, 1, 1, 1, 1], [1, 1, 1, 0, 1], [0, 1, 0, 1, 0], [1, 1, 0, 0, 0]] },
+  { dir: [0, 0, -1], corners: [[1, 0, 0, 0, 0], [0, 0, 0, 1, 0], [1, 1, 0, 0, 1], [0, 1, 0, 1, 1]] },
+  { dir: [0, 0, 1], corners: [[0, 0, 1, 0, 0], [1, 0, 1, 1, 0], [0, 1, 1, 0, 1], [1, 1, 1, 1, 1]] },
+];
+
+const AO_LEVELS = [0.42, 0.62, 0.8, 1.0];
+const FACE_LIGHT = [0.78, 0.78, 0.55, 1.0, 0.68, 0.68]; // directional baked shading
+
+function faceTile(def, faceIdx, x, z) {
+  if (faceIdx === 3) return def.tex.t;
+  if (faceIdx === 2) return def.tex.b;
+  // t' range shows a fire on one side
+  if (def.sFront !== undefined && faceIdx === 5) return def.sFront;
+  return def.tex.s;
+}
+
+class GeoBuilder {
+  constructor() { this.pos = []; this.norm = []; this.uv = []; this.col = []; this.idx = []; this.n = 0; }
+  quad(corners, normal, uvRect, aos, light) {
+    const [u0, v0, u1, v1] = uvRect;
+    for (const c of corners) {
+      this.pos.push(c[0], c[1], c[2]);
+      this.norm.push(normal[0], normal[1], normal[2]);
+      this.uv.push(u0 + (u1 - u0) * c[3], v0 + (v1 - v0) * c[4]);
+    }
+    for (let i = 0; i < 4; i++) {
+      const b = AO_LEVELS[aos[i]] * light;
+      this.col.push(b, b, b);
+    }
+    // flip quad to avoid AO anisotropy artefacts
+    if (aos[0] + aos[3] > aos[1] + aos[2]) {
+      this.idx.push(this.n, this.n + 1, this.n + 2, this.n + 2, this.n + 1, this.n + 3);
+    } else {
+      this.idx.push(this.n + 1, this.n + 3, this.n, this.n, this.n + 3, this.n + 2);
+    }
+    this.n += 4;
+  }
+  build(material) {
+    if (this.n === 0) return null;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(this.norm, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
+    g.setIndex(this.idx);
+    g.computeBoundingSphere();
+    return new THREE.Mesh(g, material);
+  }
+}
+
+export function buildChunkMeshes(world, chunk) {
+  const { cx, cz, data } = chunk;
+  const x0 = cx * CHUNK, z0 = cz * CHUNK;
+  const solid = new GeoBuilder();
+  const cutout = new GeoBuilder();
+  const liquid = new GeoBuilder();
+
+  const get = (x, y, z) => {
+    if (y < 0) return B.BEDROCK;
+    if (y >= HEIGHT) return B.AIR;
+    if (x >= 0 && x < CHUNK && z >= 0 && z < CHUNK) {
+      return data[x + z * CHUNK + y * CHUNK * CHUNK];
+    }
+    return world.getBlock(x0 + x, y, z0 + z);
+  };
+  const occludes = (x, y, z) => isOpaque(get(x, y, z));
+
+  for (let y = 0; y < HEIGHT; y++) {
+    for (let lz = 0; lz < CHUNK; lz++) {
+      for (let lx = 0; lx < CHUNK; lx++) {
+        const id = get(lx, y, lz);
+        if (id === B.AIR) continue;
+        const def = BLOCKS[id];
+
+        if (isCutout(id)) {
+          // cross quads
+          const uvr = tileUV(def.tex.t);
+          const [u0, v0, u1, v1] = uvr;
+          const j = 0.5; // centre
+          for (const [ax, az, bx, bz] of [[0.15, 0.15, 0.85, 0.85], [0.85, 0.15, 0.15, 0.85]]) {
+            cutout.quad(
+              [[lx + ax, y, lz + az, 0, 0], [lx + bx, y, lz + bz, 1, 0],
+               [lx + ax, y + 1, lz + az, 0, 1], [lx + bx, y + 1, lz + bz, 1, 1]],
+              [0, 1, 0], [u0, v0, u1, v1], [3, 3, 3, 3], 0.95
+            );
+          }
+          continue;
+        }
+
+        if (isLiquid(id)) {
+          const uvr = tileUV(def.tex.t);
+          const drop = 0.12;
+          for (let f = 0; f < FACES.length; f++) {
+            const { dir, corners } = FACES[f];
+            const nb = get(lx + dir[0], y + dir[1], lz + dir[2]);
+            if (nb === id || isOpaque(nb)) continue;
+            if (isLiquid(nb)) continue;
+            const cs = corners.map(c => {
+              const yy = (c[1] === 1) ? y + 1 - drop : y;
+              return [lx + c[0], yy, lz + c[2], c[3], c[4]];
+            });
+            liquid.quad(cs, dir, uvr, [3, 3, 3, 3], FACE_LIGHT[f]);
+          }
+          continue;
+        }
+
+        // solid block faces
+        for (let f = 0; f < FACES.length; f++) {
+          const { dir, corners } = FACES[f];
+          const nb = get(lx + dir[0], y + dir[1], lz + dir[2]);
+          if (isOpaque(nb)) continue;
+          const uvr = tileUV(faceTile(def, f, x0 + lx, z0 + lz));
+          // per-vertex AO
+          const aos = [];
+          const axis = dir[0] !== 0 ? 0 : dir[1] !== 0 ? 1 : 2;
+          const t1 = axis === 0 ? 1 : 0;
+          const t2 = axis === 2 ? 1 : 2;
+          for (const c of corners) {
+            const s1o = c[t1] === 1 ? 1 : -1;
+            const s2o = c[t2] === 1 ? 1 : -1;
+            const np = [lx + dir[0], y + dir[1], lz + dir[2]];
+            const p1 = [...np]; p1[t1] += s1o;
+            const p2 = [...np]; p2[t2] += s2o;
+            const pc = [...np]; pc[t1] += s1o; pc[t2] += s2o;
+            const s1 = occludes(p1[0], p1[1], p1[2]) ? 1 : 0;
+            const s2 = occludes(p2[0], p2[1], p2[2]) ? 1 : 0;
+            const co = occludes(pc[0], pc[1], pc[2]) ? 1 : 0;
+            aos.push(s1 && s2 ? 0 : 3 - (s1 + s2 + co));
+          }
+          solid.quad(corners.map(c => [lx + c[0], y + c[1], lz + c[2], c[3], c[4]]), dir, uvr, aos, FACE_LIGHT[f]);
+        }
+      }
+    }
+  }
+
+  const meshes = [];
+  const ms = solid.build(materials.opaque);
+  const mc = cutout.build(materials.cutout);
+  const ml = liquid.build(materials.liquid);
+  for (const m of [ms, mc, ml]) {
+    if (!m) continue;
+    m.position.set(x0, 0, z0);
+    meshes.push(m);
+  }
+  if (ml) ml.renderOrder = 2;
+  return meshes;
+}
+
+export function disposeChunkMeshes(scene, meshes) {
+  for (const m of meshes) {
+    scene.remove(m);
+    m.geometry.dispose();
+  }
+}

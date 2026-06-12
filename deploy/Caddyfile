@@ -1,0 +1,18 @@
+# Moorstead web front: static game + brain proxy on one origin (port 8080).
+# cloudflared (or your LAN) points at this. The brain itself stays bound to
+# 127.0.0.1:8000 and is never exposed directly.
+:8080 {
+	encode gzip
+
+	# /brain/* -> the village brain (prefix stripped, matching the game's client)
+	handle_path /brain/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	# everything else -> the built game
+	handle {
+		root * /opt/moorstead/game
+		try_files {path} /index.html
+		file_server
+	}
+}
