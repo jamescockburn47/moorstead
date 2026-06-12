@@ -43,9 +43,10 @@ export const I = {
   HOLY_WATER: 95, WOODEN_STAKE: 96, HOLY_STAKE: 97, DRACULA_JOURNAL: 98,
 };
 
-// Parish wardens: dash account ids wi' admin powers in t' client
-// (client-side only — t' game is client-authoritative owt road)
-export const ADMIN_ACCTS = ['beck-cross-53'];
+// Parish wardens: SHA-256 o' t' dash account id, never t' id itsen —
+// account ids double as login codes, so plaintext in a public repo would
+// hand out t' keys. (Client-side only owt road — t' game is client-authoritative.)
+export const ADMIN_HASHES = ['cfc79a30f3bbe268ecc0395fee178ce8afc6806b111cd253b3f68c845e2d73a8'];
 
 // kind: 'solid' | 'cutout' (cross plants) | 'liquid' | 'air'
 // tex: {t, s, b} tile ids; hard: seconds to break by hand; tool: best tool

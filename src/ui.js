@@ -237,6 +237,7 @@ export class UI {
 <b>1&ndash;9 / mouse wheel</b> Pick hotbar slot<br>
 <b>E</b> Thi pockets &mdash; inventory &amp; crafting<br>
 <b>Q</b> Venture journal (same as t&rsquo; notice board)<br>
+<b>T</b> Village chat on t&rsquo; Shared Moor (carries ~60m)<br>
 <b>M</b> Mute sound<br>
 <b>Esc</b> Pause / close a screen<br>
 <b>Space &times;2</b> Toggle flying (creative mode only)
@@ -253,6 +254,7 @@ export class UI {
 <li><b>Neet</b> belongs to t&rsquo; <b>barghest</b> (great black hound, eyes like coals) and <b>boggarts</b> (little horrors frae t&rsquo; mires). They walk frae dusk till dawn, out on t&rsquo; open moor only &mdash; <b>Moorstead ground is hallowed; nowt dark sets foot on it</b>. Tha can sprint faster than a barghest. Just.</li>
 <li><b>Dark things fear flame.</b> Craft <b>torches</b> (1 stick + 1 coal = 4, no bench needed): a <b>placed</b> torch or lantern wards off all but t&rsquo; worst within ~9 blocks an&rsquo; stops owt rising nearby &mdash; plant a ring o&rsquo; them an&rsquo; camp anywhere. A torch <b>in thi hand</b> lights thi way an&rsquo; sees off boggarts, but a barghest&rsquo;s bolder than that.</li>
 <li><b>Caught out at neet?</b> Stone <b>moor shelters</b> stand scattered across t&rsquo; tops, lantern-lit an&rsquo; safe. <b>Right-click any waymark signpost</b> &mdash; it&rsquo;ll tell thee t&rsquo; bearing an&rsquo; distance to t&rsquo; nearest shelter an&rsquo; back to Moorstead. Tha can craft thi own signposts (3 planks + 1 stick) to mark routes.</li>
+<li><b>T&rsquo; GREAT FOG.</b> Every three days or so, a fog like wet wool comes down on t&rsquo; <b>high tops</b> for half a day. Tha can&rsquo;t see five yards, an&rsquo; t&rsquo; <b>map an&rsquo; bearings go wi&rsquo; it</b> &mdash; no minimap, no coordinates, nowt. Villages, t&rsquo; coast an&rsquo; t&rsquo; low dales stay clear. If it catches thee on t&rsquo; tops: <b>stop</b>. Find a waymark stone or a wall an&rsquo; follow it; signposts still know t&rsquo; way to shelter if tha stumbles on one. Or place torches as breadcrumbs an&rsquo; sit it out &mdash; it lifts as sudden as it falls.</li>
 <li><b>Dying</b> loses thee nowt &mdash; tha wakes on t&rsquo; green wi&rsquo; thi pockets intact.</li>
 </ul>
 <h3>Tools an&rsquo; digging</h3>
@@ -263,8 +265,10 @@ export class UI {
 </ul>`,
 
       'T\u2019 Village': `
-<h3>T&rsquo; folk o&rsquo; Moorstead</h3>
+<h3>T&rsquo; folk o&rsquo; t&rsquo; moors</h3>
 <ul>
+<li><b>Every settlement is lived in</b>: t&rsquo; family at Moorstead, t&rsquo; stationmaster an&rsquo; shepherdess at Goathland, t&rsquo; innkeeper an&rsquo; owd miner at Rosedale Abbey, fisherfolk at Staithes, t&rsquo; vicar an&rsquo; market trader at Pickering, engine crew at Grosmont, an&rsquo; t&rsquo; fishwife an&rsquo; jet carver at Whitby. Each knows their own patch best.</li>
+<li><b>Of an evening they head indoors</b> &mdash; tha&rsquo;ll see &rsquo;em walk to their own door at dusk. Follow &rsquo;em in an&rsquo; <b>right-click for a natter by t&rsquo; lantern</b>; they&rsquo;re home all neet an&rsquo; out again of a morning.</li>
 <li><b>Right-click a villager</b> to talk &mdash; proper talk, they remember thee between visits, and word travels round t&rsquo; family. Tell &rsquo;em things, ask &rsquo;em things. They know t&rsquo; moors better than thee.</li>
 <li><b>Friendship</b> grows wi&rsquo; every chat: Stranger &rarr; Acquaintance &rarr; Friendly &rarr; Friend &rarr; Close friend. As folk warm to thee they <b>press presents into thi hands</b> &mdash; t&rsquo; closer t&rsquo; friend, t&rsquo; finer t&rsquo; gift.</li>
 <li><b>Give</b> hands ower whatever tha&rsquo;s holding. Folk have favourites &mdash; Glinda&rsquo;s partial to heather, t&rsquo; kids like bilberries. A good gift builds trust faster than talk.</li>
@@ -288,6 +292,17 @@ export class UI {
 <p>Summat&rsquo;s been taking sheep in t&rsquo; night. <b>T&rsquo; Hound o&rsquo; the Mires</b> runs five chapters across t&rsquo; real landmarks &mdash; starred &#9733; in thi journal. It starts wi&rsquo; Farmer James, and it ends on a crooked hill, at neet, wi&rsquo; summat as has eyes like coals. Higher chapters need higher standing &mdash; t&rsquo; village doesn&rsquo;t hand its secrets to strangers.</p>
 <h3>Count Dracula on t&rsquo; Moors &#8224;</h3>
 <p>A <b>separate</b> storyline, marked &#8224; in thi journal. Start at t&rsquo; <b>Dracula Museum in Whitby</b> (east coast, below t&rsquo; abbey cliffs). Learn how Bram Stoker&rsquo;s 1890 visit gave England its vampire; then draw <b>holy water</b> frae t&rsquo; abbey font, craft a <b>wooden stake</b> at a bench an&rsquo; steep it in t&rsquo; water. At neet, Count Dracula walks t&rsquo; open moor &mdash; tha&rsquo;ll <b>feel him afore tha sees him</b>. Hold t&rsquo; holy stake to strike true; hide in <b>moor shelters</b> or reach a village if tha must. Slaying him makes t&rsquo; moors <b>far safer after dark</b> &mdash; barghests still walk, but nowt worse.</p>`,
+
+      'T’ Railway': `
+<h3>T&rsquo; Moors Railway</h3>
+<ul>
+<li><b>One steam train</b> works t&rsquo; whole line, on t&rsquo; same clock for every player &mdash; tha can watch her steam past frae out on t&rsquo; moor, plume an&rsquo; all.</li>
+<li>T&rsquo; line runs like t&rsquo; real un: <b>Pickering</b> (south end) &rarr; <b>Levisham</b> (a lone halt under t&rsquo; Hole of Horcum) &rarr; <b>Moorstead</b> &rarr; <b>Goathland</b> &rarr; <b>Grosmont</b> &rarr; <b>Whitby</b> by t&rsquo; sea.</li>
+<li><b>To ride</b>: find t&rsquo; station platform (lantern, departures board, signpost), <b>right-click t&rsquo; board</b>, pick where tha&rsquo;s bound an&rsquo; pay t&rsquo; fare &mdash; <b>coal lumps</b>, more for further (free in creative). Then be <b>stood on t&rsquo; platform when she calls</b> &mdash; t&rsquo; board says how long. She waits half a minute at each stop, doors open.</li>
+<li>Aboard, tha gets a <b>window seat</b> &mdash; watch t&rsquo; dales an&rsquo; embankments roll by. She&rsquo;ll set thee down at thi stop wi&rsquo; a whistle.</li>
+<li>Miss her an&rsquo; thi fare comes back. Stations are <b>safe, lit ground</b> at neet an&rsquo; all.</li>
+<li>It&rsquo;s t&rsquo; fastest way across t&rsquo; map by far &mdash; an&rsquo; t&rsquo; bonniest. Walk out to a viaduct embankment at dusk an&rsquo; wait for her lamp.</li>
+</ul>`,
 
       'Craft & Cook': `
 <h3>Crafting</h3>
@@ -325,10 +340,11 @@ export class UI {
 <li><b>Moor crosses</b> &mdash; waymarks on t&rsquo; high moor. One&rsquo;s painted white: say hello to <b>Fat Betty</b>, and mebbe leave her summat.</li>
 <li><b>T&rsquo; Abbey</b> (far E, on t&rsquo; cliffs) &mdash; a drowned-voiced ruin ower t&rsquo; sea. A <b>holy water font</b> still glimmers in t&rsquo; nave.</li>
 <li><b>Whitby</b> (below t&rsquo; abbey) &mdash; harbour, pier, fish &amp; chip shop, fossil shop, an&rsquo; t&rsquo; <b>Dracula Museum</b>. Right-click t&rsquo; museum boards to enter.</li>
-<li><b>Robin Hood&rsquo;s Bay</b> (SE coast) &mdash; a sweeping bay wi&rsquo; proper <b>beaches</b>. <b>Dig t&rsquo; sand</b> for fossils: ammonites (snakestones), Devil&rsquo;s Toenails, an&rsquo; now an&rsquo; then washed-up jet. T&rsquo; bay sands are twice as rich as owt else. Harry an&rsquo; Glinda trade for fossils, an&rsquo; Harry treasures a gifted ammonite above all else.</li>
-<li>Other settlements stand across t&rsquo; moors: <b>Goathland</b>, <b>Rosedale Abbey</b>, <b>Staithes</b> on t&rsquo; clifftop, an&rsquo; <b>Pickering</b> t&rsquo; capital, minster, market an&rsquo; all. All safe ground.</li>
+<li><b>Robin Hood&rsquo;s Bay</b> (SE coast) &mdash; a sweeping bay wi&rsquo; broad <b>beaches</b>. <b>Dig t&rsquo; sand</b> for fossils: ammonites (snakestones), Devil&rsquo;s Toenails, an&rsquo; now an&rsquo; then washed-up jet. T&rsquo; bay sands are twice as rich as owt else. Harry an&rsquo; Glinda trade for fossils, an&rsquo; Harry treasures a gifted ammonite above all else.</li>
+<li><b>T&rsquo; tide minds t&rsquo; beaches</b>: owt dug or built on t&rsquo; sands smooths back ower in a few minutes &mdash; t&rsquo; fossil grounds can&rsquo;t be ruined, so dig wi&rsquo; a clear conscience (just don&rsquo;t build thi house on &rsquo;em).</li>
+<li>Other settlements stand across t&rsquo; moors: <b>Goathland</b>, <b>Rosedale Abbey</b>, <b>Staithes</b> on t&rsquo; clifftop, <b>Grosmont</b> in t&rsquo; valley, an&rsquo; <b>Pickering</b> t&rsquo; capital, minster, market an&rsquo; all. All safe ground, all lived in &mdash; an&rsquo; all on or near t&rsquo; railway.</li>
 </ul>
-<p class="how-note">Thi world saves itsen every half-minute, in this browser. &ldquo;Carry On&rdquo; picks up where tha left off.</p>`,
+<p class="how-note">A full day on t&rsquo; moors is <b>half an hour</b>. Thi world saves itsen every half-minute, in this browser. &ldquo;Carry On&rdquo; picks up where tha left off.</p>`,
     };
 
     this.howTabs.innerHTML = '';

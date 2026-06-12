@@ -2,7 +2,7 @@
 // (Storage keys an' t' save DB keep their owd 'moorcraft' names on purpose:
 // renaming them would orphan every player's saves an' login.)
 import * as THREE from 'three';
-import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_ACCTS } from './defs.js';
+import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_HASHES } from './defs.js';
 import { strSeed } from './noise.js';
 import { initMaterials } from './mesher.js';
 import { getIconURL } from './textures.js';
@@ -80,6 +80,7 @@ class Game {
 
     this.bindEvents();
     this.auth = JSON.parse(localStorage.getItem('moorcraft-auth') || 'null');
+    this.refreshAdmin();
     this.ui.setLoggedIn(this.auth);
     this.ui.show('titleScreen');
 
@@ -344,8 +345,21 @@ class Game {
   }
 
   // ---------------- parish warden (admin) ----------------
+  // T' warden check hashes t' account id (it doubles as a login code, so
+  // plaintext stays out o' t' source). Needs a secure context for
+  // crypto.subtle — https or localhost; a raw-IP LAN page won't have it.
+  async refreshAdmin() {
+    this.adminOk = false;
+    if (!this.auth || !this.auth.acct || !(window.crypto && crypto.subtle)) return;
+    try {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(this.auth.acct));
+      const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+      this.adminOk = ADMIN_HASHES.includes(hex);
+    } catch { /* no subtle crypto — no warden powers, no matter */ }
+  }
+
   isAdmin() {
-    return !!(this.auth && ADMIN_ACCTS.includes(this.auth.acct));
+    return !!this.adminOk;
   }
 
   renderAdminPanel() {
@@ -509,6 +523,7 @@ class Game {
       }
       this.auth = { code, name: d.name, acct: d.acct };
       localStorage.setItem('moorcraft-auth', JSON.stringify(this.auth));
+      this.refreshAdmin();
       this.ui.loginErr.textContent = '';
       this.ui.setLoggedIn(this.auth);
     } catch {
