@@ -410,23 +410,26 @@ export class Geography {
     // (controls planted ±22 blocks along t' angle bisector), so curves sweep
     // out in open country between stops — not through folk's farmyards.
     const unit = (ax, az) => { const L = Math.hypot(ax, az) || 1; return { x: ax / L, z: az / L }; };
+    // (plat-tagged controls form t' dead-straight platform runs; their
+    // segments are lerped, not splined — uniform Catmull-Rom overshoots
+    // where a 22-block hop neighbours a 700-block leg)
     const ctrl = [];
     for (let i = 0; i < st.length; i++) {
       if (i === 0) {
         const w = unit(st[1].x - st[0].x, st[1].z - st[0].z);
-        ctrl.push({ x: st[0].x, z: st[0].z, station: 0 });
-        ctrl.push({ x: st[0].x + w.x * 22, z: st[0].z + w.z * 22 });
+        ctrl.push({ x: st[0].x, z: st[0].z, station: 0, plat: true });
+        ctrl.push({ x: st[0].x + w.x * 22, z: st[0].z + w.z * 22, plat: true });
       } else if (i === st.length - 1) {
         const u = unit(st[i].x - st[i - 1].x, st[i].z - st[i - 1].z);
-        ctrl.push({ x: st[i].x - u.x * 22, z: st[i].z - u.z * 22 });
-        ctrl.push({ x: st[i].x, z: st[i].z, station: i });
+        ctrl.push({ x: st[i].x - u.x * 22, z: st[i].z - u.z * 22, plat: true });
+        ctrl.push({ x: st[i].x, z: st[i].z, station: i, plat: true });
       } else {
         const u = unit(st[i].x - st[i - 1].x, st[i].z - st[i - 1].z);
         const w = unit(st[i + 1].x - st[i].x, st[i + 1].z - st[i].z);
         const m = unit(u.x + w.x, u.z + w.z);
-        ctrl.push({ x: st[i].x - m.x * 22, z: st[i].z - m.z * 22 });
-        ctrl.push({ x: st[i].x, z: st[i].z, station: i });
-        ctrl.push({ x: st[i].x + m.x * 22, z: st[i].z + m.z * 22 });
+        ctrl.push({ x: st[i].x - m.x * 22, z: st[i].z - m.z * 22, plat: true });
+        ctrl.push({ x: st[i].x, z: st[i].z, station: i, plat: true });
+        ctrl.push({ x: st[i].x + m.x * 22, z: st[i].z + m.z * 22, plat: true });
       }
     }
     // village avoidance: where a leg would pass through a settlement, plant a
@@ -482,11 +485,13 @@ export class Geography {
       const p0 = P[i - 1], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2];
       const approx = Math.hypot(p2.x - p1.x, p2.z - p1.z);
       const n = Math.max(4, Math.ceil(approx / 2));
+      const straight = p1.plat && p2.plat; // platform runs stay dead straight
       for (let k = 1; k <= n; k++) {
         const t = k / n, t2 = t * t, t3 = t2 * t;
         const cr = (a, b, c, d) =>
           0.5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
-        const x = cr(p0.x, p1.x, p2.x, p3.x), z = cr(p0.z, p1.z, p2.z, p3.z);
+        const x = straight ? p1.x + (p2.x - p1.x) * t : cr(p0.x, p1.x, p2.x, p3.x);
+        const z = straight ? p1.z + (p2.z - p1.z) * t : cr(p0.z, p1.z, p2.z, p3.z);
         s += Math.hypot(x - px, z - pz);
         pts.push({ x, z, s });
         px = x; pz = z;
@@ -530,6 +535,22 @@ export class Geography {
           pts[i].z = (pts[i - 1].z + pts[i].z * 2 + pts[i + 1].z) / 4;
         }
       }
+    }
+    // strike any kinks t' shoving left behind: a near-duplicate sample or one
+    // that doubles back would spin t' train clean round — midpoint 'em out
+    // (positions only, indices stay put so t' station pins hold)
+    for (let pass = 0; pass < 6; pass++) {
+      let mended = 0;
+      for (let i = 1; i < pts.length - 1; i++) {
+        const a = pts[i - 1], b = pts[i], c = pts[i + 1];
+        const abx = b.x - a.x, abz = b.z - a.z, bcx = c.x - b.x, bcz = c.z - b.z;
+        if (Math.hypot(abx, abz) < 0.4 || (abx * bcx + abz * bcz) < 0) {
+          b.x = (a.x + c.x) / 2;
+          b.z = (a.z + c.z) / 2;
+          mended++;
+        }
+      }
+      if (!mended) break;
     }
     // re-measure chainage after t' shoving
     pts[0].s = 0;

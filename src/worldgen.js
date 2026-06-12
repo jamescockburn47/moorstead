@@ -185,35 +185,36 @@ export class Gen {
         // follows t' line's own smoothed profile, so it rides embankments
         // an' causeways ower t' dips an' cuts a slot through t' rises.
         // (T' rails an' sleepers themselves are drawn as real geometry.)
-        {
-          const ri = geo.railInfo(x, z);
-          if (ri && ri.d < 2.2) {
-            const deck = Math.max(1, Math.min(HEIGHT - 5, Math.round(ri.deck)));
-            // embankment / causeway: fill frae t' ground (or t' watter bed) up
-            for (let y = Math.min(h, deck); y < deck && y > 0; y++) {
-              data[IDX(lx, y, lz)] = B.STONE;
-            }
-            // cutting: clear t' slot where t' land stands prouder than t' line
-            const clearTop = Math.min(HEIGHT - 1, Math.max(deck + 4, h + 1));
-            for (let y = deck + 1; y <= clearTop; y++) data[IDX(lx, y, lz)] = B.AIR;
-            // ballast bed wi' dressed stone edging
-            data[IDX(lx, deck, lz)] = ri.d > 1.6 ? B.COBBLE : B.GRAVEL;
+        const ri = geo.railInfo(x, z);
+        if (ri && ri.d < 2.2) {
+          const deck = Math.max(1, Math.min(HEIGHT - 5, Math.round(ri.deck)));
+          // embankment / causeway: fill frae t' ground (or t' watter bed) up
+          for (let y = Math.min(h, deck); y < deck && y > 0; y++) {
+            data[IDX(lx, y, lz)] = B.STONE;
           }
+          // cutting: clear t' slot where t' land stands prouder than t' line
+          const clearTop = Math.min(HEIGHT - 1, Math.max(deck + 4, h + 1));
+          for (let y = deck + 1; y <= clearTop; y++) data[IDX(lx, y, lz)] = B.AIR;
+          // ballast bed wi' dressed stone edging
+          data[IDX(lx, deck, lz)] = ri.d > 1.6 ? B.COBBLE : B.GRAVEL;
         }
 
-        if (!vcol && this.wallAt(x, z)) {
+        // drystone walls stop at t' lineside — t' railway bought its land
+        if (!vcol && !(ri && ri.d < 3.4) && this.wallAt(x, z)) {
           data[IDX(lx, h + 1, lz)] = B.COBBLE;
           if (hash2i(x, z, this.seed ^ 0xa12) < 0.85) data[IDX(lx, h + 2, lz)] = B.COBBLE;
         }
       }
     }
 
-    // trees (canopies may cross borders)
+    // trees (canopies may cross borders) — none on t' railway land
     for (let lz = -2; lz < CHUNK + 2; lz++) {
       for (let lx = -2; lx < CHUNK + 2; lx++) {
         const x = x0 + lx, z = z0 + lz;
         const th = this.treeAt(x, z);
         if (!th) continue;
+        const tri = geo.railInfo(x, z);
+        if (tri && tri.d < 3) continue;
         this.stampTree(data, lx, this.geo.height(x, z) + 1, lz, th);
       }
     }
@@ -226,25 +227,46 @@ export class Gen {
     return data;
   }
 
-  // station platforms: planks, a lantern, an' t' departures board
+  // station platforms: laid PARALLEL to t' rails on t' right o' t' up
+  // direction — planks level wi' t' deck, lantern, departures board, signpost
   stampStations(data, cx, cz) {
     const x0 = cx * CHUNK, z0 = cz * CHUNK;
     const put = (wx, wy, wz, id) => {
       const lx = wx - x0, lz = wz - z0;
       if (lx >= 0 && lx < CHUNK && lz >= 0 && lz < CHUNK && wy > 0 && wy < HEIGHT) data[IDX(lx, wy, lz)] = id;
     };
-    for (const s of this.geo.railway()) {
-      if (s.x < x0 - 6 || s.x > x0 + CHUNK + 6 || s.z < z0 - 6 || s.z > z0 + CHUNK + 6) continue;
-      // platform stands level wi' t' engineered deck, never below watter
-      const ri = this.geo.railInfo(s.x, s.z);
-      const g = Math.max(ri ? Math.round(ri.deck) : this.geo.height(s.x, s.z), WATER_LEVEL + 1);
-      for (let dx = -2; dx <= 2; dx++) for (let dz = 1; dz <= 3; dz++) {
-        put(s.x + dx, g, s.z + dz, B.PLANKS);
-        for (let y = g + 1; y <= g + 3; y++) put(s.x + dx, y, s.z + dz, B.AIR);
+    const at = (wx, wy, wz) => {
+      const lx = wx - x0, lz = wz - z0;
+      if (lx < 0 || lx >= CHUNK || lz < 0 || lz >= CHUNK || wy <= 0 || wy >= HEIGHT) return undefined;
+      return data[IDX(lx, wy, lz)];
+    };
+    const path = this.geo.railPath();
+    const stns = this.geo.railway();
+    for (let si = 0; si < stns.length; si++) {
+      const s = stns[si];
+      if (s.x < x0 - 12 || s.x > x0 + CHUNK + 12 || s.z < z0 - 12 || s.z > z0 + CHUNK + 12) continue;
+      const sp = this.geo.samplePos(path.stationS[si]);
+      const g = Math.max(Math.round(sp.deck), WATER_LEVEL + 1);
+      const ux = sp.tx, uz = sp.tz;   // along t' line
+      const px = uz, pz = -ux;        // across it, platform side
+      const cell = (a, w) => [Math.round(sp.x + ux * a + px * w), Math.round(sp.z + uz * a + pz * w)];
+      for (let a = -4; a <= 4; a++) {
+        for (let w = 2; w <= 4; w++) {
+          const [wx, wz] = cell(a, w);
+          put(wx, g, wz, B.PLANKS);
+          for (let y = g + 1; y <= g + 3; y++) put(wx, y, wz, B.AIR);
+          // a made footing under t' platform edge, so nowt floats
+          for (let y = g - 1; y > 0 && y >= g - 6; y--) {
+            const below = at(wx, y, wz);
+            if (below === undefined || (below !== B.AIR && below !== B.WATER)) break;
+            put(wx, y, wz, B.STONE);
+          }
+        }
       }
-      put(s.x - 2, g + 1, s.z + 2, B.LANTERN);
-      put(s.x + 2, g + 1, s.z + 2, B.BOARD);
-      put(s.x, g + 1, s.z + 3, B.SIGNPOST);
+      let c;
+      c = cell(-3, 3); put(c[0], g + 1, c[1], B.LANTERN);
+      c = cell(0, 3); put(c[0], g + 1, c[1], B.BOARD);
+      c = cell(3, 3); put(c[0], g + 1, c[1], B.SIGNPOST);
     }
   }
 

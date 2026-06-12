@@ -86,6 +86,15 @@ for (const seedStr of SEEDS) {
   }
   if (badGrade) bad(`${badGrade} samples steeper than 1-in-7 (worst ${steepest.toFixed(3)})`);
   else ok(`gradients all gentle (steepest 1-in-${Math.round(1 / Math.max(steepest, 0.001))})`);
+  // t' line must never double back on itsen — a reversed micro-segment
+  // would spin t' train round on t' spot
+  let kinks = 0;
+  for (let i = 1; i < path.pts.length - 1; i++) {
+    const a = path.pts[i - 1], b = path.pts[i], c = path.pts[i + 1];
+    if ((b.x - a.x) * (c.x - b.x) + (b.z - a.z) * (c.z - b.z) < 0) kinks++;
+  }
+  if (kinks) bad(`${kinks} kinked samples — t' path doubles back on itsen`);
+  else ok('line never doubles back on itsen');
   if (wetDeck) bad(`${wetDeck} samples o' deck below water`);
   else ok('deck dry t\' whole way');
   for (let si = 0; si < st.length; si++) {

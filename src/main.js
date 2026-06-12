@@ -1075,16 +1075,34 @@ class Game {
     const near = Math.hypot(x - p.x, z - p.z) < 260;
     const show = (near || this.state === 'riding') && this.world.isLoaded(Math.floor(x), Math.floor(z));
     if (!this.train) this.train = buildTrain();
-    const tg = this.train.group;
+    const parts = this.train.parts;
     if (show) {
-      if (!tg.parent) { this.scene.add(tg); tg.rotation.order = 'YXZ'; }
-      const deck = sp.deck + 1; // t' engineered profile, smooth as t' rails
-      tg.position.x = x; tg.position.z = z;
-      tg.position.y = tg.position.y ? tg.position.y + (deck - tg.position.y) * Math.min(1, dt * 5) : deck;
-      tg.rotation.y = rotY;
-      tg.rotation.x += (pitch - tg.rotation.x) * Math.min(1, dt * 4); // settles into gradients
+      // each body takes its own spot on t' spline, so t' rake bends
+      // honestly through t' curves an' noses into t' gradients
+      for (const part of parts) {
+        const pg = part.group;
+        if (!pg.parent) { this.scene.add(pg); pg.rotation.order = 'YXZ'; }
+        const psp = geo.samplePos(s.s + part.offset * fwd);
+        const deck = psp.deck + 1;
+        pg.position.x = psp.x; pg.position.z = psp.z;
+        pg.position.y = pg.position.y ? pg.position.y + (deck - pg.position.y) * Math.min(1, dt * 6) : deck;
+        if (Math.hypot(psp.tx, psp.tz) > 0.01) pg.rotation.y = Math.atan2(psp.tx * fwd, psp.tz * fwd);
+        const ppitch = -Math.atan(psp.grade * fwd);
+        pg.rotation.x += (ppitch - pg.rotation.x) * Math.min(1, dt * 4);
+        if (moving && part.wheels) {
+          for (const w of part.wheels) w.rotateZ(-fwd * speed * dt / (w.userData.r || 0.62));
+        }
+      }
+      // coupling rods ride t' crank pins, quartered like t' real thing
+      if (moving && this.train.loco.rods) {
+        this.train.rodPhase = (this.train.rodPhase || 0) - fwd * speed * dt / 0.62;
+        this.train.loco.rods.forEach((rod, i) => {
+          const th = this.train.rodPhase + i * Math.PI / 2;
+          rod.position.y = 0.62 + Math.sin(th) * 0.32;
+          rod.position.z = 0.2 + Math.cos(th) * 0.32;
+        });
+      }
       if (moving) {
-        this.train.wheels.forEach(w => w.rotateY(speed * dt / 0.62));
         this.trainChuff = (this.trainChuff || 0) - dt;
         if (this.trainChuff <= 0) {
           this.trainChuff = Math.max(0.16, 8 / Math.max(speed, 3));
@@ -1092,7 +1110,8 @@ class Game {
           if (dNow < 150 || this.state === 'riding') {
             this.audio.noiseBurst && this.audio.noiseBurst(this.audio.ctx ? this.audio.ctx.currentTime : 0, 0.09, Math.max(0.03, 0.14 - dNow / 1500), 600, 'bandpass');
           }
-          const fn = this.train.funnel.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), rotY).add(tg.position);
+          const lg = this.train.loco.group;
+          const fn = this.train.funnel.clone().applyQuaternion(lg.quaternion).add(lg.position);
           this.entities.burst(fn.x, fn.y, fn.z, [228, 228, 232], 5);
         }
       }
@@ -1105,15 +1124,16 @@ class Game {
           if (s.mode === 'dwell') this.ui.toast(`T\u2019 train\u2019s come in at <b>${st[s.i].name}</b> \u2014 ${Math.round(s.dwellLeft)}s at t\u2019 platform.`, 5000);
         }
       }
-    } else if (tg.parent) {
-      this.scene.remove(tg);
+    } else if (parts[0].group.parent) {
+      for (const part of parts) this.scene.remove(part.group);
     }
   }
 
-  // riding: thi seat is on t' train, wherever she is
+  // riding: thi seat is in t' carriage, wherever she is on t' curve
   updateRide() {
     const ts = this.trainState;
-    if (!ts || !this.train || !this.train.group.parent) return;
+    const cg = this.train && this.train.carriage.group;
+    if (!ts || !cg || !cg.parent) return;
     // a seat o' thi own, so a full carriage o' players sits apart
     if (this.seatOffset === undefined) {
       const hash = [...this.devicePid()].reduce((a, c) => a + c.charCodeAt(0), 0);
@@ -1122,7 +1142,7 @@ class Game {
     const seatLocal = this.train.seat.clone();
     seatLocal.x = this.seatOffset[0];
     seatLocal.z += this.seatOffset[1] + 0.7;
-    const seat = seatLocal.applyAxisAngle(new THREE.Vector3(0, 1, 0), ts.rotY).add(this.train.group.position);
+    const seat = seatLocal.applyQuaternion(cg.quaternion).add(cg.position);
     this.player.pos = { x: seat.x, y: seat.y - this.player.eye, z: seat.z };
     this.player.vel = { x: 0, y: 0, z: 0 };
     if (!this.rideYawSet) {
@@ -1149,9 +1169,9 @@ class Game {
     const st = this.world.gen.geo.railway();
     const s = this.trainState.s;
     if (s.mode === 'dwell' && s.i === p.stIdx && this.state === 'playing') {
-      const stn = st[p.stIdx];
-      const d = Math.hypot(this.player.pos.x - stn.x, this.player.pos.z - stn.z);
-      if (d < 16) {
+      // measured to t' TRAIN herself, not t' station post — easier to board
+      const d = Math.hypot(this.player.pos.x - this.trainState.x, this.player.pos.z - this.trainState.z);
+      if (d < 18) {
         this.pendingRide = null;
         this.ride = { destIdx: p.destIdx };
         this.state = 'riding';
