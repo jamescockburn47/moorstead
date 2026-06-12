@@ -141,7 +141,8 @@ export class Geography {
     // Goathland: cottages strung along a long green, up t' moor SW o' Whitby
     // (NE quarter o' t' map, like t' real un — t' railway calls here)
     {
-      const x = 460, z = -60, g = Math.floor(this.heightRaw(x, z));
+      const s = this.drySpot(460, -60, 29);
+      const x = s.x, z = s.z, g = Math.max(Math.floor(this.heightRaw(x, z)), WATER_LEVEL + 2);
       vs.push({
         x, z, ground: g, name: 'Goathland', radius: 40, style: 'longgreen',
         buildings: [
@@ -153,7 +154,8 @@ export class Geography {
     }
     // Rosedale Abbey: by t' kilns, wi' its own ruined arch
     {
-      const x = KILNS.x + 34, z = KILNS.z + 26, g = Math.floor(this.heightRaw(x, z));
+      const s = this.drySpot(KILNS.x + 34, KILNS.z + 26, 29);
+      const x = s.x, z = s.z, g = Math.max(Math.floor(this.heightRaw(x, z)), WATER_LEVEL + 2);
       vs.push({
         x, z, ground: g, name: 'Rosedale Abbey', radius: 36, style: 'green',
         buildings: [
@@ -165,7 +167,8 @@ export class Geography {
     }
     // Staithes: a tight fishing huddle up on t' cliff top
     {
-      const z = 140, x = Math.floor(this.coastX(z)) - 26, g = Math.floor(this.heightRaw(x, z));
+      const s = this.drySpot(Math.floor(this.coastX(140)) - 26, 140, 29);
+      const x = s.x, z = s.z, g = Math.max(Math.floor(this.heightRaw(x, z)), WATER_LEVEL + 2);
       vs.push({
         x, z, ground: g, name: 'Staithes', radius: 30, style: 'cluster',
         buildings: [
@@ -179,7 +182,8 @@ export class Geography {
     // Sits at t' SOUTH foot o' t' moors below t' Hole of Horcum, like t' real
     // town: t' railway sets off north frae here.
     {
-      const x = 540, z = 860, g = Math.floor(this.heightRaw(x, z));
+      const s = this.drySpot(540, 860, 29);
+      const x = s.x, z = s.z, g = Math.max(Math.floor(this.heightRaw(x, z)), WATER_LEVEL + 2);
       vs.push({
         x, z, ground: g, name: 'Pickering', radius: 56, style: 'capital',
         buildings: [
@@ -193,7 +197,8 @@ export class Geography {
     }
     // Grosmont: t' engine-shed hamlet in t' Esk valley, last stop afore Whitby
     {
-      const x = 640, z = -104, g = Math.floor(this.heightRaw(x, z));
+      const s = this.drySpot(640, -104, 29);
+      const x = s.x, z = s.z, g = Math.max(Math.floor(this.heightRaw(x, z)), WATER_LEVEL + 2);
       vs.push({
         x, z, ground: g, name: 'Grosmont', radius: 26, style: 'cluster',
         buildings: [
@@ -206,7 +211,10 @@ export class Geography {
     // Whitby: fishing town below t' abbey cliffs — museum, chippy, fossil shop
     {
       const ab = this.abbeySite();
-      const x = ab.x + 48, z = ab.z + 62, g = Math.floor(this.heightRaw(x, z));
+      // Whitby stays down by t' sea, but stands on a dry terrace behind a
+      // sea wall — t' town were drowning whole on some seeds
+      const x = ab.x + 48, z = ab.z + 62;
+      const g = Math.max(Math.floor(this.heightRaw(x, z)), WATER_LEVEL + 2);
       vs.push({
         x, z, ground: g, name: 'Whitby', radius: 44, style: 'cluster',
         buildings: [
@@ -236,7 +244,7 @@ export class Geography {
         }
       }
     }
-    const ground = Math.floor(this.heightRaw(best.x, best.z));
+    const ground = Math.max(Math.floor(this.heightRaw(best.x, best.z)), WATER_LEVEL + 2);
     const rng = mulberry32(this.seed ^ 0x71c);
     const mk = (dx, dz, w, d, wallH, type) => ({
       x0: best.x + dx, z0: best.z + dz,
@@ -259,14 +267,14 @@ export class Geography {
   }
 
   inVillage(x, z, pad = 0) {
-    for (const v of this.villages) {
+    for (const v of this.villages || []) {
       if (Math.hypot(x - v.x, z - v.z) < v.radius + pad) return true;
     }
     return false;
   }
 
   villageAt(x, z) {
-    for (const v of this.villages) {
+    for (const v of this.villages || []) {
       if (Math.abs(x - v.x) <= v.radius && Math.abs(z - v.z) <= v.radius) return v;
     }
     return null;
@@ -326,14 +334,14 @@ export class Geography {
   // Staithes is its own coastal town; tha walks t' cliff path for that one.)
   // nearest dry, inland, un-built-on spot to (x0,z0) — deterministic spiral,
   // so open-country halts never end up in a beck or on t' sands
-  drySpot(x0, z0) {
+  drySpot(x0, z0, minH = WATER_LEVEL + 1) {
     for (let r = 0; r <= 96; r += 6) {
       for (let a = 0; a < (r ? 8 : 1); a++) {
         const ang = (a / 8) * Math.PI * 2;
         const x = Math.round(x0 + Math.cos(ang) * r), z = Math.round(z0 + Math.sin(ang) * r);
         if (this.coastT(x, z) > 0) continue;
-        if (this.heightRaw(x, z) <= WATER_LEVEL) continue;
-        if (this.daleness(x, z) > 0.6 && this.heightRaw(x, z) <= WATER_LEVEL + 2) continue;
+        if (this.heightRaw(x, z) < minH) continue;
+        if (this.daleness(x, z) > 0.6 && this.heightRaw(x, z) <= minH + 1) continue;
         const vc = this.villageColumn(x, z);
         if (vc && vc.kind === 'building') continue;
         return { x, z };
@@ -355,7 +363,7 @@ export class Geography {
       { name: 'Pickering', x: v('Pickering').x - 20, z: v('Pickering').z - 30 },
       { name: 'Levisham', x: lev.x, z: lev.z },
       { name: 'Moorstead', x: v('Moorstead').x + 8, z: v('Moorstead').z + 34 },
-      { name: 'Goathland', x: v('Goathland').x - 20, z: v('Goathland').z + 24 },
+      { name: 'Goathland', x: v('Goathland').x + 24, z: v('Goathland').z + 20 },
       { name: 'Grosmont', x: v('Grosmont').x, z: v('Grosmont').z + 24 },
       { name: 'Whitby', x: wb.x, z: wb.z },
     ];

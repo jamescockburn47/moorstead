@@ -50,7 +50,7 @@ for (const seedStr of SEEDS) {
   // 2. stations on dry land
   for (const s of st) {
     const ct = geo.coastT(s.x, s.z);
-    const h = geo.heightRaw(s.x, s.z);
+    const h = geo.height(s.x, s.z); // post-flatten: what t' game actually builds
     if (ct > 0.35) bad(`${s.name} station is in t' sea (coastT=${ct.toFixed(2)})`);
     else if (h <= WATER_LEVEL) bad(`${s.name} station is under water (h=${h.toFixed(1)})`);
   }
@@ -76,6 +76,17 @@ for (const seedStr of SEEDS) {
   }
   if (!clipped) ok('corridor clear o\' buildings');
   else console.log(`        (${clipped} clipped samples total)`);
+
+  // 3b. every village stands on dry ground — t' whole disk flattens to t'
+  // centre's height, an' shared-moor folk spawn across ALL villages
+  let wetVillage = false;
+  for (const v of geo.villages) {
+    if (v.ground <= WATER_LEVEL + 1) {
+      bad(`${v.name} village ground is wet/under water (ground=${v.ground}, water=${WATER_LEVEL})`);
+      wetVillage = true;
+    }
+  }
+  if (!wetVillage) ok('every village stands on dry ground');
 
   // 4. NYMR shape: right stations, right order, right ends
   const want = ['Pickering', 'Levisham', 'Moorstead', 'Goathland', 'Grosmont', 'Whitby'];
