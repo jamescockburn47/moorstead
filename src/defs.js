@@ -48,7 +48,8 @@ export const I = {
 // hand out t' keys. (Client-side only owt road — t' game is client-authoritative;
 // t' relay keeps its own warden list for where/fx.) Dedicated warden login,
 // separate frae owt anybody plays on.
-export const ADMIN_HASHES = ['540b8969f17ffa7107ae287effedf175d9b4c8edfa3ab0f622a11c64465bc549'];
+// (Note: t' dash returns acct = sha1(code)[:10], so this is sha256 o' THAT.)
+export const ADMIN_HASHES = ['7335dca7ccd870b9b623258d8b389d8f2b33b1e496868d83c01d7d4af301cddc'];
 
 // kind: 'solid' | 'cutout' (cross plants) | 'liquid' | 'air'
 // tex: {t, s, b} tile ids; hard: seconds to break by hand; tool: best tool

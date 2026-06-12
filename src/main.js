@@ -578,7 +578,7 @@ class Game {
         this.ui.loginErr.textContent = d.err || 'That didn\u2019t work.';
         return;
       }
-      this.auth = { code, name: d.name, acct: d.acct };
+      this.auth = { code, name: d.name, acct: d.acct, room: d.room || 'moor' };
       localStorage.setItem('moorcraft-auth', JSON.stringify(this.auth));
       this.refreshAdmin();
       this.ui.loginErr.textContent = '';
@@ -586,6 +586,34 @@ class Game {
     } catch {
       this.ui.loginErr.textContent = 'Can\u2019t reach t\u2019 parish clerk \u2014 try again in a minute, or come in as a rambler.';
     }
+  }
+
+  // Quiet re-claim wi' t' stored code: picks up room moves an' name changes
+  // made on t' ledger since last visit. Best-effort — offline, carry on.
+  async refreshAuth() {
+    if (!this.auth || !this.auth.code) return;
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 4000);
+      const res = await fetch('/dash/auth/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: this.auth.code, name: this.auth.name || '', pid: this.devicePid() }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      const d = await res.json();
+      if (d && d.ok) {
+        this.auth = { code: this.auth.code, name: d.name, acct: d.acct, room: d.room || 'moor' };
+        localStorage.setItem('moorcraft-auth', JSON.stringify(this.auth));
+        this.refreshAdmin();
+        this.ui.setLoggedIn(this.auth);
+      } else if (d && /No such invite/i.test(d.err || '')) {
+        // t' token's been retired in a reset — don't limp on wi' a dead identity
+        this.logout();
+        this.ui.toast('Thi owd invite’s been retired — ask t’ warden for a fresh un.', 8000);
+      }
+    } catch { /* parish clerk's having his tea */ }
   }
 
   loginGuest() {
@@ -752,7 +780,12 @@ class Game {
   async joinShared() {
     const { strSeed: ss, hash2i } = await import('./noise.js');
     this.netActive = true;
-    this.startWorld(ss('t-shared-moor'), null, new Map());
+    // each group gets its own moor: t' room comes frae thi account
+    // ('moor' = t' original world; owt else gets its own seed an' all)
+    await this.refreshAuth();
+    const room = ((this.auth && this.auth.room) || 'moor').toLowerCase();
+    this.netRoom = room;
+    this.startWorld(ss(room === 'moor' ? 't-shared-moor' : 't-shared-moor:' + room), null, new Map());
     // folk wake spread across t' villages, same one each visit
     const who = (this.auth && this.auth.acct) || this.devicePid();
     const idx = Math.floor(hash2i(ss(who), 7, 99) * this.world.gen.geo.villages.length);
@@ -764,7 +797,7 @@ class Game {
   async connectNet() {
     this.net = new Net(this);
     try {
-      await this.net.connect('moor', (this.auth && this.auth.acct ? 'a' + this.auth.acct : this.devicePid()).slice(0, 40), this.player.name || (this.auth && this.auth.name) || 'rambler');
+      await this.net.connect(this.netRoom || 'moor', (this.auth && this.auth.acct ? 'a' + this.auth.acct : this.devicePid()).slice(0, 40), this.player.name || (this.auth && this.auth.name) || 'rambler');
       // pick up where tha left off: pockets, ventures, an' thi spot on t' map
       const sv = this.net.savedState;
       if (sv && sv.player) {
