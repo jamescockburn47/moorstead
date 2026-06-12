@@ -53,10 +53,10 @@ export class Geography {
     return 900 + bay + fbm2(z * 0.004, 7.7, 2, this.seed ^ 0xc0a57) * 45;
   }
 
-  // 0 inland .. 1 open sea
+  // 0 inland .. 1 open sea — a broad transition, for proper wide sands
   coastT(x, z) {
     const cx = this.coastX(z);
-    return smoothstep((x - (cx - 6)) / 34);
+    return smoothstep((x - (cx - 6)) / 64);
   }
 
   // ---------- height ----------
@@ -102,7 +102,7 @@ export class Geography {
           h = lerp(h, 25.3, smoothstep(t / 0.4)); // cliff face down to t' sands
         } else {
           const sea = 17 + fbm2(x * 0.02, z * 0.02, 2, this.seed ^ 0x5ea) * 1.5;
-          h = lerp(25.3, sea, Math.pow((t - 0.4) / 0.6, 1.6)); // long gentle scaur
+          h = lerp(25.3, sea, Math.pow((t - 0.4) / 0.6, 2.2)); // long gentle scaur, wide flats
         }
       }
     }

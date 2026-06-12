@@ -581,10 +581,16 @@ export class Gen {
       if (ab.x >= x0 - 24 && ab.x < x0 + CHUNK + 24 && ab.z >= z0 - 12 && ab.z < z0 + CHUNK + 12) {
         const g = geo.height(ab.x, ab.z);
         const rng = mulberry32(this.seed ^ 0xabbe);
+        // every wall stands on a made footing: stone filled frae t' slope up
+        // to t' abbey floor, so nowt floats where t' cliff falls away
+        const found = (x, z) => {
+          for (let y = Math.max(1, geo.height(x, z)); y <= g; y++) put(x, y, z, B.STONEBRICK);
+        };
         // nave: two long walls wi' arched gaps, crumbling toward t' west
         for (let dx = 0; dx < 20; dx++) {
           for (const dz of [0, 7]) {
             const x = ab.x + dx, z = ab.z + dz;
+            found(x, z);
             const crumble = hash2i(x, z, this.seed ^ 0xabb1);
             let wh = dx > 14 ? 7 : Math.floor(2 + crumble * 6);
             if (dx > 14) wh = 7; // east end stands proud
@@ -597,6 +603,7 @@ export class Gen {
         }
         // east end wall wi' t' great window hole
         for (let dz = 0; dz <= 7; dz++) {
+          found(ab.x + 19, ab.z + dz);
           for (let y = 1; y <= 8; y++) {
             const window = dz >= 2 && dz <= 5 && y >= 3 && y <= 6;
             if (!window) put(ab.x + 19, g + y, ab.z + dz, B.STONEBRICK);
@@ -606,10 +613,12 @@ export class Gen {
         for (let i = 0; i < 5; i++) {
           const px = ab.x + 2 + ((rng() * 16) | 0), pz = ab.z + 2 + ((rng() * 4) | 0);
           const ph = 1 + ((rng() * 3) | 0);
+          found(px, pz);
           for (let y = 1; y <= ph; y++) put(px, g + y, pz, B.STONEBRICK);
         }
         // holy water font — a stone basin wi' a glimmer o' light
         const font = geo.abbeyFont();
+        found(font.x, font.z);
         put(font.x, g, font.z, B.STONEBRICK);
         put(font.x, g + 1, font.z, B.STONEBRICK);
         put(font.x, g + 2, font.z, B.LANTERN);

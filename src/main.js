@@ -1098,7 +1098,9 @@ class Game {
       this.entities.spawnDrop(hit.x + 0.5, hit.y + 0.4, hit.z + 0.5, def.drop, 1);
     }
     this.quests.onBlockBroken(hit.x, hit.y, hit.z, hit.id);
-    if (this.net) this.net.sendEdit(hit.x, hit.y, hit.z, 0);
+    const eph = this.beachEphemeral(hit.x, hit.y, hit.z);
+    if (this.net) this.net.sendEdit(hit.x, hit.y, hit.z, 0, eph ? { revert: hit.id } : null);
+    if (eph) this.queueBeachRevert(hit.x, hit.y, hit.z, hit.id, 0);
 
     // fossil hunting: t' bay sands give up their dead, like Whitby an' Bay Town
     if ((hit.id === B.SAND || hit.id === B.GRAVEL) && !this.player.creative) {
@@ -1200,7 +1202,37 @@ class Game {
     this.audio.place();
     this.ui.invDirty = true;
     this.quests.onBlockPlaced(px, py, pz, held.id);
-    if (this.net) this.net.sendEdit(px, py, pz, held.id);
+    const eph = this.beachEphemeral(px, py, pz);
+    if (this.net) this.net.sendEdit(px, py, pz, held.id, eph ? { revert: cur } : null);
+    if (eph) this.queueBeachRevert(px, py, pz, cur, held.id);
+  }
+
+  // ---------------- t' healing sands ----------------
+  // Beach edits aren't forever: t' tide smooths t' sands back ower a few
+  // minutes, so t' fossil grounds aren't ruined for t' next comer. T' relay
+  // does t' same server-side for t' shared moor.
+  beachEphemeral(x, y, z) {
+    if (!this.world) return false;
+    return this.world.gen.geo.coastT(x, z) > 0.25 && y <= WATER_LEVEL + 4;
+  }
+
+  queueBeachRevert(x, y, z, oldId, newId) {
+    this.beachReverts = this.beachReverts || [];
+    this.beachReverts.push({ x, y, z, oldId, newId, at: performance.now() / 1000 + 180 + Math.random() * 120 });
+  }
+
+  processBeachReverts() {
+    if (!this.beachReverts || !this.beachReverts.length || !this.world) return;
+    const now = performance.now() / 1000;
+    for (let i = this.beachReverts.length - 1; i >= 0; i--) {
+      const r = this.beachReverts[i];
+      if (now < r.at) continue;
+      this.beachReverts.splice(i, 1);
+      if (!this.world.isLoaded(r.x, r.z)) continue; // chunk's gone — t' relay covers t' shared moor
+      if (this.world.getBlock(r.x, r.y, r.z) !== r.newId) continue; // summat else changed it since
+      this.world.setBlock(r.x, r.y, r.z, r.oldId);
+      if (this.world.netEdits) this.world.netEdits.delete(`${r.x},${r.y},${r.z}`);
+    }
   }
 
   // ---------------- per-frame ----------------
@@ -1253,6 +1285,35 @@ class Game {
         this.ui.invDirty = true;
         this.ui.toast(`+${n} ${itemName(item)}`, 1600);
       });
+
+      // T' Great Fog gate: tops only — never t' coast, never in/near a village
+      this.fogGateTimer = (this.fogGateTimer || 0) - dt;
+      if (this.fogGateTimer <= 0) {
+        this.fogGateTimer = 0.5;
+        const geo = this.world.gen.geo, pp = this.player.pos;
+        let gate = 0;
+        if (geo.coastT(pp.x, pp.z) === 0) {
+          const hh = geo.heightRaw(pp.x, pp.z);
+          const elevT = Math.max(0, Math.min(1, (hh - 31.5) / 2.5));
+          let villF = 1;
+          for (const v of geo.villages) {
+            const d = Math.hypot(pp.x - v.x, pp.z - v.z);
+            villF = Math.min(villF, Math.max(0, Math.min(1, (d - (v.radius + 14)) / 34)));
+          }
+          gate = elevT * villF;
+        }
+        this.sky.moorGate = gate;
+        const mf = this.sky.moorFog;
+        if (mf > 0.25 && !this.greatFogOn) {
+          this.greatFogOn = true;
+          this.ui.toast('T’ <b>Great Fog</b> is down on t’ tops — tha can’t see thi hand afore thi face, an’ t’ map’s no use. Get off t’ high moor or hunker down till it lifts.', 10000);
+        } else if (mf < 0.1 && this.greatFogOn) {
+          this.greatFogOn = false;
+          this.ui.toast('T’ fog’s lifting off t’ moor. Tha can breathe again.', 5000);
+        }
+      }
+      // beach edits heal: t' tide smooths t' sands back ower
+      this.processBeachReverts();
 
       // sky & weather
       const msg = this.sky.update(dt, this.player.pos);

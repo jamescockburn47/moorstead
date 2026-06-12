@@ -623,6 +623,14 @@ export class UI {
     if (this.invDirty) { this.renderHotbar(player); this.invDirty = false; }
 
     const px = Math.floor(player.pos.x), py = Math.floor(player.pos.y), pz = Math.floor(player.pos.z);
+    // t' Great Fog takes thi bearings wi' it: no place name, no coordinates
+    if (sky.moorFog > 0.6) {
+      this.mapInfo.innerHTML =
+        `<span style="color:#9aa0a8">Lost in t&rsquo; fog</span><br>` +
+        `?, ?, ?<br>Day ${sky.day} &mdash; ${sky.timeName()}` +
+        (player.creative ? '<br><span style="color:#d8b95a">Creative</span>' : '');
+      return;
+    }
     const loc = this.game.world ? this.game.world.gen.geo.locationName(px, pz) : '';
     this.mapInfo.innerHTML =
       `<span style="color:#d8b95a">${loc}</span><br>` +
@@ -671,6 +679,18 @@ export class UI {
   drawMinimap(player, world) {
     const ctx = this.minimap.getContext('2d');
     const size = 160, scale = 2; // 2px per block, 80 block span
+    // t' Great Fog blots t' map out entirely — folk navigate by memory or not at all
+    if (this.game.sky && this.game.sky.moorFog > 0.6) {
+      ctx.fillStyle = '#b9bec4';
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = '#62676e';
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillText('T’ FOG’S DOWN', size / 2, 74);
+      ctx.font = '11px sans-serif';
+      ctx.fillText('tha’s on thi own out here', size / 2, 94);
+      return;
+    }
     const span = size / scale;
     const px = Math.floor(player.pos.x), pz = Math.floor(player.pos.z);
     const img = ctx.createImageData(size, size);

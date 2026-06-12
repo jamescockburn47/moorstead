@@ -23,6 +23,10 @@ export class Sky {
     this.rainAmount = 0;
     this.dread = 0;
     this.dreadTarget = 0;
+    this.moorFog = 0;    // T' Great Fog intensity at t' player, 0..1
+    this.moorGate = 0;   // set by t' game: 1 on t' high moor, 0 in villages/coast
+    this._gateS = 0;
+    this.fogDebug = false; // dev: force t' Great Fog on
 
     this.sun = new THREE.DirectionalLight(0xfff2dd, 1.0);
     scene.add(this.sun);
@@ -176,12 +180,30 @@ export class Sky {
       sky = sky.clone().lerp(new THREE.Color(0x1a1020), this.dread * 0.42);
       sky.lerp(new THREE.Color(0x301018), this.dread * 0.12);
     }
+
+    // T' Great Fog: a shared-clock whiteout on t' high moor — same for every
+    // player, like t' train. Every 1800s (three game days) t' last 150s
+    // (about six game hours) comes down thick, eased in an' out ower ~20s.
+    // T' game sets moorGate frae geography: tops only, never coast nor village.
+    {
+      const CYCLE = 1800, DUR = 150, EASE = 20;
+      const into = (Date.now() / 1000) % CYCLE - (CYCLE - DUR);
+      let ev = 0;
+      if (into >= 0) ev = into < EASE ? into / EASE : Math.min(1, Math.max(0, (DUR - into) / EASE));
+      if (this.fogDebug) ev = 1;
+      this._gateS += (this.moorGate - this._gateS) * Math.min(1, dt * 1.2);
+      this.moorFog = ev * this._gateS;
+      if (this.moorFog > 0.01) {
+        sky = sky.clone().lerp(new THREE.Color(0xc6cbd1), this.moorFog * (0.3 + dayness * 0.55));
+      }
+    }
     this.scene.background = sky;
     this.scene.fog.color.copy(sky);
 
     // fog distance
     let baseFog = { clear: 150, misty: 70, rain: 95, fog: 30 }[this.weather];
     if (this.dread > 0.05) baseFog = Math.min(baseFog, 55 - this.dread * 22);
+    if (this.moorFog > 0.01) baseFog = Math.min(baseFog, 150 - this.moorFog * 143); // ~7 at full: hand-afore-face stuff
     this.fogTargetFar = baseFog;
     this.fogFar += (this.fogTargetFar - this.fogFar) * Math.min(1, dt * 0.5);
     this.scene.fog.far = this.fogFar;

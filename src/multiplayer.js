@@ -122,7 +122,10 @@ export class Net {
     if (this.connected && this.ws.readyState === 1) this.ws.send(JSON.stringify(obj));
   }
 
-  sendEdit(x, y, z, id) { this.send({ type: 'edit', x, y, z, id }); }
+  // eph: {revert} marks a beach edit t' relay should undo after a while
+  sendEdit(x, y, z, id, eph) {
+    this.send(eph ? { type: 'edit', x, y, z, id, ttl: 300, revert: eph.revert } : { type: 'edit', x, y, z, id });
+  }
   sendChat(text) { this.send({ type: 'chat', text }); }
   sendSave(data) { this.send({ type: 'save', data }); }
 
