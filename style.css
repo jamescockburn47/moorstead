@@ -324,3 +324,5 @@ button.mc.how-tab.active {
 .admin-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .admin-tp { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .admin-tp button { font-size: 12px; padding: 6px 4px; }
+
+.admin-coord { width: 70px; flex: none; }

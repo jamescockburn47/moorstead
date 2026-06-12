@@ -403,16 +403,73 @@ class Game {
       const b = ui.el('button', 'mc chat-btn', tp, label);
       b.addEventListener('click', () => this.adminTeleport(x, z, label));
     }
+    // drop in on a player (shared moor only — t' relay answers wardens wi' t' map)
+    if (this.netActive && this.net && this.net.connected) {
+      ui.el('div', 'r-needs', panel, 'Drop in on a player:');
+      const pl = ui.el('div', 'admin-tp', panel);
+      ui.el('div', 'r-needs', pl, 'asking t’ relay...');
+      this.net.requestWhere(players => {
+        if (this.state !== 'paused') return; // panel's closed — let it be
+        pl.innerHTML = '';
+        const mePid = (this.auth && this.auth.acct ? 'a' + this.auth.acct : this.devicePid()).slice(0, 40);
+        const others = players.filter(q => q.pid !== mePid);
+        if (!others.length) { ui.el('div', 'r-needs', pl, 'nob’dy else out just now'); return; }
+        for (const q of others) {
+          const d = Math.round(Math.hypot(q.x - this.player.pos.x, q.z - this.player.pos.z));
+          const b = ui.el('button', 'mc chat-btn', pl, `${q.name} (${d}m)`);
+          b.addEventListener('click', () => this.adminTeleport(Math.floor(q.x), Math.floor(q.z), q.name));
+        }
+      });
+    }
+    // or owt else: straight to coordinates
+    ui.el('div', 'r-needs', panel, 'Or drop at coordinates:');
+    const coordRow = ui.el('div', 'admin-btns', panel);
+    const ix = ui.el('input', 'chat-input admin-coord', coordRow); ix.placeholder = 'x';
+    const iz = ui.el('input', 'chat-input admin-coord', coordRow); iz.placeholder = 'z';
+    const go = ui.el('button', 'mc chat-btn', coordRow, 'Drop');
+    go.addEventListener('click', () => {
+      const x = parseInt(ix.value, 10), z = parseInt(iz.value, 10);
+      if (Number.isFinite(x) && Number.isFinite(z)) this.adminTeleport(x, z, `${x}, ${z}`);
+    });
   }
 
+  // Warden travel: tha doesn't walk, tha ARRIVES — dropped frae t' sky,
+  // landing wi' a thump as t' parish will notice.
   adminTeleport(x, z, label) {
     const p = this.player;
+    const g = this.world.gen.height(Math.floor(x), Math.floor(z));
     p.pos.x = x + 0.5; p.pos.z = z + 0.5;
-    p.pos.y = this.world.gen.height(Math.floor(x), Math.floor(z)) + 2.2;
-    if (p.vel) p.vel.y = 0;
+    p.pos.y = Math.min(HEIGHT - 2, g + 38);
+    if (p.vel) { p.vel.x = 0; p.vel.y = 0; p.vel.z = 0; }
     p.fallStart = null;
+    p.flying = false; // creative hover would spoil t' entrance
+    this.wardenDrop = { label, t: 0 };
     this.resume();
-    this.ui.toast(`Whisked off to <b>${label}</b>.`, 3500);
+    this.ui.toast(`Dropping in ower <b>${label}</b>...`, 2500);
+  }
+
+  // a warden hits t' ground like a dropped anvil: dust ring an' a thump
+  landImpact(x, y, z, mine) {
+    const e = this.entities;
+    if (e) {
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        e.burst(x + Math.cos(a) * 1.6, y + 0.3, z + Math.sin(a) * 1.6, [122, 106, 82], 4);
+      }
+      e.burst(x, y + 0.6, z, [186, 178, 156], 12);
+    }
+    if (this.audio && this.audio.noiseBurst && this.audio.ctx) {
+      const dNow = Math.hypot(x - this.player.pos.x, z - this.player.pos.z);
+      const gain = Math.max(0.06, 0.5 - dNow / 200);
+      this.audio.noiseBurst(this.audio.ctx.currentTime, 0.28, gain, 90, 'lowpass');
+      this.audio.noiseBurst(this.audio.ctx.currentTime + 0.05, 0.12, gain * 0.6, 240, 'lowpass');
+    }
+    if (mine && this.netActive && this.net) this.net.sendFx('land', x, y, z);
+  }
+
+  // a warden's flourish happening near us (relayed by t' moor)
+  remoteFx(m) {
+    if (m.kind === 'land') this.landImpact(m.x, m.y, m.z, false);
   }
 
   resume() {
@@ -1300,6 +1357,18 @@ class Game {
         this.ui.invDirty = true;
         this.ui.toast(`+${n} ${itemName(item)}`, 1600);
       });
+
+      // warden drop: no harm frae t' fall, an' a proper thump on arrival
+      if (this.wardenDrop) {
+        const wp = this.player;
+        wp.fallStart = null; // t' drop doesn't count as a fall
+        this.wardenDrop.t += dt;
+        if ((wp.onGround && this.wardenDrop.t > 0.3) || this.wardenDrop.t > 12) {
+          const d = this.wardenDrop; this.wardenDrop = null;
+          this.landImpact(wp.pos.x, wp.pos.y, wp.pos.z, true);
+          this.ui.toast(`<b>${d.label}</b>. T' ground remembers thee.`, 3500);
+        }
+      }
 
       // T' Great Fog gate: tops only — never t' coast, never in/near a village
       this.fogGateTimer = (this.fogGateTimer || 0) - dt;

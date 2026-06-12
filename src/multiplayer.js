@@ -69,8 +69,17 @@ export class Net {
       if (r && r.mob) g.entities.speak(r.mob, m.text, 7);
     } else if (m.type === 'time') {
       g.sky.time = m.time;
+    } else if (m.type === 'where') {
+      // warden's map o' who's where (t' relay only answers wardens)
+      if (this.onWhere) this.onWhere(m.players || []);
+    } else if (m.type === 'fx') {
+      // a flourish frae a warden nearby (landing thump an' t' like)
+      if (g.remoteFx) g.remoteFx(m);
     }
   }
+
+  requestWhere(cb) { this.onWhere = cb; this.send({ type: 'where' }); }
+  sendFx(kind, x, y, z) { this.send({ type: 'fx', kind, x, y, z }); }
 
   addRemote(pid, name, p) {
     if (this.remotes.has(pid)) return;

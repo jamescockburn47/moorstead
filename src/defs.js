@@ -45,8 +45,10 @@ export const I = {
 
 // Parish wardens: SHA-256 o' t' dash account id, never t' id itsen —
 // account ids double as login codes, so plaintext in a public repo would
-// hand out t' keys. (Client-side only owt road — t' game is client-authoritative.)
-export const ADMIN_HASHES = ['cfc79a30f3bbe268ecc0395fee178ce8afc6806b111cd253b3f68c845e2d73a8'];
+// hand out t' keys. (Client-side only owt road — t' game is client-authoritative;
+// t' relay keeps its own warden list for where/fx.) Dedicated warden login,
+// separate frae owt anybody plays on.
+export const ADMIN_HASHES = ['540b8969f17ffa7107ae287effedf175d9b4c8edfa3ab0f622a11c64465bc549'];
 
 // kind: 'solid' | 'cutout' (cross plants) | 'liquid' | 'air'
 // tex: {t, s, b} tile ids; hard: seconds to break by hand; tool: best tool
