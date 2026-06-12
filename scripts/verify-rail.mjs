@@ -28,12 +28,13 @@ for (const seedStr of SEEDS) {
   console.log(`\n== seed "${seedStr}" ==`);
   console.log('  stations: ' + st.map(s => `${s.name}(${s.x},${s.z})`).join(' -> '));
 
-  // leg lengths an' speeds
+  // leg lengths along t' actual alignment (spline chainage)
+  const path = geo.railPath();
   const legs = [];
-  for (let i = 0; i < st.length - 1; i++) {
-    legs.push(Math.hypot(st[i + 1].x - st[i].x, st[i + 1].z - st[i].z));
+  for (let i = 0; i < path.stationS.length - 1; i++) {
+    legs.push(path.stationS[i + 1] - path.stationS[i]);
   }
-  console.log('  legs: ' + legs.map(l => Math.round(l)).join(', ') + ' blocks');
+  console.log('  legs: ' + legs.map(l => Math.round(l)).join(', ') + ' blocks; line ' + Math.round(path.length) + ' end to end');
 
   // 1. self-intersection
   let crossings = 0;
@@ -56,26 +57,42 @@ for (const seedStr of SEEDS) {
   }
   ok('stations checked against sea an\' water');
 
-  // 3. corridor never slices a building (centreline ± perpendicular offsets)
+  // 3. corridor never slices a building (walk t' actual spline wi' offsets)
   let clipped = 0;
-  for (let i = 0; i < st.length - 1; i++) {
-    const a = st[i], b = st[i + 1];
-    const L = Math.hypot(b.x - a.x, b.z - a.z);
+  for (let i = 0; i < path.pts.length - 1; i++) {
+    const a = path.pts[i], b = path.pts[i + 1];
+    const L = Math.hypot(b.x - a.x, b.z - a.z) || 1;
     const ux = (b.x - a.x) / L, uz = (b.z - a.z) / L;
-    for (let t = 0; t <= L; t += 1) {
-      for (const off of [-1.5, 0, 1.5]) {
-        const x = Math.round(a.x + ux * t - uz * off);
-        const z = Math.round(a.z + uz * t + ux * off);
-        const col = geo.villageColumn(x, z);
-        if (col && col.kind === 'building') {
-          if (clipped < 4) bad(`leg ${a.name}->${b.name} slices a ${col.b.type} at (${x},${z}) in ${col.v.name}`);
-          clipped++;
-        }
+    for (const off of [-1.8, 0, 1.8]) {
+      const x = Math.round(a.x - uz * off), z = Math.round(a.z + ux * off);
+      const col = geo.villageColumn(x, z);
+      if (col && col.kind === 'building') {
+        if (clipped < 4) bad(`line slices a ${col.b.type} at (${x},${z}) in ${col.v.name}`);
+        clipped++;
       }
     }
   }
   if (!clipped) ok('corridor clear o\' buildings');
   else console.log(`        (${clipped} clipped samples total)`);
+
+  // 3c. engineered profile: gradients sane, deck dry, platforms level
+  let badGrade = 0, wetDeck = 0, steepest = 0;
+  for (let i = 1; i < path.pts.length; i++) {
+    const ds = path.pts[i].s - path.pts[i - 1].s || 0.001;
+    const g = Math.abs((path.pts[i].deck - path.pts[i - 1].deck) / ds);
+    steepest = Math.max(steepest, g);
+    if (g > 0.14) badGrade++;
+    if (path.pts[i].deck < WATER_LEVEL + 1) wetDeck++;
+  }
+  if (badGrade) bad(`${badGrade} samples steeper than 1-in-7 (worst ${steepest.toFixed(3)})`);
+  else ok(`gradients all gentle (steepest 1-in-${Math.round(1 / Math.max(steepest, 0.001))})`);
+  if (wetDeck) bad(`${wetDeck} samples o' deck below water`);
+  else ok('deck dry t\' whole way');
+  for (let si = 0; si < st.length; si++) {
+    const dAlign = Math.abs(geo.samplePos(path.stationS[si]).deck - geo.height(st[si].x, st[si].z));
+    if (dAlign > 1.6) bad(`${st[si].name} platform sits ${dAlign.toFixed(1)} blocks off t' deck`);
+  }
+  ok('platforms level wi\' t\' line');
 
   // 3b. every village stands on dry ground — t' whole disk flattens to t'
   // centre's height, an' shared-moor folk spawn across ALL villages

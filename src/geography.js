@@ -374,6 +374,7 @@ export class Geography {
     const vs = this.villages;
     const v = n => vs.find(x => x.name === n);
     const lev = this.drySpot(HORCUM.x - 45, HORCUM.z - 45);
+    const ms = this.drySpot(v('Moorstead').x + 28, v('Moorstead').z + 50, 28);
     // Whitby station hunts dry ground frae t' coast at its OWN z, so it never
     // ends up on t' sands (or in a dale mouth) whatever t' seed says
     const wz = ABBEY_Z + 26;
@@ -381,7 +382,9 @@ export class Geography {
     const stations = [
       { name: 'Pickering', x: v('Pickering').x - 20, z: v('Pickering').z - 30 },
       { name: 'Levisham', x: lev.x, z: lev.z },
-      { name: 'Moorstead', x: v('Moorstead').x + 8, z: v('Moorstead').z + 34 },
+      // t' village halt stands a step out on t' moor (like t' real Levisham!)
+      // so t' line can curve past wi'out clipping owt on t' green
+      { name: 'Moorstead', x: ms.x, z: ms.z },
       { name: 'Goathland', x: v('Goathland').x + 24, z: v('Goathland').z + 20 },
       { name: 'Grosmont', x: v('Grosmont').x, z: v('Grosmont').z + 24 },
       { name: 'Whitby', x: wb.x, z: wb.z },
@@ -394,28 +397,253 @@ export class Geography {
     return this.railway().find(s => Math.hypot(s.x - x, s.z - z) < r) || null;
   }
 
-  // Nearest point on t' line: {d: lateral distance, along: chainage} | null
-  railInfo(x, z) {
+  // ---------- t' permanent way ----------
+  // T' line is a proper engineered alignment, not dot-to-dot: a Catmull-Rom
+  // spline swept through t' stations, sampled every couple o' blocks, wi' a
+  // smoothed vertical profile (gradients clamped to ~1-in-8) that cuts
+  // through t' rises an' rides embankments ower t' dips — cuttings,
+  // causeways an' all. Deterministic frae t' seed, same for every player.
+  railPath() {
+    if (this._path) return this._path;
     const st = this.railway();
-    if (!this._railCum) {
-      this._railCum = [0];
-      for (let i = 0; i < st.length - 1; i++) {
-        this._railCum.push(this._railCum[i] + Math.hypot(st[i + 1].x - st[i].x, st[i + 1].z - st[i].z));
+    // Control points: every station gets a STRAIGHT run through t' platform
+    // (controls planted ±22 blocks along t' angle bisector), so curves sweep
+    // out in open country between stops — not through folk's farmyards.
+    const unit = (ax, az) => { const L = Math.hypot(ax, az) || 1; return { x: ax / L, z: az / L }; };
+    const ctrl = [];
+    for (let i = 0; i < st.length; i++) {
+      if (i === 0) {
+        const w = unit(st[1].x - st[0].x, st[1].z - st[0].z);
+        ctrl.push({ x: st[0].x, z: st[0].z, station: 0 });
+        ctrl.push({ x: st[0].x + w.x * 22, z: st[0].z + w.z * 22 });
+      } else if (i === st.length - 1) {
+        const u = unit(st[i].x - st[i - 1].x, st[i].z - st[i - 1].z);
+        ctrl.push({ x: st[i].x - u.x * 22, z: st[i].z - u.z * 22 });
+        ctrl.push({ x: st[i].x, z: st[i].z, station: i });
+      } else {
+        const u = unit(st[i].x - st[i - 1].x, st[i].z - st[i - 1].z);
+        const w = unit(st[i + 1].x - st[i].x, st[i + 1].z - st[i].z);
+        const m = unit(u.x + w.x, u.z + w.z);
+        ctrl.push({ x: st[i].x - m.x * 22, z: st[i].z - m.z * 22 });
+        ctrl.push({ x: st[i].x, z: st[i].z, station: i });
+        ctrl.push({ x: st[i].x + m.x * 22, z: st[i].z + m.z * 22 });
       }
     }
-    let best = null;
-    for (let i = 0; i < st.length - 1; i++) {
-      const a = st[i], b = st[i + 1];
-      // cheap bounding box first
-      if (x < Math.min(a.x, b.x) - 3 || x > Math.max(a.x, b.x) + 3 ||
-          z < Math.min(a.z, b.z) - 3 || z > Math.max(a.z, b.z) + 3) continue;
+    // village avoidance: where a leg would pass through a settlement, plant a
+    // via point pushed out past its boundary — t' line curves round, not through
+    const vias = [];
+    for (let i = 0; i < ctrl.length - 1; i++) {
+      vias.push(ctrl[i]);
+      const a = ctrl[i], b = ctrl[i + 1];
       const dx = b.x - a.x, dz = b.z - a.z;
       const L2 = dx * dx + dz * dz;
-      let t = ((x - a.x) * dx + (z - a.z) * dz) / L2;
-      t = Math.max(0, Math.min(1, t));
-      const d = Math.hypot(x - (a.x + dx * t), z - (a.z + dz * t));
-      if (d < 1.7 && (!best || d < best.d)) {
-        best = { d, along: this._railCum[i] + Math.sqrt(L2) * t };
+      if (L2 < 900) continue; // short hops (station triplets) handled below
+      let push = null;
+      for (const vv of this.villages) {
+        const t = Math.max(0, Math.min(1, ((vv.x - a.x) * dx + (vv.z - a.z) * dz) / L2));
+        const cx = a.x + dx * t, cz = a.z + dz * t;
+        const d = Math.hypot(cx - vv.x, cz - vv.z);
+        if (d < vv.radius + 14 && t > 0.05 && t < 0.95) {
+          const out = unit(cx - vv.x || 1, cz - vv.z || 0);
+          const r = vv.radius + 20;
+          push = { x: vv.x + out.x * r, z: vv.z + out.z * r };
+          break;
+        }
+      }
+      if (push) vias.push(push);
+    }
+    vias.push(ctrl[ctrl.length - 1]);
+    // an' no plain control may stand inside a village either — t' spline
+    // hugs its controls, so shove strays out past t' boundary
+    for (const c of vias) {
+      if (c.station !== undefined) continue;
+      for (const vv of this.villages) {
+        const d = Math.hypot(c.x - vv.x, c.z - vv.z);
+        if (d < vv.radius + 8) {
+          const out = unit(c.x - vv.x || 1, c.z - vv.z || 0);
+          c.x = vv.x + out.x * (vv.radius + 14);
+          c.z = vv.z + out.z * (vv.radius + 14);
+        }
+      }
+    }
+    const route = vias;
+    // phantom ends mirror t' first an' last hops
+    const P = [
+      { x: 2 * route[0].x - route[1].x, z: 2 * route[0].z - route[1].z },
+      ...route,
+      { x: 2 * route[route.length - 1].x - route[route.length - 2].x, z: 2 * route[route.length - 1].z - route[route.length - 2].z },
+    ];
+    const pts = [];                      // {x, z, s}
+    const stationS = new Array(st.length).fill(0);
+    const stationIdx = new Array(st.length).fill(0);
+    let s = 0, px = route[0].x, pz = route[0].z;
+    pts.push({ x: px, z: pz, s: 0 });
+    for (let i = 1; i < P.length - 2; i++) {
+      const p0 = P[i - 1], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2];
+      const approx = Math.hypot(p2.x - p1.x, p2.z - p1.z);
+      const n = Math.max(4, Math.ceil(approx / 2));
+      for (let k = 1; k <= n; k++) {
+        const t = k / n, t2 = t * t, t3 = t2 * t;
+        const cr = (a, b, c, d) =>
+          0.5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+        const x = cr(p0.x, p1.x, p2.x, p3.x), z = cr(p0.z, p1.z, p2.z, p3.z);
+        s += Math.hypot(x - px, z - pz);
+        pts.push({ x, z, s });
+        px = x; pz = z;
+      }
+      if (P[i + 1].station !== undefined) {
+        stationS[P[i + 1].station] = s;
+        stationIdx[P[i + 1].station] = pts.length - 1;
+      }
+    }
+
+    // precision pass: t' line may cross a green or a close, but never a
+    // building. Shove offending samples out o' (expanded) building boxes,
+    // smooth t' kinks, re-measure t' chainage. Stations stay pinned.
+    const pinned = new Array(pts.length).fill(false);
+    for (const si of stationIdx) {
+      for (let i = Math.max(0, si - 8); i <= Math.min(pts.length - 1, si + 8); i++) pinned[i] = true;
+    }
+    for (let pass = 0; pass < 5; pass++) {
+      let moved = false;
+      for (const p of pts) {
+        for (const vv of this.villages) {
+          if (Math.abs(p.x - vv.x) > vv.radius + 8 || Math.abs(p.z - vv.z) > vv.radius + 8) continue;
+          for (const b of vv.buildings) {
+            const ex0 = b.x0 - 2.6, ex1 = b.x1 + 2.6, ez0 = b.z0 - 2.6, ez1 = b.z1 + 2.6;
+            if (p.x > ex0 && p.x < ex1 && p.z > ez0 && p.z < ez1) {
+              const dl = p.x - ex0, dr = ex1 - p.x, du = p.z - ez0, dd = ez1 - p.z;
+              const m = Math.min(dl, dr, du, dd);
+              if (m === dl) p.x = ex0; else if (m === dr) p.x = ex1;
+              else if (m === du) p.z = ez0; else p.z = ez1;
+              moved = true;
+            }
+          }
+        }
+      }
+      if (!moved) break;
+      // light positional smoothing to round t' shoves off (pins held)
+      for (let r = 0; r < 2; r++) {
+        for (let i = 1; i < pts.length - 1; i++) {
+          if (pinned[i]) continue;
+          pts[i].x = (pts[i - 1].x + pts[i].x * 2 + pts[i + 1].x) / 4;
+          pts[i].z = (pts[i - 1].z + pts[i].z * 2 + pts[i + 1].z) / 4;
+        }
+      }
+    }
+    // re-measure chainage after t' shoving
+    pts[0].s = 0;
+    for (let i = 1; i < pts.length; i++) {
+      pts[i].s = pts[i - 1].s + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+    }
+    for (let si = 0; si < stationIdx.length; si++) stationS[si] = pts[stationIdx[si]].s;
+
+    // vertical profile: terrain under t' line, smoothed twice...
+    const deck = pts.map(p => Math.max(this.height(Math.round(p.x), Math.round(p.z)), WATER_LEVEL + 1));
+    for (let pass = 0; pass < 2; pass++) {
+      const w = 20, sm = deck.slice();
+      for (let i = 0; i < deck.length; i++) {
+        let acc = 0, cnt = 0;
+        for (let j = Math.max(0, i - w); j <= Math.min(deck.length - 1, i + w); j++) { acc += deck[j]; cnt++; }
+        sm[i] = acc / cnt;
+      }
+      for (let i = 0; i < deck.length; i++) deck[i] = sm[i];
+    }
+    // ...gradient-clamped to 1-in-8, forward an' back...
+    const maxg = 0.125;
+    for (let i = 1; i < deck.length; i++) {
+      const ds = pts[i].s - pts[i - 1].s;
+      deck[i] = Math.min(deck[i], deck[i - 1] + maxg * ds);
+      deck[i] = Math.max(deck[i], deck[i - 1] - maxg * ds);
+    }
+    for (let i = deck.length - 2; i >= 0; i--) {
+      const ds = pts[i + 1].s - pts[i].s;
+      deck[i] = Math.min(deck[i], deck[i + 1] + maxg * ds);
+      deck[i] = Math.max(deck[i], deck[i + 1] - maxg * ds);
+    }
+    // ...then platforms forced dead level wi' their station ground, an' a
+    // final clamp anchored AT t' stations so t' approaches stay railway-gentle
+    const fixed = new Array(deck.length).fill(false);
+    for (let si = 0; si < st.length; si++) {
+      const g = this.height(st[si].x, st[si].z);
+      for (let i = 0; i < pts.length; i++) {
+        const ds = Math.abs(pts[i].s - stationS[si]);
+        if (ds < 52) {
+          const k = ds < 12 ? 1 : 1 - (ds - 12) / 40;
+          deck[i] += (g - deck[i]) * k;
+          if (ds < 12) fixed[i] = true;
+        }
+      }
+    }
+    for (let i = 1; i < deck.length; i++) {
+      if (fixed[i]) continue;
+      const ds = pts[i].s - pts[i - 1].s;
+      deck[i] = Math.min(deck[i], deck[i - 1] + maxg * ds);
+      deck[i] = Math.max(deck[i], deck[i - 1] - maxg * ds);
+    }
+    for (let i = deck.length - 2; i >= 0; i--) {
+      if (fixed[i]) continue;
+      const ds = pts[i + 1].s - pts[i].s;
+      deck[i] = Math.min(deck[i], deck[i + 1] + maxg * ds);
+      deck[i] = Math.max(deck[i], deck[i + 1] - maxg * ds);
+    }
+    for (let i = 0; i < deck.length; i++) deck[i] = Math.max(deck[i], WATER_LEVEL + 1);
+    for (let i = 0; i < pts.length; i++) pts[i].deck = deck[i];
+
+    // spatial index: 8-block cells -> sample indices (for fast per-column lookup)
+    const cells = new Map();
+    for (let i = 0; i < pts.length; i++) {
+      const k = `${Math.floor(pts[i].x / 8)},${Math.floor(pts[i].z / 8)}`;
+      if (!cells.has(k)) cells.set(k, []);
+      cells.get(k).push(i);
+    }
+    this._path = { pts, cells, length: s, stationS };
+    return this._path;
+  }
+
+  // position, heading an' deck height at chainage s along t' line
+  samplePos(s) {
+    const path = this.railPath();
+    const pts = path.pts;
+    s = Math.max(0, Math.min(path.length, s));
+    // binary search for t' sample pair straddling s
+    let lo = 0, hi = pts.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (pts[mid].s <= s) lo = mid; else hi = mid;
+    }
+    const a = pts[lo], b = pts[hi];
+    const ds = Math.max(b.s - a.s, 0.001);
+    const t = (s - a.s) / ds;
+    return {
+      x: a.x + (b.x - a.x) * t,
+      z: a.z + (b.z - a.z) * t,
+      deck: a.deck + (b.deck - a.deck) * t,
+      tx: (b.x - a.x) / ds, tz: (b.z - a.z) / ds,
+      grade: (b.deck - a.deck) / ds,
+    };
+  }
+
+  // Nearest point on t' line: {d, along, deck} | null (within ~2.6 blocks)
+  railInfo(x, z) {
+    const path = this.railPath();
+    let best = null;
+    const cx = Math.floor(x / 8), cz = Math.floor(z / 8);
+    for (let gx = cx - 1; gx <= cx + 1; gx++) {
+      for (let gz = cz - 1; gz <= cz + 1; gz++) {
+        const idxs = path.cells.get(`${gx},${gz}`);
+        if (!idxs) continue;
+        for (const i of idxs) {
+          const a = path.pts[i], b = path.pts[Math.min(i + 1, path.pts.length - 1)];
+          const dx = b.x - a.x, dz = b.z - a.z;
+          const L2 = dx * dx + dz * dz || 0.001;
+          let t = ((x - a.x) * dx + (z - a.z) * dz) / L2;
+          t = Math.max(0, Math.min(1, t));
+          const d = Math.hypot(x - (a.x + dx * t), z - (a.z + dz * t));
+          if (d < 2.6 && (!best || d < best.d)) {
+            best = { d, along: a.s + Math.sqrt(L2) * t, deck: a.deck + (b.deck - a.deck) * t };
+          }
+        }
       }
     }
     return best;

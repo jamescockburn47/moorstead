@@ -181,25 +181,23 @@ export class Gen {
           if (r < 0.05) data[IDX(lx, h + 1, lz)] = B.HEATHER;
         }
 
-        // t' Moors Railway: a proper permanent way — three-wide ballast bed,
-        // sleepers across it, stone edging, an' causeways ower t' watter
+        // t' Moors Railway: a proper engineered permanent way — t' deck
+        // follows t' line's own smoothed profile, so it rides embankments
+        // an' causeways ower t' dips an' cuts a slot through t' rises.
+        // (T' rails an' sleepers themselves are drawn as real geometry.)
         {
           const ri = geo.railInfo(x, z);
-          if (ri) {
-            const deck = Math.max(h, WATER_LEVEL + 1);
-            // embankment fill up frae t' ground (or t' lake bed)
-            for (let y = h; y < deck && y > 0; y++) {
-              if (y < HEIGHT) data[IDX(lx, y, lz)] = B.STONE;
+          if (ri && ri.d < 2.2) {
+            const deck = Math.max(1, Math.min(HEIGHT - 5, Math.round(ri.deck)));
+            // embankment / causeway: fill frae t' ground (or t' watter bed) up
+            for (let y = Math.min(h, deck); y < deck && y > 0; y++) {
+              data[IDX(lx, y, lz)] = B.STONE;
             }
-            // clear headroom (an' owt growing on t' line)
-            for (let y = deck + 1; y <= Math.min(HEIGHT - 1, deck + 3); y++) data[IDX(lx, y, lz)] = B.AIR;
-            // deck: sleeper courses across t' bed every few yards
-            const sleeper = ((ri.along % 4) + 4) % 4 < 1.2;
-            let id;
-            if (sleeper) id = B.PLANKS;
-            else if (ri.d > 1.0) id = B.COBBLE; // dressed edging
-            else id = B.GRAVEL;                  // ballast
-            if (deck < HEIGHT) data[IDX(lx, deck, lz)] = id;
+            // cutting: clear t' slot where t' land stands prouder than t' line
+            const clearTop = Math.min(HEIGHT - 1, Math.max(deck + 4, h + 1));
+            for (let y = deck + 1; y <= clearTop; y++) data[IDX(lx, y, lz)] = B.AIR;
+            // ballast bed wi' dressed stone edging
+            data[IDX(lx, deck, lz)] = ri.d > 1.6 ? B.COBBLE : B.GRAVEL;
           }
         }
 
@@ -237,8 +235,9 @@ export class Gen {
     };
     for (const s of this.geo.railway()) {
       if (s.x < x0 - 6 || s.x > x0 + CHUNK + 6 || s.z < z0 - 6 || s.z > z0 + CHUNK + 6) continue;
-      // platform never below t' causeway deck — a halt ower watter stands proud
-      const g = Math.max(this.geo.height(s.x, s.z), WATER_LEVEL + 1);
+      // platform stands level wi' t' engineered deck, never below watter
+      const ri = this.geo.railInfo(s.x, s.z);
+      const g = Math.max(ri ? Math.round(ri.deck) : this.geo.height(s.x, s.z), WATER_LEVEL + 1);
       for (let dx = -2; dx <= 2; dx++) for (let dz = 1; dz <= 3; dz++) {
         put(s.x + dx, g, s.z + dz, B.PLANKS);
         for (let y = g + 1; y <= g + 3; y++) put(s.x + dx, y, s.z + dz, B.AIR);

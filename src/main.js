@@ -12,9 +12,30 @@ import * as npc from './npc.js';
 import { Quests } from './quests.js';
 import { Net } from './multiplayer.js';
 import { buildTrain } from './train.js';
+import { Rails } from './rails.js';
 
-const RAIL_SPEED = 16; // blocks a second — t' steady pace of a heritage steamer
+const RAIL_VMAX = 11;  // blocks a second flat out — t' pace of a heritage steamer
+const RAIL_ACC = 0.18; // gentle acceleration: she works up to speed an' brakes early
 const DWELL_T = 30;    // thirty seconds stood at each platform, doors open
+
+// where is she an' how fast, tt seconds into a leg o' length len?
+// (trapezoid speed profile: accelerate, cruise, brake — closed form, so
+// every client computes t' same train frae t' same wall clock)
+function runProfile(len, tt) {
+  const dFull = RAIL_VMAX * RAIL_VMAX / (2 * RAIL_ACC);
+  let vPeak, tA;
+  if (len >= 2 * dFull) { vPeak = RAIL_VMAX; tA = RAIL_VMAX / RAIL_ACC; }
+  else { vPeak = Math.sqrt(RAIL_ACC * len); tA = vPeak / RAIL_ACC; }
+  const dA = 0.5 * RAIL_ACC * tA * tA;
+  const tCruise = vPeak >= RAIL_VMAX ? (len - 2 * dA) / RAIL_VMAX : 0;
+  const tTotal = 2 * tA + tCruise;
+  let dist, v;
+  if (tt <= tA) { dist = 0.5 * RAIL_ACC * tt * tt; v = RAIL_ACC * tt; }
+  else if (tt <= tA + tCruise) { dist = dA + (tt - tA) * vPeak; v = vPeak; }
+  else { const tb = Math.max(0, tTotal - tt); dist = len - 0.5 * RAIL_ACC * tb * tb; v = RAIL_ACC * tb; }
+  return { dist: Math.max(0, Math.min(len, dist)), v: Math.max(0, v), tTotal };
+}
+function legTime(len) { return runProfile(len, 0).tTotal; }
 import { Entities } from './entities.js';
 import { Sky } from './sky.js';
 import { AudioEngine } from './audio.js';
@@ -121,6 +142,8 @@ class Game {
     this.standing = null;
     this.standingData = null;
     this.quests = new Quests(this);
+    if (this.rails) this.rails.dispose();
+    this.rails = new Rails(this.scene, this.world.gen.geo); // t' permanent way, drawn proper
     this.entities.game = this;
     this.entities.onKill = mob => this.quests.onMobKilled(mob);
     window.moorstead = window.moorcraft = this; // a handle for t' dev console
@@ -141,6 +164,7 @@ class Game {
   }
 
   teardownWorld() {
+    if (this.rails) { this.rails.dispose(); this.rails = null; }
     this.entities.clear();
     for (const c of this.world.chunks.values()) {
       if (c.meshes) for (const m of c.meshes) { this.scene.remove(m); m.geometry.dispose(); }
@@ -830,15 +854,16 @@ class Game {
   // ---------------- t' Moors Railway ----------------
   // ONE train, running t' line forever on t' shared clock — same for every
   // player, so tha can watch her steam past frae out on t' moor.
-  // per-leg running times: long legs take longer, like a proper timetable
+  // per-leg running times frae t' real alignment: trapezoid speed profile
+  // ower t' spline's chainage — long legs genuinely take longer
   railLegs() {
     const geo = this.world.gen.geo;
     if (this._legGeo === geo) return this._legs;
-    const st = geo.railway();
+    const path = geo.railPath();
     const legs = [];
-    for (let i = 0; i < st.length - 1; i++) {
-      const len = Math.hypot(st[i + 1].x - st[i].x, st[i + 1].z - st[i].z);
-      legs.push({ len, t: Math.min(75, Math.max(12, len / RAIL_SPEED)) });
+    for (let i = 0; i < path.stationS.length - 1; i++) {
+      const len = path.stationS[i + 1] - path.stationS[i];
+      legs.push({ len, t: legTime(len), s0: path.stationS[i], s1: path.stationS[i + 1] });
     }
     this._legGeo = geo;
     this._legs = legs;
@@ -846,7 +871,8 @@ class Game {
   }
 
   trainSchedule(nowSec) {
-    const st = this.world.gen.geo.railway();
+    const geo = this.world.gen.geo;
+    const st = geo.railway();
     const legs = this.railLegs();
     const n = st.length;
     const oneway = legs.reduce((a, l) => a + l.t, 0) + n * DWELL_T;
@@ -856,24 +882,26 @@ class Game {
     const leg = k => legs[dir === 0 ? k : n - 2 - k]; // t' leg run after t' k-th call
     let tt = now % oneway;
     for (let k = 0; k < n; k++) {
-      if (tt < DWELL_T) return { mode: 'dwell', i: idx(k), dwellLeft: DWELL_T - tt, dir };
+      if (tt < DWELL_T) {
+        const sAt = geo.railPath().stationS[idx(k)];
+        const sp = geo.samplePos(sAt);
+        return { mode: 'dwell', i: idx(k), dwellLeft: DWELL_T - tt, dir, s: sAt, x: sp.x, z: sp.z };
+      }
       tt -= DWELL_T;
       if (k < n - 1) {
         const L = leg(k);
         if (tt < L.t) {
-          const a = st[idx(k)], b = st[idx(k + 1)];
-          // ease in an' out o' t' stations
-          const u = tt / L.t;
-          const f = u * u * (3 - 2 * u);
-          return { mode: 'run', from: idx(k), to: idx(k + 1), frac: f, dir,
-                   x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, a, b,
-                   // true pace in blocks/s (smoothstep derivative), wi' a breath at each end
-                   speed: (L.len / L.t) * 6 * u * (1 - u) + 0.15 };
+          const run = runProfile(L.len, tt);
+          // dir 0 runs up t' chainage, dir 1 back down it
+          const s = dir === 0 ? L.s0 + run.dist : L.s1 - run.dist;
+          const sp = geo.samplePos(s);
+          return { mode: 'run', from: idx(k), to: idx(k + 1), frac: run.dist / L.len, dir,
+                   s, x: sp.x, z: sp.z, speed: run.v + 0.05 };
         }
         tt -= L.t;
       }
     }
-    return { mode: 'dwell', i: idx(n - 1), dwellLeft: 1, dir };
+    return { mode: 'dwell', i: idx(n - 1), dwellLeft: 1, dir, s: geo.railPath().stationS[idx(n - 1)] };
   }
 
   // seconds till t' train next calls at station i
@@ -906,14 +934,9 @@ class Game {
       ? `<b style="color:#9ec27a">She\u2019s stood at t\u2019 platform now</b> \u2014 ${Math.round(sched.dwellLeft)}s afore she\u2019s away. Book on an\u2019 tha\u2019s straight aboard.`
       : `Next train calls in <b style="color:#d8b95a">${this.fmtMins(this.nextCallAt(stIdx))}</b>. Book on, then be stood on t\u2019 platform when she comes in.`);
     const list = ui.el('div', 'recipes board-list', ui.boardPanel);
-    const lineDist = (a, b) => {
-      const i0 = stations.indexOf(a), i1 = stations.indexOf(b);
-      let d = 0;
-      for (let i = Math.min(i0, i1); i < Math.max(i0, i1); i++) {
-        d += Math.hypot(stations[i + 1].x - stations[i].x, stations[i + 1].z - stations[i].z);
-      }
-      return d;
-    };
+    // honest distances: chainage along t' actual alignment, curves an' all
+    const stS = this.world.gen.geo.railPath().stationS;
+    const lineDist = (a, b) => Math.abs(stS[stations.indexOf(b)] - stS[stations.indexOf(a)]);
     const myCoal = this.player.countItem(I.COAL_LUMP);
     for (const dest of stations) {
       if (dest === st) continue;
@@ -947,16 +970,19 @@ class Game {
   // platforms, ridden frae a window seat.
   updateTrainWorld(dt) {
     if (!this.world || this.state === 'title' || this.state === 'loading') return;
-    const st = this.world.gen.geo.railway();
+    const geo = this.world.gen.geo;
+    const st = geo.railway();
     const s = this.trainSchedule();
-    let x, z, rotY = this.trainRot || 0, moving = false, speed = 0;
+    const sp = geo.samplePos(s.s);
+    const x = sp.x, z = sp.z;
+    let rotY = this.trainRot || 0, pitch = 0, moving = false, speed = 0;
+    // she faces along t' rails — t' spline's tangent, flipped for t' down trains
+    const fwd = s.dir === 0 ? 1 : -1;
+    if (Math.hypot(sp.tx, sp.tz) > 0.01) rotY = Math.atan2(sp.tx * fwd, sp.tz * fwd);
+    pitch = -Math.atan(sp.grade * fwd);
     if (s.mode === 'run') {
-      x = s.x; z = s.z;
-      rotY = Math.atan2(s.b.x - s.a.x, s.b.z - s.a.z);
       moving = true;
       speed = s.speed; // already blocks/s
-    } else {
-      x = st[s.i].x; z = st[s.i].z;
     }
     this.trainRot = rotY;
     this.trainState = { x, z, rotY, s };
@@ -967,11 +993,12 @@ class Game {
     if (!this.train) this.train = buildTrain();
     const tg = this.train.group;
     if (show) {
-      if (!tg.parent) this.scene.add(tg);
-      const deck = Math.max(this.world.gen.height(Math.floor(x), Math.floor(z)), WATER_LEVEL + 1) + 1;
+      if (!tg.parent) { this.scene.add(tg); tg.rotation.order = 'YXZ'; }
+      const deck = sp.deck + 1; // t' engineered profile, smooth as t' rails
       tg.position.x = x; tg.position.z = z;
       tg.position.y = tg.position.y ? tg.position.y + (deck - tg.position.y) * Math.min(1, dt * 5) : deck;
       tg.rotation.y = rotY;
+      tg.rotation.x += (pitch - tg.rotation.x) * Math.min(1, dt * 4); // settles into gradients
       if (moving) {
         this.train.wheels.forEach(w => w.rotateY(speed * dt / 0.62));
         this.trainChuff = (this.trainChuff || 0) - dt;
@@ -1370,6 +1397,7 @@ class Game {
     if (!paused) {
       // t' one true train: always running, visible to all
       this.updateTrainWorld(dt);
+      if (this.rails) this.rails.update(dt, this.player.pos);
       if (this.state === 'riding' && this.ride) {
         this.updateRide();
       }
