@@ -11,8 +11,8 @@ import { Quests } from './quests.js';
 import { Net } from './multiplayer.js';
 import { buildTrain } from './train.js';
 
-const LEG_T = 30;   // thirty seconds between stations
-const DWELL_T = 30; // an' thirty stood at each platform, doors open
+const RAIL_SPEED = 16; // blocks a second — t' steady pace of a heritage steamer
+const DWELL_T = 30;    // thirty seconds stood at each platform, doors open
 import { Entities } from './entities.js';
 import { Sky } from './sky.js';
 import { AudioEngine } from './audio.js';
@@ -120,6 +120,7 @@ class Game {
     this.quests = new Quests(this);
     this.entities.game = this;
     this.entities.onKill = mob => this.quests.onMobKilled(mob);
+    window.moorcraft = this; // a handle for t' dev console
     this.lastQuestDay = 1;
 
     if (meta) {
@@ -658,28 +659,47 @@ class Game {
   // ---------------- t' Moors Railway ----------------
   // ONE train, running t' line forever on t' shared clock — same for every
   // player, so tha can watch her steam past frae out on t' moor.
-  trainSchedule() {
+  // per-leg running times: long legs take longer, like a proper timetable
+  railLegs() {
+    const geo = this.world.gen.geo;
+    if (this._legGeo === geo) return this._legs;
+    const st = geo.railway();
+    const legs = [];
+    for (let i = 0; i < st.length - 1; i++) {
+      const len = Math.hypot(st[i + 1].x - st[i].x, st[i + 1].z - st[i].z);
+      legs.push({ len, t: Math.min(75, Math.max(12, len / RAIL_SPEED)) });
+    }
+    this._legGeo = geo;
+    this._legs = legs;
+    return legs;
+  }
+
+  trainSchedule(nowSec) {
     const st = this.world.gen.geo.railway();
+    const legs = this.railLegs();
     const n = st.length;
-    const oneway = (n - 1) * LEG_T + n * DWELL_T;
-    const now = Date.now() / 1000;
+    const oneway = legs.reduce((a, l) => a + l.t, 0) + n * DWELL_T;
+    const now = nowSec !== undefined ? nowSec : Date.now() / 1000;
     const dir = Math.floor(now / oneway) % 2;
     const idx = k => (dir === 0 ? k : n - 1 - k);
+    const leg = k => legs[dir === 0 ? k : n - 2 - k]; // t' leg run after t' k-th call
     let tt = now % oneway;
     for (let k = 0; k < n; k++) {
       if (tt < DWELL_T) return { mode: 'dwell', i: idx(k), dwellLeft: DWELL_T - tt, dir };
       tt -= DWELL_T;
       if (k < n - 1) {
-        if (tt < LEG_T) {
+        const L = leg(k);
+        if (tt < L.t) {
           const a = st[idx(k)], b = st[idx(k + 1)];
           // ease in an' out o' t' stations
-          let f = tt / LEG_T;
-          f = f * f * (3 - 2 * f);
+          const u = tt / L.t;
+          const f = u * u * (3 - 2 * u);
           return { mode: 'run', from: idx(k), to: idx(k + 1), frac: f, dir,
                    x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, a, b,
-                   speed: Math.sin(Math.PI * (tt / LEG_T)) + 0.15 };
+                   // true pace in blocks/s (smoothstep derivative), wi' a breath at each end
+                   speed: (L.len / L.t) * 6 * u * (1 - u) + 0.15 };
         }
-        tt -= LEG_T;
+        tt -= L.t;
       }
     }
     return { mode: 'dwell', i: idx(n - 1), dwellLeft: 1, dir };
@@ -687,11 +707,9 @@ class Game {
 
   // seconds till t' train next calls at station i
   nextCallAt(i) {
-    for (let dt = 0; dt < 1200; dt += 2) {
-      const save = Date.now;
-      Date.now = () => save() + dt * 1000;
-      const s = this.trainSchedule();
-      Date.now = save;
+    const now = Date.now() / 1000;
+    for (let dt = 0; dt < 1800; dt += 2) {
+      const s = this.trainSchedule(now + dt);
       if (s.mode === 'dwell' && s.i === i) return dt;
     }
     return 0;
@@ -765,7 +783,7 @@ class Game {
       x = s.x; z = s.z;
       rotY = Math.atan2(s.b.x - s.a.x, s.b.z - s.a.z);
       moving = true;
-      speed = s.speed * 25;
+      speed = s.speed; // already blocks/s
     } else {
       x = st[s.i].x; z = st[s.i].z;
     }

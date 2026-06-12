@@ -237,7 +237,8 @@ export class Gen {
     };
     for (const s of this.geo.railway()) {
       if (s.x < x0 - 6 || s.x > x0 + CHUNK + 6 || s.z < z0 - 6 || s.z > z0 + CHUNK + 6) continue;
-      const g = this.geo.height(s.x, s.z);
+      // platform never below t' causeway deck — a halt ower watter stands proud
+      const g = Math.max(this.geo.height(s.x, s.z), WATER_LEVEL + 1);
       for (let dx = -2; dx <= 2; dx++) for (let dz = 1; dz <= 3; dz++) {
         put(s.x + dx, g, s.z + dz, B.PLANKS);
         for (let y = g + 1; y <= g + 3; y++) put(s.x + dx, y, s.z + dz, B.AIR);

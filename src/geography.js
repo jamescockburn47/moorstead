@@ -138,9 +138,10 @@ export class Geography {
       x0: vx + dx, z0: vz + dz, x1: vx + dx + w - 1, z1: vz + dz + d - 1, wallH, type,
     });
 
-    // Goathland: cottages strung along a long green
+    // Goathland: cottages strung along a long green, up t' moor SW o' Whitby
+    // (NE quarter o' t' map, like t' real un — t' railway calls here)
     {
-      const x = -480, z = 430, g = Math.floor(this.heightRaw(x, z));
+      const x = 460, z = -60, g = Math.floor(this.heightRaw(x, z));
       vs.push({
         x, z, ground: g, name: 'Goathland', radius: 40, style: 'longgreen',
         buildings: [
@@ -174,9 +175,11 @@ export class Geography {
         ],
       });
     }
-    // Pickering: t' capital — market square, shops, an' a proper minster
+    // Pickering: t' capital — market square, shops, an' a proper minster.
+    // Sits at t' SOUTH foot o' t' moors below t' Hole of Horcum, like t' real
+    // town: t' railway sets off north frae here.
     {
-      const x = 520, z = -380, g = Math.floor(this.heightRaw(x, z));
+      const x = 540, z = 860, g = Math.floor(this.heightRaw(x, z));
       vs.push({
         x, z, ground: g, name: 'Pickering', radius: 56, style: 'capital',
         buildings: [
@@ -185,6 +188,18 @@ export class Geography {
           mk(x, z, 14, -4, 7, 6, 3, 'shop'), mk(x, z, 14, 6, 7, 6, 3, 'shop'),
           mk(x, z, -8, 14, 8, 6, 3, 'shop'), mk(x, z, 3, 14, 8, 6, 3, 'cottage'),
           mk(x, z, -22, -16, 8, 7, 3, 'cottage'), mk(x, z, 15, -16, 8, 7, 3, 'cottage'),
+        ],
+      });
+    }
+    // Grosmont: t' engine-shed hamlet in t' Esk valley, last stop afore Whitby
+    {
+      const x = 640, z = -104, g = Math.floor(this.heightRaw(x, z));
+      vs.push({
+        x, z, ground: g, name: 'Grosmont', radius: 26, style: 'cluster',
+        buildings: [
+          mk(x, z, -10, -8, 6, 5, 3, 'cottage'), mk(x, z, -2, -10, 6, 5, 3, 'cottage'),
+          mk(x, z, 6, -7, 6, 5, 3, 'cottage'),
+          mk(x, z, -4, 0, 8, 6, 4, 'barn'), // t' engine shed
         ],
       });
     }
@@ -303,20 +318,46 @@ export class Geography {
   }
 
   // ---------- t' railway ----------
-  // T' Moors Railway: every village connected, ending at t' sea (like t' NYMR).
+  // T' Moors Railway, shaped like t' real NYMR: Pickering at t' south end,
+  // climbing north past t' Hole of Horcum (Levisham halt on its western
+  // shoulder), a lonely moor-top call at Moorstead (playing Newton Dale),
+  // then Goathland, Grosmont, an' into Whitby by t' sea.
+  // (Rosedale's ironstone line were its own affair — ask Harry at t' kilns.
+  // Staithes is its own coastal town; tha walks t' cliff path for that one.)
+  // nearest dry, inland, un-built-on spot to (x0,z0) — deterministic spiral,
+  // so open-country halts never end up in a beck or on t' sands
+  drySpot(x0, z0) {
+    for (let r = 0; r <= 96; r += 6) {
+      for (let a = 0; a < (r ? 8 : 1); a++) {
+        const ang = (a / 8) * Math.PI * 2;
+        const x = Math.round(x0 + Math.cos(ang) * r), z = Math.round(z0 + Math.sin(ang) * r);
+        if (this.coastT(x, z) > 0) continue;
+        if (this.heightRaw(x, z) <= WATER_LEVEL) continue;
+        if (this.daleness(x, z) > 0.6 && this.heightRaw(x, z) <= WATER_LEVEL + 2) continue;
+        const vc = this.villageColumn(x, z);
+        if (vc && vc.kind === 'building') continue;
+        return { x, z };
+      }
+    }
+    return { x: Math.round(x0), z: Math.round(z0) };
+  }
+
   railway() {
     if (this._rail) return this._rail;
     const vs = this.villages;
     const v = n => vs.find(x => x.name === n);
-    const ab = this.abbeySite();
-    // Pickering to Whitby, ower t' moors — just like t' real NYMR.
-    // (Staithes is its own coastal town; tha walks t' cliff path for that one.)
+    const lev = this.drySpot(HORCUM.x - 45, HORCUM.z - 45);
+    // Whitby station hunts dry ground frae t' coast at its OWN z, so it never
+    // ends up on t' sands (or in a dale mouth) whatever t' seed says
+    const wz = ABBEY_Z + 26;
+    const wb = this.drySpot(Math.floor(this.coastX(wz)) - 44, wz);
     const stations = [
-      { name: 'Pickering', x: v('Pickering').x - 30, z: v('Pickering').z + 20 },
+      { name: 'Pickering', x: v('Pickering').x - 20, z: v('Pickering').z - 30 },
+      { name: 'Levisham', x: lev.x, z: lev.z },
       { name: 'Moorstead', x: v('Moorstead').x + 8, z: v('Moorstead').z + 34 },
-      { name: 'Rosedale Abbey', x: v('Rosedale Abbey').x - 14, z: v('Rosedale Abbey').z + 14 },
-      { name: 'Goathland', x: v('Goathland').x + 20, z: v('Goathland').z },
-      { name: 'Whitby', x: ab.x - 14, z: ab.z + 26 },
+      { name: 'Goathland', x: v('Goathland').x - 20, z: v('Goathland').z + 24 },
+      { name: 'Grosmont', x: v('Grosmont').x, z: v('Grosmont').z + 24 },
+      { name: 'Whitby', x: wb.x, z: wb.z },
     ];
     this._rail = stations;
     return stations;
