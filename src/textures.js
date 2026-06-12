@@ -447,6 +447,17 @@ const ITEM_ICON_PAINTERS = {
     ctx.stroke();
     ctx.strokeStyle = '#8a7a5e'; ctx.lineWidth = 1.2; ctx.stroke();
   },
+  [I.FISH_CHIPS](ctx) {
+    // a paper cone o' chips wi' battered fish atop
+    ctx.fillStyle = '#e8e0d0'; // t' paper
+    ctx.beginPath(); ctx.moveTo(8, 12); ctx.lineTo(24, 12); ctx.lineTo(19, 28); ctx.lineTo(13, 28); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#c8bca4'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = '#e8c050'; // chips poking out
+    ctx.fillRect(10, 6, 3, 8); ctx.fillRect(14, 4, 3, 10); ctx.fillRect(18, 7, 3, 7);
+    ctx.fillStyle = '#c89838'; // battered fish laid across
+    ctx.beginPath(); ctx.ellipse(16, 11, 8, 3.4, -0.25, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#a87828'; ctx.stroke();
+  },
   [I.GRYPHAEA](ctx) {
     ctx.fillStyle = '#4a4438';
     ctx.beginPath();

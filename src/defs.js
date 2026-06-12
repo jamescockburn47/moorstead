@@ -39,6 +39,8 @@ export const I = {
   SPARKLE: 91, HIDE_SCRAP: 92,
   // fossils, dug frae t' bay sands
   AMMONITE: 93, GRYPHAEA: 94,
+  // Whitby's finest, wrapped in paper — Fishwife Annie's trade
+  FISH_CHIPS: 99,
   // Dracula storyline
   HOLY_WATER: 95, WOODEN_STAKE: 96, HOLY_STAKE: 97, DRACULA_JOURNAL: 98,
 };
@@ -116,6 +118,7 @@ export const ITEM_NAMES = {
   [I.HIDE_SCRAP]: 'Barghest Hide Scrap',
   [I.AMMONITE]: 'Ammonite (Snakestone)',
   [I.GRYPHAEA]: 'Devil\u2019s Toenail',
+  [I.FISH_CHIPS]: 'Fish & Chips (Whitby\u2019s finest)',
   [I.HOLY_WATER]: 'Holy Water (Whitby Abbey)',
   [I.WOODEN_STAKE]: 'Wooden Stake',
   [I.HOLY_STAKE]: 'Holy Water Stake',
@@ -151,6 +154,7 @@ export const FOODS = {
   [I.COOKED_MUTTON]: 8,
   [I.RAW_GROUSE]: 2,
   [I.COOKED_GROUSE]: 6,
+  [I.FISH_CHIPS]: 10, // best scran on t' moors — worth t' trip to Whitby
 };
 
 export const STACK_SIZE = 64;

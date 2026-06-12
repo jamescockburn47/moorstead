@@ -1121,6 +1121,50 @@ export class Quests {
       cc: [
         { give: [I.BILBERRIES, 1], get: [B.HEATHER, 2], min: 0 },
       ],
+      // t' wider moors: every settlement trades its own way
+      annie: [ // Whitby quay: proper fish an' chips, paid in coal or fossils
+        { give: [I.COAL_LUMP, 2], get: [I.FISH_CHIPS, 1], min: 0 },
+        { give: [I.AMMONITE, 1], get: [I.FISH_CHIPS, 2], min: 0 },
+        { give: [I.JET_GEM, 1], get: [I.FISH_CHIPS, 5], min: 1 },
+      ],
+      silas: [ // t' jet carver pays fair for raw jet
+        { give: [I.JET_GEM, 2], get: [I.IRON_INGOT, 3], min: 0 },
+        { give: [I.AMMONITE, 3], get: [I.JET_GEM, 1], min: 1 },
+      ],
+      briggs: [ // stationmaster keeps t' coal staithe
+        { give: [I.AMMONITE, 1], get: [I.COAL_LUMP, 4], min: 0 },
+        { give: [B.WOOL, 3], get: [I.COAL_LUMP, 6], min: 1 },
+      ],
+      tilly: [
+        { give: [I.BILBERRIES, 4], get: [B.WOOL, 3], min: 0 },
+      ],
+      martha: [ // t' inn kitchen roasts what tha brings
+        { give: [I.RAW_MUTTON, 2], get: [I.COOKED_MUTTON, 3], min: 0 },
+        { give: [I.RAW_GROUSE, 2], get: [I.COOKED_GROUSE, 3], min: 0 },
+      ],
+      tom: [
+        { give: [I.COAL_LUMP, 4], get: [I.RAW_IRON, 3], min: 0 },
+      ],
+      ned: [ // owt off t' scaur for warm wool
+        { give: [B.WOOL, 2], get: [I.AMMONITE, 1], min: 0 },
+      ],
+      beck: [
+        { give: [I.BILBERRIES, 3], get: [I.GRYPHAEA, 2], min: 0 },
+      ],
+      ambrose: [ // t' vicarage garden's bounty for t' roof fund
+        { give: [I.COAL_LUMP, 2], get: [I.BILBERRIES, 8], min: 0 },
+      ],
+      mag: [ // market rates, everything priced
+        { give: [I.GRYPHAEA, 2], get: [I.COAL_LUMP, 6], min: 0 },
+        { give: [B.WOOL, 5], get: [I.IRON_INGOT, 1], min: 1 },
+      ],
+      wassell: [
+        { give: [I.COOKED_MUTTON, 1], get: [I.COAL_LUMP, 3], min: 0 },
+      ],
+      joe: [ // t' fireman swaps footplate coal for owt warm to eat
+        { give: [I.COOKED_MUTTON, 2], get: [I.COAL_LUMP, 5], min: 0 },
+        { give: [I.FISH_CHIPS, 1], get: [I.COAL_LUMP, 8], min: 0 },
+      ],
     };
     for (const key of Object.keys(all)) {
       if (n.includes(key)) {
