@@ -1,7 +1,8 @@
 // Day/night cycle, moorland weather (clear / misty / fog / rain), rain particles.
 import * as THREE from 'three';
 
-const DAY_LENGTH = 600; // seconds per full day
+const DAY_LENGTH = 1800; // seconds per full day — a proper half-hour, not a rush
+// (t' shared-moor relay must agree: worldsvc/server.py DAY_LENGTH)
 
 function lerpC(a, b, t) { return a.clone().lerp(b, t); }
 
@@ -182,11 +183,11 @@ export class Sky {
     }
 
     // T' Great Fog: a shared-clock whiteout on t' high moor — same for every
-    // player, like t' train. Every 1800s (three game days) t' last 150s
-    // (about six game hours) comes down thick, eased in an' out ower ~20s.
+    // player, like t' train. Every three game days, about six game hours
+    // comes down thick, eased in an' out ower ~25s.
     // T' game sets moorGate frae geography: tops only, never coast nor village.
     {
-      const CYCLE = 1800, DUR = 150, EASE = 20;
+      const CYCLE = DAY_LENGTH * 3, DUR = DAY_LENGTH / 4, EASE = 25;
       const into = (Date.now() / 1000) % CYCLE - (CYCLE - DUR);
       let ev = 0;
       if (into >= 0) ev = into < EASE ? into / EASE : Math.min(1, Math.max(0, (DUR - into) / EASE));

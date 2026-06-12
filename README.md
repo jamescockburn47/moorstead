@@ -16,7 +16,7 @@ Route sanity-check (railway + village siting, 4 seeds): `node scripts/verify-rai
 
 ## Deploying
 
-- **Public site** (moorstead at moorcraft.app): `npx vercel deploy --prod --yes`
+- **Public site** ([www.moorstead.app](https://www.moorstead.app) — apex an' owd moorcraft.app redirect there): `npx vercel deploy --prod --yes`
 - **EVO X2** (Caddy serves `~/moorstead/game` on :8090 behind the Cloudflare tunnel):
   `scp -r dist evo:moorstead/game.new` then swap `game.new` → `game` (keep `game.old` for rollback)
 
