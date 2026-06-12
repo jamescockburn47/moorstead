@@ -47,7 +47,7 @@ export const LORE = [
   },
   {
     holders: ['glinda'], near: 'whitby',
-    text: 'The Dracula Experience in Whitby tells how Stoker braided real places into fiction: the 199 Steps, the Demeter wrecked below the East Cliff, jet workshops, sea-haar. Fiction \u2014 but folk out on the moors still swear they feel watched on certain nights.',
+    text: 'T\u2019 Dracula Museum in Whitby tells how Stoker braided real places into fiction: the 199 Steps, the Demeter wrecked below the East Cliff, jet workshops, sea-haar. Fiction \u2014 but folk out on the moors still swear they feel watched on certain nights.',
   },
   {
     holders: ['glinda'], near: null,

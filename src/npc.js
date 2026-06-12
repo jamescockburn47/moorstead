@@ -72,13 +72,25 @@ export function gift(characterId, item, playerId, amount) {
   }, 10000);
 }
 
-// Fallback roster so Moorstead in't a ghost town when t' brain is down.
-// Names mirror yorkshire_bot/characters.json; ids null = offline (no chat).
+// Fallback roster so t' moors aren't a ghost land when t' brain is down.
+// Names an' villages mirror yorkshire_bot/characters.json; ids null = offline (no chat).
 export const FALLBACK_ROSTER = [
-  { id: null, name: 'farmer james' },
-  { id: null, name: 'granny glinda' },
-  { id: null, name: 'farmer harry' },
-  { id: null, name: 'karen' },
-  { id: null, name: 'cc' },
-  { id: null, name: 'max' },
+  { id: null, name: 'farmer james', village: 'Moorstead' },
+  { id: null, name: 'granny glinda', village: 'Moorstead' },
+  { id: null, name: 'farmer harry', village: 'Moorstead' },
+  { id: null, name: 'karen', village: 'Moorstead' },
+  { id: null, name: 'cc', village: 'Moorstead' },
+  { id: null, name: 'max', village: 'Moorstead' },
+  { id: null, name: 'stationmaster briggs', village: 'Goathland' },
+  { id: null, name: 'tilly', village: 'Goathland' },
+  { id: null, name: 'innkeeper martha', village: 'Rosedale Abbey' },
+  { id: null, name: 'owd tom', village: 'Rosedale Abbey' },
+  { id: null, name: 'fisherman ned', village: 'Staithes' },
+  { id: null, name: 'beck', village: 'Staithes' },
+  { id: null, name: 'vicar ambrose', village: 'Pickering' },
+  { id: null, name: 'market mag', village: 'Pickering' },
+  { id: null, name: 'driver wassell', village: 'Grosmont' },
+  { id: null, name: 'fireman joe', village: 'Grosmont' },
+  { id: null, name: 'fishwife annie', village: 'Whitby' },
+  { id: null, name: 'silas', village: 'Whitby' },
 ];

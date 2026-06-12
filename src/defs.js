@@ -1,4 +1,4 @@
-// Block, item, tile, recipe and smelting definitions for Moorcraft.
+// Block, item, tile, recipe and smelting definitions for Moorstead.
 
 export const CHUNK = 16;
 export const HEIGHT = 64;
@@ -42,6 +42,10 @@ export const I = {
   // Dracula storyline
   HOLY_WATER: 95, WOODEN_STAKE: 96, HOLY_STAKE: 97, DRACULA_JOURNAL: 98,
 };
+
+// Parish wardens: dash account ids wi' admin powers in t' client
+// (client-side only — t' game is client-authoritative owt road)
+export const ADMIN_ACCTS = ['beck-cross-53'];
 
 // kind: 'solid' | 'cutout' (cross plants) | 'liquid' | 'air'
 // tex: {t, s, b} tile ids; hard: seconds to break by hand; tool: best tool

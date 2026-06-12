@@ -159,15 +159,15 @@ function buildDraculaArc(geo) {
     drac1: {
       id: 'drac1', giver: 'museum', minStanding: 0, needs: null,
       title: 'Where t\u2019 Story Began',
-      desc: 'Visit t\u2019 Dracula Experience in Whitby \u2014 learn how Bram Stoker found his villain in these very cliffs an\u2019 harbours.',
-      offer: 'You are the Dracula Experience museum in Whitby. You can offer the visitor the beginning of a separate mystery: Bram Stoker stayed here in 1890, walking the abbey steps and the harbour in fog, and from that atmosphere he wrote Count Dracula. Invite them to visit the museum exhibits to understand why the Count still walks these moors in folk memory.',
+      desc: 'Visit t\u2019 Dracula Museum in Whitby \u2014 learn how Bram Stoker found his villain in these very cliffs an\u2019 harbours.',
+      offer: 'You are the Dracula Museum in Whitby. You can offer the visitor the beginning of a separate mystery: Bram Stoker stayed here in 1890, walking the abbey steps and the harbour in fog, and from that atmosphere he wrote Count Dracula. Invite them to visit the museum exhibits to understand why the Count still walks these moors in folk memory.',
       steps: [
         { kind: 'visit', x: museum.x, z: museum.z, r: 14,
-          objective: 'Visit t\u2019 Dracula Experience museum in Whitby' },
+          objective: 'Visit t\u2019 Dracula Museum in Whitby' },
       ],
       turnIn: 'auto',
       truth: 'The visitor has NOT yet been to the museum. Do not claim they know the story.',
-      doneNote: 'The visitor came to the Dracula Experience in Whitby and learned how Stoker\u2019s 1890 visit to the abbey and the harbour gave him his villain.',
+      doneNote: 'The visitor came to the Dracula Museum in Whitby and learned how Stoker\u2019s 1890 visit to the abbey and the harbour gave him his villain.',
       reward: { items: [[I.DRACULA_JOURNAL, 1]], trust: [], text: 'T\u2019 curator presses a copied captain\u2019s log into thi hand. \u201cRead it by t\u2019 abbey, love. Then tha\u2019ll understand what walks at neet.\u201d' },
       clues: [
         { holder: 'glinda', text: 'They say a foreign gentleman was seen on t\u2019 abbey steps in t\u2019 summer o\u2019 ninety \u2014 same year a Dublin writer stayed at Mrs Veazey\u2019s. Whitby gave him his villain, an\u2019 some folk swear t\u2019 villain never truly left.' },
@@ -963,7 +963,7 @@ export class Quests {
     if (this.completed.includes('drac5')) {
       parts.push('Known more widely: the visitor faced Count Dracula on the open moor at night with a holy water stake and laid him to rest. The moors are safer after dark now — though barghests and boggarts still walk.');
     } else if (this.completed.includes('drac1')) {
-      parts.push('The visitor has been to the Dracula Experience museum in Whitby and knows how Bram Stoker\'s 1890 visit inspired the story. Count Dracula is still said to walk the moors at night — that matter is NOT settled.');
+      parts.push('The visitor has been to the Dracula Museum in Whitby and knows how Bram Stoker\'s 1890 visit inspired the story. Count Dracula is still said to walk the moors at night — that matter is NOT settled.');
     }
     if (this.completed.includes('arc1') && !this.completed.includes('arc5')) {
       parts.push('Known to the whole village: a sheep was taken in the night a while back, and the visitor tracked it to the Wainstones, coming back with a scrap of cold black hide. Folk whisper it is a barghest. The matter is not settled yet.');

@@ -291,7 +291,7 @@ export class Entities {
   }
 
   // ---------- villagers ----------
-  spawnVillager(charId, name, x, y, z) {
+  spawnVillager(charId, name, x, y, z, opts = {}) {
     const look = villagerLook(name);
     const model = makeVillager(look);
     this.scene.add(model.group);
@@ -306,6 +306,9 @@ export class Entities {
       displayName,
       pos: { x, y, z }, vel: { x: 0, y: 0, z: 0 },
       home: { x, z },
+      village: opts.village || null,   // which settlement they belong to
+      house: opts.house || null,       // {b, out, inside} frae geo.npcHome
+      atHome: false, homeStuck: 0,
       hw: 0.28 * look.scale + 0.08, h: Math.max(0.5, 1.65 * look.scale), onGround: false,
       hp: Infinity, yaw: Math.random() * Math.PI * 2,
       state: 'idle', stateTimer: 1 + Math.random() * 4,
@@ -607,6 +610,11 @@ export class Entities {
       }
       return;
     }
+    // frozen till t' world's built under their feet (far-off villages)
+    if (!this.world.isLoaded(Math.floor(mob.pos.x), Math.floor(mob.pos.z))) {
+      mob.model.group.position.set(mob.pos.x, mob.pos.y, mob.pos.z);
+      return;
+    }
     mob.stateTimer -= dt;
     // nameplate fades in as tha gets near
     const target = distP < 9 && !mob.chatting ? Math.min(1, (9 - distP) / 4) : 0;
@@ -630,20 +638,61 @@ export class Entities {
       if (mob.stateTimer <= 0) mob.stateTimer = 1;
     } else {
       if (mob.state === 'greet') { mob.state = 'idle'; mob.stateTimer = 1 + Math.random() * 2; }
-      if (mob.stateTimer <= 0) {
-        mob.stateTimer = 3 + Math.random() * 6;
-        mob.state = Math.random() < 0.55 ? 'wander' : 'idle';
-        if (mob.state === 'wander') {
-          // potter about near home
-          const hx = mob.home.x - mob.pos.x, hz = mob.home.z - mob.pos.z;
-          const homeDist = Math.hypot(hx, hz);
-          if (homeDist > 9) mob.wanderYaw = Math.atan2(hz, hx);
-          else mob.wanderYaw = Math.random() * Math.PI * 2;
+      const skyT = this.game && this.game.sky ? this.game.sky.time : 0.5;
+      const homeTime = !!mob.house && (skyT > 0.76 || skyT < 0.16);
+      const walkTo = (tgt, sp) => {
+        const dx = tgt.x - mob.pos.x, dz = tgt.z - mob.pos.z;
+        const d = Math.hypot(dx, dz);
+        wishX = dx / Math.max(d, 0.001); wishZ = dz / Math.max(d, 0.001);
+        speed = sp;
+        const spNow = Math.hypot(mob.vel.x, mob.vel.z);
+        mob.homeStuck = spNow < 0.15 ? (mob.homeStuck || 0) + dt : 0;
+        return d;
+      };
+      const popTo = (tgt) => { // gie ower an' pop there — kinder than a neet stuck on a wall
+        mob.pos.x = tgt.x; mob.pos.z = tgt.z;
+        mob.pos.y = this.world.gen.height(Math.floor(tgt.x), Math.floor(tgt.z)) + 1.1;
+        mob.vel.x = mob.vel.z = 0; mob.homeStuck = 0;
+      };
+      if (homeTime && mob.atHome) {
+        // settled in for t' neet — stand quiet by t' lantern, face t' door now an' then
+        mob.vel.x *= 0.8; mob.vel.z *= 0.8;
+        if (mob.stateTimer <= 0) {
+          mob.stateTimer = 4 + Math.random() * 6;
+          mob.yaw = Math.atan2(mob.house.out.x - mob.pos.x, mob.house.out.z - mob.pos.z);
         }
-      }
-      if (mob.state === 'wander') {
-        wishX = Math.cos(mob.wanderYaw); wishZ = Math.sin(mob.wanderYaw);
-        speed = mob.t.speed;
+      } else if (homeTime) {
+        // dusk: mek for thi own door, then ower t' threshold
+        if (!mob.passedDoor) {
+          if (walkTo(mob.house.out, 1.5) < 1.2) mob.passedDoor = true;
+        } else if (walkTo(mob.house.inside, 1.2) < 0.9) {
+          mob.atHome = true; mob.homeStuck = 0; wishX = wishZ = speed = 0;
+        }
+        if (mob.homeStuck > 6) { popTo(mob.house.inside); mob.atHome = true; mob.passedDoor = true; }
+      } else if (mob.atHome || mob.leavingHome) {
+        // morning: out t' door afore owt else
+        mob.atHome = false; mob.leavingHome = true;
+        if (walkTo(mob.house.out, 1.2) < 1.2 || mob.homeStuck > 6) {
+          if (mob.homeStuck > 6) popTo(mob.house.out);
+          mob.leavingHome = false; mob.passedDoor = false; mob.homeStuck = 0;
+          wishX = wishZ = speed = 0;
+        }
+      } else {
+        if (mob.stateTimer <= 0) {
+          mob.stateTimer = 3 + Math.random() * 6;
+          mob.state = Math.random() < 0.55 ? 'wander' : 'idle';
+          if (mob.state === 'wander') {
+            // potter about near home
+            const hx = mob.home.x - mob.pos.x, hz = mob.home.z - mob.pos.z;
+            const homeDist = Math.hypot(hx, hz);
+            if (homeDist > 9) mob.wanderYaw = Math.atan2(hz, hx);
+            else mob.wanderYaw = Math.random() * Math.PI * 2;
+          }
+        }
+        if (mob.state === 'wander') {
+          wishX = Math.cos(mob.wanderYaw); wishZ = Math.sin(mob.wanderYaw);
+          speed = mob.t.speed;
+        }
       }
     }
 

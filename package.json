@@ -1,9 +1,9 @@
 {
-  "name": "moorcraft",
+  "name": "moorstead",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
-  "description": "A voxel sandbox game set in the Yorkshire Moors",
+  "description": "A procedural sandbox game set on the North York Moors",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

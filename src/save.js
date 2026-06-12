@@ -1,4 +1,5 @@
 // World persistence via IndexedDB: modified chunks (raw bytes) + game metadata.
+// DB keeps its owd 'moorcraft' name on purpose — renaming would orphan every save.
 const DB_NAME = 'moorcraft';
 const DB_VERSION = 1;
 

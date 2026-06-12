@@ -154,7 +154,7 @@ export class Player {
     if (inLiquid) this.fallStart = null;
 
     // ----- survival ticks -----
-    if (!this.creative) {
+    if (!this.creative && !this.god) {
       // drowning / bog suffocation
       const headIn = isLiquid(this.headBlock());
       if (headIn) {
@@ -206,7 +206,7 @@ export class Player {
   }
 
   damage(n, cause) {
-    if (this.creative || this.dead || n <= 0) return;
+    if (this.creative || this.god || this.dead || n <= 0) return;
     this.health -= n;
     this.hurtFlash = 0.4;
     if (this.health <= 0) {

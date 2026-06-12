@@ -1,6 +1,8 @@
-// Moorcraft — entry point and game orchestration.
+// Moorstead — entry point and game orchestration.
+// (Storage keys an' t' save DB keep their owd 'moorcraft' names on purpose:
+// renaming them would orphan every player's saves an' login.)
 import * as THREE from 'three';
-import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL } from './defs.js';
+import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_ACCTS } from './defs.js';
 import { strSeed } from './noise.js';
 import { initMaterials } from './mesher.js';
 import { getIconURL } from './textures.js';
@@ -120,7 +122,7 @@ class Game {
     this.quests = new Quests(this);
     this.entities.game = this;
     this.entities.onKill = mob => this.quests.onMobKilled(mob);
-    window.moorcraft = this; // a handle for t' dev console
+    window.moorstead = window.moorcraft = this; // a handle for t' dev console
     this.lastQuestDay = 1;
 
     if (meta) {
@@ -337,7 +339,66 @@ class Game {
     this.state = 'paused';
     this.mouseDown = [false, false, false];
     this.clearKeys();
+    this.renderAdminPanel();
     this.ui.show('pauseScreen');
+  }
+
+  // ---------------- parish warden (admin) ----------------
+  isAdmin() {
+    return !!(this.auth && ADMIN_ACCTS.includes(this.auth.acct));
+  }
+
+  renderAdminPanel() {
+    const panel = this.ui.adminPanel;
+    if (!panel) return;
+    if (!this.isAdmin() || !this.world) { panel.classList.add('hidden'); return; }
+    panel.classList.remove('hidden');
+    panel.innerHTML = '';
+    const ui = this.ui;
+    ui.el('div', 'inv-title', panel, 'Parish Warden');
+    const row = ui.el('div', 'admin-btns', panel);
+    const god = ui.el('button', 'mc', row, this.player.god ? 'Mortal Again' : 'Hard As T’ Wainstones (God)');
+    god.addEventListener('click', () => {
+      this.player.god = !this.player.god;
+      ui.toast(this.player.god ? 'Nowt can touch thee now.' : 'Tha’s mortal again — mind t’ bogs.');
+      this.renderAdminPanel();
+    });
+    const kit = ui.el('button', 'mc', row, 'Full Kit (iron tools an’ all)');
+    kit.addEventListener('click', () => {
+      const p = this.player;
+      [[I.I_PICK, 1], [I.I_AXE, 1], [I.I_SHOVEL, 1], [I.I_SWORD, 1],
+       [I.COAL_LUMP, 64], [B.TORCH, 64], [B.LANTERN, 8], [B.PLANKS, 64],
+       [B.STONEBRICK, 64], [I.COOKED_MUTTON, 16]].forEach(([id, n]) => p.addItem(id, n));
+      ui.invDirty = true;
+      ui.toast('Kitted out proper.');
+    });
+    ui.el('div', 'r-needs', panel, 'Whisk thissen anywhere:');
+    const tp = ui.el('div', 'admin-tp', panel);
+    const geo = this.world.gen.geo;
+    for (const v of geo.villages) {
+      const b = ui.el('button', 'mc chat-btn', tp, v.name);
+      b.addEventListener('click', () => this.adminTeleport(v.x, v.z, v.name));
+    }
+    for (const s of geo.railway()) {
+      const b = ui.el('button', 'mc chat-btn', tp, s.name + ' Stn');
+      b.addEventListener('click', () => this.adminTeleport(s.x, s.z, s.name + ' Station'));
+    }
+    for (const [label, x, z] of [['Roseberry Topping', -700, -880], ['T’ Hole of Horcum', 540, 680],
+                                 ['T’ Abbey', geo.abbeySite().x, geo.abbeySite().z],
+                                 ['T’ Wainstones', -380, -620], ['Rosedale Kilns', -260, 380]]) {
+      const b = ui.el('button', 'mc chat-btn', tp, label);
+      b.addEventListener('click', () => this.adminTeleport(x, z, label));
+    }
+  }
+
+  adminTeleport(x, z, label) {
+    const p = this.player;
+    p.pos.x = x + 0.5; p.pos.z = z + 0.5;
+    p.pos.y = this.world.gen.height(Math.floor(x), Math.floor(z)) + 2.2;
+    if (p.vel) p.vel.y = 0;
+    p.fallStart = null;
+    this.resume();
+    this.ui.toast(`Whisked off to <b>${label}</b>.`, 3500);
   }
 
   resume() {
@@ -370,13 +431,18 @@ class Game {
     if (!online) roster = npc.FALLBACK_ROSTER;
     const geo = this.world.gen.geo;
     for (const c of roster) {
-      const [x, z] = geo.npcSpot(c.name);
+      // folk live all ower t' moors now — t' roster says which settlement
+      const village = (c.village && geo.villages.find(v => v.name.toLowerCase() === c.village.toLowerCase())) || geo.village;
+      const [x, z] = geo.npcSpot(c.name, village);
       const h = this.world.gen.height(Math.floor(x), Math.floor(z));
-      this.entities.spawnVillager(c.id, c.name, x + 0.5, h + 1.1, z + 0.5);
+      this.entities.spawnVillager(c.id, c.name, x + 0.5, h + 1.1, z + 0.5, {
+        village: village.name,
+        house: geo.npcHome(c.name, village),
+      });
     }
     this.ui.toast(online
-      ? '<b>Right-click</b> t&rsquo; folk of Moorstead for a natter. Make friends &mdash; they&rsquo;ll see thee right.'
-      : 'Moorstead stands quiet &mdash; t&rsquo; village brain in&rsquo;t answering (yet).', 8000);
+      ? '<b>Right-click</b> t&rsquo; folk o&rsquo; t&rsquo; moors for a natter &mdash; every settlement&rsquo;s got its own. After dark, knock on their doors.'
+      : 'T&rsquo; villages stand quiet &mdash; t&rsquo; brain in&rsquo;t answering (yet).', 8000);
     if (online) this.refreshStanding(false);
     else this.scheduleRosterRetry(3);
   }
@@ -1264,7 +1330,7 @@ class Game {
         let hint = '';
         if (hit.id === B.BOARD) {
           const geo = this.world.gen.geo;
-          if (geo.isMuseumBoard(hit.x, hit.z)) hint = 'Right-click: Dracula Experience museum';
+          if (geo.isMuseumBoard(hit.x, hit.z)) hint = 'Right-click: Dracula Museum';
           else hint = geo.nearStation(hit.x, hit.z, 8)
             ? 'Right-click: departures board' : 'Right-click: parish notices an\u2019 jobs';
         } else if (hit.id === B.SIGNPOST) hint = 'Right-click: read t\u2019 waymark';

@@ -314,3 +314,13 @@ button.mc.how-tab.active {
 .museum-exhibit-title { color: #d8a0b0; font-weight: bold; margin-bottom: 6px; font-size: 14px; }
 .museum-exhibit-text { font-size: 13px; line-height: 1.55; color: #ccc4b4; }
 .museum-exhibit-text em { color: #b8a898; font-style: italic; }
+
+/* ---------- parish warden (admin) ---------- */
+.admin-panel {
+  margin-top: 10px; padding: 10px 12px;
+  background: rgba(0,0,0,0.28); border: 1px solid rgba(216,185,90,0.35);
+  border-radius: 5px; text-align: left;
+}
+.admin-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.admin-tp { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.admin-tp button { font-size: 12px; padding: 6px 4px; }

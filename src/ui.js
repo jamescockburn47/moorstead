@@ -4,7 +4,8 @@ import { getIconURL } from './textures.js';
 
 const PIX = {
   heart: ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'],
-  food: ['..XXX..', '.XXXXX.', '.XXXXX.', '..XXX..', '...BB..', '...BB..', '..BB...'],
+  // a proper raised pork pie — crust, pale collar, nowt else will do
+  food: ['..BBB..', '.XXXXX.', 'XXXXXXX', 'XXXXXXX', 'XBBBBBX', '.XXXXX.'],
 };
 
 function pixURL(pattern, fullColor, dim) {
@@ -103,7 +104,7 @@ export class UI {
 
     // ---------- title ----------
     this.titleScreen = this.el('div', 'overlay', body); this.titleScreen.id = 'title-screen';
-    this.el('h1', 'title', this.titleScreen, 'MOORCRAFT');
+    this.el('h1', 'title', this.titleScreen, 'MOORSTEAD');
     this.el('div', 'subtitle', this.titleScreen, 'A reet grand voxel adventure on t&rsquo; North York Moors');
     // login (invite code) — shown till tha's claimed thi place in t' village
     this.loginBox = this.el('div', 'login-box', this.titleScreen);
@@ -135,6 +136,7 @@ export class UI {
     this.btnResume = this.el('button', 'mc', pp, 'Back to t&rsquo; Moor');
     this.btnSave = this.el('button', 'mc', pp, 'Save T&rsquo; World');
     this.btnCreative = this.el('button', 'mc', pp, 'Toggle Creative Mode');
+    this.adminPanel = this.el('div', 'admin-panel hidden', pp); // filled by t' game for parish wardens
     this.btnHow2 = this.el('button', 'mc', pp, 'Ow Ter Play');
     this.btnQuit = this.el('button', 'mc', pp, 'Give Up &amp; Go Home (Save &amp; Quit)');
 
@@ -244,7 +246,7 @@ export class UI {
       'Staying Alive': `
 <h3>Hearts, hunger an&rsquo; what kills thee</h3>
 <ul>
-<li><b>Hunger</b> drains as tha walks, sprints, jumps an&rsquo; digs. Below 6 drumsticks tha can&rsquo;t sprint; at nowt, tha starves down to half a heart. Eat wi&rsquo; right-click: bilberries (+3), raw mutton (+3), <b>roast mutton (+8)</b>, grouse. Cook on a range.</li>
+<li><b>Hunger</b> drains as tha walks, sprints, jumps an&rsquo; digs. Below 6 pies tha can&rsquo;t sprint; at nowt, tha starves down to half a heart. Eat wi&rsquo; right-click: bilberries (+3), raw mutton (+3), <b>roast mutton (+8)</b>, grouse. Cook on a range.</li>
 <li><b>Health</b> heals on its own when tha&rsquo;s well fed (16+ hunger). Otherwise: eat, wait, or stay out o&rsquo; trouble.</li>
 <li><b>Falling</b> hurts past 3 blocks. <b>Water</b>: tha can swim (Space), but air bubbles run out &mdash; surface afore they do.</li>
 <li><b>Bogs</b> on t&rsquo; high moor are t&rsquo; dark pools in t&rsquo; peat. They grip thee, sink thee, and they&rsquo;re hungry. Skirt round, or sprint-jump if tha must.</li>
@@ -285,7 +287,7 @@ export class UI {
 <h3>T&rsquo; Hound o&rsquo; the Mires &#9733;</h3>
 <p>Summat&rsquo;s been taking sheep in t&rsquo; night. <b>T&rsquo; Hound o&rsquo; the Mires</b> runs five chapters across t&rsquo; real landmarks &mdash; starred &#9733; in thi journal. It starts wi&rsquo; Farmer James, and it ends on a crooked hill, at neet, wi&rsquo; summat as has eyes like coals. Higher chapters need higher standing &mdash; t&rsquo; village doesn&rsquo;t hand its secrets to strangers.</p>
 <h3>Count Dracula on t&rsquo; Moors &#8224;</h3>
-<p>A <b>separate</b> storyline, marked &#8224; in thi journal. Start at t&rsquo; <b>Dracula Experience museum in Whitby</b> (east coast, below t&rsquo; abbey cliffs). Learn how Bram Stoker&rsquo;s 1890 visit gave England its vampire; then draw <b>holy water</b> frae t&rsquo; abbey font, craft a <b>wooden stake</b> at a bench an&rsquo; steep it in t&rsquo; water. At neet, Count Dracula walks t&rsquo; open moor &mdash; tha&rsquo;ll <b>feel him afore tha sees him</b>. Hold t&rsquo; holy stake to strike true; hide in <b>moor shelters</b> or reach a village if tha must. Slaying him makes t&rsquo; moors <b>far safer after dark</b> &mdash; barghests still walk, but nowt worse.</p>`,
+<p>A <b>separate</b> storyline, marked &#8224; in thi journal. Start at t&rsquo; <b>Dracula Museum in Whitby</b> (east coast, below t&rsquo; abbey cliffs). Learn how Bram Stoker&rsquo;s 1890 visit gave England its vampire; then draw <b>holy water</b> frae t&rsquo; abbey font, craft a <b>wooden stake</b> at a bench an&rsquo; steep it in t&rsquo; water. At neet, Count Dracula walks t&rsquo; open moor &mdash; tha&rsquo;ll <b>feel him afore tha sees him</b>. Hold t&rsquo; holy stake to strike true; hide in <b>moor shelters</b> or reach a village if tha must. Slaying him makes t&rsquo; moors <b>far safer after dark</b> &mdash; barghests still walk, but nowt worse.</p>`,
 
       'Craft & Cook': `
 <h3>Crafting</h3>
@@ -322,7 +324,7 @@ export class UI {
 <li><b>Wade&rsquo;s Causey</b> &mdash; t&rsquo; owd Roman road, running straight north ower t&rsquo; tops.</li>
 <li><b>Moor crosses</b> &mdash; waymarks on t&rsquo; high moor. One&rsquo;s painted white: say hello to <b>Fat Betty</b>, and mebbe leave her summat.</li>
 <li><b>T&rsquo; Abbey</b> (far E, on t&rsquo; cliffs) &mdash; a drowned-voiced ruin ower t&rsquo; sea. A <b>holy water font</b> still glimmers in t&rsquo; nave.</li>
-<li><b>Whitby</b> (below t&rsquo; abbey) &mdash; harbour, pier, fish &amp; chip shop, fossil shop, an&rsquo; t&rsquo; <b>Dracula Experience museum</b>. Right-click t&rsquo; museum boards to enter.</li>
+<li><b>Whitby</b> (below t&rsquo; abbey) &mdash; harbour, pier, fish &amp; chip shop, fossil shop, an&rsquo; t&rsquo; <b>Dracula Museum</b>. Right-click t&rsquo; museum boards to enter.</li>
 <li><b>Robin Hood&rsquo;s Bay</b> (SE coast) &mdash; a sweeping bay wi&rsquo; proper <b>beaches</b>. <b>Dig t&rsquo; sand</b> for fossils: ammonites (snakestones), Devil&rsquo;s Toenails, an&rsquo; now an&rsquo; then washed-up jet. T&rsquo; bay sands are twice as rich as owt else. Harry an&rsquo; Glinda trade for fossils, an&rsquo; Harry treasures a gifted ammonite above all else.</li>
 <li>Other settlements stand across t&rsquo; moors: <b>Goathland</b>, <b>Rosedale Abbey</b>, <b>Staithes</b> on t&rsquo; clifftop, an&rsquo; <b>Pickering</b> t&rsquo; capital, minster, market an&rsquo; all. All safe ground.</li>
 </ul>
@@ -463,7 +465,7 @@ export class UI {
     const dracDef = q.draculaNext();
     if (dracDef && !q.active.some(a => a.dracArc)) {
       this.el('div', 'recipe unavail quest-row', list,
-        `<div class="r-name"><b>\u2020 ${dracDef.title}</b><br><span class="r-needs">A separate mystery at t&rsquo; <b>Dracula Experience museum in Whitby</b> &mdash; right-click t&rsquo; museum boards by t&rsquo; harbour.</span></div>`);
+        `<div class="r-name"><b>\u2020 ${dracDef.title}</b><br><span class="r-needs">A separate mystery at t&rsquo; <b>Dracula Museum in Whitby</b> &mdash; right-click t&rsquo; museum boards by t&rsquo; harbour.</span></div>`);
     }
     if (arcDef && q.standingIndex() < arcDef.minStanding) {
       this.el('div', 'recipe unavail quest-row', list,
@@ -493,11 +495,11 @@ export class UI {
     this.show('boardScreen');
   }
 
-  // ============ Dracula Experience museum ============
+  // ============ Dracula Museum ============
   openMuseum() {
     const q = this.game.quests;
     this.museumPanel.innerHTML = '';
-    this.el('div', 'inv-title', this.museumPanel, 'Dracula Experience &mdash; Whitby');
+    this.el('div', 'inv-title', this.museumPanel, 'Dracula Museum &mdash; Whitby');
     this.el('div', 'r-needs museum-intro', this.museumPanel,
       'How a Dublin writer&rsquo;s 1890 holiday on these cliffs gave England its most famous vampire.');
 

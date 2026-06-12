@@ -308,21 +308,40 @@ export class Geography {
   }
 
   // Where t' villagers stand of a morning (homes keyed by name fragment).
-  npcSpot(name) {
-    const v = this.village;
+  npcSpot(name, v = this.village) {
     const n = (name || '').toLowerCase();
-    const spots = {
-      james: [v.x + 13, v.z + 20],   // Beck Farm door
-      harry: [v.x + 16, v.z + 19],
-      karen: [v.x + 10, v.z + 19],
-      max: [v.x + 14, v.z + 18],
-      cc: [v.x + 2, v.z + 3],        // on t' green
-      glinda: [v.x - 14, v.z - 8],   // cottage door on t' green
-    };
-    for (const k of Object.keys(spots)) if (n.includes(k)) return spots[k];
-    // owt else stands about t' green
-    const r = mulberry32(this.seed ^ n.length * 977)();
+    if (v === this.village) {
+      const spots = {
+        james: [v.x + 13, v.z + 20],   // Beck Farm door
+        harry: [v.x + 16, v.z + 19],
+        karen: [v.x + 10, v.z + 19],
+        max: [v.x + 14, v.z + 18],
+        cc: [v.x + 2, v.z + 3],        // on t' green
+        glinda: [v.x - 14, v.z - 8],   // cottage door on t' green
+      };
+      for (const k of Object.keys(spots)) if (n.includes(k)) return spots[k];
+    }
+    // owt else stands about t' green o' their own village
+    const r = mulberry32(this.seed ^ (n.length * 977 + (v.x * 31 + v.z * 7 | 0)))();
     return [v.x + Math.round((r - 0.5) * 14), v.z + Math.round((r * 7919 % 1 - 0.5) * 10)];
+  }
+
+  // A villager's house in their village: deterministic building pick, wi'
+  // t' door an' a spot just inside (doors face south; barns face north).
+  npcHome(name, v = this.village) {
+    const liveable = (v.buildings || []).filter(b => b.type !== 'ruin');
+    if (!liveable.length) return null;
+    const n = (name || '').toLowerCase();
+    let h = 0;
+    for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0;
+    const b = liveable[h % liveable.length];
+    const midX = Math.floor((b.x0 + b.x1) / 2);
+    const barn = b.type === 'barn';
+    return {
+      b,
+      out: { x: midX + 0.5, z: barn ? b.z1 + 1.7 : b.z0 - 1.7 },   // afore t' door
+      inside: { x: midX + 0.5, z: barn ? b.z1 - 1.3 : b.z0 + 2.3 }, // ower t' threshold
+    };
   }
 
   // ---------- t' railway ----------
@@ -436,7 +455,7 @@ export class Geography {
     return { x: ab.x + 12, z: ab.z + 3 };
   }
 
-  // Dracula Experience museum in Whitby
+  // T' Dracula Museum in Whitby
   museumSite() {
     const w = this.villages.find(v => v.name === 'Whitby');
     if (!w) return { x: 0, z: 0 };
