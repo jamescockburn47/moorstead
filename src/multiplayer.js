@@ -69,6 +69,11 @@ export class Net {
       if (r && r.mob) g.entities.speak(r.mob, m.text, 7);
     } else if (m.type === 'time') {
       g.sky.time = m.time;
+    } else if (m.type === 'sleepers') {
+      // who's kipping: t' neet only passes when everybody's abed
+      if (g.onSleepers) g.onSleepers(m.n, m.total);
+    } else if (m.type === 'wake') {
+      if (g.onWake) g.onWake();
     } else if (m.type === 'where') {
       // warden's map o' who's where (t' relay only answers wardens)
       if (this.onWhere) this.onWhere(m.players || []);
@@ -136,6 +141,7 @@ export class Net {
     this.send(eph ? { type: 'edit', x, y, z, id, ttl: 300, revert: eph.revert } : { type: 'edit', x, y, z, id });
   }
   sendChat(text) { this.send({ type: 'chat', text }); }
+  sendSleep(on) { this.send({ type: 'sleep', on: !!on }); }
   sendSave(data) { this.send({ type: 'save', data }); }
 
   disconnect() {

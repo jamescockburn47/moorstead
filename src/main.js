@@ -285,6 +285,7 @@ class Game {
         if (e.code === 'KeyE') this.openInventory();
         if (e.code === 'KeyQ') this.openBoard(false);
         if (e.code === 'KeyT' && this.netActive) { e.preventDefault(); this.openNetChat(); return; }
+        if (e.code === 'KeyN') this.trySleep();
         if (e.code === 'KeyM') { this.audio.setMuted(!this.audio.muted); this.ui.toast(this.audio.muted ? 'Sound off.' : 'Sound on.'); }
         const num = parseInt(e.key);
         if (num >= 1 && num <= 9) { this.player.hotbar = num - 1; this.ui.invDirty = true; }
@@ -294,6 +295,8 @@ class Game {
         if (e.code === 'KeyQ' || e.code === 'Escape') this.closeScreens();
       } else if (this.state === 'chat') {
         if (e.code === 'Escape') this.closeChat();
+      } else if (this.state === 'sleeping') {
+        if (e.code === 'KeyN' || e.code === 'Escape') this.cancelSleep('Up an’ about again, then.');
       }
     });
     document.addEventListener('keyup', e => { this.keys[e.code] = false; });
@@ -798,6 +801,87 @@ class Game {
     if (sh && sh.dist > 10) msg += `<br><b>MOOR SHELTER</b> \u2014 ${dirTo(sh.x, sh.z)}`;
     else if (sh) msg = `<b>MOOR SHELTER</b> \u2014 tha\u2019s stood at it<br>` + msg;
     this.ui.toast(msg, 8000);
+  }
+
+  // ---------------- sleeping ----------------
+  // Neet passes if tha can find shelter: a roof ower thi head an' a flame
+  // near — any house, t' pub, a moor shelter, or a cottage tha's built thissen.
+  canSleepHere() {
+    if (!this.world || !this.sky.isNight()) return 'not night';
+    const p = this.player.pos;
+    const px = Math.floor(p.x), py = Math.floor(p.y + (this.player.eye || 1.6)), pz = Math.floor(p.z);
+    let roofed = false;
+    for (let y = py + 1; y <= Math.min(HEIGHT - 1, py + 14); y++) {
+      if (isSolid(this.world.getBlock(px, y, pz))) { roofed = true; break; }
+    }
+    if (!roofed) return 'no roof';
+    for (let dx = -6; dx <= 6; dx++) {
+      for (let dy = -3; dy <= 3; dy++) {
+        for (let dz = -6; dz <= 6; dz++) {
+          const id = this.world.getBlock(px + dx, py + dy, pz + dz);
+          if (id === B.TORCH || id === B.LANTERN) return 'ok';
+        }
+      }
+    }
+    return 'no light';
+  }
+
+  trySleep() {
+    if (this.state !== 'playing') return;
+    if (!this.sky.isNight()) { this.ui.toast('Tha can only sleep of a neet.'); return; }
+    const why = this.canSleepHere();
+    if (why !== 'ok') {
+      this.ui.toast(why === 'no roof'
+        ? 'Nowhere to kip here — find a roof: a house, t’ pub, or a moor shelter.'
+        : 'Too dark an’ cold to settle — get thissen near a torch or lantern first.', 5000);
+      return;
+    }
+    this.state = 'sleeping';
+    this.clearKeys();
+    this.mouseDown = [false, false, false];
+    this.sleepT = 0;
+    this.ui.sleepScreen.classList.remove('hidden');
+    if (this.netActive && this.net && this.net.connected) {
+      this.ui.sleepText.textContent = 'waiting for t’ others to kip down...';
+      this.net.sendSleep(true);
+    } else {
+      this.ui.sleepText.textContent = '';
+    }
+  }
+
+  cancelSleep(msg) {
+    if (this.state !== 'sleeping') return;
+    this.state = 'playing';
+    this.ui.sleepScreen.classList.add('hidden');
+    if (this.netActive && this.net && this.net.connected) this.net.sendSleep(false);
+    if (msg) this.ui.toast(msg, 4000);
+  }
+
+  finishWake() {
+    this.state = 'playing';
+    this.ui.sleepScreen.classList.add('hidden');
+    const p = this.player;
+    p.health = 20;
+    p.hunger = Math.max(0, p.hunger - 3);
+    p.air = 10;
+    this.ui.toast('Tha wakes wi’ t’ dawn, right as rain — an’ a bit peckish.', 5000);
+  }
+
+  // relay says t' neet has passed for t' whole room (time lands separately)
+  onWake() {
+    if (this.state === 'sleeping') this.finishWake();
+  }
+
+  onSleepers(n, total) {
+    if (this.state === 'sleeping') {
+      this.ui.sleepText.textContent = `waiting for t’ others to kip down... (${n}/${total} abed)`;
+    } else if (n > 0 && this.sky.isNight() && this.state === 'playing') {
+      const now = performance.now() / 1000;
+      if (!this._sleepNag || now - this._sleepNag > 60) {
+        this._sleepNag = now;
+        this.ui.toast(`${n} o’ ${total} are abed — find a roof an’ a light, press <b>N</b>, an’ t’ neet will pass for all.`, 8000);
+      }
+    }
   }
 
   // ---------------- t' shared moor ----------------
@@ -1418,6 +1502,28 @@ class Game {
         this.ui.invDirty = true;
         this.ui.toast(`+${n} ${itemName(item)}`, 1600);
       });
+
+      // sleeping: solo skips t' neet after a moment; owt hurting thee wakes thee
+      if (this.state === 'sleeping') {
+        this.sleepT += dt;
+        if (this.player.hurtFlash > 0.3) {
+          this.cancelSleep('Summat’s at thee! No sleeping through that.');
+        } else if (!(this.netActive && this.net && this.net.connected) && this.sleepT > 2.2) {
+          if (this.sky.time > 0.5) this.sky.day++;
+          this.sky.time = 0.25;
+          this.sky.weather = 'misty';
+          this.finishWake();
+        }
+      }
+      // of a neet, one nudge when tha's stood somewhere tha COULD kip
+      this.sleepHintTimer = (this.sleepHintTimer || 0) - dt;
+      if (this.sleepHintTimer <= 0 && this.state === 'playing' && this.sky.isNight()) {
+        this.sleepHintTimer = 2;
+        if (this.sleepHintDay !== this.sky.day && this.canSleepHere() === 'ok') {
+          this.sleepHintDay = this.sky.day;
+          this.ui.toast('Snug enough here — press <b>N</b> to sleep till morn.', 6000);
+        }
+      }
 
       // warden drop: no harm frae t' fall, an' a proper thump on arrival
       if (this.wardenDrop) {

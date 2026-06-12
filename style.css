@@ -326,3 +326,9 @@ button.mc.how-tab.active {
 .admin-tp button { font-size: 12px; padding: 6px 4px; }
 
 .admin-coord { width: 70px; flex: none; }
+
+/* ---------- sleeping ---------- */
+.sleep-overlay { background: rgba(4,5,8,0.92); transition: background 1.2s; }
+.sleep-inner { text-align: center; }
+.sleep-title { color: #d8d2c0; font-size: 26px; letter-spacing: 2px; margin-bottom: 10px; }
+.sleep-sub { color: #8a8576; font-size: 14px; }

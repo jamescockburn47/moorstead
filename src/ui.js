@@ -205,6 +205,13 @@ export class UI {
     this.tracker = this.el('div', '', this.hud);
     this.tracker.id = 'quest-tracker';
 
+    // ---------- sleeping ----------
+    this.sleepScreen = this.el('div', 'overlay sleep-overlay hidden', body);
+    const slp = this.el('div', '', this.sleepScreen);
+    slp.className = 'sleep-inner';
+    this.sleepTitle = this.el('div', 'sleep-title', slp, 'Tha sleeps...');
+    this.sleepText = this.el('div', 'sleep-sub', slp, '');
+
     // ---------- loading ----------
     this.loadingScreen = this.el('div', 'overlay hidden', body);
     this.el('div', 'panel', this.loadingScreen, '<div class="inv-title">Walkin&rsquo; up onto t&rsquo; moor...</div>');
@@ -238,6 +245,7 @@ export class UI {
 <b>E</b> Thi pockets &mdash; inventory &amp; crafting<br>
 <b>Q</b> Venture journal (same as t&rsquo; notice board)<br>
 <b>T</b> Village chat on t&rsquo; Shared Moor (carries ~60m)<br>
+<b>N</b> Sleep till morn (of a neet, under a roof, near a light)<br>
 <b>M</b> Mute sound<br>
 <b>Esc</b> Pause / close a screen<br>
 <b>Space &times;2</b> Toggle flying (creative mode only)
@@ -255,6 +263,7 @@ export class UI {
 <li><b>Dark things fear flame.</b> Craft <b>torches</b> (1 stick + 1 coal = 4, no bench needed): a <b>placed</b> torch or lantern wards off all but t&rsquo; worst within ~9 blocks an&rsquo; stops owt rising nearby &mdash; plant a ring o&rsquo; them an&rsquo; camp anywhere. A torch <b>in thi hand</b> lights thi way an&rsquo; sees off boggarts, but a barghest&rsquo;s bolder than that.</li>
 <li><b>Caught out at neet?</b> Stone <b>moor shelters</b> stand scattered across t&rsquo; tops, lantern-lit an&rsquo; safe. <b>Right-click any waymark signpost</b> &mdash; it&rsquo;ll tell thee t&rsquo; bearing an&rsquo; distance to t&rsquo; nearest shelter an&rsquo; back to Moorstead. Tha can craft thi own signposts (3 planks + 1 stick) to mark routes.</li>
 <li><b>T&rsquo; GREAT FOG.</b> Every three days or so, a fog like wet wool comes down on t&rsquo; <b>high tops</b> for half a day. Tha can&rsquo;t see five yards, an&rsquo; t&rsquo; <b>map an&rsquo; bearings go wi&rsquo; it</b> &mdash; no minimap, no coordinates, nowt. Villages, t&rsquo; coast an&rsquo; t&rsquo; low dales stay clear. If it catches thee on t&rsquo; tops: <b>stop</b>. Find a waymark stone or a wall an&rsquo; follow it; signposts still know t&rsquo; way to shelter if tha stumbles on one. Or place torches as breadcrumbs an&rsquo; sit it out &mdash; it lifts as sudden as it falls.</li>
+<li><b>Sleep t&rsquo; neet away.</b> Find a <b>roof an&rsquo; a light</b> &mdash; a villager&rsquo;s house, t&rsquo; pub, a moor shelter, or thi own cottage wi&rsquo; a torch in &mdash; an&rsquo; press <b>N</b>: tha sleeps till morn an&rsquo; wakes wi&rsquo; <b>full health</b> (an&rsquo; a bit of an appetite). On t&rsquo; Shared Moor t&rsquo; neet only passes when <b>everybody</b> kips down &mdash; so shout &rsquo;em in off t&rsquo; moor first.</li>
 <li><b>Dying</b> loses thee nowt &mdash; tha wakes on t&rsquo; green wi&rsquo; thi pockets intact.</li>
 </ul>
 <h3>Tools an&rsquo; digging</h3>
