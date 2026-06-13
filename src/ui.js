@@ -1,5 +1,5 @@
 // All DOM UI: title, HUD, inventory/crafting/smelting, chat, quests, pause, death, minimap, toasts.
-import { B, I, RECIPES, SMELTS, FUELS, FOODS, TOOLS, itemName, maxStack, CREATIVE_ITEMS, CHUNK } from './defs.js';
+import { B, I, RECIPES, SMELTS, FUELS, FOODS, TOOLS, itemName, maxStack, CREATIVE_ITEMS, CHUNK, WATER_LEVEL } from './defs.js';
 import { getIconURL } from './textures.js';
 
 const PIX = {
@@ -81,6 +81,14 @@ export class UI {
     const mapBox = this.el('div', '', this.hud); mapBox.id = 'minimap-box';
     this.minimap = this.el('canvas', '', mapBox); this.minimap.id = 'minimap';
     this.minimap.width = 160; this.minimap.height = 160;
+    // expanded "peek" map (hold Tab) — a whole-moor overview
+    this.mapOverlay = this.el('div', 'hidden', document.body); this.mapOverlay.id = 'big-map';
+    const mapInner = this.el('div', '', this.mapOverlay); mapInner.id = 'big-map-inner';
+    this.el('div', '', mapInner, 'T&rsquo; Moors &mdash; <span class="dim">hold Tab to peek</span>').id = 'big-map-title';
+    this.bigMap = this.el('canvas', '', mapInner); this.bigMap.id = 'big-map-canvas';
+    this.bigMap.width = 900; this.bigMap.height = 760;
+    this.mapBase = document.createElement('canvas'); // cached static layer
+    this.mapBaseKey = null;
     this.mapInfo = this.el('div', '', mapBox); this.mapInfo.id = 'map-info';
 
     this.toastBox = this.el('div', '', this.hud); this.toastBox.id = 'toasts';
@@ -238,7 +246,7 @@ export class UI {
 <b>Left click</b> Dig blocks (hold) / clout beasts<br>
 <b>Right click</b> Place blocks / eat scran / talk to folk / use bench, range &amp; board<br>
 <b>W A S D</b> Walk<br>
-<b>Ctrl</b> Leg it (sprint &mdash; burns hunger, outruns a barghest)<br>
+<b>Z</b> Leg it (sprint &mdash; burns hunger, outruns a barghest)<br>
 <b>Space</b> Jump / swim up<br>
 <b>Shift</b> Sneak &mdash; slow, but tha won&rsquo;t walk off edges<br>
 <b>1&ndash;9 / mouse wheel</b> Pick hotbar slot<br>
@@ -609,12 +617,26 @@ export class UI {
     this.btnShared.classList.toggle('hidden', !loggedIn);
     this.btnContinue.classList.toggle('hidden', !loggedIn);
     this.whoBox.classList.toggle('hidden', !loggedIn);
-    if (loggedIn) {
-      this.whoBox.innerHTML = auth.guest
-        ? 'Passing through as <b>a rambler</b> &mdash; <u id="swap-user">got an invite?</u>'
-        : `Welcome back, <b>${auth.name}</b> &mdash; <u id="swap-user">not thee?</u>`;
+    if (!loggedIn) return;
+    if (auth.guest) {
+      this.whoBox.innerHTML = 'Passing through as <b>a rambler</b> &mdash; <u id="swap-user">got an invite?</u>';
       document.getElementById('swap-user').onclick = () => this.game.logout();
+      return;
     }
+    const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const roster = (this.game.loadAccounts ? this.game.loadAccounts() : []).filter(a => a.acct !== auth.acct);
+    let html = `Welcome back, <b>${esc(auth.name)}</b>`;
+    if (roster.length) {
+      html += '<div class="who-switch"><span class="lbl">play as:</span>' + roster.map(a =>
+        `<button class="who-chip" data-acct="${esc(a.acct)}">${esc(a.name)}</button>` +
+        `<button class="who-forget" data-forget="${esc(a.acct)}" title="forget this un">&times;</button>`
+      ).join('') + '</div>';
+    }
+    html += '<div class="who-new"><u id="swap-user">+ someone new</u></div>';
+    this.whoBox.innerHTML = html;
+    document.getElementById('swap-user').onclick = () => this.game.logout();
+    this.whoBox.querySelectorAll('.who-chip').forEach(b => { b.onclick = () => this.game.switchAccount(b.dataset.acct); });
+    this.whoBox.querySelectorAll('.who-forget').forEach(b => { b.onclick = e => { e.stopPropagation(); this.game.forgetAccount(b.dataset.forget); }; });
   }
 
   toast(text, ms = 3500) {
@@ -741,6 +763,18 @@ export class UI {
       }
     }
     ctx.putImageData(img, 0, 0);
+    // other folk on t' shared moor, if any are in t' window
+    const net = this.game && this.game.net;
+    if (net && net.remotes && net.remotes.size) {
+      for (const r of net.remotes.values()) {
+        const p = r.mob ? r.mob.pos : r.target; if (!p) continue;
+        const sx = (p.x - player.pos.x) * scale + size / 2;
+        const sy = (p.z - player.pos.z) * scale + size / 2;
+        if (sx < 3 || sx > size - 3 || sy < 3 || sy > size - 3) continue;
+        ctx.fillStyle = '#5ad0ff'; ctx.strokeStyle = '#002'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(sx, sy, 3, 0, 7); ctx.fill(); ctx.stroke();
+      }
+    }
     // player arrow
     ctx.save();
     ctx.translate(size / 2, size / 2);
@@ -754,6 +788,124 @@ export class UI {
     // north marker
     ctx.fillStyle = '#d8b95a'; ctx.font = 'bold 11px sans-serif';
     ctx.fillText('N', size / 2 - 3, 11);
+  }
+
+  // ============ expanded "peek" map (hold Tab) ============
+  mapTint(geo, x, z) {
+    const ct = geo.coastT(x, z);
+    if (ct > 0.5) return '#26415c';                                       // t' North Sea
+    const h = geo.height(x, z);
+    if (ct > 0.25 || (h >= 22 && h <= 27 && ct > 0.05)) return '#cdb98a'; // sands
+    if (h < WATER_LEVEL) return '#3a5e7a';                                // beck or tarn
+    const bog = geo.bogginess(x, z);
+    if (h >= 33 && bog > 0.5) return '#39341f';                           // blanket bog
+    if (h >= 33) return geo.heatheriness(x, z) > 0.3 ? '#6a4f6a' : '#5b4c3c'; // heather moor / bare top
+    return '#4a5e34';                                                     // dale pasture
+  }
+
+  buildBigMap(player, world) {
+    const geo = world.gen.geo;
+    let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
+    const note = (x, z) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); };
+    for (const v of geo.villages) note(v.x, v.z);
+    for (const s of geo.railway()) note(s.x, s.z);
+    for (const [x, z] of [[-700, -880], [540, 680], [-380, -620], [-260, 380]]) note(x, z);
+    note(player.pos.x, player.pos.z);
+    minX -= 120; maxX += 200; minZ -= 120; maxZ += 120; // pad, wi' room for t' sea to t' east
+    const C = this.bigMap, W = C.width, H = C.height;
+    const ww = maxX - minX, wh = maxZ - minZ;
+    const sc = Math.min(W / ww, H / wh);
+    const offX = (W - ww * sc) / 2, offZ = (H - wh * sc) / 2;
+    this._mapXf = { s: sc, offX, offZ, minX, minZ };
+    const w2x = x => offX + (x - minX) * sc, w2y = z => offZ + (z - minZ) * sc;
+    const base = this.mapBase; base.width = W; base.height = H;
+    const b = base.getContext('2d');
+    b.fillStyle = '#0e1118'; b.fillRect(0, 0, W, H);
+    const CELLS = 150, stepX = ww / CELLS, stepZ = wh / CELLS;          // coarse terrain tint
+    const cw = Math.ceil(W / CELLS) + 1, cyh = Math.ceil(H / CELLS) + 1;
+    for (let gz = 0; gz < CELLS; gz++) for (let gx = 0; gx < CELLS; gx++) {
+      b.fillStyle = this.mapTint(geo, minX + (gx + 0.5) * stepX, minZ + (gz + 0.5) * stepZ);
+      b.fillRect(Math.floor(w2x(minX + gx * stepX)), Math.floor(w2y(minZ + gz * stepZ)), cw, cyh);
+    }
+    const path = geo.railPath().pts;                                    // t' railway
+    b.lineJoin = 'round';
+    b.strokeStyle = '#1c1c1c'; b.lineWidth = 4; b.beginPath();
+    path.forEach((pt, i) => { const X = w2x(pt.x), Y = w2y(pt.z); i ? b.lineTo(X, Y) : b.moveTo(X, Y); }); b.stroke();
+    b.strokeStyle = '#cbb784'; b.lineWidth = 1.4; b.stroke();
+    for (const st of geo.railway()) {                                   // stations
+      const X = w2x(st.x), Y = w2y(st.z);
+      b.fillStyle = '#1c1c1c'; b.fillRect(X - 3, Y - 3, 6, 6);
+      b.fillStyle = '#e8d8a0'; b.fillRect(X - 2, Y - 2, 4, 4);
+      b.fillStyle = '#d8c89a'; b.font = '10px sans-serif'; b.textAlign = 'left'; b.fillText(st.name, X + 5, Y + 3);
+    }
+    for (const v of geo.villages) {                                     // villages
+      const X = w2x(v.x), Y = w2y(v.z);
+      b.fillStyle = '#caa84a'; b.strokeStyle = '#000'; b.lineWidth = 1.5;
+      b.beginPath(); b.arc(X, Y, 5, 0, 7); b.fill(); b.stroke();
+      b.fillStyle = '#fff'; b.font = 'bold 12px sans-serif'; b.textAlign = 'left'; b.fillText(v.name, X + 7, Y + 4);
+    }
+    b.fillStyle = '#a59c8c'; b.font = 'italic 11px sans-serif';         // landmarks
+    for (const [label, x, z] of [['Roseberry Topping', -700, -880], ['Hole of Horcum', 540, 680], ['Wainstones', -380, -620], ['Rosedale Kilns', -260, 380], ['Whitby Abbey', geo.abbeySite().x, geo.abbeySite().z]]) {
+      b.fillText('▲ ' + label, w2x(x) + 4, w2y(z));
+    }
+    b.fillStyle = '#d8b95a'; b.font = 'bold 16px sans-serif'; b.textAlign = 'center'; b.fillText('N ↑', W - 34, 26);
+    this.mapBaseKey = world.gen.seed;
+  }
+
+  drawBigMapDots(player, net) {
+    const ctx = this.bigMap.getContext('2d');
+    ctx.drawImage(this.mapBase, 0, 0);
+    const xf = this._mapXf; if (!xf) return;
+    const w2x = x => xf.offX + (x - xf.minX) * xf.s, w2y = z => xf.offZ + (z - xf.minZ) * xf.s;
+    net = net || (this.game && this.game.net);
+    if (net && net.remotes) {                                           // other folk, named
+      ctx.font = '11px sans-serif'; ctx.textAlign = 'left';
+      for (const r of net.remotes.values()) {
+        const p = r.mob ? r.mob.pos : r.target; if (!p) continue;
+        const X = w2x(p.x), Y = w2y(p.z);
+        ctx.fillStyle = '#5ad0ff'; ctx.strokeStyle = '#013'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(X, Y, 4, 0, 7); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#cdefff'; ctx.fillText(r.name || 'rambler', X + 6, Y + 3);
+      }
+    }
+    const X = w2x(player.pos.x), Y = w2y(player.pos.z);                  // thee
+    ctx.save(); ctx.translate(X, Y); ctx.rotate(-player.yaw);
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(6, 7); ctx.lineTo(0, 3); ctx.lineTo(-6, 7); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  showBigMap(player, world) {
+    if (!world) return;
+    const ctx = this.bigMap.getContext('2d');
+    if (this.game.sky && this.game.sky.moorFog > 0.6) {                 // t' fog swallows t' map an' all
+      ctx.fillStyle = '#b9bec4'; ctx.fillRect(0, 0, this.bigMap.width, this.bigMap.height);
+      ctx.fillStyle = '#62676e'; ctx.textAlign = 'center'; ctx.font = 'bold 22px sans-serif';
+      ctx.fillText('T’ FOG’S DOWN — no map till it lifts', this.bigMap.width / 2, this.bigMap.height / 2);
+      this.mapOverlay.classList.remove('hidden');
+      return;
+    }
+    if (this.mapBaseKey !== world.gen.seed) this.buildBigMap(player, world);
+    this.drawBigMapDots(player, this.game.net);
+    this.mapOverlay.classList.remove('hidden');
+  }
+
+  hideBigMap() { this.mapOverlay.classList.add('hidden'); }
+
+  // warden world chooser — resolves wi' a relay room name
+  pickWorld(currentRoom) {
+    return new Promise(resolve => {
+      const ov = this.el('div', '', document.body); ov.id = 'world-pick';
+      const box = this.el('div', '', ov); box.id = 'world-pick-box';
+      this.el('div', 'inv-title', box, 'Which world, Warden?');
+      const worlds = [['moor', 'T’ Moor (original)'], ['bairns', 'Bairns’ World'], ['dale', 'Dale'], ['crag', 'Crag'], ['tarn', 'Tarn']];
+      for (const [room, label] of worlds) {
+        const btn = this.el('button', 'mc', box, label + (room === currentRoom ? ' · (thine)' : ''));
+        btn.onclick = () => { ov.remove(); resolve(room); };
+      }
+      const cancel = this.el('div', 'muted-note', box, '<u>cancel</u>'); cancel.style.cursor = 'pointer';
+      cancel.onclick = () => { ov.remove(); resolve(currentRoom); };
+    });
   }
 
   // ============ inventory & crafting ============

@@ -64,7 +64,7 @@ export class Player {
     fwd /= mag; strafe /= mag;
 
     const sneaking = input.keys['ShiftLeft'] && !this.flying;
-    let sprinting = input.keys['ControlLeft'] && fwd > 0 && this.hunger > 6 && !sneaking;
+    let sprinting = input.keys['KeyZ'] && fwd > 0 && this.hunger > 6 && !sneaking;
     let speed = this.flying ? (sprinting ? FLY_FAST : FLY) : sprinting ? SPRINT : sneaking ? SNEAK : WALK;
     if (inBog) speed *= 0.3;
     else if (inWater) speed *= 0.55;
