@@ -45,6 +45,8 @@ export const I = {
   FISH_CHIPS: 99,
   // Dracula storyline
   HOLY_WATER: 95, WOODEN_STAKE: 96, HOLY_STAKE: 97, DRACULA_JOURNAL: 98,
+  // beef frae t' cows in t' dale pastures (100-103 held back for fishing tackle)
+  RAW_BEEF: 104, COOKED_BEEF: 105,
 };
 
 // Parish wardens: SHA-256 o' t' dash account id, never t' id itsen —
@@ -115,6 +117,7 @@ export const ITEM_NAMES = {
   [I.COAL_LUMP]: 'Coal', [I.RAW_IRON]: 'Raw Ironstone', [I.IRON_INGOT]: 'Iron Ingot', [I.JET_GEM]: 'Whitby Jet',
   [I.RAW_MUTTON]: 'Raw Mutton', [I.COOKED_MUTTON]: 'Roast Mutton',
   [I.RAW_GROUSE]: 'Raw Grouse', [I.COOKED_GROUSE]: 'Roast Grouse',
+  [I.RAW_BEEF]: 'Raw Beef', [I.COOKED_BEEF]: 'Roast Beef',
   [I.BILBERRIES]: 'Bilberries',
   [I.PARCEL]: 'Brown Paper Parcel',
   [I.AMULET_L]: 'Owd Amulet (left half)',
@@ -161,6 +164,8 @@ export const FOODS = {
   [I.COOKED_MUTTON]: 8,
   [I.RAW_GROUSE]: 2,
   [I.COOKED_GROUSE]: 6,
+  [I.RAW_BEEF]: 3,
+  [I.COOKED_BEEF]: 8,
   [I.FISH_CHIPS]: 10, // best scran on t' moors — worth t' trip to Whitby
 };
 
@@ -202,6 +207,7 @@ export const SMELTS = [
   { in: B.COBBLE, out: B.STONE, label: 'Fire cobble to gritstone' },
   { in: I.RAW_MUTTON, out: I.COOKED_MUTTON, label: 'Roast mutton' },
   { in: I.RAW_GROUSE, out: I.COOKED_GROUSE, label: 'Roast grouse' },
+  { in: I.RAW_BEEF, out: I.COOKED_BEEF, label: 'Roast beef' },
 ];
 export const FUELS = { [I.COAL_LUMP]: 4, [B.PEAT]: 1 };
 
@@ -220,6 +226,7 @@ export const CREATIVE_ITEMS = [
   I.W_PICK, I.S_PICK, I.I_PICK, I.W_AXE, I.S_AXE, I.I_AXE,
   I.W_SHOVEL, I.S_SHOVEL, I.I_SHOVEL, I.W_SWORD, I.S_SWORD, I.I_SWORD,
   I.STICK, I.COAL_LUMP, I.RAW_IRON, I.IRON_INGOT, I.JET_GEM,
-  I.RAW_MUTTON, I.COOKED_MUTTON, I.RAW_GROUSE, I.COOKED_GROUSE, I.BILBERRIES,
+  I.RAW_MUTTON, I.COOKED_MUTTON, I.RAW_GROUSE, I.COOKED_GROUSE,
+  I.RAW_BEEF, I.COOKED_BEEF, I.BILBERRIES,
   I.HOLY_WATER, I.WOODEN_STAKE, I.HOLY_STAKE, I.DRACULA_JOURNAL,
 ];

@@ -107,6 +107,121 @@ function makeBoggart() {
   return { group: g, legs: legs.concat(arms), body, head };
 }
 
+function makeCow() {
+  const g = new THREE.Group();
+  const body = box(1.0, 0.8, 1.5, 0x5a4632); body.position.y = 0.9; g.add(body);
+  const patch = box(1.02, 0.5, 0.8, 0xe8e2d4); patch.position.set(0, 1.0, 0.1); g.add(patch); // a white flank
+  const head = box(0.46, 0.46, 0.5, 0x4a3a28); head.position.set(0, 1.15, 0.95); g.add(head);
+  const snout = box(0.36, 0.28, 0.2, 0xc89898); snout.position.set(0, 1.02, 1.18); g.add(snout);
+  for (const x of [-0.18, 0.18]) { const horn = box(0.09, 0.12, 0.09, 0xe8e0d0); horn.position.set(x, 1.42, 0.95); g.add(horn); }
+  const legs = [];
+  for (const [x, z] of [[-0.34, 0.55], [0.34, 0.55], [-0.34, -0.55], [0.34, -0.55]]) {
+    const l = box(0.2, 0.6, 0.2, 0x3a2e20); l.position.set(x, 0.3, z); g.add(l); legs.push(l);
+  }
+  return { group: g, legs, body, head };
+}
+
+function makeBull() {
+  const g = new THREE.Group();
+  const body = box(1.15, 0.95, 1.7, 0x241c14); body.position.y = 1.0; g.add(body);
+  const hump = box(0.7, 0.32, 0.6, 0x2c2218); hump.position.set(0, 1.5, 0.2); g.add(hump);
+  const head = box(0.52, 0.52, 0.55, 0x1c150e); head.position.set(0, 1.2, 1.05); g.add(head);
+  const snout = box(0.4, 0.3, 0.2, 0x3a2a24); snout.position.set(0, 1.05, 1.3); g.add(snout);
+  for (const x of [-0.3, 0.3]) {
+    const horn = box(0.1, 0.1, 0.34, 0xd8d0c0); horn.position.set(x, 1.42, 1.0); horn.rotation.z = x < 0 ? 0.4 : -0.4; g.add(horn);
+    const eye = box(0.07, 0.07, 0.04, 0x401010, 0x802010); eye.position.set(x * 0.5, 1.28, 1.33); g.add(eye);
+  }
+  const legs = [];
+  for (const [x, z] of [[-0.4, 0.62], [0.4, 0.62], [-0.4, -0.62], [0.4, -0.62]]) {
+    const l = box(0.24, 0.62, 0.24, 0x161009); l.position.set(x, 0.31, z); g.add(l); legs.push(l);
+  }
+  return { group: g, legs, body, head };
+}
+
+function makePheasant() {
+  const g = new THREE.Group();
+  const body = box(0.34, 0.34, 0.56, 0x7a4a26); body.position.y = 0.36; g.add(body);
+  const neck = box(0.16, 0.26, 0.16, 0x16306a); neck.position.set(0, 0.6, 0.22); g.add(neck); // glossy dark neck-ring
+  const head = box(0.2, 0.2, 0.22, 0x123a2a); head.position.set(0, 0.78, 0.28); g.add(head);
+  const face = box(0.24, 0.16, 0.1, 0xd02a2a, 0x501008); face.position.set(0, 0.78, 0.41); g.add(face); // t' distinctive red face
+  const tail = box(0.12, 0.1, 0.72, 0x9a6a36); tail.position.set(0, 0.42, -0.52); tail.rotation.x = 0.18; g.add(tail);
+  const legs = [];
+  for (const x of [-0.09, 0.09]) { const l = box(0.05, 0.2, 0.05, 0xa89060); l.position.set(x, 0.1, 0.05); g.add(l); legs.push(l); }
+  return { group: g, legs, body, head };
+}
+
+function makeOwl() {
+  const g = new THREE.Group();
+  const body = box(0.36, 0.46, 0.34, 0x6a5640); body.position.y = 0; g.add(body);
+  const head = box(0.36, 0.3, 0.3, 0x7a6248); head.position.set(0, 0.34, 0.02); g.add(head);
+  for (const x of [-0.09, 0.09]) {
+    const eye = box(0.1, 0.1, 0.05, 0xf2c84a, 0x705012); eye.position.set(x, 0.36, 0.16); g.add(eye);
+    const ear = box(0.06, 0.1, 0.06, 0x5a4632); ear.position.set(x * 1.4, 0.52, 0); g.add(ear);
+  }
+  const beak = box(0.06, 0.08, 0.08, 0x3a2a1a); beak.position.set(0, 0.28, 0.18); g.add(beak);
+  const wings = [];
+  for (const x of [-1, 1]) { const w = box(0.5, 0.08, 0.32, 0x5a4632); w.position.set(x * 0.42, 0.06, 0); g.add(w); wings.push(w); }
+  return { group: g, legs: [], wings, body, head };
+}
+
+function makeCrow() {
+  const g = new THREE.Group();
+  const body = box(0.26, 0.26, 0.5, 0x0c0c10); body.position.y = 0; g.add(body);
+  const head = box(0.2, 0.2, 0.2, 0x101015); head.position.set(0, 0.16, 0.3); g.add(head);
+  const beak = box(0.06, 0.06, 0.18, 0x1a1a1a); beak.position.set(0, 0.14, 0.46); g.add(beak);
+  const tail = box(0.16, 0.06, 0.3, 0x0a0a0e); tail.position.set(0, 0.02, -0.34); g.add(tail);
+  const wings = [];
+  for (const x of [-1, 1]) { const w = box(0.6, 0.06, 0.28, 0x08080c); w.position.set(x * 0.4, 0.04, 0); g.add(w); wings.push(w); }
+  return { group: g, legs: [], wings, body, head };
+}
+
+function makeLizard() {
+  const g = new THREE.Group();
+  const body = box(0.16, 0.08, 0.34, 0x4a5a32); body.position.y = 0.06; g.add(body);
+  const head = box(0.12, 0.08, 0.12, 0x55683a); head.position.set(0, 0.06, 0.22); g.add(head);
+  const tail = box(0.06, 0.05, 0.3, 0x3e4c2a); tail.position.set(0, 0.05, -0.28); g.add(tail);
+  const legs = [];
+  for (const [x, z] of [[-0.1, 0.1], [0.1, 0.1], [-0.1, -0.1], [0.1, -0.1]]) {
+    const l = box(0.04, 0.05, 0.1, 0x3a4828); l.position.set(x, 0.03, z); l.rotation.y = x < 0 ? 0.5 : -0.5; g.add(l); legs.push(l);
+  }
+  return { group: g, legs, body, head };
+}
+
+function makeCurlew() {
+  const g = new THREE.Group();
+  const body = box(0.3, 0.28, 0.46, 0x8a7448); body.position.y = 0.5; g.add(body);
+  const neck = box(0.12, 0.24, 0.12, 0x9a8458); neck.position.set(0, 0.74, 0.18); g.add(neck);
+  const head = box(0.16, 0.16, 0.18, 0x9a8458); head.position.set(0, 0.9, 0.22); g.add(head);
+  const bill = box(0.04, 0.04, 0.34, 0x2a1c12); bill.position.set(0, 0.84, 0.42); bill.rotation.x = 0.5; g.add(bill); // long downcurved bill
+  const legs = [];
+  for (const x of [-0.08, 0.08]) { const l = box(0.04, 0.4, 0.04, 0x4a4030); l.position.set(x, 0.2, 0); g.add(l); legs.push(l); }
+  return { group: g, legs, body, head };
+}
+
+function makeFrog() {
+  const g = new THREE.Group();
+  const body = box(0.24, 0.14, 0.26, 0x3a6a2e); body.position.y = 0.1; g.add(body);
+  for (const x of [-0.07, 0.07]) {
+    const eye = box(0.07, 0.07, 0.07, 0x6a9a3a); eye.position.set(x, 0.2, 0.08); g.add(eye);
+    const pup = box(0.03, 0.03, 0.03, 0x101810); pup.position.set(x, 0.22, 0.13); g.add(pup);
+  }
+  const legs = [];
+  for (const [x, z] of [[-0.12, -0.08], [0.12, -0.08]]) { const l = box(0.06, 0.06, 0.16, 0x336026); l.position.set(x, 0.05, z); g.add(l); legs.push(l); }
+  for (const [x, z] of [[-0.1, 0.1], [0.1, 0.1]]) { const l = box(0.05, 0.05, 0.1, 0x336026); l.position.set(x, 0.05, z); g.add(l); legs.push(l); }
+  return { group: g, legs, body, head: body };
+}
+
+function makeSeagull() {
+  const g = new THREE.Group();
+  const body = box(0.3, 0.3, 0.5, 0xeef0f2); body.position.y = 0; g.add(body);
+  const head = box(0.2, 0.2, 0.2, 0xf8fafc); head.position.set(0, 0.18, 0.3); g.add(head);
+  const beak = box(0.07, 0.07, 0.16, 0xe8b028); beak.position.set(0, 0.14, 0.46); g.add(beak);
+  const tail = box(0.18, 0.06, 0.26, 0xdfe4e8); tail.position.set(0, 0.02, -0.34); g.add(tail);
+  const wings = [];
+  for (const x of [-1, 1]) { const w = box(0.7, 0.06, 0.3, 0xc2cdd6); w.position.set(x * 0.46, 0.05, 0); g.add(w); wings.push(w); }
+  return { group: g, legs: [], wings, body, head };
+}
+
 // ---------- villagers ----------
 // Appearance derived from t' persona's name (matches yorkshire_bot's roster).
 function villagerLook(name) {
@@ -237,12 +352,14 @@ export const MOB_TYPES = {
     hostile: false, drops: [[I.RAW_MUTTON, 1, 2], [B.WOOL, 1, 2]], cap: 8, name: 'Swaledale Yow',
   },
   grouse: {
-    make: makeGrouse, hw: 0.2, h: 0.6, hp: 3, speed: 1.4, fleeSpeed: 3.6,
+    make: makeGrouse, hw: 0.2, h: 0.6, hp: 3, speed: 1.4, fleeSpeed: 3.8,
     hostile: false, drops: [[I.RAW_GROUSE, 1, 1]], cap: 6, name: 'Red Grouse',
+    habitat: 'moor', shy: true, shyRadius: 6, flush: true, fleeFor: 3,
   },
   hare: {
-    make: makeHare, hw: 0.2, h: 0.7, hp: 4, speed: 2.6, fleeSpeed: 6.0,
+    make: makeHare, hw: 0.2, h: 0.7, hp: 4, speed: 2.6, fleeSpeed: 6.4,
     hostile: false, drops: [], cap: 4, name: 'Brown Hare',
+    shy: true, shyRadius: 7, fleeFor: 4, // bolts t' moment tha gets near
   },
   barghest: {
     make: makeBarghest, hw: 0.45, h: 1.6, hp: 22, speed: 4.0, fleeSpeed: 4.6,
@@ -251,6 +368,52 @@ export const MOB_TYPES = {
   boggart: {
     make: makeBoggart, hw: 0.3, h: 1.3, hp: 10, speed: 3.0, fleeSpeed: 3.0,
     hostile: true, dmg: 2, attackRange: 1.4, drops: [[B.PEAT, 0, 2]], cap: 4, night: true, name: 'Boggart',
+  },
+  // ---- t' living moor: cattle, game birds, fliers, basking lizards ----
+  cow: {
+    make: makeCow, hw: 0.55, h: 1.45, hp: 12, speed: 1.2, fleeSpeed: 2.8,
+    hostile: false, drops: [[I.RAW_BEEF, 1, 2]], cap: 8, name: 'Dale Cow',
+    habitat: 'pasture', group: [2, 4],
+  },
+  bull: {
+    make: makeBull, hw: 0.6, h: 1.6, hp: 20, speed: 3.8, fleeSpeed: 3.0,
+    hostile: false, aggroRadius: 8, dmg: 4, attackRange: 1.9, attackCause: 'A bull had thee on its horns',
+    drops: [[I.RAW_BEEF, 1, 3]], cap: 1, name: 'Dale Bull', habitat: 'pasture',
+  },
+  pheasant: {
+    make: makePheasant, hw: 0.2, h: 0.85, hp: 3, speed: 1.6, fleeSpeed: 4.6,
+    hostile: false, drops: [[I.RAW_GROUSE, 1, 1]], cap: 5, name: 'Pheasant',
+    habitat: 'edge', shy: true, shyRadius: 7, flush: true, fleeFor: 4,
+  },
+  owl: {
+    make: makeOwl, hw: 0.3, h: 0.6, hp: 4, speed: 4.0, fleeSpeed: 4.0,
+    hostile: false, drops: [], cap: 2, name: 'Tawny Owl',
+    fly: true, swoop: true, flyBand: 12, night: true,
+  },
+  crow: {
+    make: makeCrow, hw: 0.25, h: 0.4, hp: 3, speed: 4.5, fleeSpeed: 5.0,
+    hostile: false, drops: [], cap: 7, name: 'Carrion Crow',
+    fly: true, flock: true, flyBand: 16, day: true, group: [3, 6], habitat: 'moor',
+  },
+  lizard: {
+    make: makeLizard, hw: 0.12, h: 0.18, hp: 2, speed: 1.0, fleeSpeed: 5.5,
+    hostile: false, drops: [], cap: 5, name: 'Common Lizard',
+    bask: true, shy: true, shyRadius: 5, fleeFor: 2.5, day: true, habitat: 'rock',
+  },
+  curlew: {
+    make: makeCurlew, hw: 0.2, h: 0.95, hp: 3, speed: 1.5, fleeSpeed: 4.4,
+    hostile: false, drops: [], cap: 4, name: 'Curlew',
+    shy: true, shyRadius: 8, flush: true, fleeFor: 4, habitat: 'moor',
+  },
+  frog: {
+    make: makeFrog, hw: 0.14, h: 0.22, hp: 2, speed: 1.2, fleeSpeed: 3.2,
+    hostile: false, drops: [], cap: 5, name: 'Frog',
+    shy: true, shyRadius: 4, fleeFor: 2, habitat: 'water',
+  },
+  seagull: {
+    make: makeSeagull, hw: 0.28, h: 0.5, hp: 3, speed: 4.8, fleeSpeed: 5.2,
+    hostile: false, drops: [], cap: 6, name: 'Herring Gull',
+    fly: true, flock: true, flyBand: 18, day: true, group: [2, 5], habitat: 'coast',
   },
   // quest-only creatures (never spawn naturally)
   lamb: {
@@ -373,10 +536,12 @@ export class Entities {
     const dracGone = this.draculaVanquished();
     // early nights are gentler: half t' hostile caps until day 3
     const day = this.day || 1;
+    const geo = this.world.gen.geo;
     const types = Object.keys(MOB_TYPES).filter(k => {
       const t = MOB_TYPES[k];
       if (t.natural === false) return false;
       if (t.night && !isNight) return false;
+      if (t.day && isNight) return false;        // day birds roost at neet
       if (t.hostile && warded) return false;
       let cap = t.hostile && day <= 2 ? Math.max(1, t.cap >> 1) : t.cap;
       // once Dracula's laid to rest, t' common night horrors thin out a touch
@@ -393,23 +558,75 @@ export class Entities {
     const z = Math.floor(player.pos.z + Math.sin(ang) * dist);
     if (!this.world.isLoaded(x, z)) return;
     // nowt nasty walks into Moorstead — t' village is safe ground
-    if (t.hostile && this.world.gen.geo.inVillage(x, z, 12)) return;
+    if (t.hostile && geo.inVillage(x, z, 12)) return;
     // nor will owt dark rise near a burning light (shelters, torch camps)
     if (t.hostile && this.world.nearLight(x, z, 18)) return;
-    // find surface
+    // find t' surface block an' its height
+    let surfY = -1, surfB = 0;
     for (let y = HEIGHT - 2; y > 1; y--) {
       const b = this.world.getBlock(x, y, z);
       if (b === B.AIR) continue;
-      if (b === B.GRASS || b === B.PEAT || b === B.DIRT || b === B.STONE) {
+      if (b === B.GRASS || b === B.PEAT || b === B.DIRT || b === B.STONE || b === B.SAND) {
+        const above = this.world.getBlock(x, y + 1, z);
+        if (above === B.AIR || (BLOCKS[above] && BLOCKS[above].kind === 'cutout')) { surfY = y; surfB = b; }
+      }
+      break;
+    }
+    if (surfY < 0) return;
+    // right beast for t' right ground
+    if (t.habitat && !this.habitatOk(t, geo, x, z, surfY, surfB)) return;
+    const mob = this.spawnMob(type, x + 0.5, t.fly ? surfY + (t.flyBand || 14) : surfY + 1.05, z + 0.5);
+    if (type === 'barghest' && audio) audio.howl();
+    // herds an' flocks come in numbers
+    if (t.group) {
+      const extra = t.group[0] + ((Math.random() * (t.group[1] - t.group[0] + 1)) | 0) - 1;
+      for (let i = 0; i < extra; i++) {
+        this.spawnNear(type, x + ((Math.random() * 10 - 5) | 0), z + ((Math.random() * 10 - 5) | 0));
+      }
+    }
+    return mob;
+  }
+
+  // one more o' t' same on t' surface at (x,z) — for herds an' flocks
+  spawnNear(type, x, z) {
+    if (!this.world.isLoaded(x, z)) return;
+    const t = MOB_TYPES[type];
+    for (let y = HEIGHT - 2; y > 1; y--) {
+      const b = this.world.getBlock(x, y, z);
+      if (b === B.AIR) continue;
+      if (b === B.GRASS || b === B.PEAT || b === B.DIRT || b === B.STONE || b === B.SAND) {
         const above = this.world.getBlock(x, y + 1, z);
         if (above === B.AIR || (BLOCKS[above] && BLOCKS[above].kind === 'cutout')) {
-          const mob = this.spawnMob(type, x + 0.5, y + 1.05, z + 0.5);
-          if (type === 'barghest' && audio) audio.howl();
-          return mob;
+          this.spawnMob(type, x + 0.5, t.fly ? y + (t.flyBand || 14) : y + 1.05, z + 0.5);
         }
       }
       break;
     }
+  }
+
+  // is this t' right ground for yon beast?
+  habitatOk(t, geo, x, z, h, surf) {
+    const coast = geo.coastT(x, z);
+    switch (t.habitat) {
+      case 'coast': return coast > 0.05;
+      case 'pasture': return coast === 0 && h >= WATER_LEVEL && h <= 34 && geo.bogginess(x, z) < 0.4 && (geo.daleness(x, z) > 0.3 || geo.inVillage(x, z, 24));
+      case 'edge': return coast === 0 && h < 37 && (this.world.gen.woodiness(x, z) > 0.22 || geo.daleness(x, z) > 0.3);
+      case 'moor': return coast === 0 && h >= 30;
+      case 'rock': return surf === B.STONE || h >= 42;
+      case 'water': return this.nearWater(x, h, z);
+      default: return true;
+    }
+  }
+
+  // is there beck, tarn or bog within a hop?
+  nearWater(x, h, z) {
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+      for (let dy = -1; dy <= 2; dy++) {
+        const b = this.world.getBlock(x + dx, h + dy, z + dz);
+        if (b === B.WATER || b === B.BOG) return true;
+      }
+    }
+    return false;
   }
 
   hurtMob(mob, dmg, kx, kz, audio, player) {
@@ -459,9 +676,9 @@ export class Entities {
         continue;
       }
 
-      // despawn: too far, or hostiles at dawn (bosses an' followers linger longer)
-      if ((distP > (t.boss || t.follower ? 140 : 90)) || (t.night && !isNight)) {
-        if (t.night && !isNight) this.burst(mob.pos.x, mob.pos.y + 1, mob.pos.z, [30, 30, 40], 8);
+      // despawn: too far, hostiles at dawn, day-birds at dusk (bosses/followers linger)
+      if ((distP > (t.boss || t.follower ? 140 : 90)) || (t.night && !isNight) || (t.day && isNight)) {
+        if ((t.night && !isNight) || (t.day && isNight)) this.burst(mob.pos.x, mob.pos.y + 1, mob.pos.z, [30, 30, 40], 8);
         this.scene.remove(mob.model.group);
         mob.dead = true;
         continue;
@@ -470,6 +687,9 @@ export class Entities {
       mob.stateTimer -= dt;
       mob.attackCd -= dt;
       if (mob.flash > 0) mob.flash -= dt;
+
+      // fliers (owls, crows, gulls) ride t' air on their own rules
+      if (t.fly) { this.updateFlyer(mob, dt, player, distP, isNight, audio); continue; }
 
       let wishX = 0, wishZ = 0, speed = 0;
 
@@ -510,6 +730,18 @@ export class Entities {
         }
       }
 
+      // a bull turns on thee if tha crowds it; eases off when tha gives ground
+      if (t.aggroRadius && !player.dead && !player.creative) {
+        if (distP < t.aggroRadius) mob.state = 'chase';
+        else if (mob.state === 'chase' && distP > t.aggroRadius + 9) mob.state = 'idle';
+      }
+      // shy beasts bolt t' moment tha gets near (hare, lizard, curlew, pheasant, grouse)
+      if (t.shy && mob.state !== 'chase' && mob.state !== 'flee' && !player.dead && !player.creative && distP < (t.shyRadius || 8)) {
+        mob.state = 'flee'; mob.fleeTimer = t.fleeFor || 3;
+        if (t.flush) mob.vel.y = Math.max(mob.vel.y, 7); // break frae cover wi' a clatter o' wings
+        if (audio) audio.mobAmbient(mob.type, distP);
+      }
+
       if (mob.state === 'follow') {
         if (!(t.follower && distP < 26)) mob.state = 'idle';
         // wish already set above
@@ -525,15 +757,17 @@ export class Entities {
           mob.attackCd = 1.1;
           const cause = mob.type === 'dracula' ? 'Count Dracula got thee'
             : t.boss ? 'T\u2019 Great Barghest got thee'
-            : mob.type === 'barghest' ? 'A barghest got thee' : 'A boggart did for thee';
+            : mob.type === 'barghest' ? 'A barghest got thee'
+            : mob.type === 'boggart' ? 'A boggart did for thee'
+            : (t.attackCause || 'summat got thee');
           player.damage(t.dmg, cause);
-          if (audio) { audio.hurt(); audio.mobAttack('barghest'); }
+          if (audio) { audio.hurt(); if (mob.type === 'bull') audio.bullSnort(0.4); else audio.mobAttack('barghest'); }
         }
         if (distP > (t.boss ? 60 : 34) || player.dead || player.creative) mob.state = 'idle';
       } else { // idle / wander
         if (mob.stateTimer <= 0) {
           mob.stateTimer = 2 + Math.random() * 5;
-          if (Math.random() < 0.6) {
+          if (Math.random() < (t.bask ? 0.12 : 0.6)) { // basking lizards mostly sit an' sun
             mob.wanderYaw = Math.random() * Math.PI * 2;
             mob.state = 'wander';
           } else {
@@ -580,6 +814,58 @@ export class Entities {
       });
     }
     this.mobs = this.mobs.filter(m => !m.dead);
+  }
+
+  // owls, crows an' gulls — airborne, no gravity, wi' a flap an' (for owls) a swoop
+  updateFlyer(mob, dt, player, distP, isNight, audio) {
+    const t = mob.t;
+    const groundH = this.world.gen.height(Math.floor(mob.pos.x), Math.floor(mob.pos.z));
+    mob.flyTimer = (mob.flyTimer || 0) - dt;
+    if (!mob.flyTarget || mob.flyTimer <= 0) {
+      mob.flyTimer = 2.5 + Math.random() * 4;
+      const ang = Math.random() * Math.PI * 2, rad = 8 + Math.random() * 24;
+      let ty;
+      if (t.swoop && Math.random() < 0.4) { ty = groundH + 1.5 + Math.random() * 2.5; mob.swooping = true; } // graceful swoop
+      else { ty = groundH + (t.flyBand || 14) + Math.random() * 6; mob.swooping = false; }
+      mob.flyTarget = { x: mob.pos.x + Math.cos(ang) * rad, y: ty, z: mob.pos.z + Math.sin(ang) * rad };
+    }
+    const tx = mob.flyTarget.x - mob.pos.x, ty2 = mob.flyTarget.y - mob.pos.y, tz = mob.flyTarget.z - mob.pos.z;
+    const d = Math.hypot(tx, ty2, tz) || 1;
+    const sp = t.speed * (mob.swooping ? 1.7 : 1), k = Math.min(1, 2.4 * dt);
+    mob.vel.x += (tx / d * sp - mob.vel.x) * k;
+    mob.vel.y += (ty2 / d * sp - mob.vel.y) * k;
+    mob.vel.z += (tz / d * sp - mob.vel.z) * k;
+    if (t.flock) this.applyFlock(mob, dt);
+    if (mob.pos.y < groundH + 1.6) { mob.vel.y += 14 * dt; mob.swooping = false; } // never plough in
+    mob.pos.x += mob.vel.x * dt; mob.pos.y += mob.vel.y * dt; mob.pos.z += mob.vel.z * dt;
+    if (d < 3) mob.flyTarget = null;
+    const hsp = Math.hypot(mob.vel.x, mob.vel.z);
+    if (hsp > 0.2) mob.yaw = Math.atan2(mob.vel.x, mob.vel.z);
+    mob.model.group.position.set(mob.pos.x, mob.pos.y, mob.pos.z);
+    mob.model.group.rotation.y = mob.yaw;
+    mob.walkPhase += dt * (mob.swooping ? 3 : 10);
+    const flap = Math.sin(mob.walkPhase * Math.PI * 2) * (mob.swooping ? 0.25 : 0.8);
+    if (mob.model.wings) mob.model.wings.forEach((w, i) => { w.rotation.z = (i === 0 ? 1 : -1) * flap; });
+    if (audio && Math.random() < 0.004) audio.mobAmbient(mob.type, distP);
+    const f = mob.flash > 0 ? 0.7 : 0;
+    mob.model.group.traverse(o => { if (o.isMesh && !o.material.emissiveIntensity) o.material.emissive.setRGB(f, 0, 0); });
+  }
+
+  // boids-lite: cohesion, alignment an' a bit o' personal space, among t' same kind
+  applyFlock(mob, dt) {
+    let cx = 0, cz = 0, vx = 0, vz = 0, n = 0, sx = 0, sz = 0;
+    for (const o of this.mobs) {
+      if (o === mob || o.dead || o.type !== mob.type) continue;
+      const dx = o.pos.x - mob.pos.x, dz = o.pos.z - mob.pos.z, dd = dx * dx + dz * dz;
+      if (dd > 900) continue;
+      n++; cx += o.pos.x; cz += o.pos.z; vx += o.vel.x; vz += o.vel.z;
+      if (dd < 16 && dd > 0.0001) { sx -= dx / dd; sz -= dz / dd; }
+    }
+    if (!n) return;
+    cx /= n; cz /= n; vx /= n; vz /= n;
+    const w = dt * 2;
+    mob.vel.x += ((cx - mob.pos.x) * 0.4 + (vx - mob.vel.x) * 0.5 + sx * 8) * w;
+    mob.vel.z += ((cz - mob.pos.z) * 0.4 + (vz - mob.vel.z) * 0.5 + sz * 8) * w;
   }
 
   // show a spoken line ower their head for a few seconds

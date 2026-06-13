@@ -474,6 +474,8 @@ const ITEM_ICON_PAINTERS = {
   [I.COOKED_MUTTON](ctx) { drawMeat(ctx, '#8a5230', '#b07448'); },
   [I.RAW_GROUSE](ctx) { drawMeat(ctx, '#c2737f', '#daa0a8', 0.7); },
   [I.COOKED_GROUSE](ctx) { drawMeat(ctx, '#96603a', '#ba8456', 0.7); },
+  [I.RAW_BEEF](ctx) { drawMeat(ctx, '#aa3f44', '#cc6a64', 1.1); },
+  [I.COOKED_BEEF](ctx) { drawMeat(ctx, '#723c24', '#9a5e36', 1.1); },
   [I.BILBERRIES](ctx) {
     for (const [x, y] of [[11, 13], [19, 12], [15, 19], [22, 20], [9, 21]]) {
       ctx.fillStyle = '#2c3460'; ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill();

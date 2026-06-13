@@ -205,6 +205,97 @@ export class AudioEngine {
     }
   }
 
+  moo(vol = 0.3) {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    o.type = 'sawtooth';
+    const base = 150 + Math.random() * 40;
+    o.frequency.setValueAtTime(base * 1.2, t0);
+    o.frequency.linearRampToValueAtTime(base, t0 + 0.3);
+    o.frequency.linearRampToValueAtTime(base * 0.85, t0 + 1.0);
+    const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700;
+    const g = this.ctx.createGain();
+    this.env(g, t0, 0.12, vol, 0.9);
+    o.connect(f).connect(g).connect(this.master);
+    o.start(t0); o.stop(t0 + 1.2);
+  }
+
+  bullSnort(vol = 0.32) {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime;
+    this.noiseBurst(t0, 0.18, vol, 500, 'lowpass');
+    this.noiseBurst(t0 + 0.16, 0.14, vol * 0.8, 400, 'lowpass');
+    const o = this.osc('sawtooth', 90, t0, 0.3, vol * 0.5);
+    if (o) o.frequency.exponentialRampToValueAtTime(60, t0 + 0.3);
+  }
+
+  crow(vol = 0.2) {
+    if (!this.ctx) return;
+    let t0 = this.ctx.currentTime;
+    const n = 2 + ((Math.random() * 2) | 0);
+    for (let i = 0; i < n; i++) {
+      const o = this.ctx.createOscillator();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(420, t0);
+      o.frequency.exponentialRampToValueAtTime(250, t0 + 0.14);
+      const f = this.ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 3;
+      const g = this.ctx.createGain();
+      this.env(g, t0, 0.01, vol, 0.16);
+      o.connect(f).connect(g).connect(this.master);
+      o.start(t0); o.stop(t0 + 0.3);
+      t0 += 0.22 + Math.random() * 0.1;
+    }
+  }
+
+  gull(vol = 0.18) {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime;
+    for (const [dt, hi] of [[0, 1500], [0.34, 1700], [0.62, 1400]]) {
+      const o = this.ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(900, t0 + dt);
+      o.frequency.linearRampToValueAtTime(hi, t0 + dt + 0.1);
+      o.frequency.linearRampToValueAtTime(800, t0 + dt + 0.22);
+      const f = this.ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1600; f.Q.value = 4;
+      const g = this.ctx.createGain();
+      this.env(g, t0 + dt, 0.02, vol, 0.2);
+      o.connect(f).connect(g).connect(this.master);
+      o.start(t0 + dt); o.stop(t0 + dt + 0.3);
+    }
+  }
+
+  pheasant(vol = 0.22) {
+    if (!this.ctx) return;
+    let t0 = this.ctx.currentTime; // a harsh double "kok-kok"
+    for (let i = 0; i < 2; i++) {
+      const o = this.ctx.createOscillator();
+      o.type = 'square'; o.frequency.setValueAtTime(380, t0);
+      o.frequency.exponentialRampToValueAtTime(220, t0 + 0.07);
+      const f = this.ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 800;
+      const g = this.ctx.createGain();
+      this.env(g, t0, 0.005, vol, 0.08);
+      o.connect(f).connect(g).connect(this.master);
+      o.start(t0); o.stop(t0 + 0.16);
+      t0 += 0.16;
+    }
+  }
+
+  frogCroak(vol = 0.16) {
+    if (!this.ctx) return;
+    let t0 = this.ctx.currentTime;
+    const n = 2 + ((Math.random() * 3) | 0);
+    for (let i = 0; i < n; i++) {
+      const o = this.ctx.createOscillator();
+      o.type = 'square'; o.frequency.setValueAtTime(150 + Math.random() * 30, t0);
+      const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 500;
+      const g = this.ctx.createGain();
+      this.env(g, t0, 0.01, vol, 0.08);
+      o.connect(f).connect(g).connect(this.master);
+      o.start(t0); o.stop(t0 + 0.12);
+      t0 += 0.1;
+    }
+  }
+
   howl(vol = 0.22) {
     if (!this.ctx) return;
     const t0 = this.ctx.currentTime;
@@ -284,6 +375,9 @@ export class AudioEngine {
     else if (type === 'grouse') this.grouseCall(0.25);
     else if (type === 'barghest') this.growl(0.3);
     else if (type === 'boggart') this.boggartChitter(0.25);
+    else if (type === 'cow' || type === 'bull') this.moo(0.32);
+    else if (type === 'pheasant') this.pheasant(0.28);
+    else if (type === 'curlew') this.curlew(0.2);
     else this.thud();
   }
   mobAttack(type) { if (type === 'barghest') this.growl(0.35); else this.boggartChitter(0.3); }
@@ -294,6 +388,14 @@ export class AudioEngine {
     else if (type === 'grouse') this.grouseCall(vol * 0.7);
     else if (type === 'barghest') this.growl(vol * 0.8);
     else if (type === 'boggart') this.boggartChitter(vol * 0.6);
+    else if (type === 'cow') this.moo(vol);
+    else if (type === 'bull') this.bullSnort(vol);
+    else if (type === 'curlew') this.curlew(vol * 0.7);
+    else if (type === 'pheasant') this.pheasant(vol * 0.8);
+    else if (type === 'owl') this.owl(vol * 0.9);
+    else if (type === 'crow') this.crow(vol * 0.7);
+    else if (type === 'seagull') this.gull(vol * 0.8);
+    else if (type === 'frog') this.frogCroak(vol * 0.8);
   }
   growl(vol = 0.25) {
     if (!this.ctx) return;
