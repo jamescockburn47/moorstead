@@ -661,7 +661,9 @@ export class Geography {
           let t = ((x - a.x) * dx + (z - a.z) * dz) / L2;
           t = Math.max(0, Math.min(1, t));
           const d = Math.hypot(x - (a.x + dx * t), z - (a.z + dz * t));
-          if (d < 2.6 && (!best || d < best.d)) {
+          // report out to t' lineside verge (banks an' cuttin' tops); every
+          // consumer gates on its own smaller distance, so this only widens reach
+          if (d < 6 && (!best || d < best.d)) {
             best = { d, along: a.s + Math.sqrt(L2) * t, deck: a.deck + (b.deck - a.deck) * t };
           }
         }

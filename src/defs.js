@@ -13,6 +13,7 @@ export const TILE = {
   LANTERN: 23, TUSSOCK: 24, WOOL: 25, BILBERRY: 26, RANGE_FRONT: 27,
   RANGE_SIDE: 28, WINDOW: 29, BOARD: 30, TORCH: 31, SIGNPOST: 32, SAND: 33,
   GORSE: 34,
+  FERN: 35, FOXGLOVE: 36, DOG_ROSE: 37, ELDER: 38, MONKEY_LEAVES: 39,
 };
 
 // ---- Block ids ----
@@ -23,6 +24,7 @@ export const B = {
   THATCH: 18, STONEBRICK: 19, BENCH: 20, LANTERN: 21, TUSSOCK: 22,
   WOOL: 23, BILBERRY_BUSH: 24, RANGE: 25, WINDOW: 26, BOARD: 27,
   TORCH: 28, SIGNPOST: 29, SAND: 30, GORSE: 31,
+  FERN: 32, FOXGLOVE: 33, DOG_ROSE: 34, ELDER: 35, MONKEY_LEAVES: 36,
 };
 
 // ---- Item ids (blocks double as items; pure items start at 64) ----
@@ -90,6 +92,11 @@ D[B.TORCH] = { name: 'Torch', kind: 'cutout', tex: { t: TILE.TORCH, s: TILE.TORC
 D[B.SIGNPOST] = { name: 'Waymark Signpost', kind: 'cutout', tex: { t: TILE.SIGNPOST, s: TILE.SIGNPOST, b: TILE.SIGNPOST }, hard: 1.0, tool: 'axe', drop: B.SIGNPOST };
 D[B.SAND] = { name: 'Bay Sand', kind: 'solid', tex: { t: TILE.SAND, s: TILE.SAND, b: TILE.SAND }, hard: 0.5, tool: 'shovel', drop: B.SAND };
 D[B.GORSE] = { name: 'Gorse', kind: 'cutout', tex: { t: TILE.GORSE, s: TILE.GORSE, b: TILE.GORSE }, hard: 0.05, tool: null, drop: B.GORSE };
+D[B.FERN] = { name: 'Fern', kind: 'cutout', tex: { t: TILE.FERN, s: TILE.FERN, b: TILE.FERN }, hard: 0.05, tool: null, drop: B.FERN };
+D[B.FOXGLOVE] = { name: 'Foxglove', kind: 'cutout', tex: { t: TILE.FOXGLOVE, s: TILE.FOXGLOVE, b: TILE.FOXGLOVE }, hard: 0.05, tool: null, drop: B.FOXGLOVE };
+D[B.DOG_ROSE] = { name: 'Dog Rose', kind: 'cutout', tex: { t: TILE.DOG_ROSE, s: TILE.DOG_ROSE, b: TILE.DOG_ROSE }, hard: 0.05, tool: null, drop: B.DOG_ROSE };
+D[B.ELDER] = { name: 'Elder Bush', kind: 'cutout', tex: { t: TILE.ELDER, s: TILE.ELDER, b: TILE.ELDER }, hard: 0.1, tool: null, drop: B.ELDER };
+D[B.MONKEY_LEAVES] = { name: 'Monkey Puzzle', kind: 'solid', tex: { t: TILE.MONKEY_LEAVES, s: TILE.MONKEY_LEAVES, b: TILE.MONKEY_LEAVES }, hard: 0.3, tool: null, drop: null };
 
 export const BLOCKS = D;
 
@@ -207,7 +214,8 @@ export function isPlaceable(id) {
 export const CREATIVE_ITEMS = [
   B.GRASS, B.DIRT, B.PEAT, B.STONE, B.COBBLE, B.STONEBRICK, B.GRAVEL,
   B.LOG, B.PLANKS, B.LEAVES, B.THATCH, B.WOOL, B.HEATHER, B.BRACKEN,
-  B.TUSSOCK, B.BILBERRY_BUSH, B.COAL_ORE, B.IRON_ORE, B.JET_ORE,
+  B.TUSSOCK, B.BILBERRY_BUSH, B.FERN, B.FOXGLOVE, B.DOG_ROSE, B.ELDER, B.MONKEY_LEAVES,
+  B.COAL_ORE, B.IRON_ORE, B.JET_ORE,
   B.BENCH, B.RANGE, B.LANTERN, B.WINDOW, B.TORCH, B.SIGNPOST, B.BOARD,
   I.W_PICK, I.S_PICK, I.I_PICK, I.W_AXE, I.S_AXE, I.I_AXE,
   I.W_SHOVEL, I.S_SHOVEL, I.I_SHOVEL, I.W_SWORD, I.S_SWORD, I.I_SWORD,

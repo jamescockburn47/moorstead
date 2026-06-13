@@ -309,6 +309,85 @@ const TILE_PAINTERS = {
     p.px(10, 10, '#a8c2d4'); p.px(11, 11, '#c8dcea');
     p.px(4, 10, '#7a94a8'); p.px(11, 4, '#a8c2d4');
   },
+  [TILE.FERN](p) {
+    p.clear();
+    // lush green shuttlecock fronds — greener an' fuller than t' rusty bracken
+    for (let i = 0; i < 6; i++) {
+      const x = 2 + ((p.rng() * 12) | 0);
+      const h = 9 + ((p.rng() * 6) | 0);
+      const lean = (p.rng() - 0.5) * 0.6;
+      for (let y = 0; y < h; y++) {
+        const yy = T - 1 - y;
+        const sx = Math.round(x + lean * y);
+        p.px(sx, yy, shade(0x3f6a2e, 0.85 + p.rng() * 0.3)); // midrib
+        const w = Math.max(1, Math.round((h - y) / 3));      // pinnae, broadest near t' base
+        for (let dx = 1; dx <= w; dx++) {
+          if (p.rng() < 0.7) p.px(sx - dx, yy + (dx > 1 ? 1 : 0), shade(0x4f7e38, 0.8 + p.rng() * 0.35));
+          if (p.rng() < 0.7) p.px(sx + dx, yy + (dx > 1 ? 1 : 0), shade(0x4f7e38, 0.8 + p.rng() * 0.35));
+        }
+      }
+    }
+  },
+  [TILE.FOXGLOVE](p) {
+    p.clear();
+    // tall stem wi' a one-sided spire o' purple bells
+    for (let i = 0; i < 3; i++) {
+      const x = 3 + ((p.rng() * 10) | 0);
+      const h = 11 + ((p.rng() * 4) | 0);
+      for (let y = 0; y < h; y++) p.px(x, T - 1 - y, shade(0x3c5a2a, 0.85 + p.rng() * 0.3));
+      p.px(x - 1, T - 2, shade(0x46682e, 1)); p.px(x + 1, T - 1, shade(0x46682e, 1));
+      const top = T - h;
+      for (let y = top; y < top + Math.floor(h * 0.55); y++) {
+        const side = (y % 2 === 0) ? -1 : 1;
+        p.px(x + side, y, shade(0x9a3f9e, 0.85 + p.rng() * 0.3));
+        if (p.rng() < 0.6) p.px(x + side * 2, y, shade(0xb060b8, 1));
+      }
+      p.px(x, top, '#c878c8'); // pale bud at t' tip
+    }
+  },
+  [TILE.DOG_ROSE](p) {
+    p.clear();
+    // an arching bush ablaze wi' pink five-petal blooms
+    for (let y = 4; y < T; y++) for (let x = 1; x < 15; x++) {
+      const cx = x - 8, cy = y - 12;
+      if (cx * cx / 49 + cy * cy / 36 < 1 && p.rng() < 0.78) p.px(x, y, shade(0x3a5a2e, 0.8 + p.rng() * 0.4));
+    }
+    for (let i = 0; i < 3; i++) { // arching canes
+      let x = 3 + ((p.rng() * 9) | 0), y = T - 1;
+      for (let s = 0; s < 9 && y > 3; s++) { p.px(x, y, shade(0x5a4632, 1)); x += p.rng() < 0.5 ? 1 : 0; y -= 1 + (p.rng() < 0.3 ? 1 : 0); }
+    }
+    for (let i = 0; i < 5; i++) { // blooms: pink petals round a yellow eye
+      const x = 3 + ((p.rng() * 10) | 0), y = 4 + ((p.rng() * 7) | 0);
+      p.px(x - 1, y, '#e88fb4'); p.px(x + 1, y, '#e88fb4');
+      p.px(x, y - 1, '#f2a8c4'); p.px(x, y + 1, '#f2a8c4');
+      p.px(x, y, '#ffe070');
+    }
+  },
+  [TILE.ELDER](p) {
+    p.clear();
+    // a tall dark shrub crowned wi' creamy umbels o' flower
+    for (let y = 1; y < T; y++) for (let x = 1; x < 15; x++) {
+      const cx = x - 8, cy = y - 9;
+      if (cx * cx / 49 + cy * cy / 55 < 1 && p.rng() < 0.82) p.px(x, y, shade(0x2f4a26, 0.8 + p.rng() * 0.4));
+    }
+    p.rect(7, T - 3, 2, 3, shade(0x4a3a26, 1)); // woody base
+    for (let i = 0; i < 4; i++) {
+      const cx = 3 + ((p.rng() * 10) | 0), cy = 3 + ((p.rng() * 6) | 0);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+        if (p.rng() < 0.8) p.px(cx + dx, cy + dy, p.rng() < 0.5 ? '#f2eed8' : '#e6e0c6');
+      }
+    }
+  },
+  [TILE.MONKEY_LEAVES](p) {
+    // dense dark araucaria fronds — stiff overlapping spiky scales
+    p.speckle(0x244a26, 0.18);
+    for (let i = 0; i < 26; i++) {
+      const x = (p.rng() * T) | 0, y = (p.rng() * T) | 0;
+      p.px(x, y, shade(0x346634, 0.8 + p.rng() * 0.4));
+      if (p.rng() < 0.5) p.px(x, Math.max(0, y - 1), shade(0x163016, 1)); // shadow above each scale
+    }
+    p.dots(0x4f8240, 10); // brighter tips
+  },
 };
 
 let atlasCanvas = null;

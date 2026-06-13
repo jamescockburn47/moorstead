@@ -44,14 +44,32 @@ export class Gen {
     return 3 + ((hash2i(x, z, this.seed ^ 0x7ef) * 2) | 0);
   }
 
-  // lone gritstone boulders break up t' empty stretches
+  // gritstone breaks up t' empty stretches — most a lone stone, some a middlin'
+  // cluster, t' odd proud tor up on t' tops. Returns 0 | 1 (stone) | 2 (cluster) | 3 (tor).
   boulderAt(x, z) {
     const h = this.geo.height(x, z);
     if (h < 30 || this.geo.coastT(x, z) > 0 || this.geo.inVillage(x, z, 8)) return 0;
-    if (this.geo.bogginess(x, z) > 0.45) return 0;
+    if (this.geo.bogginess(x, z) > 0.45 || this.geo.villageColumn(x, z)) return 0;
     const r = hash2i(x, z, this.seed ^ 0xb01d);
-    if (r > 0.0006) return 0;
-    return 1 + ((r * 10000) | 0) % 2;
+    if (r < 0.00035 && h >= 36) return 3; // a gritstone tor, Wainstones in miniature
+    if (r < 0.0016) return 2;             // a middlin' cluster
+    if (r < 0.004) return 1;              // a lone weathered stone
+    return 0;
+  }
+
+  // monkey puzzles — a Victorian fancy, planted about t' edges o' settlements
+  // (gardens, station yards), wi' t' rare lone specimen gone wild on t' moor.
+  // Returns 0 or t' trunk height.
+  monkeyPuzzleAt(x, z) {
+    const h = this.geo.height(x, z);
+    if (h <= WATER_LEVEL || h > 40) return 0;
+    if (this.geo.coastT(x, z) > 0 || this.geo.bogginess(x, z) > 0.4) return 0;
+    if (this.geo.villageColumn(x, z)) return 0; // never on a building, path or green
+    const fringe = this.geo.inVillage(x, z, 14) && !this.geo.inVillage(x, z, 0);
+    const r = hash2i(x, z, this.seed ^ 0x70e5);
+    if (fringe) { if (r > 0.012) return 0; }
+    else { if (r > 0.00012) return 0; } // ultra-rare wild specimen
+    return 9 + ((hash2i(x, z, this.seed ^ 0x70e6) * 5) | 0); // tall: 9-13
   }
 
   // drystone field walls: t' dale pastures are squared off; t' open moor in't
@@ -137,37 +155,60 @@ export class Gen {
           if (h - 2 > 0) data[IDX(lx, h - 2, lz)] = B.PEAT;
         }
 
+        // t' railway profile (deck height an' distance frae t' line) — wanted
+        // both for t' permanent way below an' for t' lineside planting
+        const ri = geo.railInfo(x, z);
+
         // surface vegetation
         if (!vcol && !pool && !onRoad && h >= WATER_LEVEL && h <= HEIGHT - 3) {
           const surf = data[IDX(lx, h, lz)];
           const r = hash2i(x, z, this.seed ^ 0xf10);
           const heath = geo.heatheriness(x, z);
-          if (surf === B.GRASS) {
+          const onVerge = ri && ri.d >= 2.4 && ri.d < 5; // t' railway's banks an' cuttin' tops
+          if (onVerge && (surf === B.GRASS || surf === B.DIRT)) {
+            // lineside verge: where t' railway fenced its land off frae t'
+            // grazin', ferns an' flowers run riot — t' character o' t' line
+            const v = hash2i(x, z, this.seed ^ 0x5a1e);
+            let plant = 0;
+            if (v < 0.20) plant = B.FERN;
+            else if (v < 0.32) plant = B.FOXGLOVE;
+            else if (v < 0.40) plant = B.DOG_ROSE;
+            else if (v < 0.46) plant = B.ELDER;
+            else if (v < 0.54) plant = B.BRACKEN;
+            else if (v < 0.60) plant = B.TUSSOCK;
+            if (plant && data[IDX(lx, h + 1, lz)] === B.AIR) data[IDX(lx, h + 1, lz)] = plant;
+          } else if (surf === B.GRASS) {
             // patches o' colour on an open moor: heather drifts (purple),
             // gorse banks (yellow), woods — wi' bare ground between
             const gorse = this.geo.heatheriness(x + 1731, z - 942); // an independent patch field
+            const wood = this.woodiness(x, z);
             if (h >= 33) {
               if (heath > 0.28) { // a heather drift
                 if (r < 0.5) data[IDX(lx, h + 1, lz)] = B.HEATHER;
                 else if (r < 0.56) data[IDX(lx, h + 1, lz)] = B.BILBERRY_BUSH;
+                else if (r < 0.574) data[IDX(lx, h + 1, lz)] = B.FOXGLOVE; // t' odd spire in t' heather
               } else if (gorse > 0.34) { // a gorse bank
                 if (r < 0.4) data[IDX(lx, h + 1, lz)] = B.GORSE;
+                else if (r < 0.43) data[IDX(lx, h + 1, lz)] = B.FERN;
               } else {
-                // open moor: sparse tussock, t' odd lone bush
-                if (r < 0.05) data[IDX(lx, h + 1, lz)] = B.TUSSOCK;
-                else if (r < 0.058) data[IDX(lx, h + 1, lz)] = B.HEATHER;
-                else if (r < 0.064) data[IDX(lx, h + 1, lz)] = B.GORSE;
+                // open moor: a touch more life than t' bare stretches afore
+                if (r < 0.07) data[IDX(lx, h + 1, lz)] = B.TUSSOCK;
+                else if (r < 0.085) data[IDX(lx, h + 1, lz)] = B.HEATHER;
+                else if (r < 0.095) data[IDX(lx, h + 1, lz)] = B.GORSE;
+                else if (r < 0.10) data[IDX(lx, h + 1, lz)] = B.FOXGLOVE;
               }
             } else {
-              // dale pasture an' fringe: gorse on t' banks, bracken near t' woods
+              // dale pasture an' fringe: gorse on t' banks, ferns an' bracken near
+              // t' woods, dog rose an' elder in t' hedgerow
               if (gorse > 0.4 && r < 0.3) data[IDX(lx, h + 1, lz)] = B.GORSE;
-              else if (this.woodiness(x, z) > 0.3 && r < 0.14) data[IDX(lx, h + 1, lz)] = B.BRACKEN;
+              else if (wood > 0.3 && r < 0.16) data[IDX(lx, h + 1, lz)] = B.BRACKEN;
+              else if (wood > 0.3 && r < 0.21) data[IDX(lx, h + 1, lz)] = B.FERN;
+              else if (wood > 0.25 && r < 0.235) data[IDX(lx, h + 1, lz)] = B.FOXGLOVE;
               else if (r < 0.05) data[IDX(lx, h + 1, lz)] = B.TUSSOCK;
-              else if (r < 0.058) data[IDX(lx, h + 1, lz)] = B.BILBERRY_BUSH;
+              else if (r < 0.062) data[IDX(lx, h + 1, lz)] = B.BILBERRY_BUSH;
+              else if (r < 0.072) data[IDX(lx, h + 1, lz)] = B.DOG_ROSE;
+              else if (r < 0.078) data[IDX(lx, h + 1, lz)] = B.ELDER;
             }
-            // a lone boulder, mebbe
-            const bh = this.boulderAt(x, z);
-            for (let y = 1; y <= bh && h + y < HEIGHT; y++) data[IDX(lx, h + y, lz)] = B.STONE;
           } else if (surf === B.PEAT) {
             if (r < 0.14) data[IDX(lx, h + 1, lz)] = B.TUSSOCK;
             else if (r < 0.2) data[IDX(lx, h + 1, lz)] = B.HEATHER;
@@ -185,7 +226,6 @@ export class Gen {
         // follows t' line's own smoothed profile, so it rides embankments
         // an' causeways ower t' dips an' cuts a slot through t' rises.
         // (T' rails an' sleepers themselves are drawn as real geometry.)
-        const ri = geo.railInfo(x, z);
         if (ri && ri.d < 2.2) {
           const deck = Math.max(1, Math.min(HEIGHT - 5, Math.round(ri.deck)));
           // embankment / causeway: fill frae t' ground (or t' watter bed) up
@@ -207,15 +247,21 @@ export class Gen {
       }
     }
 
-    // trees (canopies may cross borders) — none on t' railway land
+    // trees, rocks an' t' odd monkey puzzle (canopies an' blobs may cross
+    // borders) — none o' it on t' railway land
     for (let lz = -2; lz < CHUNK + 2; lz++) {
       for (let lx = -2; lx < CHUNK + 2; lx++) {
         const x = x0 + lx, z = z0 + lz;
         const th = this.treeAt(x, z);
-        if (!th) continue;
+        const size = th ? 0 : this.boulderAt(x, z);
+        const mh = (th || size) ? 0 : this.monkeyPuzzleAt(x, z);
+        if (!th && !size && !mh) continue;
         const tri = geo.railInfo(x, z);
         if (tri && tri.d < 3) continue;
-        this.stampTree(data, lx, this.geo.height(x, z) + 1, lz, th);
+        const gh = this.geo.height(x, z);
+        if (th) this.stampTree(data, lx, gh + 1, lz, th);
+        else if (size) this.stampBoulder(data, lx, gh, lz, size, x, z);
+        else this.stampMonkeyPuzzle(data, lx, gh + 1, lz, mh);
       }
     }
 
@@ -681,6 +727,68 @@ export class Gen {
       }
     }
     put(lx, base + th + 1, lz, B.LEAVES, true);
+  }
+
+  // a boulder/cluster/tor sat on t' ground at (lx,lz). Seeded frae t' world
+  // co-ords so it stamps t' same frae whichever chunk catches it.
+  stampBoulder(data, lx, base, lz, size, x, z) {
+    const rng = mulberry32(((x * 73856093) ^ (z * 19349663) ^ this.seed) | 0);
+    const put = (px, py, pz, id) => {
+      if (px < 0 || px >= CHUNK || pz < 0 || pz >= CHUNK || py < 1 || py >= HEIGHT) return;
+      const cur = data[IDX(px, py, pz)];
+      // rest on t' surface — fill air or low plants, never gouge solid ground
+      if (cur === B.AIR || (BLOCKS[cur] && BLOCKS[cur].kind === 'cutout')) data[IDX(px, py, pz)] = id;
+    };
+    if (size === 1) {
+      put(lx, base + 1, lz, B.STONE);
+      if (rng() < 0.4) put(lx, base + 2, lz, B.COBBLE);
+    } else if (size === 2) {
+      const ry = 1 + ((rng() * 2) | 0);
+      for (let dy = 1; dy <= ry + 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+          const t = (dx * dx) / 1.3 + (dz * dz) / 1.3 + ((dy - 1) / (ry + 0.5)) ** 2;
+          if (t < 1 && rng() < 0.85) put(lx + dx, base + dy, lz + dz, rng() < 0.5 ? B.STONE : B.COBBLE);
+        }
+      }
+    } else {
+      // a proper gritstone tor — stacked an' weathered, taperin' toward t' top
+      const ry = 3 + ((rng() * 3) | 0);
+      for (let dy = 1; dy <= ry; dy++) {
+        const rad = 2 - (dy / ry) * 1.6;
+        const r2 = (rad + 0.4) ** 2;
+        for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+          if (dx * dx + dz * dz <= r2 && rng() < 0.9) {
+            put(lx + dx, base + dy, lz + dz, (dy > ry - 2 && rng() < 0.5) ? B.COBBLE : B.STONE);
+          }
+        }
+      }
+      put(lx, base + ry + 1, lz, B.STONE); // a capstone
+    }
+  }
+
+  // a monkey puzzle: a tall bare trunk wi' a narrow domed crown o' dark fronds
+  stampMonkeyPuzzle(data, lx, base, lz, th) {
+    const put = (px, py, pz, id, keep) => {
+      if (px < 0 || px >= CHUNK || pz < 0 || pz >= CHUNK || py < 1 || py >= HEIGHT) return;
+      const i = IDX(px, py, pz);
+      if (keep && data[i] !== B.AIR) return;
+      data[i] = id;
+    };
+    for (let y = 0; y < th; y++) put(lx, base + y, lz, B.LOG);
+    const crownBase = base + Math.floor(th * 0.55);
+    const crownTop = base + th + 1;
+    for (let y = crownBase; y <= crownTop; y++) {
+      const f = (y - crownBase) / Math.max(1, crownTop - crownBase);
+      const rad = Math.round(2.2 * Math.sin(f * Math.PI) + 0.4); // bulges in t' middle, tapers each end
+      const r2 = (rad + 0.3) ** 2;
+      for (let dx = -rad; dx <= rad; dx++) for (let dz = -rad; dz <= rad; dz++) {
+        if (dx === 0 && dz === 0 && y < crownTop) continue; // keep t' trunk line
+        if (dx * dx + dz * dz <= r2 && hash3i(lx + dx, y, lz + dz, this.seed ^ 0x70e7) < 0.82) {
+          put(lx + dx, y, lz + dz, B.MONKEY_LEAVES, true);
+        }
+      }
+    }
+    put(lx, crownTop + 1, lz, B.MONKEY_LEAVES, true); // a pointed top
   }
 
   // ---------------- scattered ruins (as before, rarer) ----------------
