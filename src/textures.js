@@ -476,6 +476,18 @@ const ITEM_ICON_PAINTERS = {
   [I.COOKED_GROUSE](ctx) { drawMeat(ctx, '#96603a', '#ba8456', 0.7); },
   [I.RAW_BEEF](ctx) { drawMeat(ctx, '#aa3f44', '#cc6a64', 1.1); },
   [I.COOKED_BEEF](ctx) { drawMeat(ctx, '#723c24', '#9a5e36', 1.1); },
+  [I.FISHING_ROD](ctx) {
+    ctx.strokeStyle = '#8a6a40'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(5, 28); ctx.lineTo(27, 4); ctx.stroke();          // t' rod
+    ctx.strokeStyle = '#5a4428'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(5, 28); ctx.lineTo(10, 23); ctx.stroke();          // t' handle
+    ctx.strokeStyle = 'rgba(210,224,236,0.85)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(27, 4); ctx.lineTo(25, 22); ctx.stroke();          // t' line
+    ctx.fillStyle = '#d83a2a'; ctx.beginPath(); ctx.arc(25, 23, 2, 0, 7); ctx.fill(); // t' float
+  },
+  [I.RAW_TROUT](ctx) { drawFish(ctx, '#7a8a5a', '#cfd2b8'); ctx.fillStyle = '#a0402c'; for (let i = 0; i < 6; i++) ctx.fillRect(9 + i * 2.5, 14 + (i % 2) * 2, 1, 1); },
+  [I.SEA_FISH](ctx) { drawFish(ctx, '#6a8298', '#dfe6ec'); },
+  [I.COOKED_FISH](ctx) { drawFish(ctx, '#b07a44', '#dab584'); },
   [I.BILBERRIES](ctx) {
     for (const [x, y] of [[11, 13], [19, 12], [15, 19], [22, 20], [9, 21]]) {
       ctx.fillStyle = '#2c3460'; ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill();
@@ -607,6 +619,13 @@ function drawMeat(ctx, c1, c2, s = 1) {
   ctx.fillStyle = c2; ctx.beginPath(); ctx.ellipse(12, 13, 5, 3.5, -0.6, 0, 7); ctx.fill();
   ctx.fillStyle = '#e8e0d0'; ctx.fillRect(20, 20, 8, 4); ctx.fillRect(26, 18, 4, 8);
   ctx.restore();
+}
+
+function drawFish(ctx, body, belly) {
+  ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(15, 16, 10, 5, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = belly; ctx.beginPath(); ctx.ellipse(14, 18, 7, 2.4, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = body; ctx.beginPath(); ctx.moveTo(24, 16); ctx.lineTo(30, 11); ctx.lineTo(30, 21); ctx.closePath(); ctx.fill(); // tail
+  ctx.fillStyle = '#16161a'; ctx.beginPath(); ctx.arc(8, 15, 1.2, 0, 7); ctx.fill(); // eye
 }
 
 export function getIconURL(itemId) {

@@ -1403,6 +1403,9 @@ class Game {
     const held = this.player.heldItem();
     if (!held) return;
 
+    // a fishing rod? cast toward t' watter, or reel in
+    if (held.id === I.FISHING_ROD) { this.useRod(); return; }
+
     // scran
     if (FOODS[held.id]) {
       if (this.player.eat(this.player.hotbar, this.audio)) this.ui.invDirty = true;
@@ -1441,6 +1444,70 @@ class Game {
     const eph = this.beachEphemeral(px, py, pz);
     if (this.net) this.net.sendEdit(px, py, pz, held.id, eph ? { revert: cur } : null);
     if (eph) this.queueBeachRevert(px, py, pz, cur, held.id);
+  }
+
+  // ---------------- fishing: cast an' wait ----------------
+  useRod() {
+    const f = this.fishing;
+    if (f && f.active) { // already out — reel in
+      if (f.state === 'biting') this.landFish();
+      else this.endFishing('Tha reeled in early — nowt bit.');
+      return;
+    }
+    const eye = this.player.eyePos();
+    const d = this.lookDir();
+    const w = raycast(this.world, eye.x, eye.y, eye.z, d.x, d.y, d.z, REACH + 2, id => id === B.WATER);
+    if (!w) { this.ui.toast('Cast toward t’ watter, love — a beck, tarn or t’ sea.'); return; }
+    // float rides t' top o' t' water column
+    let sy = w.y;
+    while (sy < HEIGHT - 1 && this.world.getBlock(w.x, sy + 1, w.z) === B.WATER) sy++;
+    const coast = this.world.gen.geo.coastT(w.x, w.z) > 0.1;
+    const bob = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 5), new THREE.MeshBasicMaterial({ color: 0xd83a2a }));
+    bob.position.set(w.x + 0.5, sy + 1.02, w.z + 0.5);
+    this.scene.add(bob);
+    this.fishing = { active: true, state: 'waiting', bob, x: w.x, y: sy + 1, z: w.z, coast,
+      t: 0, biteAt: 2.5 + Math.random() * (coast ? 4 : 6), biteWindow: 0, baseY: sy + 1.02 };
+    this.audio.place && this.audio.place();
+    this.ui.toast('Line’s in t’ watter — wait for a bite…', 2500);
+  }
+
+  updateFishing(dt) {
+    const f = this.fishing;
+    if (!f || !f.active) return;
+    const held = this.player.heldItem();
+    if (!held || held.id !== I.FISHING_ROD || this.player.dead || this.state !== 'playing') { this.endFishing(); return; }
+    if (Math.hypot(this.player.pos.x - (f.x + 0.5), this.player.pos.z - (f.z + 0.5)) > 9) { this.endFishing('Tha wandered off — t’ line went slack.'); return; }
+    f.t += dt;
+    if (f.state === 'waiting') {
+      f.bob.position.y = f.baseY + Math.sin(f.t * 2) * 0.03; // gentle bob
+      if (f.t >= f.biteAt) {
+        f.state = 'biting'; f.biteWindow = 1.3; f.t = 0;
+        this.ui.toast('<b>A bite!</b> Right-click sharp to reel her in!', 1400);
+        this.audio.pickup && this.audio.pickup();
+      }
+    } else if (f.state === 'biting') {
+      f.bob.position.y = f.baseY - 0.16 + Math.sin(f.t * 34) * 0.05; // t' float jerks under
+      f.biteWindow -= dt;
+      if (f.biteWindow <= 0) this.endFishing('She got away — too slow on t’ reel.');
+    }
+  }
+
+  landFish() {
+    const f = this.fishing;
+    const fish = f.coast ? (Math.random() < 0.8 ? I.SEA_FISH : I.RAW_TROUT)   // mackerel an' cod off t' coast
+                         : (Math.random() < 0.85 ? I.RAW_TROUT : I.SEA_FISH); // trout in t' becks an' tarns
+    this.player.addItem(fish, 1);
+    this.ui.invDirty = true;
+    this.audio.pickup && this.audio.pickup();
+    this.ui.toast(`Tha’s landed <b>${fish === I.SEA_FISH ? 'a fine sea fish' : 'a bonny brown trout'}</b>!`, 3000);
+    this.endFishing();
+  }
+
+  endFishing(msg) {
+    const f = this.fishing;
+    if (f && f.bob) this.scene.remove(f.bob);
+    this.fishing = null;
+    if (msg) this.ui.toast(msg, 3000);
   }
 
   // ---------------- t' healing sands ----------------
@@ -1612,9 +1679,11 @@ class Game {
         this.refreshStanding(false);
       }
 
-      // mining / repeat placing
+      // mining / repeat placing / fishing
       this.updateMining(dt);
-      if (this.mouseDown[2] && playing) {
+      this.updateFishing(dt);
+      const repHeld = this.player.heldItem();
+      if (this.mouseDown[2] && playing && !(repHeld && repHeld.id === I.FISHING_ROD)) {
         this.placeRepeat -= dt;
         if (this.placeRepeat <= 0) { this.placeRepeat = 0.22; this.useItem(); }
       }

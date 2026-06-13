@@ -1126,6 +1126,9 @@ export class Quests {
         { give: [I.COAL_LUMP, 2], get: [I.FISH_CHIPS, 1], min: 0 },
         { give: [I.AMMONITE, 1], get: [I.FISH_CHIPS, 2], min: 0 },
         { give: [I.JET_GEM, 1], get: [I.FISH_CHIPS, 5], min: 1 },
+        { give: [I.SEA_FISH, 2], get: [I.COAL_LUMP, 3], min: 0 },   // she'll buy thi fresh catch
+        { give: [I.RAW_TROUT, 3], get: [I.COAL_LUMP, 3], min: 0 },
+        { give: [I.SEA_FISH, 3], get: [I.FISH_CHIPS, 2], min: 0 },  // or fry it up for thee
       ],
       silas: [ // t' jet carver pays fair for raw jet
         { give: [I.JET_GEM, 2], get: [I.IRON_INGOT, 3], min: 0 },
@@ -1145,8 +1148,10 @@ export class Quests {
       tom: [
         { give: [I.COAL_LUMP, 4], get: [I.RAW_IRON, 3], min: 0 },
       ],
-      ned: [ // owt off t' scaur for warm wool
+      ned: [ // owt off t' scaur for warm wool; he'll tek thi catch an' all
         { give: [B.WOOL, 2], get: [I.AMMONITE, 1], min: 0 },
+        { give: [I.SEA_FISH, 2], get: [I.COAL_LUMP, 3], min: 0 },
+        { give: [I.RAW_TROUT, 2], get: [I.COAL_LUMP, 2], min: 0 },
       ],
       beck: [
         { give: [I.BILBERRIES, 3], get: [I.GRYPHAEA, 2], min: 0 },

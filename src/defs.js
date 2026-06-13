@@ -45,7 +45,9 @@ export const I = {
   FISH_CHIPS: 99,
   // Dracula storyline
   HOLY_WATER: 95, WOODEN_STAKE: 96, HOLY_STAKE: 97, DRACULA_JOURNAL: 98,
-  // beef frae t' cows in t' dale pastures (100-103 held back for fishing tackle)
+  // fishing tackle an' t' catch
+  FISHING_ROD: 100, RAW_TROUT: 101, SEA_FISH: 102, COOKED_FISH: 103,
+  // beef frae t' cows in t' dale pastures
   RAW_BEEF: 104, COOKED_BEEF: 105,
 };
 
@@ -118,6 +120,8 @@ export const ITEM_NAMES = {
   [I.RAW_MUTTON]: 'Raw Mutton', [I.COOKED_MUTTON]: 'Roast Mutton',
   [I.RAW_GROUSE]: 'Raw Grouse', [I.COOKED_GROUSE]: 'Roast Grouse',
   [I.RAW_BEEF]: 'Raw Beef', [I.COOKED_BEEF]: 'Roast Beef',
+  [I.FISHING_ROD]: 'Fishing Rod',
+  [I.RAW_TROUT]: 'Brown Trout', [I.SEA_FISH]: 'Sea Fish', [I.COOKED_FISH]: 'Fish Supper',
   [I.BILBERRIES]: 'Bilberries',
   [I.PARCEL]: 'Brown Paper Parcel',
   [I.AMULET_L]: 'Owd Amulet (left half)',
@@ -166,11 +170,14 @@ export const FOODS = {
   [I.COOKED_GROUSE]: 6,
   [I.RAW_BEEF]: 3,
   [I.COOKED_BEEF]: 8,
+  [I.RAW_TROUT]: 2,
+  [I.SEA_FISH]: 2,
+  [I.COOKED_FISH]: 8,
   [I.FISH_CHIPS]: 10, // best scran on t' moors — worth t' trip to Whitby
 };
 
 export const STACK_SIZE = 64;
-export function maxStack(id) { return TOOLS[id] ? 1 : STACK_SIZE; }
+export function maxStack(id) { return (TOOLS[id] || id === I.FISHING_ROD) ? 1 : STACK_SIZE; }
 
 // ---- Crafting recipes ----
 // { out, n, needs: [[itemId, count]...], bench: requires joiner's bench nearby }
@@ -196,6 +203,7 @@ export const RECIPES = [
   { out: B.TORCH, n: 4, needs: [[I.STICK, 1], [I.COAL_LUMP, 1]] },
   { out: B.SIGNPOST, n: 1, needs: [[B.PLANKS, 3], [I.STICK, 1]] },
   { out: B.LANTERN, n: 1, needs: [[I.IRON_INGOT, 1], [I.COAL_LUMP, 1]], bench: true },
+  { out: I.FISHING_ROD, n: 1, needs: [[I.STICK, 3], [B.WOOL, 2]], bench: true },
   { out: I.AMULET, n: 1, needs: [[I.AMULET_L, 1], [I.AMULET_R, 1], [I.BELL_CLAPPER, 1], [I.JET_GEM, 1]], bench: true },
   { out: I.WOODEN_STAKE, n: 1, needs: [[B.PLANKS, 2], [I.STICK, 2]], bench: true },
   { out: I.HOLY_STAKE, n: 1, needs: [[I.WOODEN_STAKE, 1], [I.HOLY_WATER, 1]], bench: true },
@@ -208,6 +216,8 @@ export const SMELTS = [
   { in: I.RAW_MUTTON, out: I.COOKED_MUTTON, label: 'Roast mutton' },
   { in: I.RAW_GROUSE, out: I.COOKED_GROUSE, label: 'Roast grouse' },
   { in: I.RAW_BEEF, out: I.COOKED_BEEF, label: 'Roast beef' },
+  { in: I.RAW_TROUT, out: I.COOKED_FISH, label: 'Cook t’ trout' },
+  { in: I.SEA_FISH, out: I.COOKED_FISH, label: 'Fry t’ sea fish' },
 ];
 export const FUELS = { [I.COAL_LUMP]: 4, [B.PEAT]: 1 };
 
@@ -228,5 +238,6 @@ export const CREATIVE_ITEMS = [
   I.STICK, I.COAL_LUMP, I.RAW_IRON, I.IRON_INGOT, I.JET_GEM,
   I.RAW_MUTTON, I.COOKED_MUTTON, I.RAW_GROUSE, I.COOKED_GROUSE,
   I.RAW_BEEF, I.COOKED_BEEF, I.BILBERRIES,
+  I.FISHING_ROD, I.RAW_TROUT, I.SEA_FISH, I.COOKED_FISH,
   I.HOLY_WATER, I.WOODEN_STAKE, I.HOLY_STAKE, I.DRACULA_JOURNAL,
 ];
