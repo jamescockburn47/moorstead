@@ -923,7 +923,9 @@ class Game {
     // each group gets its own moor: t' room comes frae thi account
     // ('moor' = t' original world; owt else gets its own seed an' all)
     await this.refreshAuth();
-    const room = ((this.auth && this.auth.room) || 'moor').toLowerCase();
+    let room = ((this.auth && this.auth.room) || 'moor').toLowerCase();
+    // t' warden may walk onto any world — bairns or adults, not just their own
+    if (this.isAdmin()) room = (await this.ui.pickWorld(room)) || room;
     this.netRoom = room;
     this.startWorld(ss(room === 'moor' ? 't-shared-moor' : 't-shared-moor:' + room), null, new Map());
     // folk wake spread across t' villages, same one each visit
@@ -1838,6 +1840,12 @@ class Game {
         }).catch(() => { /* ledger's closed — no matter */ });
       }
     }
+
+    // hold Tab to peek at t' whole-moor map (only while actually playing)
+    const wantMap = this.state === 'playing' && !!this.keys['Tab'];
+    if (wantMap && !this.peekingMap) { this.peekingMap = true; this.ui.showBigMap(this.player, this.world); }
+    else if (!wantMap && this.peekingMap) { this.peekingMap = false; this.ui.hideBigMap(); }
+    else if (this.peekingMap) this.ui.drawBigMapDots(this.player, this.net);
 
     this.renderer.render(this.scene, this.camera);
   }
