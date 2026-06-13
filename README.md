@@ -72,7 +72,7 @@ top above Whitby.
 | Right click | Place blocks / eat / use bench & range / natter |
 | W A S D | Walk |
 | Space | Jump / swim up (double-tap to fly in creative) |
-| Ctrl | Sprint |
+| Z | Sprint |
 | Shift | Sneak (won't fall off edges) |
 | 1–9 / wheel | Hotbar |
 | E | Inventory & crafting |

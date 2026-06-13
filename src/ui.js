@@ -238,7 +238,7 @@ export class UI {
 <b>Left click</b> Dig blocks (hold) / clout beasts<br>
 <b>Right click</b> Place blocks / eat scran / talk to folk / use bench, range &amp; board<br>
 <b>W A S D</b> Walk<br>
-<b>Ctrl</b> Leg it (sprint &mdash; burns hunger, outruns a barghest)<br>
+<b>Z</b> Leg it (sprint &mdash; burns hunger, outruns a barghest)<br>
 <b>Space</b> Jump / swim up<br>
 <b>Shift</b> Sneak &mdash; slow, but tha won&rsquo;t walk off edges<br>
 <b>1&ndash;9 / mouse wheel</b> Pick hotbar slot<br>
