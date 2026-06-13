@@ -609,12 +609,26 @@ export class UI {
     this.btnShared.classList.toggle('hidden', !loggedIn);
     this.btnContinue.classList.toggle('hidden', !loggedIn);
     this.whoBox.classList.toggle('hidden', !loggedIn);
-    if (loggedIn) {
-      this.whoBox.innerHTML = auth.guest
-        ? 'Passing through as <b>a rambler</b> &mdash; <u id="swap-user">got an invite?</u>'
-        : `Welcome back, <b>${auth.name}</b> &mdash; <u id="swap-user">not thee?</u>`;
+    if (!loggedIn) return;
+    if (auth.guest) {
+      this.whoBox.innerHTML = 'Passing through as <b>a rambler</b> &mdash; <u id="swap-user">got an invite?</u>';
       document.getElementById('swap-user').onclick = () => this.game.logout();
+      return;
     }
+    const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const roster = (this.game.loadAccounts ? this.game.loadAccounts() : []).filter(a => a.acct !== auth.acct);
+    let html = `Welcome back, <b>${esc(auth.name)}</b>`;
+    if (roster.length) {
+      html += '<div class="who-switch"><span class="lbl">play as:</span>' + roster.map(a =>
+        `<button class="who-chip" data-acct="${esc(a.acct)}">${esc(a.name)}</button>` +
+        `<button class="who-forget" data-forget="${esc(a.acct)}" title="forget this un">&times;</button>`
+      ).join('') + '</div>';
+    }
+    html += '<div class="who-new"><u id="swap-user">+ someone new</u></div>';
+    this.whoBox.innerHTML = html;
+    document.getElementById('swap-user').onclick = () => this.game.logout();
+    this.whoBox.querySelectorAll('.who-chip').forEach(b => { b.onclick = () => this.game.switchAccount(b.dataset.acct); });
+    this.whoBox.querySelectorAll('.who-forget').forEach(b => { b.onclick = e => { e.stopPropagation(); this.game.forgetAccount(b.dataset.forget); }; });
   }
 
   toast(text, ms = 3500) {

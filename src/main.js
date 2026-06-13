@@ -607,6 +607,7 @@ class Game {
       }
       this.auth = { code, name: d.name, acct: d.acct, room: d.room || 'moor' };
       localStorage.setItem('moorcraft-auth', JSON.stringify(this.auth));
+      this.saveAccount(this.auth);
       this.refreshAdmin();
       this.ui.loginErr.textContent = '';
       this.ui.setLoggedIn(this.auth);
@@ -633,6 +634,7 @@ class Game {
       if (d && d.ok) {
         this.auth = { code: this.auth.code, name: d.name, acct: d.acct, room: d.room || 'moor' };
         localStorage.setItem('moorcraft-auth', JSON.stringify(this.auth));
+        this.saveAccount(this.auth);
         this.refreshAdmin();
         this.ui.setLoggedIn(this.auth);
       } else if (d && /No such invite/i.test(d.err || '')) {
@@ -653,6 +655,36 @@ class Game {
     this.auth = null;
     localStorage.removeItem('moorcraft-auth');
     this.ui.setLoggedIn(null);
+  }
+
+  // ---- saved logins: switch between folk who share this browser ----
+  // A roster o' real accounts (not ramblers), so t' family can hop between
+  // their own pockets an' ventures wi'out keyin' t' invite code each time.
+  loadAccounts() {
+    try { return JSON.parse(localStorage.getItem('moorcraft-accounts') || '[]'); } catch { return []; }
+  }
+
+  saveAccount(auth) {
+    if (!auth || !auth.code || auth.guest) return; // ramblers leave no trace
+    const roster = this.loadAccounts().filter(a => a.acct !== auth.acct);
+    roster.unshift({ code: auth.code, name: auth.name, acct: auth.acct, room: auth.room || 'moor' });
+    localStorage.setItem('moorcraft-accounts', JSON.stringify(roster.slice(0, 8)));
+  }
+
+  switchAccount(acct) {
+    const a = this.loadAccounts().find(x => x.acct === acct);
+    if (!a) return;
+    this.auth = { code: a.code, name: a.name, acct: a.acct, room: a.room || 'moor' };
+    localStorage.setItem('moorcraft-auth', JSON.stringify(this.auth));
+    this.refreshAdmin();
+    this.ui.setLoggedIn(this.auth);
+    this.ui.toast(`Now playing as <b>${a.name}</b>.`, 3000);
+    this.refreshAuth(); // quiet re-claim picks up owt t' ledger's changed
+  }
+
+  forgetAccount(acct) {
+    localStorage.setItem('moorcraft-accounts', JSON.stringify(this.loadAccounts().filter(a => a.acct !== acct)));
+    this.ui.setLoggedIn(this.auth);
   }
 
   // ---- friendship has its rewards ----

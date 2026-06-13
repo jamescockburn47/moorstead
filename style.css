@@ -66,6 +66,17 @@ input.seed {
 .login-guest { cursor: pointer; }
 .login-who { color: #b8b2a0; font-size: 14px; }
 .login-who u, .login-guest u { cursor: pointer; color: #9ec27a; }
+.who-switch { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; align-items: center; }
+.who-switch .lbl { color: #8a8478; font-size: 13px; margin-right: 2px; }
+.who-chip {
+  padding: 5px 12px; font-size: 13px; font-weight: 600;
+  background: linear-gradient(#5a6a4a, #44523a); color: var(--text);
+  border: 2px solid #2a3322; border-radius: 4px; cursor: pointer;
+}
+.who-chip:hover { background: linear-gradient(#6a7a58, #525e44); }
+.who-forget { background: none; border: none; color: #8a8478; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; }
+.who-forget:hover { color: #d87a5a; }
+.who-new { margin-top: 8px; }
 
 #title-screen {
   background:
