@@ -40,7 +40,7 @@ for (const SEED of SEEDS) {
       const wx = Math.round(p.x + nx * off), wz = Math.round(p.z + nz * off);
       const ri = geo.railInfo(wx, wz);
       if (!ri || ri.d >= 2.8) continue;             // same gate worldgen clears on
-      const deck = Math.max(1, Math.round(ri.deck));  // same deck worldgen uses
+      const deck = Math.max(1, Math.floor(ri.deck));  // same deck worldgen uses
       const cx = Math.floor(wx / CHUNK), cz = Math.floor(wz / CHUNK);
       const data = chunk(cx, cz);
       const lx = wx - cx * CHUNK, lz = wz - cz * CHUNK;

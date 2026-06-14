@@ -228,7 +228,8 @@ export class Gen {
         // an' causeways ower t' dips an' cuts a slot through t' rises.
         // (T' rails an' sleepers themselves are drawn as real geometry.)
         if (ri && ri.d < 2.8) {
-          const deck = Math.max(1, Math.min(HEIGHT - 5, Math.round(ri.deck)));
+          // floor (not round) so t' voxel bed tucks UNDER t' smooth ballast crown
+          const deck = Math.max(1, Math.min(HEIGHT - 5, Math.floor(ri.deck)));
           // embankment / causeway: fill frae t' ground (or t' watter bed) up to
           // t' deck so there's a level shoulder either side — no trench
           for (let y = Math.min(h, deck); y < deck && y > 0; y++) {

@@ -21,6 +21,7 @@ export class Rails {
     this.railMat = new THREE.MeshLambertMaterial({ color: 0x787c84 });
     this.sleeperMat = new THREE.MeshLambertMaterial({ color: 0x4a3a2c });
     this.skirtMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    this.ballastMat = new THREE.MeshLambertMaterial({ color: 0x6b6258 }); // smooth trackbed crown
   }
 
   // nearest chainage to a point — coarse stride scan, it's only for t' window
@@ -82,6 +83,31 @@ export class Rails {
     rails.instanceMatrix.needsUpdate = true;
     this.scene.add(rails);
     this.meshes.push(rails);
+
+    // smooth ballast crown — a continuous trackbed ribbon swept along t' spline,
+    // laid OWER t' stepped voxel ballast so t' line reads smooth, not blocky
+    {
+      const pos = [], W = 2.3, Y = 1.05;
+      const vert = p => pos.push(p[0], p[1], p[2]);
+      for (let i = i0; i < i1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        const ds = Math.max(b.s - a.s, 0.001);
+        const nx = (b.z - a.z) / ds, nz = -(b.x - a.x) / ds; // unit perpendicular
+        const aL = [a.x + nx * W, a.deck + Y, a.z + nz * W], aR = [a.x - nx * W, a.deck + Y, a.z - nz * W];
+        const bL = [b.x + nx * W, b.deck + Y, b.z + nz * W], bR = [b.x - nx * W, b.deck + Y, b.z - nz * W];
+        vert(aL); vert(bL); vert(bR);
+        vert(aL); vert(bR); vert(aR);
+      }
+      if (pos.length) {
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        geom.computeVertexNormals();
+        const crown = new THREE.Mesh(geom, this.ballastMat);
+        crown.userData.ownGeometry = true;
+        this.scene.add(crown);
+        this.meshes.push(crown);
+      }
+    }
 
     // earthwork skirts: smooth banks frae t' ballast edge down to t' land
     // (embankments), or rock faces up to t' lip (cuttings) — no stepped cubes
@@ -159,5 +185,6 @@ export class Rails {
     this.railMat.dispose();
     this.sleeperMat.dispose();
     this.skirtMat.dispose();
+    this.ballastMat.dispose();
   }
 }
