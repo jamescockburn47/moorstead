@@ -391,6 +391,11 @@ export class UI {
     this.hud.classList.toggle('hidden', name === 'titleScreen' || name === 'loadingScreen');
   }
 
+  // hidden on t' bairns' world so survival actually holds; shown everywhere else
+  setCreativeButtonVisible(show) {
+    if (this.btnCreative) this.btnCreative.style.display = show ? '' : 'none';
+  }
+
   // ============ villager chat ============
   openChat(villager, playerHasName) {
     this.chatVillager = villager;
@@ -970,6 +975,7 @@ export class UI {
             const left2 = player.addItem(r.out, r.n);
             if (left2 > 0) this.game.dropAtPlayer(r.out, left2);
             this.game.audio.craft();
+            this.game.milestones.onCraft(r.out);
             this.invDirty = true;
             this.openInventory(player, nearBench); // re-render
           });
@@ -1087,6 +1093,7 @@ export class UI {
           const left = player.addItem(sm.out, 1);
           if (left > 0) this.game.dropAtPlayer(sm.out, left);
           this.game.audio.smelt();
+          this.game.milestones.onSmelt(sm.out);
           this.invDirty = true;
           this.openRange(player);
         });

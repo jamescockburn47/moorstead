@@ -4,12 +4,14 @@
 import * as THREE from 'three';
 import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_HASHES } from './defs.js';
 import { strSeed } from './noise.js';
+import { protectedAt } from './landmarks.js';
 import { initMaterials } from './mesher.js';
 import { getIconURL } from './textures.js';
 import { World } from './world.js';
 import { Player } from './player.js';
 import * as npc from './npc.js';
 import { Quests } from './quests.js';
+import { Milestones } from './milestones.js';
 import { Net } from './multiplayer.js';
 import { buildTrain } from './train.js';
 import { Rails } from './rails.js';
@@ -56,6 +58,7 @@ class Game {
     this.keys = {};
     this.mouseDown = [false, false, false];
     this.placeRepeat = 0;
+    this.holdToPlace = false; // one block per click; true = deliberate hold lays a line
     this.breakTarget = null;
     this.breakProgress = 0;
     this.autosaveTimer = 30;
@@ -227,10 +230,11 @@ class Game {
     this.standing = null;
     this.standingData = null;
     this.quests = new Quests(this);
+    this.milestones = new Milestones(this);
     if (this.rails) this.rails.dispose();
     this.rails = new Rails(this.scene, this.world.gen.geo); // t' permanent way, drawn proper
     this.entities.game = this;
-    this.entities.onKill = mob => this.quests.onMobKilled(mob);
+    this.entities.onKill = mob => { this.quests.onMobKilled(mob); this.milestones.onKill(mob.type); };
     window.moorstead = window.moorcraft = this; // a handle for t' dev console
     this.lastQuestDay = 1;
 
@@ -330,6 +334,7 @@ class Game {
     ui.btnResume.addEventListener('click', () => this.resume());
     ui.btnSave.addEventListener('click', () => this.saveNow());
     ui.btnCreative.addEventListener('click', () => {
+      if (this.bairnLocked()) { ui.toast('Tha’s on t’ bairns’ world — it’s survival here. Tha has to earn thi blocks an’ tools!', 4000); return; }
       this.player.creative = !this.player.creative;
       if (!this.player.creative) this.player.flying = false;
       ui.toast(this.player.creative ? 'Creative mode: tha can fly an&rsquo; all (double-tap Space).' : 'Survival mode: watch thissen.');
@@ -397,7 +402,7 @@ class Game {
       if (this.state !== 'playing') return;
       if (document.pointerLockElement !== canvas) { this.lockPointer(); return; }
       this.mouseDown[e.button] = true;
-      if (e.button === 2) { this.placeRepeat = 0; this.useItem(); }
+      if (e.button === 2) { this.placeRepeat = 0.4; this.useItem(); }
       if (e.button === 0) { this.breakProgress = 0; this.attackOrMine(true); }
     });
     document.addEventListener('mouseup', e => { this.mouseDown[e.button] = false; });
@@ -474,6 +479,25 @@ class Game {
 
   isAdmin() {
     return !!this.adminOk;
+  }
+
+  // T' bairns' world is survival-only: no creative cupboard, no flying, so t'
+  // kids have to earn their blocks an' tools. Wardens (James) keep full run o'
+  // t' place on every world.
+  bairnLocked() {
+    return this.netActive && this.netRoom === 'bairns' && !this.isAdmin();
+  }
+
+  // Force survival an' hide t' Creative toggle when t' lock's on. Called on world
+  // entry AND after t' relay restores pockets — an owd save could carry a
+  // creative flag frae afore t' lock existed, so we re-assert it.
+  enforceBairnRules() {
+    const locked = this.bairnLocked();
+    if (locked && this.player) {
+      this.player.creative = false;
+      this.player.flying = false;
+    }
+    this.ui.setCreativeButtonVisible(!locked);
   }
 
   renderAdminPanel() {
@@ -1063,6 +1087,7 @@ class Game {
     this.spawn = this.world.gen.findSpawnAt(idx);
     this.player.pos = { ...this.spawn };
     this.ui.toast(`Walking up onto <b>T\u2019 Shared Moor</b> \u2014 tha wakes in <b>${this.spawn.village}</b>. Builds, pockets an\u2019 ventures all keep. <b>T</b> to talk (speech carries ~60m).`, 10000);
+    this.enforceBairnRules();
   }
 
   async connectNet() {
@@ -1079,6 +1104,7 @@ class Game {
       } else {
         this.ui.toast('Tha\u2019s on t\u2019 shared moor. Whoever else is out here, tha\u2019ll see \u2019em.', 6000);
       }
+      this.enforceBairnRules(); // re-assert after t' relay restores pockets
     } catch {
       this.ui.toast('Couldn\u2019t reach t\u2019 shared moor \u2014 playing it alone for now.', 6000);
     }
@@ -1472,6 +1498,19 @@ class Game {
     const def = BLOCKS[hit.id];
     if (def.hard === Infinity) { this.ui.drawBreakProgress(0); return; }
 
+    // protected landmarks: built fabric at/above ground can't be broken — but
+    // tha can allus dig underneath. Wardens are exempt so they can repair owt.
+    if (!this.isAdmin() && protectedAt(this.world.gen.geo, this.world, hit.x, hit.y, hit.z, hit.id)) {
+      this.breakProgress = 0;
+      this.ui.drawBreakProgress(0);
+      const now = performance.now() / 1000;
+      if (!this._lmToast || now - this._lmToast > 4) {
+        this._lmToast = now;
+        this.ui.toast('That’s a <b>protected landmark</b>, love — tha can dig under it, but tha can’t break it.', 4000);
+      }
+      return;
+    }
+
     if (this.player.creative) {
       this.creativeBreakCd = (this.creativeBreakCd || 0) - dt;
       if (this.creativeBreakCd <= 0) {
@@ -1513,6 +1552,7 @@ class Game {
       this.entities.spawnDrop(hit.x + 0.5, hit.y + 0.4, hit.z + 0.5, def.drop, 1);
     }
     this.quests.onBlockBroken(hit.x, hit.y, hit.z, hit.id);
+    this.milestones.onBreak(hit.id);
     const eph = this.beachEphemeral(hit.x, hit.y, hit.z);
     if (this.net) this.net.sendEdit(hit.x, hit.y, hit.z, 0, eph ? { revert: hit.id } : null);
     if (eph) this.queueBeachRevert(hit.x, hit.y, hit.z, hit.id, 0);
@@ -1620,6 +1660,7 @@ class Game {
     this.audio.place();
     this.ui.invDirty = true;
     this.quests.onBlockPlaced(px, py, pz, held.id);
+    this.milestones.onPlace(held.id);
     const eph = this.beachEphemeral(px, py, pz);
     if (this.net) this.net.sendEdit(px, py, pz, held.id, eph ? { revert: cur } : null);
     if (eph) this.queueBeachRevert(px, py, pz, cur, held.id);
@@ -1856,13 +1897,14 @@ class Game {
         this.lastQuestDay = this.sky.day;
         this.quests.refreshOffers();
         this.refreshStanding(false);
+        if (!this.player.dead) this.milestones.nightSurvived();
       }
 
       // mining / repeat placing / fishing
       this.updateMining(dt);
       this.updateFishing(dt);
       const repHeld = this.player.heldItem();
-      if (this.mouseDown[2] && playing && !(repHeld && repHeld.id === I.FISHING_ROD)) {
+      if (this.holdToPlace && this.mouseDown[2] && playing && !(repHeld && repHeld.id === I.FISHING_ROD)) {
         this.placeRepeat -= dt;
         if (this.placeRepeat <= 0) { this.placeRepeat = 0.22; this.useItem(); }
       }

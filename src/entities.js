@@ -540,7 +540,8 @@ export class Entities {
     // t' amulet o' t' moors wards off owt dark
     const warded = player.countItem(I.AMULET) > 0;
     const dracGone = this.draculaVanquished();
-    // early nights are gentler: half t' hostile caps until day 3
+    // early nights are gentler: half t' hostile caps for t' first few days,
+    // so little 'uns find their feet afore t' moor turns proper dark
     const day = this.day || 1;
     const geo = this.world.gen.geo;
     const types = Object.keys(MOB_TYPES).filter(k => {
@@ -549,7 +550,7 @@ export class Entities {
       if (t.night && !isNight) return false;
       if (t.day && isNight) return false;        // day birds roost at neet
       if (t.hostile && warded) return false;
-      let cap = t.hostile && day <= 2 ? Math.max(1, t.cap >> 1) : t.cap;
+      let cap = t.hostile && day <= 3 ? Math.max(1, t.cap >> 1) : t.cap;
       // once Dracula's laid to rest, t' common night horrors thin out a touch
       if (t.hostile && dracGone && (k === 'barghest' || k === 'boggart')) cap = Math.max(1, cap - 1);
       return (counts[k] || 0) < cap;
@@ -557,7 +558,7 @@ export class Entities {
     if (!types.length) return;
     const type = types[(Math.random() * types.length) | 0];
     const t = MOB_TYPES[type];
-    if (t.hostile && day <= 1 && Math.random() < 0.5) return; // first neet: a taster, not a massacre
+    if (t.hostile && day <= 2 && Math.random() < 0.5) return; // first neets: a taster, not a massacre
     const ang = Math.random() * Math.PI * 2;
     const dist = t.hostile ? 26 + Math.random() * 22 : 18 + Math.random() * 30;
     const x = Math.floor(player.pos.x + Math.cos(ang) * dist);

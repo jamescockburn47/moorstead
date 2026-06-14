@@ -1,6 +1,6 @@
 // Terrain generation for t' North York Moors.
 import { B, BLOCKS, CHUNK, HEIGHT, WATER_LEVEL } from './defs.js';
-import { fbm2, fbm3, hash2i, hash3i, mulberry32 } from './noise.js';
+import { fbm2, fbm3, noise3, hash2i, hash3i, mulberry32 } from './noise.js';
 import { Geography, ROSEBERRY, WAINSTONES, KILNS } from './geography.js';
 
 const IDX = (x, y, z) => x + z * CHUNK + y * CHUNK * CHUNK;
@@ -25,7 +25,55 @@ export class Gen {
     return fbm2(x * 0.01 + 77.7, z * 0.01 + 31.3, 3, this.seed ^ 0x300d);
   }
 
+  // A guaranteed copse just outside every village, plus an oak on t' green, so a
+  // newcomer is never stuck for wood — t' first rung o' t' whole ladder. Built
+  // once, deterministic frae t' seed, keyed by "x,z" -> trunk height.
+  homeTrees() {
+    if (this._homeTrees) return this._homeTrees;
+    const m = new Map();
+    const geo = this.geo;
+    const plantable = (x, z, hiH = 40) => {
+      const h = geo.height(x, z);
+      return h > WATER_LEVEL && h < hiH && geo.bogginess(x, z) < 0.42 && geo.coastT(x, z) <= 0;
+    };
+    for (const v of geo.villages) {
+      const rng = mulberry32((this.seed ^ Math.imul(v.x | 0, 73856093) ^ Math.imul(v.z | 0, 19349663)) | 0);
+      // one tall oak on an open green/closes column near t' middle — wood at hand frae t' off
+      for (let k = 0; k < 16; k++) {
+        const a = rng() * Math.PI * 2, d = 6 + rng() * 10;
+        const tx = Math.round(v.x + Math.cos(a) * d), tz = Math.round(v.z + Math.sin(a) * d);
+        const col = geo.villageColumn(tx, tz);
+        if (col && (col.kind === 'green' || col.kind === 'closes') && plantable(tx, tz)) { m.set(tx + ',' + tz, 5); break; }
+      }
+      // a copse o' six-or-so oaks just past t' village edge: scan rays outward an'
+      // tek t' NEAREST plantable spot, so even a coastal town like Whitby gets a
+      // wood inland rather than out to sea
+      let cx = 0, cz = 0, found = false, bestD = Infinity;
+      for (let ray = 0; ray < 48; ray++) {
+        const a = ray / 48 * Math.PI * 2;
+        for (let d = v.radius + 4; d <= v.radius + 30; d += 3) {
+          const tx = Math.round(v.x + Math.cos(a) * d), tz = Math.round(v.z + Math.sin(a) * d);
+          if (plantable(tx, tz, 40) && !geo.inVillage(tx, tz, 0) && !geo.villageColumn(tx, tz)) {
+            if (d < bestD) { bestD = d; cx = tx; cz = tz; found = true; }
+            break; // nearest along this ray
+          }
+        }
+      }
+      if (found) {
+        for (let k = 0; k < 8; k++) {
+          const a = rng() * Math.PI * 2, d = rng() * 5;
+          const tx = Math.round(cx + Math.cos(a) * d), tz = Math.round(cz + Math.sin(a) * d);
+          if (plantable(tx, tz, 40) && !geo.inVillage(tx, tz, 0) && !geo.villageColumn(tx, tz)) m.set(tx + ',' + tz, 4 + ((rng() * 2) | 0));
+        }
+      }
+    }
+    this._homeTrees = m;
+    return m;
+  }
+
   treeAt(x, z) {
+    const home = this.homeTrees().get(x + ',' + z);
+    if (home) return home;
     const h = this.geo.height(x, z);
     if (h <= WATER_LEVEL || h > 42) return 0;
     if (this.geo.coastT(x, z) > 0) return 0;
@@ -96,12 +144,17 @@ export class Gen {
   }
 
   oreAt(x, y, z) {
-    const r = hash3i(x, y, z, this.seed ^ 0x04e);
-    // Rosedale's seams are famously rich in ironstone
+    // Ore comes in VEINS, not lone specks: one low-frequency 3D field, thresholded
+    // by depth, so finding one lump means there's more about — tha can follow a
+    // seam. Caves cut through t' seams, so they show in t' cave walls an' all.
+    // A rich vein has a jet-or-iron core wi' coal round t' edges; t' deeper an'
+    // richer t' field, t' better t' ore. Rosedale's grand for ironstone an' jet.
+    const v = noise3(x * 0.17, y * 0.17, z * 0.17, this.seed ^ 0x04e); // one noise call; most blocks cheap-out below
+    if (v <= 0.50) return B.STONE;
     const nearKilns = Math.hypot(x - KILNS.x, z - KILNS.z) < 70;
-    if (y < 16 && r < 0.005) return B.JET_ORE;
-    if (y < 30 && r >= 0.01 && r < (nearKilns ? 0.045 : 0.022)) return B.IRON_ORE;
-    if (y < 42 && r >= 0.05 && r < 0.07) return B.COAL_ORE;
+    if (y < 20 && v > (nearKilns ? 0.72 : 0.86)) return B.JET_ORE;    // t' deep prize — rich in Rosedale
+    if (y < 34 && v > (nearKilns ? 0.60 : 0.68)) return B.IRON_ORE;   // ironstone
+    if (y < 48 && v > 0.61) return B.COAL_ORE;                        // common shallow coal
     return B.STONE;
   }
 

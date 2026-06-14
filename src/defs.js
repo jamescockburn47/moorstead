@@ -239,6 +239,17 @@ export function isPlaceable(id) {
   return id < 64 && id !== B.AIR && id !== B.WATER && id !== B.BOG && id !== B.BEDROCK;
 }
 
+// Landmark fabric: the built (or natural-rock) materials that make up the
+// moor's monuments. Inside a landmark's radius, these are protected at/above
+// ground (tha can allus dig underneath). Natural soil, plants an' ore aren't
+// listed, so landscaping an' tunnelling round a landmark still work.
+export const LANDMARK_MATERIALS = new Set([
+  B.STONE, B.COBBLE, B.STONEBRICK, B.SLATE, B.ST_CREAM, B.ST_RED, B.RBRICK,
+  B.WINDOW, B.PLANKS, B.LOG, B.THATCH, B.BENCH, B.RANGE, B.LANTERN, B.BOARD,
+  B.SIGNPOST, B.TER_MINT, B.TER_BLUE, B.TER_PINK, B.TER_YELLOW,
+]);
+export function isBuiltMaterial(id) { return LANDMARK_MATERIALS.has(id); }
+
 // Everything shown in t' creative cupboard
 export const CREATIVE_ITEMS = [
   B.GRASS, B.DIRT, B.PEAT, B.STONE, B.COBBLE, B.STONEBRICK, B.GRAVEL,
