@@ -14,6 +14,8 @@ export const TILE = {
   RANGE_SIDE: 28, WINDOW: 29, BOARD: 30, TORCH: 31, SIGNPOST: 32, SAND: 33,
   GORSE: 34,
   FERN: 35, FOXGLOVE: 36, DOG_ROSE: 37, ELDER: 38, MONKEY_LEAVES: 39,
+  SLATE: 40, ST_CREAM: 41, ST_RED: 42, RBRICK: 43,
+  TER_MINT: 44, TER_BLUE: 45, TER_PINK: 46, TER_YELLOW: 47,
 };
 
 // ---- Block ids ----
@@ -25,6 +27,8 @@ export const B = {
   WOOL: 23, BILBERRY_BUSH: 24, RANGE: 25, WINDOW: 26, BOARD: 27,
   TORCH: 28, SIGNPOST: 29, SAND: 30, GORSE: 31,
   FERN: 32, FOXGLOVE: 33, DOG_ROSE: 34, ELDER: 35, MONKEY_LEAVES: 36,
+  SLATE: 37, ST_CREAM: 38, ST_RED: 39, RBRICK: 40,
+  TER_MINT: 41, TER_BLUE: 42, TER_PINK: 43, TER_YELLOW: 44,
 };
 
 // ---- Item ids (blocks double as items; pure items start at 64) ----
@@ -101,6 +105,15 @@ D[B.FOXGLOVE] = { name: 'Foxglove', kind: 'cutout', tex: { t: TILE.FOXGLOVE, s: 
 D[B.DOG_ROSE] = { name: 'Dog Rose', kind: 'cutout', tex: { t: TILE.DOG_ROSE, s: TILE.DOG_ROSE, b: TILE.DOG_ROSE }, hard: 0.05, tool: null, drop: B.DOG_ROSE };
 D[B.ELDER] = { name: 'Elder Bush', kind: 'cutout', tex: { t: TILE.ELDER, s: TILE.ELDER, b: TILE.ELDER }, hard: 0.1, tool: null, drop: B.ELDER };
 D[B.MONKEY_LEAVES] = { name: 'Monkey Puzzle', kind: 'solid', tex: { t: TILE.MONKEY_LEAVES, s: TILE.MONKEY_LEAVES, b: TILE.MONKEY_LEAVES }, hard: 0.3, tool: null, drop: null };
+// railway fabric: slate roofs, NER cream/Indian-red station boarding, red brick
+D[B.SLATE] = { name: 'Slate', kind: 'solid', tex: { t: TILE.SLATE, s: TILE.SLATE, b: TILE.SLATE }, hard: 1.8, tool: 'pick', needsPick: true, drop: B.SLATE };
+D[B.ST_CREAM] = { name: 'Station Boarding (Cream)', kind: 'solid', tex: { t: TILE.ST_CREAM, s: TILE.ST_CREAM, b: TILE.ST_CREAM }, hard: 2.0, tool: 'axe', drop: B.ST_CREAM };
+D[B.ST_RED] = { name: 'Station Boarding (Indian Red)', kind: 'solid', tex: { t: TILE.ST_RED, s: TILE.ST_RED, b: TILE.ST_RED }, hard: 2.0, tool: 'axe', drop: B.ST_RED };
+D[B.RBRICK] = { name: 'Red Brick', kind: 'solid', tex: { t: TILE.RBRICK, s: TILE.RBRICK, b: TILE.RBRICK }, hard: 2.0, tool: 'pick', needsPick: true, drop: B.RBRICK };
+D[B.TER_MINT] = { name: 'Cottage Wall (Mint)', kind: 'solid', tex: { t: TILE.TER_MINT, s: TILE.TER_MINT, b: TILE.TER_MINT }, hard: 1.6, tool: 'pick', drop: B.TER_MINT };
+D[B.TER_BLUE] = { name: 'Cottage Wall (Blue)', kind: 'solid', tex: { t: TILE.TER_BLUE, s: TILE.TER_BLUE, b: TILE.TER_BLUE }, hard: 1.6, tool: 'pick', drop: B.TER_BLUE };
+D[B.TER_PINK] = { name: 'Cottage Wall (Pink)', kind: 'solid', tex: { t: TILE.TER_PINK, s: TILE.TER_PINK, b: TILE.TER_PINK }, hard: 1.6, tool: 'pick', drop: B.TER_PINK };
+D[B.TER_YELLOW] = { name: 'Cottage Wall (Yellow)', kind: 'solid', tex: { t: TILE.TER_YELLOW, s: TILE.TER_YELLOW, b: TILE.TER_YELLOW }, hard: 1.6, tool: 'pick', drop: B.TER_YELLOW };
 
 export const BLOCKS = D;
 

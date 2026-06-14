@@ -63,7 +63,7 @@ for (const seedStr of SEEDS) {
     const a = path.pts[i], b = path.pts[i + 1];
     const L = Math.hypot(b.x - a.x, b.z - a.z) || 1;
     const ux = (b.x - a.x) / L, uz = (b.z - a.z) / L;
-    for (const off of [-1.8, 0, 1.8]) {
+    for (const off of [-2.2, -1.1, 0, 1.1, 2.2]) {
       const x = Math.round(a.x - uz * off), z = Math.round(a.z + ux * off);
       const col = geo.villageColumn(x, z);
       if (col && col.kind === 'building') {

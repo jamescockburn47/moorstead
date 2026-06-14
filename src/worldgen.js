@@ -109,6 +109,7 @@ export class Gen {
     const data = new Uint8Array(CHUNK * CHUNK * HEIGHT);
     const x0 = cx * CHUNK, z0 = cz * CHUNK;
     const geo = this.geo;
+    const railCols = []; // columns in t' loading gauge — re-cleared after t' stamps
 
     for (let lz = 0; lz < CHUNK; lz++) {
       for (let lx = 0; lx < CHUNK; lx++) {
@@ -226,17 +227,20 @@ export class Gen {
         // follows t' line's own smoothed profile, so it rides embankments
         // an' causeways ower t' dips an' cuts a slot through t' rises.
         // (T' rails an' sleepers themselves are drawn as real geometry.)
-        if (ri && ri.d < 2.2) {
+        if (ri && ri.d < 2.8) {
           const deck = Math.max(1, Math.min(HEIGHT - 5, Math.round(ri.deck)));
-          // embankment / causeway: fill frae t' ground (or t' watter bed) up
+          // embankment / causeway: fill frae t' ground (or t' watter bed) up to
+          // t' deck so there's a level shoulder either side — no trench
           for (let y = Math.min(h, deck); y < deck && y > 0; y++) {
             data[IDX(lx, y, lz)] = B.STONE;
           }
-          // cutting: clear t' slot where t' land stands prouder than t' line
-          const clearTop = Math.min(HEIGHT - 1, Math.max(deck + 4, h + 1));
+          // clear t' loading gauge: a slot WIDE an' TALL enough for t' train wi'
+          // her sway — cuttings get the full slot, open ground just the air
+          const clearTop = Math.min(HEIGHT - 1, Math.max(deck + 6, h + 1));
           for (let y = deck + 1; y <= clearTop; y++) data[IDX(lx, y, lz)] = B.AIR;
-          // ballast bed wi' dressed stone edging
-          data[IDX(lx, deck, lz)] = ri.d > 1.6 ? B.COBBLE : B.GRAVEL;
+          // ballast under t' rails, dressed-stone edging, grassy verge beyond
+          data[IDX(lx, deck, lz)] = ri.d < 1.4 ? B.GRAVEL : ri.d < 2.2 ? B.COBBLE : B.GRASS;
+          railCols.push({ lx, lz, deck, d: ri.d });
         }
 
         // drystone walls stop at t' lineside — t' railway bought its land
@@ -257,7 +261,7 @@ export class Gen {
         const mh = (th || size) ? 0 : this.monkeyPuzzleAt(x, z);
         if (!th && !size && !mh) continue;
         const tri = geo.railInfo(x, z);
-        if (tri && tri.d < 3) continue;
+        if (tri && tri.d < 4) continue; // a cleared verge — nowt grows in t' four-foot
         const gh = this.geo.height(x, z);
         if (th) this.stampTree(data, lx, gh + 1, lz, th);
         else if (size) this.stampBoulder(data, lx, gh, lz, size, x, z);
@@ -269,12 +273,22 @@ export class Gen {
     this.stampLandmarks(data, cx, cz);
     this.stampShelters(data, cx, cz);
     this.stampStructures(data, cx, cz);
+    // re-clear t' loading gauge now t' trees, walls an' buildings are down, so
+    // nowt's left stood in t' train's road. Stations come AFTER, so platforms
+    // an' their furniture are laid into t' cleared slot an' kept.
+    for (const c of railCols) {
+      const top = Math.min(HEIGHT - 1, c.deck + 6);
+      for (let y = c.deck + 1; y <= top; y++) data[IDX(c.lx, y, c.lz)] = B.AIR;
+      data[IDX(c.lx, c.deck, c.lz)] = c.d < 1.4 ? B.GRAVEL : c.d < 2.2 ? B.COBBLE : B.GRASS;
+    }
     this.stampStations(data, cx, cz);
     return data;
   }
 
-  // station platforms: laid PARALLEL to t' rails on t' right o' t' up
-  // direction — planks level wi' t' deck, lantern, departures board, signpost
+  // Station: platforms laid parallel to t' rails, an NER timber (or grand
+  // stone) station building, lamps, a running-in board — an' at t' big stations
+  // an overall trainshed an' a lattice footbridge. cell(a,w): a along t' line,
+  // w across it (w>0 t' near platform side, w<0 t' far side).
   stampStations(data, cx, cz) {
     const x0 = cx * CHUNK, z0 = cz * CHUNK;
     const put = (wx, wy, wz, id) => {
@@ -290,29 +304,123 @@ export class Gen {
     const stns = this.geo.railway();
     for (let si = 0; si < stns.length; si++) {
       const s = stns[si];
-      if (s.x < x0 - 12 || s.x > x0 + CHUNK + 12 || s.z < z0 - 12 || s.z > z0 + CHUNK + 12) continue;
+      if (s.x < x0 - 24 || s.x > x0 + CHUNK + 24 || s.z < z0 - 24 || s.z > z0 + CHUNK + 24) continue;
       const sp = this.geo.samplePos(path.stationS[si]);
       const g = Math.max(Math.round(sp.deck), WATER_LEVEL + 1);
-      const ux = sp.tx, uz = sp.tz;   // along t' line
-      const px = uz, pz = -ux;        // across it, platform side
+      const ux = sp.tx, uz = sp.tz, px = uz, pz = -ux;
       const cell = (a, w) => [Math.round(sp.x + ux * a + px * w), Math.round(sp.z + uz * a + pz * w)];
-      for (let a = -4; a <= 4; a++) {
-        for (let w = 2; w <= 4; w++) {
-          const [wx, wz] = cell(a, w);
-          put(wx, g, wz, B.PLANKS);
-          for (let y = g + 1; y <= g + 3; y++) put(wx, y, wz, B.AIR);
-          // a made footing under t' platform edge, so nowt floats
-          for (let y = g - 1; y > 0 && y >= g - 6; y--) {
-            const below = at(wx, y, wz);
-            if (below === undefined || (below !== B.AIR && below !== B.WATER)) break;
-            put(wx, y, wz, B.STONE);
-          }
-        }
+      const isPickering = s.name === 'Pickering';
+      const isBig = isPickering || s.name === 'Whitby';
+      const sides = isBig ? [1, -1] : [1];
+      const aHalf = isBig ? 9 : 5;
+
+      // platforms (planks level wi' t' deck, footing carried down to t' ground)
+      for (const sd of sides) for (let a = -aHalf; a <= aHalf; a++) for (let w = 2; w <= 4; w++) {
+        const [wx, wz] = cell(a, sd * w);
+        put(wx, g, wz, B.PLANKS);
+        for (let y = g + 1; y <= g + 3; y++) put(wx, y, wz, B.AIR);
+        for (let y = g - 1; y > 0 && y >= g - 7; y--) { const b = at(wx, y, wz); if (b === undefined || (b !== B.AIR && b !== B.WATER)) break; put(wx, y, wz, B.STONE); }
       }
-      let c;
-      c = cell(-3, 3); put(c[0], g + 1, c[1], B.LANTERN);
-      c = cell(0, 3); put(c[0], g + 1, c[1], B.BOARD);
-      c = cell(3, 3); put(c[0], g + 1, c[1], B.SIGNPOST);
+
+      // a station building beside t' platform — cream/Indian-red NER timber, or
+      // dressed stone for t' grand stations, wi' a slate roof an' a brick stack
+      const buildOne = (sd, a0, a1, w0, w1, wallH, stone) => {
+        const wc = (w0 + w1) / 2, half = (w1 - w0) / 2;
+        const lowMat = stone ? B.STONEBRICK : B.ST_RED, hiMat = stone ? B.STONEBRICK : B.ST_CREAM;
+        const peak = g + wallH + 1 + Math.round(half);
+        for (let a = a0; a <= a1; a++) for (let w = w0; w <= w1; w++) {
+          const [wx, wz] = cell(a, sd * w);
+          const roofY = g + wallH + 1 + Math.round(half - Math.abs(w - wc));
+          for (let y = g + 1; y <= peak + 1; y++) put(wx, y, wz, B.AIR);
+          put(wx, g, wz, B.PLANKS);
+          const perim = (a === a0 || a === a1 || w === w0 || w === w1);
+          if (perim) {
+            for (let y = g + 1; y <= g + wallH; y++) put(wx, y, wz, y === g + 1 ? lowMat : hiMat);
+            if (a === a0 || a === a1) for (let y = g + wallH + 1; y < roofY; y++) put(wx, y, wz, hiMat);
+          }
+          put(wx, roofY, wz, B.SLATE);
+        }
+        const am = Math.round((a0 + a1) / 2);
+        const fr = (a, w, y, id) => { const [wx, wz] = cell(a, sd * w); put(wx, y, wz, id); };
+        fr(am - 1, w0, g + 1, B.AIR); fr(am, w0, g + 1, B.AIR); fr(am, w0, g + 2, B.AIR); // doorway
+        fr(a0 + 1, w0, g + 2, B.WINDOW); fr(a1 - 1, w0, g + 2, B.WINDOW);
+        const [bx, bz] = cell(am, sd * (w0 - 1)); put(bx, g + 1, bz, B.BOARD); // running-in board
+        const [chx, chz] = cell(a0 + 1, sd * Math.round(wc));
+        for (let y = g + wallH + 1; y <= peak + 2; y++) put(chx, y, chz, B.RBRICK); // chimney
+      };
+
+      if (isPickering) { this.stampTrainshed(put, cell, g, aHalf); buildOne(1, -4, 4, 6, 10, 4, true); }
+      else buildOne(1, -3, 3, 5, 8, 3, false);
+
+      // platform furniture
+      for (const a of [-aHalf + 1, aHalf - 1]) { const c = cell(a, 3); put(c[0], g + 1, c[1], B.LANTERN); }
+      let c = cell(0, 4); put(c[0], g + 1, c[1], B.SIGNPOST);
+      c = cell(-2, 4); put(c[0], g + 1, c[1], B.BENCH);
+
+      if (isBig) this.stampFootbridge(put, cell, g, aHalf);
+      if (s.name === 'Grosmont') this.stampTerrace(put, cell);
+    }
+  }
+
+  // a great overall roof spanning both platforms an' t' track, on stone walls,
+  // open at both ends so t' train runs through (rides ABOVE t' loading gauge)
+  stampTrainshed(put, cell, g, aHalf) {
+    const W = 5, eave = g + 6;
+    const roofAt = w => eave + (W - Math.abs(w)); // ridge ower t' track
+    for (let a = -aHalf - 1; a <= aHalf + 1; a++) {
+      for (let w = -W; w <= W; w++) { const [wx, wz] = cell(a, w); put(wx, roofAt(w), wz, B.SLATE); }
+      for (const w of [-W, W]) { const [wx, wz] = cell(a, w); for (let y = g + 1; y <= eave; y++) put(wx, y, wz, B.STONEBRICK); }
+    }
+    for (const a of [-aHalf - 1, aHalf + 1]) for (let w = -W; w <= W; w++) { // gable screens above t' eaves
+      const [wx, wz] = cell(a, w);
+      for (let y = eave + 1; y < roofAt(w); y++) put(wx, y, wz, B.STONEBRICK);
+    }
+  }
+
+  // a footbridge ower t' line wi' stone piers an' stairs down to t' platform
+  stampFootbridge(put, cell, g, aHalf) {
+    const W = 5, deckY = g + 7, ab = aHalf - 1;
+    for (const a of [ab, ab + 1]) for (let w = -W; w <= W; w++) { const [wx, wz] = cell(a, w); put(wx, deckY, wz, B.PLANKS); put(wx, deckY + 1, wz, B.AIR); }
+    for (const sd of [1, -1]) {
+      for (let y = g + 1; y <= deckY; y++) { let c = cell(ab, sd * W); put(c[0], y, c[1], B.STONEBRICK); c = cell(ab + 1, sd * W); put(c[0], y, c[1], B.STONEBRICK); }
+      for (let w = W; w >= 3; w--) { // stairs
+        const sy = g + Math.max(1, Math.round((deckY - g) * (w - 3) / (W - 3)));
+        const c = cell(ab + 2, sd * w); put(c[0], sy, c[1], B.PLANKS);
+        for (let y = sy + 1; y <= deckY; y++) put(c[0], y, c[1], B.AIR);
+      }
+    }
+  }
+
+  // a row o' colourful cottages stepped down t' far side o' t' line — slate
+  // roofs, brick stacks, a different wash on each, each sat on its own ground
+  stampTerrace(put, cell) {
+    const fronts = [B.TER_MINT, B.ST_CREAM, B.TER_BLUE, B.TER_YELLOW, B.TER_PINK];
+    const wFront = -9, depth = 4, hH = 5, half = (depth - 1) / 2;
+    for (let a = -10; a <= 10; a++) {
+      const hi = Math.floor((a + 10) / 3);          // which cottage
+      const col = fronts[hi % fronts.length];
+      const party = ((a + 10) % 3 === 0);           // wall between cottages
+      const doorBay = ((a + 10) % 3 === 1);
+      for (let d = 0; d < depth; d++) {
+        const w = wFront - d;
+        const [wx, wz] = cell(a, w);
+        const base = this.geo.height(wx, wz);
+        if (base <= WATER_LEVEL) continue;
+        const roofY = base + hH + 1 + Math.round(half - Math.abs(d - half));
+        for (let y = base + 1; y <= roofY + 1; y++) put(wx, y, wz, B.AIR);
+        put(wx, base, wz, B.PLANKS);
+        const frontBack = (d === 0 || d === depth - 1);
+        if (party || frontBack) {
+          for (let y = base + 1; y <= base + hH; y++) put(wx, y, wz, d === 0 ? col : B.STONEBRICK);
+          if (party) for (let y = base + hH + 1; y < roofY; y++) put(wx, y, wz, B.STONEBRICK);
+        }
+        put(wx, roofY, wz, B.SLATE);
+        if (d === 0) {
+          if (doorBay) { put(wx, base + 1, wz, B.AIR); put(wx, base + 2, wz, B.AIR); }
+          else { put(wx, base + 2, wz, B.WINDOW); put(wx, base + 4, wz, B.WINDOW); }
+        }
+        if (party && d === 1) for (let y = base + hH + 2; y <= base + hH + 4; y++) put(wx, y, wz, B.RBRICK);
+      }
     }
   }
 

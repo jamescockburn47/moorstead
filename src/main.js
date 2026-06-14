@@ -106,7 +106,86 @@ class Game {
     this.ui.show('titleScreen');
 
     this.clock = new THREE.Clock();
+    this.setupDebug();
     this.renderer.setAnimationLoop(() => this.frame());
+  }
+
+  // ---------------- dev introspection ----------------
+  // Render state as data, not pixels: query the live scene graph over the
+  // console (or via preview_eval) instead of taking slow screenshots.
+  // e.g.  moorstead.debug.viewProbe()  — what the camera sees in each direction
+  //       moorstead.debug.lookingAt()  — first mesh down the camera ray
+  //       moorstead.debug.warp('Whitby')
+  setupDebug() {
+    const G = this;
+    const V = THREE.Vector3;
+    const r2 = n => Math.round(n * 100) / 100;
+    const fmt = v => ({ x: r2(v.x), y: r2(v.y), z: r2(v.z) });
+    const describe = h => {
+      if (!h) return null;
+      const m = Array.isArray(h.object.material) ? h.object.material[0] : h.object.material;
+      const transparent = !!(m && m.transparent && m.opacity < 0.5);
+      return {
+        dist: r2(h.distance),
+        opaque: !transparent,            // a clear pane is NOT a blocker
+        name: h.object.name || h.object.geometry?.type || h.object.type || 'mesh',
+        color: m && m.color ? '#' + m.color.getHexString() : null,
+        point: fmt(h.point),
+      };
+    };
+    // cast a ray frae the camera (or a given origin) and report the first mesh.
+    // We gather solid meshes only — Sprites (the held-item viewmodel, sun/moon)
+    // can't be raycast safely, and we skip the block highlight.
+    const cast = (dir, maxDist = 96, origin) => {
+      const o = origin ? new V(origin.x, origin.y, origin.z) : G.camera.position.clone();
+      const d = (dir ? new V(dir.x, dir.y, dir.z) : G.camera.getWorldDirection(new V())).normalize();
+      const meshes = [];
+      G.scene.traverse(m => { if (m.isMesh && m.visible && m !== G.highlight) meshes.push(m); });
+      const rc = new THREE.Raycaster(o, d, 0.01, maxDist);
+      return describe(rc.intersectObjects(meshes, false)[0]);
+    };
+    this.debug = {
+      cast,
+      camera() {
+        const dir = G.camera.getWorldDirection(new V());
+        return {
+          pos: fmt(G.camera.position), dir: fmt(dir),
+          fov: r2(G.camera.fov), near: G.camera.near, far: G.camera.far,
+          state: G.state, riding: !!G.ride,
+        };
+      },
+      lookingAt(maxDist = 96) { return cast(null, maxDist); },
+      // What does the camera see left / right / forward / back / up? Each entry
+      // is the first mesh in that direction with whether it's an opaque blocker.
+      // The fast regression check for "can't see out the window".
+      viewProbe(maxDist = 8) {
+        const q = G.camera.quaternion;
+        const axes = { fwd: [0, 0, -1], back: [0, 0, 1], left: [-1, 0, 0], right: [1, 0, 0], up: [0, 1, 0] };
+        const out = {};
+        for (const [k, a] of Object.entries(axes)) out[k] = cast(new V(...a).applyQuaternion(q), maxDist);
+        return out;
+      },
+      train() {
+        if (!G.train) return null;
+        const cg = G.train.carriage.group;
+        return { trainState: G.trainState ? { ...G.trainState } : null, carriagePos: fmt(cg.position), riding: !!G.ride };
+      },
+      warp(target) {
+        const geo = G.world && G.world.gen && G.world.gen.geo;
+        if (!geo || !G.player) return 'no world loaded';
+        const st = geo.railway().find(s => s.name.toLowerCase() === String(target).toLowerCase());
+        if (st) {
+          G.player.pos = { x: st.x + 0.5, y: geo.height(Math.floor(st.x), Math.floor(st.z)) + 2, z: st.z + 0.5 };
+          G.player.vel = { x: 0, y: 0, z: 0 };
+          return `warped to ${st.name} (${st.x}, ${st.z})`;
+        }
+        if (target === 'train' && G.trainState) {
+          G.player.pos = { x: G.trainState.x, y: 60, z: G.trainState.z };
+          return 'warped above the train';
+        }
+        return `unknown target "${target}" — try a station name or "train"`;
+      },
+    };
   }
 
   // ---------------- world lifecycle ----------------
@@ -297,6 +376,8 @@ class Game {
         if (e.code === 'Escape') this.closeChat();
       } else if (this.state === 'sleeping') {
         if (e.code === 'KeyN' || e.code === 'Escape') this.cancelSleep('Up an’ about again, then.');
+      } else if (this.state === 'riding') {
+        if (e.code === 'Escape' && this.ride && this.ride.warden) this.wardenLeaveTrain();
       }
     });
     document.addEventListener('keyup', e => { this.keys[e.code] = false; });
@@ -413,6 +494,9 @@ class Game {
       ui.invDirty = true;
       ui.toast('Kitted out proper.');
     });
+    const tRow = ui.el('div', 'admin-btns', panel);
+    const train = ui.el('button', 'mc', tRow, 'Board t’ Train (ride owt, Esc to step off)');
+    train.addEventListener('click', () => this.wardenBoardTrain());
     ui.el('div', 'r-needs', panel, 'Whisk thissen anywhere:');
     const tp = ui.el('div', 'admin-tp', panel);
     const geo = this.world.gen.geo;
@@ -473,6 +557,45 @@ class Game {
     this.wardenDrop = { label, t: 0 };
     this.resume();
     this.ui.toast(`Dropping in ower <b>${label}</b>...`, 2500);
+  }
+
+  // Warden boards t' moving train wherever she is on t' line — no booking, no
+  // platform. We land on her chainage first so t' chunk loads an' t' carriage
+  // shows, then t' ride machinery seats us. An open-ended ride (no destIdx), so
+  // she runs forever till t' warden steps off.
+  wardenBoardTrain() {
+    if (!this.isAdmin()) return;
+    if (!this.trainState) { this.ui.toast('T’ train’s not running just now.'); return; }
+    const ts = this.trainState, p = this.player;
+    const gy = this.world.gen.height(Math.floor(ts.x), Math.floor(ts.z));
+    p.pos = { x: ts.x, y: Math.min(HEIGHT - 2, gy + 3), z: ts.z }; // so updateTrainWorld loads + shows her
+    if (p.vel) { p.vel.x = 0; p.vel.y = 0; p.vel.z = 0; }
+    p.fallStart = null;
+    p.flying = false;
+    this.seatOffset = [0.55, -0.7];   // a window seat in t' middle bay
+    this.ride = { warden: true };     // no destIdx → never auto-disembarks
+    this.rideYawSet = false;
+    this.state = 'riding';
+    this.ui.show(null);
+    this.lockPointer();
+    this.ui.toast('Aboard t’ train. Press <b>Esc</b> to step off.', 4500);
+  }
+
+  // Warden steps off mid-line — set down beside t' rails where t' train is.
+  wardenLeaveTrain() {
+    const ts = this.trainState, p = this.player;
+    this.ride = null;
+    this.rideYawSet = false;
+    if (ts) {
+      const gy = this.world.gen.height(Math.floor(ts.x + 1.5), Math.floor(ts.z + 1.5));
+      p.pos = { x: ts.x + 1.5, y: gy + 2, z: ts.z + 1.5 };
+    }
+    if (p.vel) { p.vel.x = 0; p.vel.y = 0; p.vel.z = 0; }
+    p.fallStart = null;
+    this.state = 'playing';
+    this.ui.show(null);
+    this.lockPointer();
+    this.ui.toast('Off t’ train, then.', 2500);
   }
 
   // a warden hits t' ground like a dropped anvil: dust ring an' a thump
@@ -1091,17 +1214,19 @@ class Game {
     const geo = this.world.gen.geo;
     const st = geo.railway();
     const s = this.trainSchedule();
-    const sp = geo.samplePos(s.s);
-    const x = sp.x, z = sp.z;
+    const fwd = s.dir === 0 ? 1 : -1; // travel sense — for t' wheels an' rods only
+    // T' rake is RIGID: t' loco keeps t' same end an' propels her back push-pull,
+    // so she never reconfigures (never passes through hersen) at t' termini. Park
+    // t' whole train as one body, clamped to stay on t' line — so it's continuous
+    // through every reversal instead o' flippin' end for end.
+    const RAKE = 11.2, len = geo.railPath().length;
+    const base = Math.max(0, Math.min(len - RAKE, s.dir === 0 ? s.s - RAKE : s.s));
+    const mid = geo.samplePos(base + RAKE * 0.5);
+    const x = mid.x, z = mid.z;
     let rotY = this.trainRot || 0, pitch = 0, moving = false, speed = 0;
-    // she faces along t' rails — t' spline's tangent, flipped for t' down trains
-    const fwd = s.dir === 0 ? 1 : -1;
-    if (Math.hypot(sp.tx, sp.tz) > 0.01) rotY = Math.atan2(sp.tx * fwd, sp.tz * fwd);
-    pitch = -Math.atan(sp.grade * fwd);
-    if (s.mode === 'run') {
-      moving = true;
-      speed = s.speed; // already blocks/s
-    }
+    if (Math.hypot(mid.tx, mid.tz) > 0.01) rotY = Math.atan2(mid.tx, mid.tz);
+    pitch = -Math.atan(mid.grade);
+    if (s.mode === 'run') { moving = true; speed = s.speed; }
     this.trainRot = rotY;
     this.trainState = { x, z, rotY, s };
 
@@ -1116,12 +1241,12 @@ class Game {
       for (const part of parts) {
         const pg = part.group;
         if (!pg.parent) { this.scene.add(pg); pg.rotation.order = 'YXZ'; }
-        const psp = geo.samplePos(s.s + part.offset * fwd);
+        const psp = geo.samplePos(base + RAKE + part.offset);
         const deck = psp.deck + 1;
         pg.position.x = psp.x; pg.position.z = psp.z;
         pg.position.y = pg.position.y ? pg.position.y + (deck - pg.position.y) * Math.min(1, dt * 6) : deck;
-        if (Math.hypot(psp.tx, psp.tz) > 0.01) pg.rotation.y = Math.atan2(psp.tx * fwd, psp.tz * fwd);
-        const ppitch = -Math.atan(psp.grade * fwd);
+        if (Math.hypot(psp.tx, psp.tz) > 0.01) pg.rotation.y = Math.atan2(psp.tx, psp.tz);
+        const ppitch = -Math.atan(psp.grade);
         pg.rotation.x += (ppitch - pg.rotation.x) * Math.min(1, dt * 4);
         if (moving && part.wheels) {
           for (const w of part.wheels) w.rotateZ(-fwd * speed * dt / (w.userData.r || 0.62));

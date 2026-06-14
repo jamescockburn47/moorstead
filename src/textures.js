@@ -388,6 +388,31 @@ const TILE_PAINTERS = {
     }
     p.dots(0x4f8240, 10); // brighter tips
   },
+  [TILE.SLATE](p) {
+    p.speckle(0x49545f, 0.12);
+    for (let cy = 0; cy < T; cy += 4) {
+      p.rect(0, cy, T, 1, shade(0x2f3640, 1));
+      for (let cx = (cy % 8 ? 0 : 4); cx < T; cx += 8) p.rect(cx, cy, 1, 4, shade(0x2f3640, 1));
+    }
+    p.dots(0x606d7a, 9);
+  },
+  [TILE.ST_CREAM](p) {
+    p.speckle(0xe7ddc1, 0.06);
+    for (let y = 2; y < T; y += 4) p.rect(0, y, T, 1, shade(0xc7bb96, 1)); // weatherboard lines
+  },
+  [TILE.ST_RED](p) {
+    p.speckle(0x8c3c2f, 0.1);
+    for (let y = 2; y < T; y += 4) p.rect(0, y, T, 1, shade(0x6c2a20, 1));
+  },
+  [TILE.RBRICK](p) {
+    p.speckle(0x9d4a38, 0.08);
+    for (const y of [0, 5, 10, 15]) p.rect(0, y, T, 1, shade(0x6d3225, 1));
+    for (const [x, y] of [[4, 1], [11, 1], [7, 6], [2, 11], [12, 11]]) p.rect(x, y, 1, 4, shade(0x6d3225, 1));
+  },
+  [TILE.TER_MINT](p) { p.speckle(0xbfe0c4, 0.07); p.dots(0xa8d0ad, 8); },
+  [TILE.TER_BLUE](p) { p.speckle(0x9fc0d8, 0.07); p.dots(0x86abc6, 8); },
+  [TILE.TER_PINK](p) { p.speckle(0xe6b8bf, 0.07); p.dots(0xd49aa3, 8); },
+  [TILE.TER_YELLOW](p) { p.speckle(0xe9d79a, 0.07); p.dots(0xd6c081, 8); },
 };
 
 let atlasCanvas = null;
