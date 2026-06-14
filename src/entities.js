@@ -39,7 +39,9 @@ function makeGrouse() {
   for (const x of [-0.08, 0.08]) {
     const l = box(0.05, 0.18, 0.05, 0x9a8a4a); l.position.set(x, 0.09, 0.05); g.add(l); legs.push(l);
   }
-  return { group: g, legs, body, head };
+  const wings = [];
+  for (const x of [-1, 1]) { const w = box(0.36, 0.06, 0.34, 0x5a3020); w.position.set(x * 0.2, 0.4, -0.02); g.add(w); wings.push(w); }
+  return { group: g, legs, body, head, wings };
 }
 
 function makeHare() {
@@ -147,7 +149,9 @@ function makePheasant() {
   const tail = box(0.12, 0.1, 0.72, 0x9a6a36); tail.position.set(0, 0.42, -0.52); tail.rotation.x = 0.18; g.add(tail);
   const legs = [];
   for (const x of [-0.09, 0.09]) { const l = box(0.05, 0.2, 0.05, 0xa89060); l.position.set(x, 0.1, 0.05); g.add(l); legs.push(l); }
-  return { group: g, legs, body, head };
+  const wings = [];
+  for (const x of [-1, 1]) { const w = box(0.38, 0.06, 0.4, 0x6a3e20); w.position.set(x * 0.2, 0.44, -0.04); g.add(w); wings.push(w); }
+  return { group: g, legs, body, head, wings };
 }
 
 function makeOwl() {
@@ -195,7 +199,9 @@ function makeCurlew() {
   const bill = box(0.04, 0.04, 0.34, 0x2a1c12); bill.position.set(0, 0.84, 0.42); bill.rotation.x = 0.5; g.add(bill); // long downcurved bill
   const legs = [];
   for (const x of [-0.08, 0.08]) { const l = box(0.04, 0.4, 0.04, 0x4a4030); l.position.set(x, 0.2, 0); g.add(l); legs.push(l); }
-  return { group: g, legs, body, head };
+  const wings = [];
+  for (const x of [-1, 1]) { const w = box(0.34, 0.05, 0.34, 0x6e5c3a); w.position.set(x * 0.18, 0.54, -0.02); g.add(w); wings.push(w); }
+  return { group: g, legs, body, head, wings };
 }
 
 function makeFrog() {
@@ -690,6 +696,8 @@ export class Entities {
 
       // fliers (owls, crows, gulls) ride t' air on their own rules
       if (t.fly) { this.updateFlyer(mob, dt, player, distP, isNight, audio); continue; }
+      // a flushed game bird is up on t' wing — she flies off, she doesn't run
+      if (mob.flushing) { this.updateFlush(mob, dt, player, audio); continue; }
 
       let wishX = 0, wishZ = 0, speed = 0;
 
@@ -738,7 +746,14 @@ export class Entities {
       // shy beasts bolt t' moment tha gets near (hare, lizard, curlew, pheasant, grouse)
       if (t.shy && mob.state !== 'chase' && mob.state !== 'flee' && !player.dead && !player.creative && distP < (t.shyRadius || 8)) {
         mob.state = 'flee'; mob.fleeTimer = t.fleeFor || 3;
-        if (t.flush) mob.vel.y = Math.max(mob.vel.y, 7); // break frae cover wi' a clatter o' wings
+        if (t.flush) {
+          // game birds don't leg it — they FLUSH: clatter up off t' ground an' away
+          mob.flushing = true; mob.fleeTimer = 6;
+          const inv = distP || 1;
+          mob.vel.y = 8;
+          mob.vel.x = -dx / inv * (t.fleeSpeed || 4);
+          mob.vel.z = -dz / inv * (t.fleeSpeed || 4);
+        }
         if (audio) audio.mobAmbient(mob.type, distP);
       }
 
@@ -814,6 +829,37 @@ export class Entities {
       });
     }
     this.mobs = this.mobs.filter(m => !m.dead);
+  }
+
+  // a flushed game bird (grouse, pheasant, curlew) — clatters up steep off t'
+  // ground, beats away on t' wing an' is gone ower t' moor. No gravity while up.
+  updateFlush(mob, dt, player, audio) {
+    const t = mob.t;
+    mob.fleeTimer -= dt;
+    const groundH = this.world.gen.height(Math.floor(mob.pos.x), Math.floor(mob.pos.z));
+    const dx = mob.pos.x - player.pos.x, dz = mob.pos.z - player.pos.z;
+    const d = Math.hypot(dx, dz) || 1;
+    const cruiseY = groundH + 12;
+    const sp = (t.fleeSpeed || 4) * 1.5;
+    mob.vel.x += ((dx / d) * sp - mob.vel.x) * Math.min(1, 4 * dt);
+    mob.vel.z += ((dz / d) * sp - mob.vel.z) * Math.min(1, 4 * dt);
+    const wantVy = mob.pos.y < cruiseY ? 7 : 0.5; // climb hard, then level off
+    mob.vel.y += (wantVy - mob.vel.y) * Math.min(1, 5 * dt);
+    mob.pos.x += mob.vel.x * dt; mob.pos.y += mob.vel.y * dt; mob.pos.z += mob.vel.z * dt;
+    const s2 = Math.hypot(mob.vel.x, mob.vel.z);
+    if (s2 > 0.3) mob.yaw = Math.atan2(mob.vel.x, mob.vel.z);
+    // beat t' wings, tuck t' legs up
+    mob.walkPhase += dt * 20;
+    const flap = Math.sin(mob.walkPhase) * 0.9;
+    if (mob.model.wings) mob.model.wings.forEach((w, i) => { w.rotation.z = (i === 0 ? 1 : -1) * flap; });
+    mob.model.legs.forEach(l => { l.rotation.x = -1.1; });
+    mob.model.group.position.set(mob.pos.x, mob.pos.y, mob.pos.z);
+    mob.model.group.rotation.y = mob.yaw;
+    // away an' high — she's flown; let her go
+    if (mob.fleeTimer <= 0 && (d > 28 || mob.pos.y > cruiseY + 6)) {
+      this.scene.remove(mob.model.group);
+      mob.dead = true;
+    }
   }
 
   // owls, crows an' gulls — airborne, no gravity, wi' a flap an' (for owls) a swoop
