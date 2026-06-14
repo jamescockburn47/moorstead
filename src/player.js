@@ -31,6 +31,7 @@ export class Player {
     this.npcRewards = {}; // charId -> highest friendship tier already rewarded
     this.milestonesDone = []; // bairns'-world first-hour achievements already earned
     this.milestonesSteered = false; // whether t' "go see t' village folk" nudge's fired
+    this.bairnFresh = false; // bairns'-world one-time bare-handed reset already done
   }
 
   eyePos() { return { x: this.pos.x, y: this.pos.y + this.eye, z: this.pos.z }; }
@@ -306,6 +307,7 @@ export class Player {
       slots: this.slots, hotbar: this.hotbar, fuelBank: this.fuelBank,
       name: this.name, npcRewards: this.npcRewards,
       milestonesDone: this.milestonesDone, milestonesSteered: this.milestonesSteered,
+      bairnFresh: this.bairnFresh,
     };
   }
 
@@ -322,5 +324,6 @@ export class Player {
     this.npcRewards = d.npcRewards || {};
     this.milestonesDone = d.milestonesDone || [];
     this.milestonesSteered = !!d.milestonesSteered;
+    this.bairnFresh = !!d.bairnFresh;
   }
 }

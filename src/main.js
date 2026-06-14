@@ -496,6 +496,18 @@ class Game {
     if (locked && this.player) {
       this.player.creative = false;
       this.player.flying = false;
+      // One-time pocket wipe so t' kids genuinely start bare-handed. Runs once
+      // per account (t' flag persists), so owt they EARN after this stays put.
+      // Survives t' "client re-saved its owd inventory" race: it clears in
+      // memory on load, afore t' next save, every load until t' flag sticks.
+      if (!this.player.bairnFresh) {
+        this.player.bairnFresh = true;
+        this.player.slots = new Array(36).fill(null);
+        this.player.hotbar = 0;
+        this.ui.invDirty = true;
+        if (this.saveNow) this.saveNow(false);
+        this.ui.toast('A fresh start on t’ bairns’ world — bare hands, like everyone. Time to earn thi keep!', 6000);
+      }
     }
     this.ui.setCreativeButtonVisible(!locked);
   }
