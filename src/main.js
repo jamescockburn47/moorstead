@@ -36,6 +36,12 @@ function runProfile(len, tt) {
   return { dist: Math.max(0, Math.min(len, dist)), v: Math.max(0, v), tTotal };
 }
 function legTime(len) { return runProfile(len, 0).tTotal; }
+// shortest-arc angle lerp, for turnin' t' loco round smoothly at t' termini
+function lerpAngle(a, b, t) {
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2; else if (d < -Math.PI) d += Math.PI * 2;
+  return a + d * t;
+}
 import { Entities } from './entities.js';
 import { Sky } from './sky.js';
 import { AudioEngine } from './audio.js';
@@ -1214,18 +1220,25 @@ class Game {
     const geo = this.world.gen.geo;
     const st = geo.railway();
     const s = this.trainSchedule();
-    const fwd = s.dir === 0 ? 1 : -1; // travel sense — for t' wheels an' rods only
-    // T' rake is RIGID: t' loco keeps t' same end an' propels her back push-pull,
-    // so she never reconfigures (never passes through hersen) at t' termini. Park
-    // t' whole train as one body, clamped to stay on t' line — so it's continuous
-    // through every reversal instead o' flippin' end for end.
-    const RAKE = 11.2, len = geo.railPath().length;
-    const base = Math.max(0, Math.min(len - RAKE, s.dir === 0 ? s.s - RAKE : s.s));
-    const mid = geo.samplePos(base + RAKE * 0.5);
-    const x = mid.x, z = mid.z;
+    const fwd = s.dir === 0 ? 1 : -1;
+    // Anchor on t' carriage — it stays put at t' platform. T' loco leads smokebox-
+    // first BOTH ways: at a terminus she RUNS ROUND (t' loco slides end to end on a
+    // loop beside t' rake during t' dwell), so she never flips through hersen nor
+    // runs backards. cc = carriage chainage, clamped to keep t' whole rake on t' line.
+    const RAKE = 11.2, len = geo.railPath().length, nSt = geo.railway().length;
+    const cc = Math.max(RAKE, Math.min(len - RAKE, s.s - RAKE * fwd));
+    let locoSign = fwd, loopLat = 0, runround = false;
+    if (s.mode === 'dwell' && ((s.dir === 0 && s.i === 0) || (s.dir === 1 && s.i === nSt - 1))) {
+      runround = true;                                          // a terminus reversal dwell
+      const ph = 1 - Math.max(0, Math.min(1, (s.dwellLeft || 0) / DWELL_T)); // 0 in -> 1 away
+      locoSign = fwd * (2 * ph - 1);                            // loco end: arrival -> departure
+      loopLat = Math.sin(Math.max(0, Math.min(1, ph)) * Math.PI) * 2.8; // out onto t' loop an' back
+    }
+    const csp = geo.samplePos(cc);
+    const x = csp.x, z = csp.z;
     let rotY = this.trainRot || 0, pitch = 0, moving = false, speed = 0;
-    if (Math.hypot(mid.tx, mid.tz) > 0.01) rotY = Math.atan2(mid.tx, mid.tz);
-    pitch = -Math.atan(mid.grade);
+    if (Math.hypot(csp.tx, csp.tz) > 0.01) rotY = Math.atan2(csp.tx * fwd, csp.tz * fwd);
+    pitch = -Math.atan(csp.grade * fwd);
     if (s.mode === 'run') { moving = true; speed = s.speed; }
     this.trainRot = rotY;
     this.trainState = { x, z, rotY, s };
@@ -1241,12 +1254,19 @@ class Game {
       for (const part of parts) {
         const pg = part.group;
         if (!pg.parent) { this.scene.add(pg); pg.rotation.order = 'YXZ'; }
-        const psp = geo.samplePos(base + RAKE + part.offset);
+        const distC = part.offset + RAKE;            // carriage 0, tender 5.9, loco 11.2
+        const isCar = distC < 0.5;
+        const psp = geo.samplePos(cc + distC * locoSign);
+        const lat = isCar ? 0 : loopLat;             // only t' loco+tender swing onto t' loop
+        const nx = -psp.tz, nz = psp.tx;             // unit perpendicular to t' line
+        pg.position.x = psp.x + nx * lat;
+        pg.position.z = psp.z + nz * lat;
         const deck = psp.deck + 1;
-        pg.position.x = psp.x; pg.position.z = psp.z;
         pg.position.y = pg.position.y ? pg.position.y + (deck - pg.position.y) * Math.min(1, dt * 6) : deck;
-        if (Math.hypot(psp.tx, psp.tz) > 0.01) pg.rotation.y = Math.atan2(psp.tx, psp.tz);
-        const ppitch = -Math.atan(psp.grade);
+        const tgt = (Math.hypot(psp.tx, psp.tz) > 0.01) ? Math.atan2(psp.tx * fwd, psp.tz * fwd) : pg.rotation.y;
+        // t' loco/tender turn smoothly as they run round; t' symmetric carriage just faces travel
+        pg.rotation.y = (runround && !isCar) ? lerpAngle(pg.rotation.y, tgt, Math.min(1, dt * 2.2)) : tgt;
+        const ppitch = -Math.atan(psp.grade * fwd);
         pg.rotation.x += (ppitch - pg.rotation.x) * Math.min(1, dt * 4);
         if (moving && part.wheels) {
           for (const w of part.wheels) w.rotateZ(-fwd * speed * dt / (w.userData.r || 0.62));
