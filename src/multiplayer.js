@@ -88,7 +88,7 @@ export class Net {
 
   addRemote(pid, name, p) {
     if (this.remotes.has(pid)) return;
-    const mob = this.game.entities.spawnVillager(null, name || 'rambler', p.x, p.y, p.z);
+    const mob = this.game.entities.spawnVillager(pid, name || 'rambler', p.x, p.y, p.z);
     mob.isRemotePlayer = true;
     mob.t.speed = 0; // we drive it frae t' network
     this.remotes.set(pid, { name, mob, target: p });

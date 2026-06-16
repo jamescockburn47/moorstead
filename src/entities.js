@@ -352,6 +352,71 @@ function makeVillager(look) {
   return { group: g, legs: legs.concat(arms), body, head };
 }
 
+// ---------- Merlin wizard extras ----------
+// Call after makeVillager to augment Merlin's group with wizard regalia.
+// s = look.scale (1.0 for a standard-height adult).
+// Everything is parented to the villager's group so it moves/rotates with him
+// and is cleaned up automatically when the group is scene.remove()'d.
+function makeWizardExtras(group, s) {
+  const INDIGO    = 0x2a2060; // robe + hat colour
+  const HAT_DARK  = 0x1a1540; // hat slightly darker for depth
+  const BEARD     = 0xd0ccc4; // pale grey beard
+  const GLOW_COL  = 0xffe080; // warm gold emissive
+
+  // -- robe: a slightly wider indigo box over the default body --
+  // body sits at y = 0.85s, height 0.6s → top 1.15s, bottom 0.55s
+  const robe = new THREE.Mesh(
+    new THREE.BoxGeometry(0.58 * s, 0.68 * s, 0.36 * s),
+    new THREE.MeshLambertMaterial({ color: INDIGO, emissive: GLOW_COL, emissiveIntensity: 0.08 })
+  );
+  robe.position.y = 0.85 * s;
+  group.add(robe);
+
+  // -- lower robe skirt: tapers toward the feet --
+  const skirt = new THREE.Mesh(
+    new THREE.BoxGeometry(0.62 * s, 0.38 * s, 0.38 * s),
+    new THREE.MeshLambertMaterial({ color: INDIGO })
+  );
+  skirt.position.y = 0.38 * s;
+  group.add(skirt);
+
+  // -- beard: a small pale cone hanging below the head --
+  // head centre is at 1.34s, head bottom ~1.16s
+  const beardGeo = new THREE.ConeGeometry(0.1 * s, 0.28 * s, 6);
+  const beard = new THREE.Mesh(
+    beardGeo,
+    new THREE.MeshLambertMaterial({ color: BEARD })
+  );
+  // cone origin is at its centre; point faces down (rotate 180°)
+  beard.rotation.x = Math.PI;
+  beard.position.set(0, (1.34 - 0.22) * s, 0.12 * s);
+  group.add(beard);
+
+  // -- hat brim: wide flat disc just above the hair --
+  // hair top ≈ (1.34 + 0.2) * s = 1.54s
+  const brim = new THREE.Mesh(
+    new THREE.BoxGeometry(0.62 * s, 0.04 * s, 0.62 * s),
+    new THREE.MeshLambertMaterial({ color: HAT_DARK })
+  );
+  brim.position.y = 1.56 * s;
+  group.add(brim);
+
+  // -- pointed hat cone: tip ~0.54s above brim --
+  const hatGeo = new THREE.ConeGeometry(0.28 * s, 0.56 * s, 7);
+  const hat = new THREE.Mesh(
+    hatGeo,
+    new THREE.MeshLambertMaterial({ color: INDIGO, emissive: GLOW_COL, emissiveIntensity: 0.12 })
+  );
+  // cone centred at half its height above brim
+  hat.position.y = (1.56 + 0.28) * s;
+  group.add(hat);
+
+  // -- soft point light: warm gold glow, small range, parented to group --
+  const light = new THREE.PointLight(GLOW_COL, 0.55, 5.5);
+  light.position.y = 1.7 * s; // roughly mid-torso height so it lights the ground nearby
+  group.add(light);
+}
+
 export const MOB_TYPES = {
   sheep: {
     make: makeSheep, hw: 0.45, h: 1.1, hp: 8, speed: 1.6, fleeSpeed: 4.2,
@@ -463,6 +528,11 @@ export class Entities {
   spawnVillager(charId, name, x, y, z, opts = {}) {
     const look = villagerLook(name);
     const model = makeVillager(look);
+    // Merlin gets the wizard treatment — keyed on pid (charId) with name fallback
+    const isMerlin = charId === 'clint-body' || (name || '').toLowerCase() === 'merlin';
+    if (isMerlin) {
+      try { makeWizardExtras(model.group, look.scale); } catch (err) { /* fail safe — default avatar still rendered */ }
+    }
     this.scene.add(model.group);
     const displayName = name.replace(/\b\w/g, c => c.toUpperCase());
     const plate = makeNameplate(displayName);
