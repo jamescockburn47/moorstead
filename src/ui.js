@@ -309,7 +309,7 @@ export class UI {
 <h3>T&rsquo; Hound o&rsquo; the Mires &#9733;</h3>
 <p>Summat&rsquo;s been taking sheep in t&rsquo; night. <b>T&rsquo; Hound o&rsquo; the Mires</b> runs five chapters across t&rsquo; real landmarks &mdash; starred &#9733; in thi journal. It starts wi&rsquo; Farmer James, and it ends on a crooked hill, at neet, wi&rsquo; summat as has eyes like coals. Higher chapters need higher standing &mdash; t&rsquo; village doesn&rsquo;t hand its secrets to strangers.</p>
 <h3>Count Dracula on t&rsquo; Moors &#8224;</h3>
-<p>A <b>separate</b> storyline, marked &#8224; in thi journal. Start at t&rsquo; <b>Dracula Museum in Whitby</b> (east coast, below t&rsquo; abbey cliffs). Learn how Bram Stoker&rsquo;s 1890 visit gave England its vampire; then draw <b>holy water</b> frae t&rsquo; abbey font, craft a <b>wooden stake</b> at a bench an&rsquo; steep it in t&rsquo; water. At neet, Count Dracula walks t&rsquo; open moor &mdash; tha&rsquo;ll <b>feel him afore tha sees him</b>. Hold t&rsquo; holy stake to strike true; hide in <b>moor shelters</b> or reach a village if tha must. Slaying him makes t&rsquo; moors <b>far safer after dark</b> &mdash; barghests still walk, but nowt worse.</p>`,
+<p>A <b>separate</b> storyline, marked &#8224; in thi journal. Start at t&rsquo; <b>Dracula Museum in Whitby</b> (north coast, below t&rsquo; abbey cliffs). Learn how Bram Stoker&rsquo;s 1890 visit gave England its vampire; then draw <b>holy water</b> frae t&rsquo; abbey font, craft a <b>wooden stake</b> at a bench an&rsquo; steep it in t&rsquo; water. At neet, Count Dracula walks t&rsquo; open moor &mdash; tha&rsquo;ll <b>feel him afore tha sees him</b>. Hold t&rsquo; holy stake to strike true; hide in <b>moor shelters</b> or reach a village if tha must. Slaying him makes t&rsquo; moors <b>far safer after dark</b> &mdash; barghests still walk, but nowt worse.</p>`,
 
       'T’ Railway': `
 <h3>T&rsquo; Moors Railway</h3>
@@ -327,7 +327,7 @@ export class UI {
 <ul>
 <li>Press <b>E</b>: simple recipes (planks, sticks, bench, thatch) craft owt where. Owt serious needs thee <b>stood near a joiner&rsquo;s bench</b>.</li>
 <li>Key recipes: pick/axe/spade/sword in wood, gritstone an&rsquo; iron &middot; <b>range</b> (8 cobble) &middot; <b>lantern</b> (ingot + coal) &middot; dressed stone (4 gritstone) &middot; thatch (4 bracken) &middot; windows for thi cottage.</li>
-<li>There&rsquo;s a free bench an&rsquo; range in t&rsquo; pub &mdash; T&rsquo; Black Sheep, north side o&rsquo; t&rsquo; green.</li>
+<li>There&rsquo;s a free bench an&rsquo; range in t&rsquo; pub &mdash; T&rsquo; Black Sheep, west side o&rsquo; t&rsquo; green.</li>
 </ul>
 <h3>T&rsquo; Range (cooking an&rsquo; smelting)</h3>
 <ul>
@@ -336,7 +336,7 @@ export class UI {
 </ul>
 <h3>Building &mdash; thi own croft</h3>
 <ul>
-<li>T&rsquo; <b>owd croft</b> at t&rsquo; south-west corner o&rsquo; t&rsquo; green (marked wi&rsquo; posts an&rsquo; a gravel edge) is <b>thine</b>. Build thissen a cottage: <b>walls</b> (stone, planks, owt solid) &rarr; a <b>thatch roof</b> &rarr; a <b>window, a lantern, an&rsquo; a bench or range</b> inside.</li>
+<li>T&rsquo; <b>owd croft</b> at t&rsquo; south-east corner o&rsquo; t&rsquo; green (marked wi&rsquo; posts an&rsquo; a gravel edge) is <b>thine</b>. Build thissen a cottage: <b>walls</b> (stone, planks, owt solid) &rarr; a <b>thatch roof</b> &rarr; a <b>window, a lantern, an&rsquo; a bench or range</b> inside.</li>
 <li>T&rsquo; village watches thi progress &mdash; folk talk about it, thi standing rises wi&rsquo; every stage, an&rsquo; finishing it earns thee a proper <b>housewarming</b>, gifts an&rsquo; all.</li>
 <li>Villagers also offer <b>building commissions</b> &mdash; a lambing shed for James, a garden wall for Glinda &mdash; materials placed at a marked spot, paid fair.</li>
 <li>Build owt else tha likes on t&rsquo; open moor &mdash; just <b>not through folk&rsquo;s houses</b>, unless tha fancies being t&rsquo; talk o&rsquo; t&rsquo; parish.</li>
@@ -346,23 +346,44 @@ export class UI {
 <h3>Reading t&rsquo; moors</h3>
 <ul>
 <li>T&rsquo; HUD names where tha stands &mdash; high moors, dales (Rosedale, Farndale, Bilsdale...), May Moss, t&rsquo; coast. T&rsquo; minimap shows t&rsquo; lie o&rsquo; t&rsquo; land, north up.</li>
-<li><b>T&rsquo; high moor</b>: a sea o&rsquo; heather, blanket bog, moor crosses, owd stone circles. <b>T&rsquo; dales</b>: becks, woods, walled pasture. <b>East</b>, past Wade&rsquo;s Causey, t&rsquo; land ends in cliffs ower t&rsquo; North Sea.</li>
+<li><b>T&rsquo; high moor</b>: a sea o&rsquo; heather, blanket bog, moor crosses, owd stone circles. <b>T&rsquo; dales</b>: becks, woods, walled pasture. <b>North</b>, past Wade&rsquo;s Causey, t&rsquo; land ends in cliffs ower t&rsquo; North Sea.</li>
 </ul>
 <h3>Landmarks worth t&rsquo; trek</h3>
 <ul>
-<li><b>Roseberry Topping</b> (far NW) &mdash; t&rsquo; lonely crooked peak. Summat lives up there, they say.</li>
-<li><b>The Wainstones</b> (NW) &mdash; a crag o&rsquo; jumbled stones on t&rsquo; ridge.</li>
-<li><b>T&rsquo; Hole of Horcum</b> (SE) &mdash; a giant&rsquo;s handful scooped out o&rsquo; t&rsquo; moor.</li>
-<li><b>Rosedale Ironstone Kilns</b> (SW) &mdash; stone arches wi&rsquo; an ember as never dies. Rich iron seams nearby.</li>
-<li><b>Wade&rsquo;s Causey</b> &mdash; t&rsquo; owd Roman road, running straight north ower t&rsquo; tops.</li>
+<li><b>Roseberry Topping</b> (far SW) &mdash; t&rsquo; lonely crooked peak. Summat lives up there, they say.</li>
+<li><b>The Wainstones</b> (SW) &mdash; a crag o&rsquo; jumbled stones on t&rsquo; ridge.</li>
+<li><b>T&rsquo; Hole of Horcum</b> (NE) &mdash; a giant&rsquo;s handful scooped out o&rsquo; t&rsquo; moor.</li>
+<li><b>Rosedale Ironstone Kilns</b> (SE) &mdash; stone arches wi&rsquo; an ember as never dies. Rich iron seams nearby.</li>
+<li><b>Wade&rsquo;s Causey</b> &mdash; t&rsquo; owd Roman road, running straight ower t&rsquo; tops.</li>
 <li><b>Moor crosses</b> &mdash; waymarks on t&rsquo; high moor. One&rsquo;s painted white: say hello to <b>Fat Betty</b>, and mebbe leave her summat.</li>
-<li><b>T&rsquo; Abbey</b> (far E, on t&rsquo; cliffs) &mdash; a drowned-voiced ruin ower t&rsquo; sea. A <b>holy water font</b> still glimmers in t&rsquo; nave.</li>
+<li><b>T&rsquo; Abbey</b> (far N, on t&rsquo; cliffs) &mdash; a drowned-voiced ruin ower t&rsquo; sea. A <b>holy water font</b> still glimmers in t&rsquo; nave.</li>
 <li><b>Whitby</b> (below t&rsquo; abbey) &mdash; harbour, pier, fish &amp; chip shop, fossil shop, an&rsquo; t&rsquo; <b>Dracula Museum</b>. Right-click t&rsquo; museum boards to enter.</li>
-<li><b>Robin Hood&rsquo;s Bay</b> (SE coast) &mdash; a sweeping bay wi&rsquo; broad <b>beaches</b>. <b>Dig t&rsquo; sand</b> for fossils: ammonites (snakestones), Devil&rsquo;s Toenails, an&rsquo; now an&rsquo; then washed-up jet. T&rsquo; bay sands are twice as rich as owt else. Harry an&rsquo; Glinda trade for fossils, an&rsquo; Harry treasures a gifted ammonite above all else.</li>
+<li><b>Robin Hood&rsquo;s Bay</b> (NE coast) &mdash; a sweeping bay wi&rsquo; broad <b>beaches</b>. <b>Dig t&rsquo; sand</b> for fossils: ammonites (snakestones), Devil&rsquo;s Toenails, an&rsquo; now an&rsquo; then washed-up jet. T&rsquo; bay sands are twice as rich as owt else. Harry an&rsquo; Glinda trade for fossils, an&rsquo; Harry treasures a gifted ammonite above all else.</li>
 <li><b>T&rsquo; tide minds t&rsquo; beaches</b>: owt dug or built on t&rsquo; sands smooths back ower in a few minutes &mdash; t&rsquo; fossil grounds can&rsquo;t be ruined, so dig wi&rsquo; a clear conscience (just don&rsquo;t build thi house on &rsquo;em).</li>
 <li>Other settlements stand across t&rsquo; moors: <b>Goathland</b>, <b>Rosedale Abbey</b>, <b>Staithes</b> on t&rsquo; clifftop, <b>Grosmont</b> in t&rsquo; valley, an&rsquo; <b>Pickering</b> t&rsquo; capital, minster, market an&rsquo; all. All safe ground, all lived in &mdash; an&rsquo; all on or near t&rsquo; railway.</li>
 </ul>
 <p class="how-note">A full day on t&rsquo; moors is <b>half an hour</b>. Thi world saves itsen every half-minute, in this browser. &ldquo;Carry On&rdquo; picks up where tha left off.</p>`,
+
+      'Merlin': `
+<h3>Merlin, t&rsquo; wizard o&rsquo; t&rsquo; moor</h3>
+<p>A glowin&rsquo; owd wizard walks these moors &mdash; <b>beard, pointed hat an&rsquo; all</b>. He&rsquo;s a friend to every traveller, an&rsquo; he&rsquo;s in <b>every world</b>, t&rsquo; bairns&rsquo; included.</p>
+<ul>
+<li><b>Call him by name.</b> Press <b>T</b> to chat an&rsquo; say <b>&ldquo;Merlin&rdquo;</b> &mdash; he&rsquo;ll hear thee frae owt where on t&rsquo; map an&rsquo; <b>come straight to thee</b>. He can be in more than one place at once, so he&rsquo;ll never leave another soul waitin&rsquo;.</li>
+<li><b>Then just natter.</b> Once he&rsquo;s wi&rsquo; thee tha needn&rsquo;t say his name again &mdash; talk on an&rsquo; he&rsquo;ll answer, an&rsquo; he walks alongside thee as tha goes. He knows t&rsquo; lie o&rsquo; t&rsquo; land, what&rsquo;s in thi pack, how far tha&rsquo;s come, an&rsquo; where t&rsquo; ore an&rsquo; t&rsquo; folk are.</li>
+<li><b>He&rsquo;ll lead thee.</b> Ask <i>&ldquo;take me to Goathland&rdquo;</i>, <i>&ldquo;where&rsquo;s t&rsquo; iron?&rdquo;</i>, <i>&ldquo;lead me to thi keep&rdquo;</i> or <i>&ldquo;where should I build?&rdquo;</i> an&rsquo; he&rsquo;ll <b>set off walkin&rsquo;</b> &mdash; follow him. Ower far to walk, an&rsquo; he&rsquo;ll point thee t&rsquo; way.</li>
+<li><b>He&rsquo;ll help thee build.</b> <i>&ldquo;Mark me a plot&rdquo;</i> an&rsquo; he lanterns out a building spot; <i>&ldquo;lay me a foundation&rdquo;</i> an&rsquo; he sets thee a dressed-stone footing to build up frae.</li>
+</ul>
+<h3>Merlin&rsquo;s magic &#10024;</h3>
+<p>He&rsquo;s a <b>true wizard</b>: <b>fetch him t&rsquo; right token</b>, carry it in thi pack, an&rsquo; ask him to <b>work some magic</b>. He&rsquo;ll conjure it up beside thee:</p>
+<ul>
+<li><b>Whitby jet</b> &rarr; a <b>Circle of Light</b> &mdash; a warding ring o&rsquo; lanterns to keep t&rsquo; dark off.</li>
+<li><b>Holy water</b> &rarr; a <b>Wayside Shrine</b> &mdash; a lit stone cross on hallowed ground.</li>
+<li><b>An iron ingot</b> &rarr; a <b>Standing Stone</b> &mdash; a lit waymark on t&rsquo; moor.</li>
+<li><b>Coal</b> &rarr; a <b>Beacon</b> &mdash; a fire burnin&rsquo; atop a stone tower.</li>
+<li><b>A snakestone</b> (ammonite, or a Devil&rsquo;s toenail) &rarr; a <b>Stone Causeway</b> &mdash; a paved path frae t&rsquo; livin&rsquo; rock.</li>
+<li><b>T&rsquo; Amulet o&rsquo; t&rsquo; Moors</b> &rarr; a <b>great Monument</b> &mdash; a lit obelisk ringed wi&rsquo; standin&rsquo; stones, for them as finish t&rsquo; quest.</li>
+</ul>
+<p class="how-note">Ask him empty-handed an&rsquo; he&rsquo;ll tell thee which token works which spell. He keeps thi token &mdash; t&rsquo; magic nobbut borrows its power.</p>`,
     };
 
     this.howTabs.innerHTML = '';
