@@ -1,0 +1,27 @@
+[Unit]
+Description=Clint-body (Merlin) — Moorstead in-world presence (BAIRNS / children's world)
+Documentation=https://github.com/jamescockburn47/moorstead
+After=network.target
+
+[Service]
+Type=simple
+User=james
+WorkingDirectory=/home/james/moorstead/clint-body
+ExecStart=/home/james/moorstead/venv/bin/python /home/james/moorstead/clint-body/clint_body.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=clint-body-bairns
+
+# Merlin in the children's world. Requires the explicit opt-in flag below;
+# without CLINT_BODY_ALLOW_BAIRNS=true the process refuses to start in bairns.
+Environment="RELAY_WS_BASE=ws://127.0.0.1:8096/ws"
+Environment="CLINT_BODY_ROOM=bairns"
+Environment="CLINT_BODY_PID=clint-body"
+Environment="CLINT_BODY_NAME=Merlin"
+Environment="CLINT_BODY_ENABLED=true"
+Environment="CLINT_BODY_ALLOW_BAIRNS=true"
+
+[Install]
+WantedBy=multi-user.target

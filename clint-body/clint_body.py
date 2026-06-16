@@ -661,11 +661,14 @@ def main() -> None:
         log.info("CLINT_BODY_ENABLED=false — disabled, exiting 0.")
         return
 
-    # Safety: refuse to run in the bairns room.  5a is adult-worlds-only.
-    if ROOM == "bairns":
+    # Safety: the bairns room is the children's world.  Running Merlin there
+    # requires an explicit opt-in (CLINT_BODY_ALLOW_BAIRNS=true), set by James.
+    if ROOM == "bairns" and os.environ.get(
+        "CLINT_BODY_ALLOW_BAIRNS", "false"
+    ).strip().lower() not in ("true", "1", "yes"):
         log.error(
-            "CLINT_BODY_ROOM=bairns is not permitted in Phase 5a (adult worlds only). "
-            "Set CLINT_BODY_ROOM=moor and restart."
+            "CLINT_BODY_ROOM=bairns requires CLINT_BODY_ALLOW_BAIRNS=true "
+            "(children's world — explicit opt-in). Refusing to start."
         )
         raise SystemExit(1)
 
