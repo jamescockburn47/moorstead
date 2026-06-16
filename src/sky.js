@@ -77,15 +77,47 @@ export class Sky {
     }
     const cloudTex = new THREE.CanvasTexture(cc);
     cloudTex.wrapS = cloudTex.wrapT = THREE.RepeatWrapping;
-    cloudTex.repeat.set(3, 3);
+    cloudTex.repeat.set(12, 12);
     this.cloudTex = cloudTex;
     this.clouds = new THREE.Mesh(
-      new THREE.PlaneGeometry(700, 700),
+      new THREE.PlaneGeometry(3000, 3000),
       new THREE.MeshBasicMaterial({ map: cloudTex, transparent: true, opacity: 0.7, fog: false, depthWrite: false })
     );
     this.clouds.rotation.x = Math.PI / 2;
-    this.clouds.position.y = 88;
+    this.clouds.position.y = 110;
     scene.add(this.clouds);
+
+    // sky dome — a gradient frae horizon to zenith, so t' sky has depth an'
+    // wraps round to t' horizon all about, not a flat lid overhead. Horizon
+    // colour is fed t' live sky tint each frame, so it keeps day/night,
+    // weather, dread an' t' seasonal cast.
+    this.domeMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite: false, fog: false,
+      uniforms: {
+        topColor: { value: new THREE.Color(0x2f5074) },
+        bottomColor: { value: new THREE.Color(0x9fb6c8) },
+        exponent: { value: 0.7 },
+      },
+      vertexShader: `
+        varying vec3 vDir;
+        void main() {
+          vDir = normalize(position);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 bottomColor;
+        uniform float exponent;
+        varying vec3 vDir;
+        void main() {
+          float t = pow(clamp(vDir.y, 0.0, 1.0), exponent);
+          gl_FragColor = vec4(mix(bottomColor, topColor, t), 1.0);
+        }`,
+    });
+    this.dome = new THREE.Mesh(new THREE.SphereGeometry(500, 24, 16), this.domeMat);
+    this.dome.renderOrder = -1;
+    this.dome.frustumCulled = false;
+    scene.add(this.dome);
 
     // rain
     this.rainCount = 900;
@@ -209,6 +241,12 @@ export class Sky {
     }
     this.scene.background = sky;
     this.scene.fog.color.copy(sky);
+
+    // sky dome follows t' player; horizon takes t' live sky colour, an' t'
+    // zenith deepens by day so there's a proper gradient to t' horizon.
+    this.dome.position.set(playerPos.x, playerPos.y, playerPos.z);
+    this.domeMat.uniforms.bottomColor.value.copy(sky);
+    this.domeMat.uniforms.topColor.value.copy(sky).lerp(new THREE.Color(0x21426a), 0.5 * dayness);
 
     // fog distance
     let baseFog = { clear: 150, misty: 70, rain: 95, fog: 30 }[this.weather];
