@@ -1,0 +1,32 @@
+[Unit]
+Description=Clint-body — Moorstead Phase 5a in-world presence (adult worlds)
+Documentation=https://github.com/jamescockburn47/moorstead
+After=network.target
+
+[Service]
+Type=simple
+User=james
+WorkingDirectory=/home/james/moorstead/clint-body
+ExecStart=/home/james/moorstead/venv/bin/python /home/james/moorstead/clint-body/clint_body.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=clint-body
+
+# Kill-switch: override CLINT_BODY_ENABLED at the unit level
+# to disable without removing the service:
+#   sudo systemctl edit clint-body
+# and add:
+#   [Service]
+#   Environment="CLINT_BODY_ENABLED=false"
+# Or just: sudo systemctl stop clint-body
+
+Environment="RELAY_WS_BASE=ws://127.0.0.1:8096/ws"
+Environment="CLINT_BODY_ROOM=moor"
+Environment="CLINT_BODY_PID=clint-body"
+Environment="CLINT_BODY_NAME=Clint"
+Environment="CLINT_BODY_ENABLED=true"
+
+[Install]
+WantedBy=multi-user.target
