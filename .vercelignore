@@ -1,0 +1,7 @@
+# Never upload secrets or backend-only code into the Vercel build context.
+# Only the vite client (src/, index.html, public/) is needed for the web build.
+moorstead keys.md
+clint-body/
+docs/
+deploy/
+*.bak
