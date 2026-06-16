@@ -380,83 +380,93 @@ function makeVillager(look) {
 }
 
 // ---------- Merlin wizard extras ----------
-// Call after makeVillager to augment Merlin's group with wizard regalia.
-// s = look.scale (1.0 for a standard-height adult).
-// Everything is parented to the villager's group so it moves/rotates with him
-// and is cleaned up automatically when the group is scene.remove()'d.
-function makeWizardExtras(group, s) {
-  const INDIGO    = 0x2a2060; // robe + hat colour
-  const HAT_DARK  = 0x1a1540; // hat slightly darker for depth
-  const BEARD     = 0xd0ccc4; // pale grey beard
-  const GLOW_COL  = 0xffe080; // warm gold emissive
+// Re-robes a freshly-built villager into a proper glowing wizard: recolours the
+// body/arms/legs into the robe (so no default villager shows through), then adds
+// a full beard, a flared robe with gold trim, a wide-brim pointed hat with a
+// glowing tip, and a breathing glow.  Takes the whole villager model so it can
+// restyle its parts.  s = look.scale (1.0 for a standard-height adult).
+function makeWizardExtras(model, s) {
+  const group   = model.group;
+  const ROBE    = 0x352a78; // deep indigo robe
+  const ROBE_DK = 0x231b52; // darker robe for the skirt/legs
+  const TRIM    = 0xc9a23a; // gold trim
+  const BEARD   = 0xeae6dc; // near-white beard
+  const GLOW    = 0xffe080; // warm gold glow
 
-  // -- robe: a slightly wider indigo box over the default body --
-  // body sits at y = 0.85s, height 0.6s → top 1.15s, bottom 0.55s
-  const robe = new THREE.Mesh(
-    new THREE.BoxGeometry(0.58 * s, 0.68 * s, 0.36 * s),
-    new THREE.MeshLambertMaterial({ color: INDIGO, emissive: GLOW_COL, emissiveIntensity: 0.42 })
+  // 1) Re-robe the villager: recolour body, arms and legs so no brown shows.
+  //    The head (skin) stays as the face.  model.legs holds legs + arms.
+  try {
+    if (model.body) model.body.material.color.setHex(ROBE);
+    for (const part of (model.legs || [])) {
+      part.material.color.setHex(part.position.y > 0.6 * s ? ROBE : ROBE_DK);
+    }
+  } catch (e) { /* fail-safe — base avatar still renders */ }
+
+  // 2) A fuller robe over the body + a flared skirt, for a proper silhouette,
+  //    cinched with a gold belt.
+  const torso = new THREE.Mesh(
+    new THREE.BoxGeometry(0.62 * s, 0.72 * s, 0.44 * s),
+    new THREE.MeshLambertMaterial({ color: ROBE, emissive: GLOW, emissiveIntensity: 0.26 }),
   );
-  robe.position.y = 0.85 * s;
-  group.add(robe);
-
-  // -- lower robe skirt: tapers toward the feet --
+  torso.position.y = 0.86 * s; group.add(torso);
   const skirt = new THREE.Mesh(
-    new THREE.BoxGeometry(0.62 * s, 0.38 * s, 0.38 * s),
-    new THREE.MeshLambertMaterial({ color: INDIGO })
+    new THREE.BoxGeometry(0.82 * s, 0.62 * s, 0.52 * s),
+    new THREE.MeshLambertMaterial({ color: ROBE_DK, emissive: GLOW, emissiveIntensity: 0.16 }),
   );
-  skirt.position.y = 0.38 * s;
-  group.add(skirt);
-
-  // -- beard: a small pale cone hanging below the head --
-  // head centre is at 1.34s, head bottom ~1.16s
-  const beardGeo = new THREE.ConeGeometry(0.1 * s, 0.28 * s, 6);
-  const beard = new THREE.Mesh(
-    beardGeo,
-    new THREE.MeshLambertMaterial({ color: BEARD })
+  skirt.position.y = 0.33 * s; group.add(skirt);
+  const belt = new THREE.Mesh(
+    new THREE.BoxGeometry(0.66 * s, 0.09 * s, 0.48 * s),
+    new THREE.MeshLambertMaterial({ color: TRIM, emissive: TRIM, emissiveIntensity: 0.3 }),
   );
-  // cone origin is at its centre; point faces down (rotate 180°)
-  beard.rotation.x = Math.PI;
-  beard.position.set(0, (1.34 - 0.22) * s, 0.12 * s);
-  group.add(beard);
+  belt.position.y = 0.6 * s; group.add(belt);
 
-  // -- hat brim: wide flat disc just above the hair --
-  // hair top ≈ (1.34 + 0.2) * s = 1.54s
+  // 3) A proper full beard: stacked tapering boxes from the jaw to mid-chest,
+  //    with a moustache so it meets the face cleanly.  (Head centre ~1.34s.)
+  const beardSegs = [[0.32, 0.14, 1.17], [0.27, 0.14, 1.04], [0.20, 0.14, 0.91], [0.12, 0.13, 0.79]];
+  for (const [w, h, y] of beardSegs) {
+    const seg = new THREE.Mesh(
+      new THREE.BoxGeometry(w * s, h * s, 0.15 * s),
+      new THREE.MeshLambertMaterial({ color: BEARD }),
+    );
+    seg.position.set(0, y * s, 0.2 * s); group.add(seg);
+  }
+  const tash = new THREE.Mesh(
+    new THREE.BoxGeometry(0.32 * s, 0.08 * s, 0.1 * s),
+    new THREE.MeshLambertMaterial({ color: BEARD }),
+  );
+  tash.position.set(0, 1.26 * s, 0.21 * s); group.add(tash);
+
+  // 4) Wide-brim pointed hat over the hair, with a gold band and a glowing tip.
   const brim = new THREE.Mesh(
-    new THREE.BoxGeometry(0.62 * s, 0.04 * s, 0.62 * s),
-    new THREE.MeshLambertMaterial({ color: HAT_DARK })
+    new THREE.BoxGeometry(0.74 * s, 0.06 * s, 0.74 * s),
+    new THREE.MeshLambertMaterial({ color: ROBE_DK }),
   );
-  brim.position.y = 1.56 * s;
-  group.add(brim);
-
-  // -- pointed hat cone: tip ~0.54s above brim --
-  const hatGeo = new THREE.ConeGeometry(0.28 * s, 0.56 * s, 7);
+  brim.position.y = 1.56 * s; group.add(brim);
+  const band = new THREE.Mesh(
+    new THREE.BoxGeometry(0.52 * s, 0.08 * s, 0.52 * s),
+    new THREE.MeshLambertMaterial({ color: TRIM, emissive: TRIM, emissiveIntensity: 0.3 }),
+  );
+  band.position.y = 1.62 * s; group.add(band);
   const hat = new THREE.Mesh(
-    hatGeo,
-    new THREE.MeshLambertMaterial({ color: INDIGO, emissive: GLOW_COL, emissiveIntensity: 0.55 })
+    new THREE.ConeGeometry(0.3 * s, 0.66 * s, 8),
+    new THREE.MeshLambertMaterial({ color: ROBE, emissive: GLOW, emissiveIntensity: 0.4 }),
   );
-  // cone centred at half its height above brim
-  hat.position.y = (1.56 + 0.28) * s;
-  group.add(hat);
-
-  // -- a tiny glowing orb at the hat's tip, like a wisp of starlight --
+  hat.position.y = (1.62 + 0.33) * s; group.add(hat);
   const orb = new THREE.Mesh(
-    new THREE.SphereGeometry(0.09 * s, 8, 8),
-    new THREE.MeshBasicMaterial({ color: GLOW_COL })
+    new THREE.SphereGeometry(0.1 * s, 10, 10),
+    new THREE.MeshBasicMaterial({ color: GLOW }),
   );
-  orb.position.y = (1.56 + 0.56) * s;
-  group.add(orb);
+  orb.position.y = (1.62 + 0.7) * s; group.add(orb);
 
-  // -- glow: a bright warm core light plus a wide soft halo on the ground --
-  const core = new THREE.PointLight(GLOW_COL, 2.4, 13);
-  core.position.y = 1.7 * s; // mid-torso, lights him and the ground nearby
-  group.add(core);
-  const halo = new THREE.PointLight(GLOW_COL, 1.1, 24);
-  halo.position.y = 1.2 * s; // a broad pool of warm light around his feet
-  group.add(halo);
-  // stash for the gentle breathing pulse driven in updateVillager
+  // 5) Glow: a bright warm core light + a wide soft halo, breathing (pulsed in
+  //    updateVillager via group.userData.wizLights).
+  const core = new THREE.PointLight(GLOW, 2.3, 13);
+  core.position.y = 1.0 * s; group.add(core);
+  const halo = new THREE.PointLight(GLOW, 1.0, 22);
+  halo.position.y = 1.2 * s; group.add(halo);
   group.userData.wizLights = [
-    { light: core, base: 2.4 },
-    { light: halo, base: 1.1 },
+    { light: core, base: 2.3 },
+    { light: halo, base: 1.0 },
   ];
 }
 
@@ -579,7 +589,7 @@ export class Entities {
     // Merlin gets the wizard treatment — keyed on pid (charId) with name fallback
     const isMerlin = charId === 'clint-body' || (name || '').toLowerCase() === 'merlin';
     if (isMerlin) {
-      try { makeWizardExtras(model.group, look.scale); } catch (err) { /* fail safe — default avatar still rendered */ }
+      try { makeWizardExtras(model, look.scale); } catch (err) { /* fail safe — default avatar still rendered */ }
     }
     this.scene.add(model.group);
     const displayName = name.replace(/\b\w/g, c => c.toUpperCase());
