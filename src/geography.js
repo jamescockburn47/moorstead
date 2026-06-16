@@ -20,6 +20,9 @@ export const ROAD_X = 60; // Wade's Causey runs north from t' village fields
 export const ABBEY_Z = -60;
 // Where Count Dracula walks t' open moor at neet (quest boss arena)
 export const DRACULA_MOOR = { x: 140, z: -180, r: 28 };
+// Merlin's Keep — a great castle stood alone on t' empty north-west moor
+// (a high, flat, far-from-owt spot — found by scanning the empty quarter)
+export const CASTLE = { x: -720, z: -420, r: 46 };
 
 const DALE_NAMES = ['Rosedale', 'Farndale', 'Bransdale', 'Bilsdale', 'Glaisdale', 'Fryupdale', 'Danby Dale', 'Baysdale'];
 const MOOR_NAMES = ['Danby High Moor', 'Westerdale Moor', 'Spaunton Moor', 'Egton High Moor', 'Goathland Moor', 'Urra Moor'];

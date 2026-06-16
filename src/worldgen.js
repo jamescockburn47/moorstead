@@ -1,7 +1,7 @@
 // Terrain generation for t' North York Moors.
 import { B, BLOCKS, CHUNK, HEIGHT, WATER_LEVEL } from './defs.js';
 import { fbm2, fbm3, noise3, hash2i, hash3i, mulberry32 } from './noise.js';
-import { Geography, ROSEBERRY, WAINSTONES, KILNS } from './geography.js';
+import { Geography, ROSEBERRY, WAINSTONES, KILNS, CASTLE } from './geography.js';
 
 const IDX = (x, y, z) => x + z * CHUNK + y * CHUNK * CHUNK;
 
@@ -14,10 +14,11 @@ export class Gen {
   height(x, z) { return this.geo.height(x, z); }
   bogginess(x, z) { return this.geo.bogginess(x, z); }
 
-  // blanket bog pool on t' tops
+  // blanket bog pool on t' tops — kept sparse (t' real moors are drier than tha'd
+  // think), so t' threshold's high: only t' boggiest hollows hold open water.
   isBogPool(x, z) {
     const h = this.geo.height(x, z);
-    return h >= 33 && this.geo.bogginess(x, z) > 0.62 && !this.geo.inVillage(x, z, 4);
+    return h >= 33 && this.geo.bogginess(x, z) > 0.74 && !this.geo.inVillage(x, z, 4);
   }
 
   // distinct woods an' copses, wi' open moor between — not a scattered forest
@@ -327,6 +328,7 @@ export class Gen {
     this.stampLandmarks(data, cx, cz);
     this.stampShelters(data, cx, cz);
     this.stampStructures(data, cx, cz);
+    this.stampCastle(data, cx, cz);
     // re-clear t' loading gauge now t' trees, walls an' buildings are down, so
     // nowt's left stood in t' train's road. Stations come AFTER, so platforms
     // an' their furniture are laid into t' cleared slot an' kept.
@@ -337,6 +339,88 @@ export class Gen {
     }
     this.stampStations(data, cx, cz);
     return data;
+  }
+
+  // Merlin's Keep: a great stone castle stood alone on t' empty north-west moor.
+  // Curtain walls wi' battlements, four corner towers, a south gatehouse, an' a
+  // tall central keep — set on a flattened plinth so it sits proud o' t' heather.
+  stampCastle(data, cx, cz) {
+    const x0 = cx * CHUNK, z0 = cz * CHUNK;
+    const CXp = CASTLE.x, CZp = CASTLE.z;
+    const OUT = 32;                 // curtain-wall half-extent (~66x66 footprint)
+    const M = OUT + 4;
+    if (x0 + CHUNK <= CXp - M || x0 > CXp + M || z0 + CHUNK <= CZp - M || z0 > CZp + M) return;
+
+    const put = (wx, wy, wz, id) => {
+      const lx = wx - x0, lz = wz - z0;
+      if (lx >= 0 && lx < CHUNK && lz >= 0 && lz < CHUNK && wy > 0 && wy < HEIGHT) data[IDX(lx, wy, lz)] = id;
+    };
+    // plinth level — clamped so even t' keep's battlements clear t' world ceiling
+    const base = Math.max(WATER_LEVEL + 1, Math.min(HEIGHT - 26, this.geo.height(CXp, CZp)));
+
+    // --- plinth, curtain wall, corner towers, gatehouse ---
+    for (let dz = -OUT - 3; dz <= OUT + 3; dz++) {
+      for (let dx = -OUT - 3; dx <= OUT + 3; dx++) {
+        const wx = CXp + dx, wz = CZp + dz;
+        if (wx < x0 - 1 || wx >= x0 + CHUNK + 1 || wz < z0 - 1 || wz >= z0 + CHUNK + 1) continue;
+        const ax = Math.abs(dx), az = Math.abs(dz);
+        const inFoot = ax <= OUT && az <= OUT;
+        const terr = this.geo.height(wx, wz);
+
+        // level the ground: clear owt above the plinth, fill any hollow below
+        for (let y = base + 1; y < base + 26; y++) put(wx, y, wz, B.AIR);
+        if (inFoot) {
+          for (let y = Math.min(terr, base); y < base; y++) put(wx, y, wz, B.STONE);
+          put(wx, base, wz, B.COBBLE);                 // bailey / courtyard floor
+        } else {
+          for (let y = Math.min(terr, base); y < base; y++) put(wx, y, wz, B.DIRT);
+          if (terr < base) put(wx, base, wz, B.GRASS);  // a clear, level approach
+        }
+
+        const corner = ax >= OUT - 3 && az >= OUT - 3;
+        const onWall = (ax === OUT || az === OUT);
+        const gate = az === OUT && dz > 0 && ax <= 3;   // south gatehouse opening
+
+        if (corner) {
+          const th = 17;                                // corner towers, taller
+          for (let y = base + 1; y <= base + th; y++) put(wx, y, wz, B.STONEBRICK);
+          if (((dx + dz) & 1) === 0) put(wx, base + th + 1, wz, B.STONEBRICK); // crenellations
+          if (((dx + dz) & 3) === 0) { put(wx, base + 6, wz, B.WINDOW); put(wx, base + 12, wz, B.WINDOW); }
+          if (dx === 0 || dz === 0) put(wx, base + th, wz, B.LANTERN);
+        } else if (gate) {
+          for (let y = base + 5; y <= base + 11; y++) put(wx, y, wz, B.STONEBRICK); // arch over
+          if (ax === 3) { for (let y = base + 1; y <= base + 11; y++) put(wx, y, wz, B.STONEBRICK); put(wx, base + 5, wz, B.LANTERN); }
+        } else if (onWall) {
+          const wh = 9;                                 // curtain wall
+          for (let y = base + 1; y <= base + wh; y++) put(wx, y, wz, B.STONEBRICK);
+          if (((dx + dz) & 1) === 0) put(wx, base + wh + 1, wz, B.STONEBRICK); // merlons
+          else if (dx % 8 === 0 || dz % 8 === 0) put(wx, base + wh + 1, wz, B.LANTERN); // wall lamps
+          if ((dx + dz) % 6 === 0) put(wx, base + wh - 3, wz, B.WINDOW); // arrow slits
+        }
+      }
+    }
+
+    // --- central keep ---
+    const K = 8, kh = 22;
+    for (let dz = -K; dz <= K; dz++) {
+      for (let dx = -K; dx <= K; dx++) {
+        const wx = CXp + dx, wz = CZp + dz;
+        if (wx < x0 - 1 || wx >= x0 + CHUNK + 1 || wz < z0 - 1 || wz >= z0 + CHUNK + 1) continue;
+        const ax = Math.abs(dx), az = Math.abs(dz);
+        if (ax === K || az === K) {
+          for (let y = base + 1; y <= base + kh; y++) put(wx, y, wz, B.STONEBRICK);
+          if (((dx + dz) & 1) === 0) put(wx, base + kh + 1, wz, B.STONEBRICK);
+          if (((dx + dz) & 3) === 0) { put(wx, base + 5, wz, B.WINDOW); put(wx, base + 11, wz, B.WINDOW); put(wx, base + 17, wz, B.WINDOW); }
+        } else {
+          for (let y = base + 1; y < base + kh; y++) put(wx, y, wz, ((y - base) % 6 === 0) ? B.PLANKS : B.AIR);
+          if (dx === 0 && dz === 0) for (let y = base + 2; y < base + kh; y += 6) put(wx, y, wz, B.LANTERN);
+        }
+      }
+    }
+    for (let dx = -1; dx <= 1; dx++) for (let y = base + 1; y <= base + 3; y++) put(CXp + dx, y, CZp + K, B.AIR); // keep doorway
+    put(CXp, base + kh + 2, CZp, B.LANTERN); // a beacon atop the keep
+
+    this._castleBase = base;
   }
 
   // Station: platforms laid parallel to t' rails, an NER timber (or grand
