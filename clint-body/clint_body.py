@@ -62,6 +62,8 @@ REPLY_THROTTLE: float = 4.0  # min seconds between brain replies
 MAX_MANIFEST: int = int(os.environ.get("CLINT_BODY_MAX_MANIFEST", "3") or "3")
 IDLE_DESPAWN: float = float(os.environ.get("CLINT_BODY_IDLE_DESPAWN", "90") or "90")
 SUMMON_THROTTLE: float = 3.0  # min seconds between replies to the same caller
+LEAD_MAX: float = 150.0       # max distance Merlin will physically lead a player
+LEAD_STEP: float = 1.6        # blocks Merlin walks per half-second while leading
 
 # Player save files: /home/james/moorstead/world/saves/<pid>.json
 SAVES_DIR: pathlib.Path = pathlib.Path(
@@ -398,6 +400,41 @@ def _greeting(name: str) -> str:
 HOME_POS: tuple[float, float, float] = WAYPOINTS[0]
 
 
+def _lead_target(text: str, world: dict, px: float, pz: float):
+    """If the player asks to be taken/shown somewhere, return (x, z, name).
+
+    Uses only the static world data (landmarks, villages, the kilns, the keep),
+    so Merlin can guide without a live terrain model.  Ore requests head for the
+    Rosedale kilns; "where should I build" heads for the nearest village.
+    """
+    t = (text or "").lower()
+    if not any(w in t for w in (
+        "lead", "take me", "show me", "guide", "where", "find", "go to",
+        "which way", "build", "dig", "mine ", "look for", "come with",
+    )):
+        return None
+    places = world.get("places", []) or []
+    if any(w in t for w in ("iron", "ironstone", "jet")):
+        k = world.get("kilns")
+        if k:
+            return (k["x"], k["z"], "the Rosedale kilns")
+    if "castle" in t or "keep" in t:
+        for p in places:
+            if "keep" in p["name"].lower():
+                return (p["x"], p["z"], p["name"])
+    for p in places:                       # a named landmark/village/station
+        nm = p["name"].lower()
+        words = [w for w in nm.replace("the ", "").replace("'s", "").split() if len(w) > 3]
+        if nm in t or any(w in t for w in words):
+            return (p["x"], p["z"], p["name"])
+    if any(w in t for w in ("build", "house", "settle")):
+        vs = [p for p in places if p.get("kind") == "village"]
+        if vs:
+            nv = min(vs, key=lambda p: math.hypot(p["x"] - px, p["z"] - pz))
+            return (nv["x"], nv["z"], nv["name"])
+    return None
+
+
 class Manifestation:
     """One Merlin avatar = one relay connection.
 
@@ -413,6 +450,7 @@ class Manifestation:
         self.yaw = 0.0
         self.assigned: Optional[str] = None        # player pid being attended
         self.last_active: float = 0.0              # monotonic of last summon
+        self.lead: Optional[tuple] = None          # (x, z, name) destination he's walking to
         self.q: "asyncio.Queue" = asyncio.Queue()  # ('teleport',x,y,z) | ('chat',text)
         self.alive = True
 
@@ -505,6 +543,23 @@ class Manager:
         reply = await asyncio.to_thread(_brain_reply_blocking, text, cname, cpid, ctx)
         if reply:
             m.q.put_nowait(("chat", reply))
+        self._maybe_lead(m, text, sx, sz)
+
+    def _maybe_lead(self, m: "Manifestation", text: str, px: float, pz: float) -> None:
+        """If the player asked to be guided somewhere near enough, set Merlin
+        walking there (the player follows). Far places stay verbal directions."""
+        try:
+            tgt = _lead_target(text, _WORLD, px, pz)
+        except Exception:
+            tgt = None
+        if not tgt:
+            return
+        tx, tz, tname = tgt
+        if math.hypot(tx - px, tz - pz) <= LEAD_MAX:
+            m.lead = (float(tx), float(tz), tname)
+            m.last_active = time.monotonic()
+            m.q.put_nowait(("chat", f"Aye — follow me, I'll take thee to {tname}."))
+            log.info("Merlin %s leading to %s", m.pid, tname)
 
     def queue_greeting(self, m: Manifestation, pid: str, name: str) -> None:
         """Home greets a newcomer once (throttled)."""
@@ -549,9 +604,6 @@ class Manager:
                     self.last_reply[cpid] = now
                     m.last_active = now
                     px, py, pz = self.player_pos.get(cpid, (m.x, m.y, m.z))
-                    # drift back beside the player so he stays with them as they move
-                    m.x, m.y, m.z = px + 1.5, py, pz + 1.5
-                    m.q.put_nowait(("teleport", m.x, m.y, m.z))
                     ctx = ""
                     try:
                         ctx = build_context(cpid, px, py, pz, self.world_time, _WORLD, self.player_pos)
@@ -560,6 +612,11 @@ class Manager:
                     reply = await asyncio.to_thread(_brain_reply_blocking, text, cname, cpid, ctx)
                     if reply:
                         m.q.put_nowait(("chat", reply))
+                    self._maybe_lead(m, text, px, pz)
+                    if not m.lead:
+                        # not leading: drift back beside the player as they move
+                        m.x, m.y, m.z = px + 1.5, py, pz + 1.5
+                        m.q.put_nowait(("teleport", m.x, m.y, m.z))
                     log.info("Merlin %s follow-up to %s: %s", m.pid, cname, text[:40])
         elif mtype == "time":
             t = msg.get("time")
@@ -639,12 +696,29 @@ async def manifestation_loop(m: "Manifestation", manager: "Manager") -> None:
                 while m.alive:
                     now = time.monotonic()
 
-                    # Position keep-alive (+ gentle idle sway).
-                    if now - last_pos >= POS_INTERVAL:
-                        m.yaw = (m.yaw + random.uniform(15.0, 45.0)) % 360.0
-                        jx = m.x + random.uniform(-0.25, 0.25)
-                        jz = m.z + random.uniform(-0.25, 0.25)
-                        await ws.send(_pos_msg(jx, m.y, jz, m.yaw))
+                    # Position keep-alive — a leading walk, or a gentle idle sway.
+                    interval = 0.5 if m.lead else POS_INTERVAL
+                    if now - last_pos >= interval:
+                        if m.lead:
+                            tx, tz, tname = m.lead
+                            dx, dz = tx - m.x, tz - m.z
+                            dist = math.hypot(dx, dz)
+                            if dist < 5.0:
+                                m.lead = None
+                                m.last_active = now
+                                m.q.put_nowait(("chat", f"Here we are, then — {tname}. Mind how tha goes."))
+                            else:
+                                step = min(dist, LEAD_STEP)
+                                m.x += dx / dist * step
+                                m.z += dz / dist * step
+                                m.yaw = math.degrees(math.atan2(dx, dz))
+                                m.last_active = now
+                            await ws.send(_pos_msg(m.x, m.y, m.z, m.yaw))
+                        else:
+                            m.yaw = (m.yaw + random.uniform(15.0, 45.0)) % 360.0
+                            jx = m.x + random.uniform(-0.25, 0.25)
+                            jz = m.z + random.uniform(-0.25, 0.25)
+                            await ws.send(_pos_msg(jx, m.y, jz, m.yaw))
                         last_pos = now
 
                     # Drain command queue. Teleport before chat keeps speech in range.
