@@ -435,6 +435,102 @@ def _lead_target(text: str, world: dict, px: float, pz: float):
     return None
 
 
+# ---------------------------------------------------------------------------
+# Conjuring — Merlin places blocks (marker plots, foundations, and spells).
+# Block ids from src/defs.js (all < 64, so the relay accepts them as edits).
+# ---------------------------------------------------------------------------
+
+B_STONE, B_COBBLE, B_PLANKS, B_STONEBRICK = 4, 5, 8, 19
+B_LANTERN, B_WINDOW, B_TORCH = 21, 26, 28
+
+
+def _ring(px, py, pz, r, ids):
+    eds = []
+    for a in range(8):
+        ang = a / 8 * 2 * math.pi
+        eds.append((round(px + math.cos(ang) * r), py, round(pz + math.sin(ang) * r), ids))
+    return eds
+
+
+def _foundation_outline(px, py, pz, s=3):
+    """A plot marked out: lantern corners + a cobble edge (#2 — guidance)."""
+    px, pz = round(px), round(pz)
+    eds = []
+    for d in range(-s, s + 1):
+        eds += [(px + d, py - 1, pz - s, B_COBBLE), (px + d, py - 1, pz + s, B_COBBLE),
+                (px - s, py - 1, pz + d, B_COBBLE), (px + s, py - 1, pz + d, B_COBBLE)]
+    for cx, cz in ((px - s, pz - s), (px + s, pz - s), (px - s, pz + s), (px + s, pz + s)):
+        eds.append((cx, py, cz, B_LANTERN))
+    return eds
+
+
+def _foundation(px, py, pz, s=2):
+    """A small starter foundation: dressed-stone floor + corner lights (#3)."""
+    px, pz = round(px), round(pz)
+    eds = [(px + dx, py - 1, pz + dz, B_STONEBRICK) for dx in range(-s, s + 1) for dz in range(-s, s + 1)]
+    for cx, cz in ((px - s, pz - s), (px + s, pz - s), (px - s, pz + s), (px + s, pz + s)):
+        eds.append((cx, py, cz, B_LANTERN))
+    return eds
+
+
+def _spell_circle_of_light(px, py, pz):   # Whitby jet — a warding ring of lanterns
+    return _ring(px, py, pz, 4, B_LANTERN)
+
+
+def _spell_shrine(px, py, pz):            # holy water — a lit wayside cross
+    bx, bz = round(px) + 2, round(pz)
+    eds = [(bx, py + y, bz, B_STONEBRICK) for y in range(3)]
+    eds += [(bx - 1, py + 2, bz, B_STONEBRICK), (bx + 1, py + 2, bz, B_STONEBRICK), (bx, py + 3, bz, B_LANTERN)]
+    eds += [(bx - 1, py, bz - 1, B_LANTERN), (bx + 1, py, bz + 1, B_LANTERN)]
+    return eds
+
+
+def _spell_waymark(px, py, pz):           # iron — a standing stone topped with light
+    bx, bz = round(px) + 2, round(pz) + 1
+    return [(bx, py + y, bz, B_STONEBRICK) for y in range(4)] + [(bx, py + 4, bz, B_LANTERN)]
+
+
+def _spell_beacon(px, py, pz):            # coal — a burning beacon
+    bx, bz = round(px) + 2, round(pz) + 2
+    eds = [(bx, py + y, bz, B_STONEBRICK) for y in range(5)] + [(bx, py + 5, bz, B_LANTERN)]
+    for dx, dz in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        eds.append((bx + dx, py + 4, bz + dz, B_TORCH))
+    return eds
+
+
+def _spell_causeway(px, py, pz):          # snakestone fossil — a paved path forward
+    px, pz = round(px), round(pz)
+    eds = []
+    for i in range(1, 9):
+        eds.append((px + i, py - 1, pz, B_COBBLE))
+        if i % 4 == 0:
+            eds.append((px + i, py, pz, B_LANTERN))
+    return eds
+
+
+def _spell_monument(px, py, pz):          # the Amulet — a great lit obelisk + standing stones
+    px, pz = round(px), round(pz)
+    bz = pz + 5
+    eds = [(px, py + y, bz, B_STONEBRICK) for y in range(8)] + [(px, py + 8, bz, B_LANTERN)]
+    for a in range(6):
+        ang = a / 6 * 2 * math.pi
+        x, z = round(px + math.cos(ang) * 6), round(bz + math.sin(ang) * 6)
+        eds += [(x, py + y, z, B_STONEBRICK) for y in range(3)] + [(x, py + 3, z, B_LANTERN)]
+    return eds
+
+
+# reagent item-id (from defs.js I.*) -> (name, pattern, Merlin's incantation)
+SPELLS = [
+    (90, "the Amulet of the Moors", _spell_monument,  "By the Amulet o' t' Moors — let t' owd stones RISE!"),
+    (80, "Whitby jet",              _spell_circle_of_light, "Whitby jet, black as neet — a circle o' light to ward thee!"),
+    (95, "holy water",              _spell_shrine,    "Holy water, blessed an' true — a shrine to keep thee safe."),
+    (79, "a Rosedale iron ingot",   _spell_waymark,   "Good Rosedale iron — a standing stone to mark thi way."),
+    (77, "coal frae t' seam",       _spell_beacon,    "Coal frae t' seam — let a beacon BURN on t' moor!"),
+    (93, "an ammonite snakestone",  _spell_causeway,  "Th' owd snakestone — let t' livin' rock make thee a path."),
+    (94, "a gryphaea",              _spell_causeway,  "Th' devil's toenail — let t' stone make thee a path."),
+]
+
+
 class Manifestation:
     """One Merlin avatar = one relay connection.
 
@@ -543,7 +639,8 @@ class Manager:
         reply = await asyncio.to_thread(_brain_reply_blocking, text, cname, cpid, ctx)
         if reply:
             m.q.put_nowait(("chat", reply))
-        self._maybe_lead(m, text, sx, sz)
+        if not self._maybe_cast(m, text, cpid, sx, sy, sz):
+            self._maybe_lead(m, text, sx, sz)
 
     def _maybe_lead(self, m: "Manifestation", text: str, px: float, pz: float) -> None:
         """If the player asked to be guided somewhere near enough, set Merlin
@@ -560,6 +657,48 @@ class Manager:
             m.last_active = time.monotonic()
             m.q.put_nowait(("chat", f"Aye — follow me, I'll take thee to {tname}."))
             log.info("Merlin %s leading to %s", m.pid, tname)
+
+    def _maybe_cast(self, m: "Manifestation", text: str, cpid: str,
+                    px: float, py: float, pz: float) -> bool:
+        """Conjure for the player: mark a plot, lay a foundation, or cast a spell
+        if they carry the right token. Returns True if Merlin conjured owt."""
+        t = (text or "").lower()
+        py = int(round(py))
+        # mark a plot (#2 — guidance only)
+        if any(w in t for w in ("mark", "outline")) and any(w in t for w in ("plot", "spot", "build", "foundation", "here")):
+            m.q.put_nowait(("build", _foundation_outline(px, py, pz)))
+            m.q.put_nowait(("chat", "I've marked thee a plot — raise thi house within yon lanterns."))
+            return True
+        # lay a starter foundation (#3)
+        if any(w in t for w in ("foundation", "lay me", "starter", "footing")) or \
+                ("build" in t and any(w in t for w in ("me a", "for me", "here for"))):
+            m.q.put_nowait(("build", _foundation(px, py, pz)))
+            m.q.put_nowait(("chat", "There — a dressed-stone footing laid for thee. Build up frae that."))
+            return True
+        # spells — need the right token in the pack
+        if not any(w in t for w in ("spell", "magic", "cast", "conjure", "enchant", "sorcery")):
+            return False
+        carried = set()
+        try:
+            save = _read_save(cpid)
+            pdata = save.get("player", save)
+            for s in (pdata.get("slots", []) if isinstance(pdata, dict) else []):
+                sid = s.get("id") if isinstance(s, dict) else s
+                if sid is not None:
+                    carried.add(int(sid))
+        except Exception:
+            pass
+        for rid, rname, pattern, line in SPELLS:
+            if rid in carried:
+                m.q.put_nowait(("chat", line))
+                m.q.put_nowait(("build", pattern(px, py, pz)))
+                m.last_active = time.monotonic()
+                log.info("Merlin %s cast spell (reagent=%s) for %s", m.pid, rname, cpid)
+                return True
+        m.q.put_nowait(("chat",
+            "Bring me a token an' I'll work magic: Whitby jet for a circle o' light, "
+            "holy water for a shrine, iron for a waymark, coal for a beacon, or a snakestone for a path."))
+        return True
 
     def queue_greeting(self, m: Manifestation, pid: str, name: str) -> None:
         """Home greets a newcomer once (throttled)."""
@@ -612,9 +751,11 @@ class Manager:
                     reply = await asyncio.to_thread(_brain_reply_blocking, text, cname, cpid, ctx)
                     if reply:
                         m.q.put_nowait(("chat", reply))
-                    self._maybe_lead(m, text, px, pz)
-                    if not m.lead:
-                        # not leading: drift back beside the player as they move
+                    did_cast = self._maybe_cast(m, text, cpid, px, py, pz)
+                    if not did_cast:
+                        self._maybe_lead(m, text, px, pz)
+                    if not m.lead and not did_cast:
+                        # not leading or conjuring: drift back beside the player
                         m.x, m.y, m.z = px + 1.5, py, pz + 1.5
                         m.q.put_nowait(("teleport", m.x, m.y, m.z))
                     log.info("Merlin %s follow-up to %s: %s", m.pid, cname, text[:40])
@@ -730,6 +871,16 @@ async def manifestation_loop(m: "Manifestation", manager: "Manager") -> None:
                             last_pos = now
                         elif item[0] == "chat":
                             await ws.send(_chat_msg(item[1]))
+                        elif item[0] == "build":
+                            for ex, ey, ez, eid in item[1]:
+                                ey = max(1, min(62, int(ey)))
+                                if 0 <= int(eid) < 64:
+                                    try:
+                                        await ws.send(json.dumps({
+                                            "type": "edit", "x": int(ex), "y": ey,
+                                            "z": int(ez), "id": int(eid)}))
+                                    except Exception:
+                                        break
 
                     # Receive incoming (short timeout so the loop stays responsive).
                     try:
