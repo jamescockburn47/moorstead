@@ -16,6 +16,7 @@ import { Net } from './multiplayer.js';
 import { initTelemetry } from './telemetry.js';
 import { buildTrain } from './train.js';
 import { Rails } from './rails.js';
+import { seasonState, seasonStateAtPhase, bilberryInSeason } from './season.js';
 
 const RAIL_VMAX = 11;  // blocks a second flat out — t' pace of a heritage steamer
 const RAIL_ACC = 0.18; // gentle acceleration: she works up to speed an' brakes early
@@ -64,6 +65,8 @@ class Game {
     this.breakProgress = 0;
     this.autosaveTimer = 30;
     this.heldIconId = -1;
+    this.seasonOverride = null; // dev: set 0..1 to force a year phase (moorstead.debug.setSeason)
+    this.season = null;         // cached per-frame season, read by sky/audio/foraging
 
     // renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -201,6 +204,12 @@ class Game {
           return 'warped above the train';
         }
         return `unknown target "${target}" — try a station name or "train"`;
+      },
+      // dev: force a season by year phase 0..1 (0.45 = late summer, 0.875 = deep
+      // winter), or null to resume real wall-clock time.
+      setSeason(p) {
+        G.seasonOverride = (p == null ? null : Math.max(0, Math.min(0.999, p)));
+        return G.seasonOverride;
       },
     };
   }
@@ -1894,7 +1903,11 @@ class Game {
       this.processBeachReverts();
 
       // sky & weather
-      const msg = this.sky.update(dt, this.player.pos);
+      const season = (this.seasonOverride != null)
+        ? seasonStateAtPhase(this.seasonOverride)
+        : seasonState();
+      this.season = season; // cached for other systems + the debug API
+      const msg = this.sky.update(dt, this.player.pos, season);
       if (msg) {
         if (msg.type === 'night') {
           const dracHunt = this.quests.draculaHuntActive() && !this.quests.draculaDone();

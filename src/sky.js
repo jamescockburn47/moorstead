@@ -124,7 +124,7 @@ export class Sky {
   }
 
   // returns a weather-change message when t' weather turns, else null
-  update(dt, playerPos) {
+  update(dt, playerPos, season = null) {
     let msg = null;
     const prevNight = this.isNight();
     const prevT = this.time;
@@ -197,6 +197,15 @@ export class Sky {
       if (this.moorFog > 0.01) {
         sky = sky.clone().lerp(new THREE.Color(0xc6cbd1), this.moorFog * (0.3 + dayness * 0.55));
       }
+    }
+    // seasonal cast — summer warms the daylight, winter cools and greys it.
+    // Scaled by `dayness` so it only tints the lit sky, not the night.
+    if (season) {
+      const w = season.warmth; // -1 (deep winter) .. +1 (high summer)
+      const tint = new THREE.Color().setHSL(w >= 0 ? 0.09 : 0.58, 0.4, 0.5);
+      sky = sky.clone().lerp(tint, 0.07 * Math.abs(w) * dayness);
+      this.ambient.intensity *= (1 + w * 0.05);
+      this.sun.intensity *= (1 + w * 0.04);
     }
     this.scene.background = sky;
     this.scene.fog.color.copy(sky);
