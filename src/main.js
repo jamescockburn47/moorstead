@@ -13,6 +13,7 @@ import * as npc from './npc.js';
 import { Quests } from './quests.js';
 import { Milestones } from './milestones.js';
 import { Net } from './multiplayer.js';
+import { initTelemetry } from './telemetry.js';
 import { buildTrain } from './train.js';
 import { Rails } from './rails.js';
 
@@ -116,6 +117,13 @@ class Game {
 
     this.clock = new THREE.Clock();
     this.setupDebug();
+    // Bug-capture telemetry: forward uncaught errors to the relay bot over the
+    // existing multiplayer WS. Closures read this.net / this.debug at report
+    // time so they work whether or not the net is connected yet.
+    initTelemetry(
+      () => this.net   || null,
+      () => this.debug || null,
+    );
     this.renderer.setAnimationLoop(() => this.frame());
   }
 
