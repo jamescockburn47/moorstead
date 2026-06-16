@@ -64,9 +64,9 @@ export class Net {
     } else if (m.type === 'leave') {
       this.removeRemote(m.pid);
     } else if (m.type === 'chat') {
-      g.ui.toast(`<b>${m.name}:</b> ${m.text.replace(/</g, '&lt;')}`, 7000);
+      g.ui.toast(`<b>${m.name}:</b> ${m.text.replace(/</g, '&lt;')}`, 16000);
       const r = this.remotes.get(m.pid);
-      if (r && r.mob) g.entities.speak(r.mob, m.text, 7);
+      if (r && r.mob) g.entities.speak(r.mob, m.text, 18);
     } else if (m.type === 'time') {
       g.sky.time = m.time;
     } else if (m.type === 'sleepers') {

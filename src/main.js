@@ -2042,7 +2042,7 @@ class Game {
           this.lastTalkAt = performance.now();
           const dNow = Math.hypot(m.pos.x - this.player.pos.x, m.pos.z - this.player.pos.z);
           if (dNow < 26 && res.reply) {
-            this.entities.speak(m, res.reply, 9);
+            this.entities.speak(m, res.reply, 18);
             m.chatLog.push({ who: 'them', text: res.reply });
             m.tier = res.tier;
           }

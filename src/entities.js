@@ -367,7 +367,7 @@ function makeWizardExtras(group, s) {
   // body sits at y = 0.85s, height 0.6s → top 1.15s, bottom 0.55s
   const robe = new THREE.Mesh(
     new THREE.BoxGeometry(0.58 * s, 0.68 * s, 0.36 * s),
-    new THREE.MeshLambertMaterial({ color: INDIGO, emissive: GLOW_COL, emissiveIntensity: 0.08 })
+    new THREE.MeshLambertMaterial({ color: INDIGO, emissive: GLOW_COL, emissiveIntensity: 0.42 })
   );
   robe.position.y = 0.85 * s;
   group.add(robe);
@@ -405,16 +405,32 @@ function makeWizardExtras(group, s) {
   const hatGeo = new THREE.ConeGeometry(0.28 * s, 0.56 * s, 7);
   const hat = new THREE.Mesh(
     hatGeo,
-    new THREE.MeshLambertMaterial({ color: INDIGO, emissive: GLOW_COL, emissiveIntensity: 0.12 })
+    new THREE.MeshLambertMaterial({ color: INDIGO, emissive: GLOW_COL, emissiveIntensity: 0.55 })
   );
   // cone centred at half its height above brim
   hat.position.y = (1.56 + 0.28) * s;
   group.add(hat);
 
-  // -- soft point light: warm gold glow, small range, parented to group --
-  const light = new THREE.PointLight(GLOW_COL, 0.55, 5.5);
-  light.position.y = 1.7 * s; // roughly mid-torso height so it lights the ground nearby
-  group.add(light);
+  // -- a tiny glowing orb at the hat's tip, like a wisp of starlight --
+  const orb = new THREE.Mesh(
+    new THREE.SphereGeometry(0.09 * s, 8, 8),
+    new THREE.MeshBasicMaterial({ color: GLOW_COL })
+  );
+  orb.position.y = (1.56 + 0.56) * s;
+  group.add(orb);
+
+  // -- glow: a bright warm core light plus a wide soft halo on the ground --
+  const core = new THREE.PointLight(GLOW_COL, 2.4, 13);
+  core.position.y = 1.7 * s; // mid-torso, lights him and the ground nearby
+  group.add(core);
+  const halo = new THREE.PointLight(GLOW_COL, 1.1, 24);
+  halo.position.y = 1.2 * s; // a broad pool of warm light around his feet
+  group.add(halo);
+  // stash for the gentle breathing pulse driven in updateVillager
+  group.userData.wizLights = [
+    { light: core, base: 2.4 },
+    { light: halo, base: 1.1 },
+  ];
 }
 
 export const MOB_TYPES = {
@@ -986,7 +1002,7 @@ export class Entities {
   }
 
   // show a spoken line ower their head for a few seconds
-  speak(mob, text, secs = 8) {
+  speak(mob, text, secs = 14) {
     if (mob.bubble) mob.model.group.remove(mob.bubble);
     mob.bubble = makeBubble(text);
     mob.bubble.position.y = mob.plate.position.y + 0.85;
@@ -1005,6 +1021,13 @@ export class Entities {
       mob.model.legs.forEach((l, i) => { l.rotation.x = (i % 2 === 0 ? swing : -swing); });
       mob.model.group.position.set(mob.pos.x, mob.pos.y, mob.pos.z);
       mob.model.group.rotation.y = mob.yaw + Math.PI;
+      // Merlin's wizardly glow breathes gently
+      const _wl = mob.model.group.userData.wizLights;
+      if (_wl) {
+        mob.glowT = (mob.glowT || 0) + dt;
+        const _pulse = 0.8 + 0.32 * Math.sin(mob.glowT * 2.6);
+        for (const e of _wl) e.light.intensity = e.base * _pulse;
+      }
       mob.plate.material.opacity = distP < 30 ? 1 : 0;
       if (mob.bubble) {
         mob.bubbleT -= dt;
