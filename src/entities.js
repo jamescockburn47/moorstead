@@ -140,6 +140,33 @@ function makeBull() {
   return { group: g, legs, body, head };
 }
 
+function makeLlama() {
+  const g = new THREE.Group();
+  // tall, slim body in cream wool
+  const body = box(0.85, 0.85, 1.2, 0xead8b6); body.position.y = 1.1; g.add(body);
+  // long neck reaching up
+  const neck = box(0.36, 0.85, 0.42, 0xead8b6); neck.position.set(0, 1.75, 0.7); g.add(neck);
+  // small head held high
+  const head = box(0.4, 0.4, 0.55, 0xddc89a); head.position.set(0, 2.1, 0.95); g.add(head);
+  const snout = box(0.28, 0.24, 0.2, 0xc8a878); snout.position.set(0, 2.0, 1.25); g.add(snout);
+  // long banana ears
+  for (const x of [-0.14, 0.14]) {
+    const ear = box(0.09, 0.32, 0.07, 0xc8a878); ear.position.set(x, 2.36, 0.88); ear.rotation.x = 0.18; g.add(ear);
+  }
+  // little dark eyes
+  for (const x of [-0.12, 0.12]) {
+    const eye = box(0.06, 0.06, 0.04, 0x101010); eye.position.set(x, 2.16, 1.22); g.add(eye);
+  }
+  // a soft chest tuft
+  const tuft = box(0.4, 0.18, 0.14, 0xfff0d0); tuft.position.set(0, 1.55, 0.6); g.add(tuft);
+  // slender legs
+  const legs = [];
+  for (const [x, z] of [[-0.3, 0.42], [0.3, 0.42], [-0.3, -0.42], [0.3, -0.42]]) {
+    const l = box(0.18, 0.75, 0.18, 0xc8a878); l.position.set(x, 0.37, z); g.add(l); legs.push(l);
+  }
+  return { group: g, legs, body, head };
+}
+
 function makePheasant() {
   const g = new THREE.Group();
   const body = box(0.34, 0.34, 0.56, 0x7a4a26); body.position.y = 0.36; g.add(body);
@@ -466,6 +493,11 @@ export const MOB_TYPES = {
     make: makeBull, hw: 0.6, h: 1.6, hp: 20, speed: 3.8, fleeSpeed: 3.0,
     hostile: false, aggroRadius: 8, dmg: 4, attackRange: 1.9, attackCause: 'A bull had thee on its horns',
     drops: [[I.RAW_BEEF, 1, 3]], cap: 1, name: 'Dale Bull', habitat: 'pasture',
+  },
+  llama: {
+    make: makeLlama, hw: 0.45, h: 2.2, hp: 14, speed: 1.4, fleeSpeed: 2.6,
+    hostile: false, drops: [[B.WOOL, 1, 2]], cap: 4, name: 'Pack Llama',
+    habitat: 'pasture', group: [2, 3],
   },
   pheasant: {
     make: makePheasant, hw: 0.2, h: 0.85, hp: 3, speed: 1.6, fleeSpeed: 4.6,
