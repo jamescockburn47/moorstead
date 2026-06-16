@@ -32,6 +32,7 @@ import math
 import os
 import random
 import time
+import urllib.request
 from typing import Optional
 
 import websockets
@@ -46,6 +47,12 @@ ROOM: str = os.environ.get("CLINT_BODY_ROOM", "moor")
 PID: str = os.environ.get("CLINT_BODY_PID", "clint-body")
 NAME: str = os.environ.get("CLINT_BODY_NAME", "Merlin")
 ENABLED: bool = os.environ.get("CLINT_BODY_ENABLED", "true").strip().lower() not in ("false", "0", "no")
+
+# Local "brain" (yorkshire_bot) — Merlin converses through his own isolated
+# persona (character_id below). No access to any personal-assistant data.
+BRAIN_URL: str = os.environ.get("BRAIN_URL", "http://127.0.0.1:8010/api/talk")
+MERLIN_CHAR: str = os.environ.get("MERLIN_CHARACTER_ID", "merlin")
+REPLY_THROTTLE: float = 4.0  # min seconds between brain replies
 
 # Behaviour constants
 POS_INTERVAL: float = 2.0       # seconds between pos keep-alives
@@ -101,6 +108,7 @@ class ClintBody:
         self.last_greeting_ts: float = 0.0      # wall-clock time of last sent greeting
         self.waypoint_idx: int = 0
         self.yaw: float = 0.0
+        self.last_reply_ts: float = 0.0
         # Pending greetings: list of (send_after_ts, pid, name)
         self._pending_greetings: list[tuple[float, str, str]] = []
 
@@ -168,6 +176,28 @@ def _chat_msg(text: str) -> str:
     # Relay enforces ≤200 chars on text; truncate defensively.
     text = text[:200]
     return json.dumps({"type": "chat", "text": text})
+
+
+def _brain_reply_blocking(message, player_name, player_id):
+    """Ask the local brain for Merlin's reply. Blocking; run off the loop."""
+    try:
+        body = json.dumps({"character_id": MERLIN_CHAR, "message": str(message)[:300],
+                           "player_name": player_name, "player_id": player_id}).encode()
+        req = urllib.request.Request(BRAIN_URL, data=body, method="POST",
+                                     headers={"Content-Type": "application/json"})
+        data = json.loads(urllib.request.urlopen(req, timeout=20).read())
+        return str(data.get("reply", ""))[:200]
+    except Exception:
+        return ""
+
+
+async def _merlin_respond(ws, message, player_name, player_id):
+    reply = await asyncio.to_thread(_brain_reply_blocking, message, player_name, player_id)
+    if reply:
+        try:
+            await ws.send(_chat_msg(reply))
+        except Exception:
+            pass
 
 
 async def _session(ws: websockets.WebSocketClientProtocol, state: ClintBody) -> None:
@@ -248,12 +278,15 @@ async def _session(ws: websockets.WebSocketClientProtocol, state: ClintBody) -> 
             log.info("leave: pid=%s", msg.get("pid"))
 
         elif mtype == "chat":
-            # Log player chat so we can see activity, but 5a does not respond.
             cpid = msg.get("pid", "")
             cname = msg.get("name", cpid)
             ctext = msg.get("text", "")
             if cpid != PID:
                 log.info("chat from %s (%s): %s", cpid, cname, ctext)
+                # Merlin replies when addressed by name (throttled), via the local brain.
+                if "merlin" in ctext.lower() and (time.time() - state.last_reply_ts) >= REPLY_THROTTLE:
+                    state.last_reply_ts = time.time()
+                    asyncio.create_task(_merlin_respond(ws, ctext, cname, cpid))
 
         elif mtype == "time":
             pass  # ignore time updates
