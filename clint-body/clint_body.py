@@ -533,6 +533,34 @@ class Manager:
                         float(msg.get("x", 0)), float(msg.get("y", 0)), float(msg.get("z", 0)))
                 except (TypeError, ValueError):
                     pass
+        elif mtype == "chat":
+            # An attending manifestation holds the conversation: it replies to
+            # its assigned player's nearby chat even WITHOUT the wake-word, so a
+            # player can keep talking after summoning Merlin. Messages that say
+            # "merlin" go via the summon path (the home dispatches), so skip
+            # those here to avoid a double reply.
+            cpid = msg.get("pid", "")
+            cname = msg.get("name", cpid) or cpid
+            text = msg.get("text", "")
+            if (not m.home and m.assigned and m.assigned == cpid
+                    and text.strip() and "merlin" not in text.lower()):
+                now = time.monotonic()
+                if now - self.last_reply.get(cpid, 0.0) >= SUMMON_THROTTLE:
+                    self.last_reply[cpid] = now
+                    m.last_active = now
+                    px, py, pz = self.player_pos.get(cpid, (m.x, m.y, m.z))
+                    # drift back beside the player so he stays with them as they move
+                    m.x, m.y, m.z = px + 1.5, py, pz + 1.5
+                    m.q.put_nowait(("teleport", m.x, m.y, m.z))
+                    ctx = ""
+                    try:
+                        ctx = build_context(cpid, px, py, pz, self.world_time, _WORLD, self.player_pos)
+                    except Exception as exc:
+                        log.debug("context build failed: %s", exc)
+                    reply = await asyncio.to_thread(_brain_reply_blocking, text, cname, cpid, ctx)
+                    if reply:
+                        m.q.put_nowait(("chat", reply))
+                    log.info("Merlin %s follow-up to %s: %s", m.pid, cname, text[:40])
         elif mtype == "time":
             t = msg.get("time")
             if t is not None:

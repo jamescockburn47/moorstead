@@ -59,12 +59,13 @@ def check(label: str, cond: bool, detail: str = "") -> None:
 # ---------------------------------------------------------------------------
 
 print("=== _compass ===")
-check("due East",   _compass(10, 0)   == "E")
-check("due West",   _compass(-5, 0)   == "W")
-check("due South",  _compass(0, 10)   == "S")
-check("due North",  _compass(0, -10)  == "N")
-check("NE quadrant",_compass(10, -10) == "NE")
-check("SW quadrant",_compass(-10, 10) == "SW")
+# North is +x, east is +z (the flipped map convention)
+check("due North",  _compass(10, 0)   == "N")
+check("due South",  _compass(-5, 0)   == "S")
+check("due East",   _compass(0, 10)   == "E")
+check("due West",   _compass(0, -10)  == "W")
+check("NE quadrant",_compass(10, 10)  == "NE")
+check("SW quadrant",_compass(-10, -10)== "SW")
 check("zero vector",_compass(0, 0)    == "here")
 
 # ---------------------------------------------------------------------------
@@ -72,14 +73,14 @@ check("zero vector",_compass(0, 0)    == "here")
 # ---------------------------------------------------------------------------
 
 print("=== _direction_phrase ===")
-# Player at (0,0), target at (300, 0) — 300 blocks East
+# Player at (0,0), target at (300, 0) — 300 blocks North (+x)
 phrase = _direction_phrase(0, 0, 300, 0)
-check("E phrase contains 'E'", "E" in phrase, phrase)
-check("E phrase contains distance", "300" in phrase, phrase)
+check("N phrase contains 'N'", "N" in phrase, phrase)
+check("N phrase contains distance", "300" in phrase, phrase)
 
-# Player at (0,0), target at (-200, 0) — 200 blocks West
+# Player at (0,0), target at (-200, 0) — 200 blocks South (-x)
 phrase2 = _direction_phrase(0, 0, -200, 0)
-check("W phrase", "W" in phrase2, phrase2)
+check("S phrase", "S" in phrase2, phrase2)
 
 # ---------------------------------------------------------------------------
 # _nearest_place
