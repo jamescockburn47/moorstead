@@ -10,6 +10,7 @@ Config (env vars, all optional):
   CLINT_BODY_PID     clint-body                 our player-id on the relay
   CLINT_BODY_NAME    Clint                      display name
   CLINT_BODY_ENABLED true                       kill-switch: set false to exit 0
+  SAVES_DIR          ~/moorstead/world/saves    directory of per-player save files
 
 Runtime notes:
   - Y=40 is used as a fixed idle height near spawn.  The relay has no server-side
@@ -30,6 +31,7 @@ import json
 import logging
 import math
 import os
+import pathlib
 import random
 import time
 import urllib.request
@@ -53,6 +55,11 @@ ENABLED: bool = os.environ.get("CLINT_BODY_ENABLED", "true").strip().lower() not
 BRAIN_URL: str = os.environ.get("BRAIN_URL", "http://127.0.0.1:8010/api/talk")
 MERLIN_CHAR: str = os.environ.get("MERLIN_CHARACTER_ID", "merlin")
 REPLY_THROTTLE: float = 4.0  # min seconds between brain replies
+
+# Player save files: /home/james/moorstead/world/saves/<pid>.json
+SAVES_DIR: pathlib.Path = pathlib.Path(
+    os.environ.get("SAVES_DIR", os.path.expanduser("~/moorstead/world/saves"))
+)
 
 # Behaviour constants
 POS_INTERVAL: float = 2.0       # seconds between pos keep-alives
@@ -79,6 +86,288 @@ logging.basicConfig(
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
 log = logging.getLogger("clint-body")
+
+
+# ---------------------------------------------------------------------------
+# World data (loaded once at startup)
+# ---------------------------------------------------------------------------
+
+_WORLD: dict = {}
+
+def _load_world() -> None:
+    """Load merlin-world.json from the same directory as this script.  Fail-safe."""
+    global _WORLD
+    try:
+        world_path = pathlib.Path(__file__).parent / "merlin-world.json"
+        with open(world_path, encoding="utf-8") as f:
+            _WORLD = json.load(f)
+        log.info("Loaded world data: %d places, %d NPCs",
+                 len(_WORLD.get("places", [])), len(_WORLD.get("npcs", [])))
+    except Exception as exc:
+        log.warning("Could not load merlin-world.json (%s) — world context disabled", exc)
+        _WORLD = {}
+
+
+# ---------------------------------------------------------------------------
+# Pure context-building helpers (importable / testable without a live socket)
+# ---------------------------------------------------------------------------
+
+def _compass(dx: float, dz: float) -> str:
+    """Return an 8-point compass label for a displacement vector.
+
+    Coordinate convention: +x is East, +z is South (matches the game renderer).
+    Compass bearing: 0=North, 90=East, 180=South, 270=West.
+    """
+    if dx == 0.0 and dz == 0.0:
+        return "here"
+    # atan2(dx, -dz): North (+z→ south so negate dz) at 0°, East at 90°
+    angle = math.degrees(math.atan2(dx, -dz)) % 360
+    dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+    idx = int((angle + 22.5) / 45) % 8
+    return dirs[idx]
+
+
+def _nearest_place(px: float, pz: float, places: list[dict]) -> Optional[dict]:
+    """Return the nearest place dict from the world places list, or None."""
+    best = None
+    best_d = float("inf")
+    for p in places:
+        d = math.hypot(px - p["x"], pz - p["z"])
+        if d < best_d:
+            best_d = d
+            best = p
+    return best
+
+
+def _direction_phrase(px: float, pz: float, tx: float, tz: float) -> str:
+    """Return e.g. 'about 340 blocks NW'."""
+    dx = tx - px
+    dz = tz - pz
+    dist = math.hypot(dx, dz)
+    compass = _compass(dx, dz)
+    rounded = int(round(dist / 10) * 10) or 5  # round to nearest 10, min 5
+    return f"about {rounded} blocks {compass}"
+
+
+# Inventory ids (from src/defs.js).  Blocks B are 0-44, pure items I are 64+,
+# so the two never collide and a flat id->name lookup is unambiguous.
+_PICK_TIER = {65: ("wooden pick", 1), 69: ("stone pick", 2), 73: ("iron pick", 3)}
+
+# Stackable materials worth naming, with their rough count.
+_RESOURCES = {
+    6:  "logs",
+    8:  "planks",
+    77: "coal",
+    78: "raw ironstone",
+    79: "iron ingots",
+    80: "Whitby jet",
+}
+
+# Storyline / mystery hooks — Merlin should always notice these so he can steer
+# the player to the right quest.  Named in full (no counts).
+_QUEST_ITEMS = {
+    86: "a parcel to deliver",
+    87: "half an amulet",
+    88: "half an amulet",
+    89: "a bell clapper",
+    90: "the finished amulet",
+    93: "an ammonite (snakestone)",
+    94: "a gryphaea fossil",
+    95: "holy water",
+    96: "a wooden stake",
+    97: "a holy stake",
+    98: "the Captain's Log (Dracula)",
+}
+
+
+def _slot_id_n(slot) -> tuple:
+    """Extract (id, count) from a slot that may be an int or {'id','n'} dict."""
+    if isinstance(slot, dict):
+        return slot.get("id"), int(slot.get("n", slot.get("count", 1)) or 1)
+    return slot, 1
+
+
+def _summarise_slots(slots: list) -> str:
+    """Turn a sparse slots list into a short phrase Merlin can act on.
+
+    Reports the best pickaxe (gates mining), key stacked resources with counts,
+    and any storyline items in full.  Bulk terrain (dirt/stone/sand) is ignored.
+    """
+    if not slots or all(s is None for s in slots):
+        return "empty-handed"
+
+    best_pick: Optional[tuple] = None      # (rank, name)
+    resources: dict[int, int] = {}
+    quest: list[str] = []
+    for slot in slots:
+        if slot is None:
+            continue
+        sid, n = _slot_id_n(slot)
+        if sid in _PICK_TIER:
+            name, rank = _PICK_TIER[sid]
+            if best_pick is None or rank > best_pick[0]:
+                best_pick = (rank, name)
+        elif sid in _RESOURCES:
+            resources[sid] = resources.get(sid, 0) + n
+        elif sid in _QUEST_ITEMS:
+            q = _QUEST_ITEMS[sid]
+            if q not in quest:
+                quest.append(q)
+
+    parts: list[str] = [best_pick[1] if best_pick else "no pick yet"]
+    for sid, n in resources.items():
+        nm = _RESOURCES[sid]
+        parts.append(f"{n} {nm}" if n > 1 else nm)
+    parts.extend(quest)
+    return ", ".join(parts[:7])
+
+
+# Milestone ladder (from src/milestones.js), most-advanced first.  Gives Merlin
+# a one-phrase read of how far the traveller has come.
+_MILESTONE_TIER = [
+    ("iron_tools",   "well-equipped — has iron tools"),
+    ("iron_won",     "smelting iron, close to iron tools"),
+    ("into_stone",   "mining stone with a pick"),
+    ("first_pick",   "has their first pick"),
+    ("first_bench",  "just starting — has a joiner's bench"),
+    ("first_planks", "just starting — has planks"),
+    ("first_log",    "brand new — felled their first tree"),
+]
+
+
+def _progression(milestones) -> str:
+    """Map the milestonesDone list to a single progression descriptor."""
+    if not isinstance(milestones, list) or not milestones:
+        return "brand new — no milestones yet"
+    m = set(milestones)
+    tier = next((label for key, label in _MILESTONE_TIER if key in m),
+                f"{len(m)} milestones done")
+    if "stood_ground" in m or "first_neet" in m:
+        tier += ", has survived a night"
+    return tier
+
+
+def _time_of_day_str(t: Optional[float]) -> str:
+    """Convert a 0..1 day fraction to a human label.
+
+    0=midnight, 0.25=morning, 0.5=midday, 0.75=dusk.
+    """
+    if t is None:
+        return "unknown time"
+    t = t % 1.0
+    if t < 0.1 or t >= 0.9:
+        return "dead of night"
+    if t < 0.25:
+        return "early morning"
+    if t < 0.4:
+        return "morning"
+    if t < 0.6:
+        return "midday"
+    if t < 0.75:
+        return "afternoon"
+    if t < 0.85:
+        return "dusk"
+    return "night"
+
+
+def _read_save(pid: str) -> dict:
+    """Return the parsed save dict for pid, or {} if missing/unreadable."""
+    try:
+        save_path = SAVES_DIR / f"{pid}.json"
+        with open(save_path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _npcs_at_village(village_name: str, npcs: list[dict]) -> list[str]:
+    """Return list of NPC names whose village matches (case-insensitive)."""
+    vn = village_name.lower()
+    return [n["name"] for n in npcs if n.get("village", "").lower() == vn]
+
+
+def build_context(
+    pid: str,
+    px: float,
+    py: float,
+    pz: float,
+    world_time: Optional[float],
+    world: dict,
+    others: Optional[dict] = None,
+) -> str:
+    """Build a compact situation string for Merlin's brain call.
+
+    Parameters
+    ----------
+    pid         : player id (used to locate their save file)
+    px, py, pz  : player position
+    world_time  : 0..1 day fraction, or None
+    world       : the loaded merlin-world.json dict (may be {})
+    others      : optional {pid: (x,y,z)} of other tracked players, for a
+                  "travellers nearby" count
+    """
+    parts: list[str] = []
+
+    places = world.get("places", [])
+    npcs   = world.get("npcs", [])
+    kilns  = world.get("kilns", {"x": -260, "z": 380})
+
+    # --- position + nearest place ---
+    if places:
+        near = _nearest_place(px, pz, places)
+        if near:
+            phrase = _direction_phrase(px, pz, near["x"], near["z"])
+            parts.append(f"Player is at ({int(px)},{int(pz)}) — {phrase} from {near['name']}")
+        else:
+            parts.append(f"Player is at ({int(px)},{int(pz)})")
+    else:
+        parts.append(f"Player is at ({int(px)},{int(pz)})")
+
+    # --- direction to the kilns (ore heartland) ---
+    kilns_phrase = _direction_phrase(px, pz, kilns["x"], kilns["z"])
+    parts.append(f"Rosedale Kilns: {kilns_phrase}")
+
+    # --- time of day ---
+    parts.append(_time_of_day_str(world_time))
+
+    # --- save-derived inventory + progress ---
+    save = _read_save(pid)
+    player_data = save.get("player", save)  # save may be flat or nested under "player"
+    if player_data:
+        inv_summary = _summarise_slots(player_data.get("slots", []))
+        progress = _progression(player_data.get("milestonesDone", []))
+        health = player_data.get("health")
+        save_parts = [f"carrying: {inv_summary}", f"progress: {progress}"]
+        if health is not None:
+            save_parts.append(f"health {health}/20")
+        parts.append("; ".join(save_parts))
+    else:
+        parts.append("their pack and progress are unknown to thee")
+
+    # --- other travellers nearby (within ~80 blocks) ---
+    if others:
+        nearby = sum(
+            1 for opid, (ox, oy, oz) in others.items()
+            if opid not in (pid, PID) and math.hypot(px - ox, pz - oz) <= 80
+        )
+        if nearby:
+            parts.append(f"{nearby} other traveller{'s' if nearby > 1 else ''} nearby")
+
+    # --- NPCs at nearest settlement ---
+    if places and npcs:
+        # find nearest village specifically (not station/landmark)
+        villages = [p for p in places if p.get("kind") == "village"]
+        if villages:
+            near_v = _nearest_place(px, pz, villages)
+            if near_v:
+                residents = _npcs_at_village(near_v["name"], npcs)
+                if residents:
+                    parts.append(f"folk at nearest village {near_v['name']}: {', '.join(residents)}")
+
+    ctx = "SITUATION (what tha can sense of this traveller right now): " + ". ".join(parts)
+    # Cap well under the brain's MAX_CONTEXT_CHARS (2800); this travels by HTTP,
+    # not through the relay's chat limit.
+    return ctx[:800]
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +400,10 @@ class ClintBody:
         self.last_reply_ts: float = 0.0
         # Pending greetings: list of (send_after_ts, pid, name)
         self._pending_greetings: list[tuple[float, str, str]] = []
+
+        # World-awareness: per-player position tracking and world time
+        self.player_pos: dict[str, tuple[float, float, float]] = {}
+        self.world_time: Optional[float] = None
 
     @property
     def current_pos(self) -> tuple[float, float, float]:
@@ -158,6 +451,26 @@ class ClintBody:
         self.last_greeting_ts = now
         return [(first_pid, first_name)]
 
+    def update_player_pos(self, pid: str, x: float, y: float, z: float) -> None:
+        """Record latest position for a player (from pos messages)."""
+        self.player_pos[pid] = (x, y, z)
+
+    def update_world_time(self, t: float) -> None:
+        """Record latest world time (0..1 day fraction)."""
+        self.world_time = t
+
+    def _build_context(self, pid: str) -> str:
+        """Build the context string for a given player's brain call.  Fail-safe."""
+        try:
+            pos = self.player_pos.get(pid)
+            if pos is None:
+                return ""
+            px, py, pz = pos
+            return build_context(pid, px, py, pz, self.world_time, _WORLD, self.player_pos)
+        except Exception as exc:
+            log.debug("Context assembly failed for %s: %s", pid, exc)
+            return ""
+
 
 # ---------------------------------------------------------------------------
 # Core loop
@@ -178,11 +491,16 @@ def _chat_msg(text: str) -> str:
     return json.dumps({"type": "chat", "text": text})
 
 
-def _brain_reply_blocking(message, player_name, player_id):
+def _brain_reply_blocking(message: str, player_name: str, player_id: str, context: str) -> str:
     """Ask the local brain for Merlin's reply. Blocking; run off the loop."""
     try:
-        body = json.dumps({"character_id": MERLIN_CHAR, "message": str(message)[:300],
-                           "player_name": player_name, "player_id": player_id}).encode()
+        body = json.dumps({
+            "character_id": MERLIN_CHAR,
+            "message": str(message)[:300],
+            "player_name": player_name,
+            "player_id": player_id,
+            "context": context or None,
+        }).encode()
         req = urllib.request.Request(BRAIN_URL, data=body, method="POST",
                                      headers={"Content-Type": "application/json"})
         data = json.loads(urllib.request.urlopen(req, timeout=20).read())
@@ -191,8 +509,8 @@ def _brain_reply_blocking(message, player_name, player_id):
         return ""
 
 
-async def _merlin_respond(ws, message, player_name, player_id):
-    reply = await asyncio.to_thread(_brain_reply_blocking, message, player_name, player_id)
+async def _merlin_respond(ws, message: str, player_name: str, player_id: str, context: str) -> None:
+    reply = await asyncio.to_thread(_brain_reply_blocking, message, player_name, player_id, context)
     if reply:
         try:
             await ws.send(_chat_msg(reply))
@@ -227,11 +545,8 @@ async def _session(ws: websockets.WebSocketClientProtocol, state: ClintBody) -> 
             if now >= waypoint_ts:
                 state.advance_waypoint()
                 waypoint_ts = now + random.uniform(25.0, 40.0)
-                # Non-binding update: update our local x,y,z for the new waypoint.
-                # (We reassign the outer-scope variables via nonlocal.)
             state.rotate_yaw()
             wp = state.current_pos
-            # Gentle jitter so movement looks natural rather than teleporting.
             jx = wp[0] + random.uniform(-0.3, 0.3)
             jz = wp[2] + random.uniform(-0.3, 0.3)
             x, y, z = jx, wp[1], jz  # noqa: F841 (assigned for send_pos closure)
@@ -264,9 +579,12 @@ async def _session(ws: websockets.WebSocketClientProtocol, state: ClintBody) -> 
                 "init received — seed=%s, %d players already in room",
                 msg.get("seed"), len(msg.get("players", {}))
             )
-            # Greet any players already present when we join.
             for existing_pid, player_data in msg.get("players", {}).items():
                 state.queue_greeting(existing_pid, player_data.get("name", existing_pid))
+                # Seed position from init if present
+                p = player_data.get("pos")
+                if p and isinstance(p, (list, tuple)) and len(p) >= 3:
+                    state.update_player_pos(existing_pid, p[0], p[1], p[2])
 
         elif mtype == "join":
             join_pid = msg.get("pid", "")
@@ -276,6 +594,22 @@ async def _session(ws: websockets.WebSocketClientProtocol, state: ClintBody) -> 
 
         elif mtype == "leave":
             log.info("leave: pid=%s", msg.get("pid"))
+            # Drop position tracking for departed player
+            state.player_pos.pop(msg.get("pid", ""), None)
+
+        elif mtype == "pos":
+            # Track every player's position; ignore our own echoes
+            ppid = msg.get("pid", "")
+            if ppid and ppid != PID:
+                px = msg.get("x", 0.0)
+                py = msg.get("y", 0.0)
+                pz = msg.get("z", 0.0)
+                state.update_player_pos(ppid, float(px), float(py), float(pz))
+
+        elif mtype == "time":
+            t = msg.get("time")
+            if t is not None:
+                state.update_world_time(float(t))
 
         elif mtype == "chat":
             cpid = msg.get("pid", "")
@@ -283,15 +617,12 @@ async def _session(ws: websockets.WebSocketClientProtocol, state: ClintBody) -> 
             ctext = msg.get("text", "")
             if cpid != PID:
                 log.info("chat from %s (%s): %s", cpid, cname, ctext)
-                # Merlin replies when addressed by name (throttled), via the local brain.
                 if "merlin" in ctext.lower() and (time.time() - state.last_reply_ts) >= REPLY_THROTTLE:
                     state.last_reply_ts = time.time()
-                    asyncio.create_task(_merlin_respond(ws, ctext, cname, cpid))
+                    context = state._build_context(cpid)
+                    asyncio.create_task(_merlin_respond(ws, ctext, cname, cpid, context))
 
-        elif mtype == "time":
-            pass  # ignore time updates
-
-        # Other message types (pos, edit, full, reject, etc.) are silently ignored.
+        # Other message types (edit, full, reject, etc.) are silently ignored.
 
 
 async def run() -> None:
@@ -317,7 +648,6 @@ async def run() -> None:
             log.exception("Unexpected error in session (%s) — reconnecting in %.0fs", exc, RECONNECT_DELAY)
 
         await asyncio.sleep(RECONNECT_DELAY)
-        # Reset greeting state so re-connects greet players afresh.
         state = ClintBody()
         log.info("Reconnecting to %s", url)
 
@@ -339,6 +669,7 @@ def main() -> None:
         )
         raise SystemExit(1)
 
+    _load_world()
     asyncio.run(run())
 
 
