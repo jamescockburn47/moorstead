@@ -1578,7 +1578,13 @@ class Game {
     this.entities.blockBurst(hit.x, hit.y, hit.z, hit.id);
     this.audio.breakBlock();
     if (!this.player.creative && !noDrop && def.drop !== null && def.drop !== undefined) {
-      this.entities.spawnDrop(hit.x + 0.5, hit.y + 0.4, hit.z + 0.5, def.drop, 1);
+      const inSeason = this.season ? this.season.heatherBloom > 0.4 : bilberryInSeason();
+      const bareBilberry = hit.id === B.BILBERRY_BUSH && !inSeason;
+      if (bareBilberry) {
+        this.ui.toast('Nobbut bare twigs — bilberries aren’t out yet. Coom back i’ late summer.', 2500);
+      } else {
+        this.entities.spawnDrop(hit.x + 0.5, hit.y + 0.4, hit.z + 0.5, def.drop, 1);
+      }
     }
     this.quests.onBlockBroken(hit.x, hit.y, hit.z, hit.id);
     this.milestones.onBreak(hit.id);
