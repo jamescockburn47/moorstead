@@ -8,12 +8,13 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "verify": "node scripts/verify-rail.mjs && node scripts/verify-rail-clearance.mjs && node scripts/verify-train-view.mjs && node scripts/verify-resources.mjs && node scripts/verify-landmarks.mjs",
+    "verify": "node scripts/verify-rail.mjs && node scripts/verify-rail-clearance.mjs && node scripts/verify-train-view.mjs && node scripts/verify-resources.mjs && node scripts/verify-landmarks.mjs && node scripts/verify-season.mjs",
     "verify:rail": "node scripts/verify-rail.mjs",
     "verify:clearance": "node scripts/verify-rail-clearance.mjs",
     "verify:train": "node scripts/verify-train-view.mjs",
     "verify:resources": "node scripts/verify-resources.mjs",
-    "verify:landmarks": "node scripts/verify-landmarks.mjs"
+    "verify:landmarks": "node scripts/verify-landmarks.mjs",
+    "verify:season": "node scripts/verify-season.mjs"
   },
   "dependencies": {
     "three": "^0.166.0"
