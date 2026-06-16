@@ -56,6 +56,13 @@ BRAIN_URL: str = os.environ.get("BRAIN_URL", "http://127.0.0.1:8010/api/talk")
 MERLIN_CHAR: str = os.environ.get("MERLIN_CHARACTER_ID", "merlin")
 REPLY_THROTTLE: float = 4.0  # min seconds between brain replies
 
+# Multi-manifestation: Merlin can attend several players at once. A "home" body
+# idles at spawn (greets + hears summons); extra bodies are conjured on demand
+# beside players who call his name, and fade after they go quiet.
+MAX_MANIFEST: int = int(os.environ.get("CLINT_BODY_MAX_MANIFEST", "3") or "3")
+IDLE_DESPAWN: float = float(os.environ.get("CLINT_BODY_IDLE_DESPAWN", "90") or "90")
+SUMMON_THROTTLE: float = 3.0  # min seconds between replies to the same caller
+
 # Player save files: /home/james/moorstead/world/saves/<pid>.json
 SAVES_DIR: pathlib.Path = pathlib.Path(
     os.environ.get("SAVES_DIR", os.path.expanduser("~/moorstead/world/saves"))
@@ -386,99 +393,176 @@ def _greeting(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# State
+# Manifestations — Merlin in several places at once
 # ---------------------------------------------------------------------------
 
-class ClintBody:
-    """Holds all mutable runtime state for one connected session."""
+HOME_POS: tuple[float, float, float] = WAYPOINTS[0]
+
+
+class Manifestation:
+    """One Merlin avatar = one relay connection.
+
+    The `home` manifestation always exists, idles at spawn, greets newcomers
+    and hears summons.  Extra manifestations are conjured on demand to attend
+    players who call Merlin's name, and fade when they go idle.
+    """
+
+    def __init__(self, pid: str, home: bool = False) -> None:
+        self.pid = pid
+        self.home = home
+        self.x, self.y, self.z = HOME_POS
+        self.yaw = 0.0
+        self.assigned: Optional[str] = None        # player pid being attended
+        self.last_active: float = 0.0              # monotonic of last summon
+        self.q: "asyncio.Queue" = asyncio.Queue()  # ('teleport',x,y,z) | ('chat',text)
+        self.alive = True
+
+
+class Manager:
+    """Owns the pool of Merlin manifestations and dispatches summons."""
 
     def __init__(self) -> None:
-        self.greeted_pids: set[str] = set()     # pids greeted this session
-        self.last_greeting_ts: float = 0.0      # wall-clock time of last sent greeting
-        self.waypoint_idx: int = 0
-        self.yaw: float = 0.0
-        self.last_reply_ts: float = 0.0
-        # Pending greetings: list of (send_after_ts, pid, name)
-        self._pending_greetings: list[tuple[float, str, str]] = []
-
-        # World-awareness: per-player position tracking and world time
+        self.manifs: dict[str, Manifestation] = {}
         self.player_pos: dict[str, tuple[float, float, float]] = {}
         self.world_time: Optional[float] = None
+        self.greeted: set[str] = set()
+        self.last_greet: float = 0.0
+        self.last_reply: dict[str, float] = {}     # caller pid -> monotonic of last reply
 
-    @property
-    def current_pos(self) -> tuple[float, float, float]:
-        return WAYPOINTS[self.waypoint_idx]
+    async def start(self) -> None:
+        home = Manifestation(PID, home=True)
+        self.manifs[PID] = home
+        log.info("Merlin manager — room=%s home=%s max=%d", ROOM, PID, MAX_MANIFEST)
+        asyncio.create_task(self._reaper())
+        # The home loop reconnects forever; keep the process alive on it.
+        await manifestation_loop(home, self)
 
-    def advance_waypoint(self) -> None:
-        self.waypoint_idx = (self.waypoint_idx + 1) % len(WAYPOINTS)
+    async def _reaper(self) -> None:
+        """Fade idle conjured manifestations back out of the world."""
+        while True:
+            await asyncio.sleep(5.0)
+            now = time.monotonic()
+            for pid, m in list(self.manifs.items()):
+                if (not m.home) and m.alive and (now - m.last_active) > IDLE_DESPAWN:
+                    log.info("Merlin %s fading (idle %.0fs)", pid, now - m.last_active)
+                    m.alive = False
+                    self.manifs.pop(pid, None)
 
-    def rotate_yaw(self) -> None:
-        """Gently sweep yaw — looks like Clint glancing around."""
-        self.yaw = (self.yaw + random.uniform(15.0, 45.0)) % 360.0
+    def _pick(self, caller_pid: str) -> Optional[Manifestation]:
+        # already attending this caller?
+        for m in self.manifs.values():
+            if m.alive and m.assigned == caller_pid:
+                return m
+        # a free conjured body?
+        for m in self.manifs.values():
+            if m.alive and not m.home and m.assigned is None:
+                return m
+        # conjure a new one if under the cap
+        if len(self.manifs) < MAX_MANIFEST:
+            pid = f"{PID}-{len(self.manifs) + 1}"
+            m = Manifestation(pid, home=False)
+            self.manifs[pid] = m
+            asyncio.create_task(manifestation_loop(m, self))
+            log.info("Conjured Merlin %s", pid)
+            return m
+        # otherwise reuse the least-recently-active conjured body, else home
+        conjured = [m for m in self.manifs.values() if m.alive and not m.home]
+        if conjured:
+            return min(conjured, key=lambda mm: mm.last_active)
+        return self.manifs.get(PID)
 
-    def queue_greeting(self, pid: str, name: str) -> None:
-        """Schedule a greeting for pid after GREETING_DELAY seconds."""
-        if pid == PID:
-            return  # never greet ourselves
-        if pid in self.greeted_pids:
-            return  # already greeted this session
-        send_after = time.monotonic() + GREETING_DELAY
-        self._pending_greetings.append((send_after, pid, name))
-        log.info("Queued greeting for %s (%s)", pid, name)
-
-    def pop_due_greetings(self) -> list[tuple[str, str]]:
-        """Return (pid, name) pairs whose greeting delay has elapsed and that
-        can be sent now (respecting the throttle).  Removes them from the queue."""
-        now = time.monotonic()
-        ready = [(pid, name) for ts, pid, name in self._pending_greetings if ts <= now]
-        # Keep only those not yet in greeted_pids (could have duped in the queue)
-        ready = [(pid, name) for pid, name in ready if pid not in self.greeted_pids]
-        if not ready:
-            return []
-        # Throttle: only send one greeting per GREETING_THROTTLE window
-        if now - self.last_greeting_ts < GREETING_THROTTLE:
-            return []
-        # Remove all due entries from the pending list (send first, defer rest to next tick)
-        due_pids = {pid for pid, _ in ready}
-        self._pending_greetings = [
-            (ts, pid, name)
-            for ts, pid, name in self._pending_greetings
-            if pid not in due_pids or ts > now
-        ]
-        # Return only the first due greeting to honour the throttle
-        first_pid, first_name = ready[0]
-        self.greeted_pids.add(first_pid)
-        self.last_greeting_ts = now
-        return [(first_pid, first_name)]
-
-    def update_player_pos(self, pid: str, x: float, y: float, z: float) -> None:
-        """Record latest position for a player (from pos messages)."""
-        self.player_pos[pid] = (x, y, z)
-
-    def update_world_time(self, t: float) -> None:
-        """Record latest world time (0..1 day fraction)."""
-        self.world_time = t
-
-    def _build_context(self, pid: str) -> str:
-        """Build the context string for a given player's brain call.  Fail-safe."""
+    async def on_summon(self, msg: dict) -> None:
+        cpid = msg.get("pid", "")
+        cname = msg.get("name", cpid) or cpid
+        text = msg.get("text", "")
+        if not cpid or cpid == PID or cpid.startswith(PID):
+            return
         try:
-            pos = self.player_pos.get(pid)
-            if pos is None:
-                return ""
-            px, py, pz = pos
-            return build_context(pid, px, py, pz, self.world_time, _WORLD, self.player_pos)
+            sx = float(msg.get("x", 0.0))
+            sy = float(msg.get("y", 40.0))
+            sz = float(msg.get("z", 0.0))
+        except (TypeError, ValueError):
+            return
+        now = time.monotonic()
+        if now - self.last_reply.get(cpid, 0.0) < SUMMON_THROTTLE:
+            return
+        self.last_reply[cpid] = now
+        m = self._pick(cpid)
+        if m is None:
+            return
+        m.assigned = cpid
+        m.last_active = now
+        # stand just beside the caller (not inside them)
+        bx, bz = sx + 1.5, sz + 1.5
+        m.x, m.y, m.z = bx, sy, bz
+        m.q.put_nowait(("teleport", bx, sy, bz))
+        log.info("Merlin %s summoned by %s (%s) -> (%.0f,%.0f,%.0f)", m.pid, cname, cpid, sx, sy, sz)
+        # situational reply from the brain (use the caller's reported position)
+        ctx = ""
+        try:
+            ctx = build_context(cpid, sx, sy, sz, self.world_time, _WORLD, self.player_pos)
         except Exception as exc:
-            log.debug("Context assembly failed for %s: %s", pid, exc)
-            return ""
+            log.debug("context build failed: %s", exc)
+        reply = await asyncio.to_thread(_brain_reply_blocking, text, cname, cpid, ctx)
+        if reply:
+            m.q.put_nowait(("chat", reply))
+
+    def queue_greeting(self, m: Manifestation, pid: str, name: str) -> None:
+        """Home greets a newcomer once (throttled)."""
+        if not pid or pid == PID or pid.startswith(PID):
+            return
+        if pid in self.greeted:
+            return
+        now = time.monotonic()
+        if now - self.last_greet < GREETING_THROTTLE:
+            return
+        self.greeted.add(pid)
+        self.last_greet = now
+        m.q.put_nowait(("chat", _greeting(name)))
+        log.info("Greeting %s (%s)", pid, name)
+
+    async def handle(self, m: Manifestation, msg: dict) -> None:
+        mtype = msg.get("type")
+        if mtype == "summon":
+            if m.home:
+                await self.on_summon(msg)
+        elif mtype == "pos":
+            ppid = msg.get("pid", "")
+            if ppid and not ppid.startswith(PID):
+                try:
+                    self.player_pos[ppid] = (
+                        float(msg.get("x", 0)), float(msg.get("y", 0)), float(msg.get("z", 0)))
+                except (TypeError, ValueError):
+                    pass
+        elif mtype == "time":
+            t = msg.get("time")
+            if t is not None:
+                try:
+                    self.world_time = float(t)
+                except (TypeError, ValueError):
+                    pass
+        elif mtype == "init":
+            if m.home:
+                for epid, pdata in msg.get("players", {}).items():
+                    self.queue_greeting(m, epid, pdata.get("name", epid))
+        elif mtype == "join":
+            if m.home:
+                self.queue_greeting(m, msg.get("pid", ""), msg.get("name", ""))
+        elif mtype == "leave":
+            lp = msg.get("pid", "")
+            self.player_pos.pop(lp, None)
+            for mm in self.manifs.values():
+                if mm.assigned == lp:
+                    mm.assigned = None
 
 
 # ---------------------------------------------------------------------------
 # Core loop
 # ---------------------------------------------------------------------------
 
-def _build_url() -> str:
+def _build_url(pid: str = PID) -> str:
     base = RELAY_WS_BASE.rstrip("/")
-    return f"{base}?room={ROOM}&pid={PID}&name={NAME}"
+    return f"{base}?room={ROOM}&pid={pid}&name={NAME}"
 
 
 def _pos_msg(x: float, y: float, z: float, yaw: float) -> str:
@@ -509,147 +593,65 @@ def _brain_reply_blocking(message: str, player_name: str, player_id: str, contex
         return ""
 
 
-async def _merlin_respond(ws, message: str, player_name: str, player_id: str, context: str) -> None:
-    reply = await asyncio.to_thread(_brain_reply_blocking, message, player_name, player_id, context)
-    if reply:
-        try:
-            await ws.send(_chat_msg(reply))
-        except Exception:
-            pass
+async def manifestation_loop(m: "Manifestation", manager: "Manager") -> None:
+    """Maintain one manifestation's relay connection until it fades.
 
-
-async def _session(ws: websockets.WebSocketClientProtocol, state: ClintBody) -> None:
-    """Handle one connected session: receive messages and drive behaviour."""
-
-    url = ws.remote_address
-    log.info("Connected to relay at %s (room=%s, pid=%s, name=%s)", url, ROOM, PID, NAME)
-
-    x, y, z = state.current_pos
-    last_pos_ts: float = 0.0
-    waypoint_ts: float = time.monotonic() + 30.0  # advance waypoint every 30s
-
-    async def send_pos() -> None:
-        nonlocal last_pos_ts
-        payload = _pos_msg(x, y, z, state.yaw)
-        await ws.send(payload)
-        last_pos_ts = time.monotonic()
-
-    # Send initial position immediately so we appear in-world at once.
-    await send_pos()
-
-    while True:
-        now = time.monotonic()
-
-        # --- Position keep-alive / gentle patrol ---
-        if now - last_pos_ts >= POS_INTERVAL:
-            if now >= waypoint_ts:
-                state.advance_waypoint()
-                waypoint_ts = now + random.uniform(25.0, 40.0)
-            state.rotate_yaw()
-            wp = state.current_pos
-            jx = wp[0] + random.uniform(-0.3, 0.3)
-            jz = wp[2] + random.uniform(-0.3, 0.3)
-            x, y, z = jx, wp[1], jz  # noqa: F841 (assigned for send_pos closure)
-            await send_pos()
-
-        # --- Pending greetings ---
-        due = state.pop_due_greetings()
-        for _pid, name in due:
-            text = _greeting(name)
-            log.info("Sending greeting to %s: %s", _pid, text)
-            await ws.send(_chat_msg(text))
-
-        # --- Receive incoming messages (non-blocking, short timeout) ---
-        try:
-            raw = await asyncio.wait_for(ws.recv(), timeout=0.1)
-        except asyncio.TimeoutError:
-            continue
-        except ConnectionClosed:
-            raise
-
-        try:
-            msg = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-
-        mtype = msg.get("type")
-
-        if mtype == "init":
-            log.info(
-                "init received — seed=%s, %d players already in room",
-                msg.get("seed"), len(msg.get("players", {}))
-            )
-            for existing_pid, player_data in msg.get("players", {}).items():
-                state.queue_greeting(existing_pid, player_data.get("name", existing_pid))
-                # Seed position from init if present
-                p = player_data.get("pos")
-                if p and isinstance(p, (list, tuple)) and len(p) >= 3:
-                    state.update_player_pos(existing_pid, p[0], p[1], p[2])
-
-        elif mtype == "join":
-            join_pid = msg.get("pid", "")
-            join_name = msg.get("name", join_pid)
-            log.info("join: pid=%s name=%s", join_pid, join_name)
-            state.queue_greeting(join_pid, join_name)
-
-        elif mtype == "leave":
-            log.info("leave: pid=%s", msg.get("pid"))
-            # Drop position tracking for departed player
-            state.player_pos.pop(msg.get("pid", ""), None)
-
-        elif mtype == "pos":
-            # Track every player's position; ignore our own echoes
-            ppid = msg.get("pid", "")
-            if ppid and ppid != PID:
-                px = msg.get("x", 0.0)
-                py = msg.get("y", 0.0)
-                pz = msg.get("z", 0.0)
-                state.update_player_pos(ppid, float(px), float(py), float(pz))
-
-        elif mtype == "time":
-            t = msg.get("time")
-            if t is not None:
-                state.update_world_time(float(t))
-
-        elif mtype == "chat":
-            cpid = msg.get("pid", "")
-            cname = msg.get("name", cpid)
-            ctext = msg.get("text", "")
-            if cpid != PID:
-                log.info("chat from %s (%s): %s", cpid, cname, ctext)
-                if "merlin" in ctext.lower() and (time.time() - state.last_reply_ts) >= REPLY_THROTTLE:
-                    state.last_reply_ts = time.time()
-                    context = state._build_context(cpid)
-                    asyncio.create_task(_merlin_respond(ws, ctext, cname, cpid, context))
-
-        # Other message types (edit, full, reject, etc.) are silently ignored.
-
-
-async def run() -> None:
-    """Main reconnect loop.  Never raises — catches everything and retries."""
-    state = ClintBody()
-    url = _build_url()
-    log.info("Clint-body starting — room=%s pid=%s name=%s", ROOM, PID, NAME)
-    log.info("Connecting to %s", url)
-
-    while True:
+    Sends position keep-alives (with a gentle idle sway), drains its command
+    queue (teleport-then-chat, so speech lands in range of the player it just
+    moved to), and feeds incoming messages to the manager.
+    """
+    url = _build_url(m.pid)
+    while m.alive:
         try:
             async with websockets.connect(
-                url,
-                ping_interval=None,   # we handle our own keep-alive via pos messages
-                close_timeout=5,
+                url, ping_interval=None, close_timeout=5,
             ) as ws:
-                await _session(ws, state)
-        except ConnectionClosed as exc:
-            log.warning("Connection closed (%s) — reconnecting in %.0fs", exc, RECONNECT_DELAY)
-        except OSError as exc:
-            log.warning("Connection failed (%s) — reconnecting in %.0fs", exc, RECONNECT_DELAY)
-        except Exception as exc:  # noqa: BLE001
-            log.exception("Unexpected error in session (%s) — reconnecting in %.0fs", exc, RECONNECT_DELAY)
+                log.info("Manifestation %s connected (home=%s, room=%s)", m.pid, m.home, ROOM)
+                await ws.send(_pos_msg(m.x, m.y, m.z, m.yaw))
+                last_pos = time.monotonic()
+                while m.alive:
+                    now = time.monotonic()
 
+                    # Position keep-alive (+ gentle idle sway).
+                    if now - last_pos >= POS_INTERVAL:
+                        m.yaw = (m.yaw + random.uniform(15.0, 45.0)) % 360.0
+                        jx = m.x + random.uniform(-0.25, 0.25)
+                        jz = m.z + random.uniform(-0.25, 0.25)
+                        await ws.send(_pos_msg(jx, m.y, jz, m.yaw))
+                        last_pos = now
+
+                    # Drain command queue. Teleport before chat keeps speech in range.
+                    while not m.q.empty():
+                        item = m.q.get_nowait()
+                        if item[0] == "teleport":
+                            _, m.x, m.y, m.z = item
+                            await ws.send(_pos_msg(m.x, m.y, m.z, m.yaw))
+                            last_pos = now
+                        elif item[0] == "chat":
+                            await ws.send(_chat_msg(item[1]))
+
+                    # Receive incoming (short timeout so the loop stays responsive).
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=0.1)
+                    except asyncio.TimeoutError:
+                        continue
+                    except ConnectionClosed:
+                        raise
+                    try:
+                        msg = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    await manager.handle(m, msg)
+        except ConnectionClosed as exc:
+            log.warning("Manifestation %s closed (%s)", m.pid, exc)
+        except OSError as exc:
+            log.warning("Manifestation %s connect failed (%s)", m.pid, exc)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("Manifestation %s error (%s)", m.pid, exc)
+        if not m.alive:
+            break
         await asyncio.sleep(RECONNECT_DELAY)
-        state = ClintBody()
-        log.info("Reconnecting to %s", url)
+    log.info("Manifestation %s gone", m.pid)
 
 
 # ---------------------------------------------------------------------------
@@ -673,7 +675,7 @@ def main() -> None:
         raise SystemExit(1)
 
     _load_world()
-    asyncio.run(run())
+    asyncio.run(Manager().start())
 
 
 if __name__ == "__main__":
