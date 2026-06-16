@@ -25,7 +25,7 @@ SyslogIdentifier=clint-body
 Environment="RELAY_WS_BASE=ws://127.0.0.1:8096/ws"
 Environment="CLINT_BODY_ROOM=moor"
 Environment="CLINT_BODY_PID=clint-body"
-Environment="CLINT_BODY_NAME=Clint"
+Environment="CLINT_BODY_NAME=Merlin"
 Environment="CLINT_BODY_ENABLED=true"
 
 [Install]

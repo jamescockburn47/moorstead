@@ -44,7 +44,7 @@ from websockets.exceptions import ConnectionClosed
 RELAY_WS_BASE: str = os.environ.get("RELAY_WS_BASE", "ws://127.0.0.1:8096/ws")
 ROOM: str = os.environ.get("CLINT_BODY_ROOM", "moor")
 PID: str = os.environ.get("CLINT_BODY_PID", "clint-body")
-NAME: str = os.environ.get("CLINT_BODY_NAME", "Clint")
+NAME: str = os.environ.get("CLINT_BODY_NAME", "Merlin")
 ENABLED: bool = os.environ.get("CLINT_BODY_ENABLED", "true").strip().lower() not in ("false", "0", "no")
 
 # Behaviour constants
@@ -82,9 +82,9 @@ def _greeting(name: str) -> str:
     """Return a single scripted greeting for the given player display name."""
     name = name.strip() or "traveller"
     templates = [
-        f"Welcome to t' moor, {name}. I'm Clint — give us a shout if tha needs owt.",
-        f"Aye up, {name}! Grand to see thee on t' moor. I'm Clint — shout if tha gets lost.",
-        f"Now then, {name}. Clint's the name — I keep an eye on t' moor. Ask away if tha needs a hand.",
+        f"Welcome to t' moor, {name}. I'm Merlin, owd wizard o' these parts — give us a shout if tha needs owt.",
+        f"Aye up, {name}! Merlin's the name, warden an' wizard o' t' moor. Shout if tha gets lost.",
+        f"Now then, {name}. I'm Merlin — I keep watch ower these moors. Ask away if tha needs a hand.",
     ]
     return random.choice(templates)
 
