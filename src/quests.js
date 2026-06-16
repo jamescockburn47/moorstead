@@ -11,8 +11,8 @@ const STANDINGS = ['Newcomer', 'Known', 'Welcomed', 'Respected', 'Treasured'];
 const STANDING_THRESHOLDS = [0, 5, 20, 50, 100];
 
 export function compassDir(dx, dz) {
-  // -z is north
-  const ang = Math.atan2(dx, -dz) * 180 / Math.PI;
+  // north is +x, east is +z (the map reads with Whitby/the coast at the top)
+  const ang = Math.atan2(dz, dx) * 180 / Math.PI;
   const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
   return dirs[Math.round(((ang + 360) % 360) / 45) % 8];
 }
@@ -51,8 +51,8 @@ function buildArc(geo) {
     arc1: {
       id: 'arc1', giver: 'james', minStanding: 0, needs: null,
       title: 'Summat in t\u2019 Night',
-      desc: 'A yow\u2019s been taken in t\u2019 night \u2014 nowt left but blood an\u2019 drag marks pointing north-west. Follow them to the Wainstones, after dark, an\u2019 see what tha finds.',
-      offer: 'You can offer the visitor a job: one of your sheep was taken in the night, leaving only blood and drag marks heading north-west toward the jagged crags called the Wainstones. You want someone with nerve to follow the trail there AFTER DARK and see what did it. You will pay in good roast mutton.',
+      desc: 'A yow\u2019s been taken in t\u2019 night \u2014 nowt left but blood an\u2019 drag marks pointing south-west. Follow them to the Wainstones, after dark, an\u2019 see what tha finds.',
+      offer: 'You can offer the visitor a job: one of your sheep was taken in the night, leaving only blood and drag marks heading south-west toward the jagged crags called the Wainstones. You want someone with nerve to follow the trail there AFTER DARK and see what did it. You will pay in good roast mutton.',
       steps: [
         { kind: 'visit', x: WAINSTONES.x, z: WAINSTONES.z, r: 15, night: true, effect: 'dropHide',
           objective: 'Reach the Wainstones at neet' },
@@ -62,8 +62,8 @@ function buildArc(geo) {
       doneNote: 'The visitor followed the trail to the Wainstones at night and brought you back a scrap of cold black hide. No natural dog, that. Granny Glinda took an interest.',
       reward: { items: [[I.COOKED_MUTTON, 5]], trust: [['james', 4]], text: 'James turns t\u2019 black hide scrap ower in his hands an\u2019 goes quiet. \u201cThat\u2019s no dog. Granny\u2019ll know more \u2014 talk to her.\u201d' },
       clues: [
-        { holder: 'harry', text: 'Dad found blood by t\u2019 lambing pens! The drag marks went off north-west, toward them big jaggy stones \u2014 the Wainstones! Dead scary. Dead good.' },
-        { holder: 'glinda', text: 'Where t\u2019 giant\u2019s teeth bite t\u2019 ridgeline north-west o\u2019 here, night shows what day hides. Go after dark, if tha must go at all.' },
+        { holder: 'harry', text: 'Dad found blood by t\u2019 lambing pens! The drag marks went off south-west, toward them big jaggy stones \u2014 the Wainstones! Dead scary. Dead good.' },
+        { holder: 'glinda', text: 'Where t\u2019 giant\u2019s teeth bite t\u2019 ridgeline south-west o\u2019 here, night shows what day hides. Go after dark, if tha must go at all.' },
       ],
     },
     arc2: {
@@ -108,7 +108,7 @@ function buildArc(geo) {
       id: 'arc4', giver: 'cc', minStanding: 2, needs: 'arc3',
       title: 'T\u2019 Drowned Bell',
       desc: 'cc swears she hears a bell ringing under t\u2019 sea when t\u2019 wind blows past t\u2019 broken abbey. An amulet wants a tongue: dive to t\u2019 sea floor off t\u2019 abbey cliffs an\u2019 find it.',
-      offer: 'You can offer the visitor your very important secret: when the wind blows at the broken church by the big water (the abbey on the cliffs, far to the east), you can hear a bell go BONG under the sea. Sparkle says the bell\u2019s tongue fell in the water and somebody brave has to dive ALL the way down and get it. You are extremely sure about this.',
+      offer: 'You can offer the visitor your very important secret: when the wind blows at the broken church by the big water (the abbey on the cliffs, far to the north), you can hear a bell go BONG under the sea. Sparkle says the bell\u2019s tongue fell in the water and somebody brave has to dive ALL the way down and get it. You are extremely sure about this.',
       steps: [
         { kind: 'visit', x: diveX, z: -60, r: 16, maxY: 21, effect: 'dropBell',
           objective: 'Dive to t\u2019 sea floor off t\u2019 abbey cliffs' },
@@ -118,7 +118,7 @@ function buildArc(geo) {
       doneNote: 'The visitor dived ALL the way down and fetched the bell\u2019s iron tongue, just like you said they should. You were RIGHT about the bell and everyone knows it now.',
       reward: { items: [[I.BILBERRIES, 4]], trust: [['cc', 4]], text: 'cc gasps so hard she nearly falls ower. \u201cTHE BELL TONGUE! Now make t\u2019 necklace an\u2019 bonk t\u2019 big doggy! Daddy knows where it lives.\u201d' },
       clues: [
-        { holder: 'karen', text: 'cc keeps saying she hears a bell under t\u2019 sea by t\u2019 abbey. She\u2019s three, so... but she\u2019s been right before. It\u2019s a long old trek east, past t\u2019 causey, right to t\u2019 cliffs.' },
+        { holder: 'karen', text: 'cc keeps saying she hears a bell under t\u2019 sea by t\u2019 abbey. She\u2019s three, so... but she\u2019s been right before. It\u2019s a long old trek north, past t\u2019 causey, right to t\u2019 cliffs.' },
         { holder: 'glinda', text: 'When t\u2019 abbey drowned its voice, t\u2019 sea kept t\u2019 tongue. What rings beneath t\u2019 cliffs wants fetching up by a breath that dares run out.' },
       ],
     },
@@ -126,7 +126,7 @@ function buildArc(geo) {
       id: 'arc5', giver: 'james', minStanding: 3, needs: 'arc4',
       title: 'T\u2019 Hound at Bay',
       desc: 'Forge t\u2019 Amulet o\u2019 t\u2019 Moors at a joiner\u2019s bench \u2014 both halves, t\u2019 bell clapper, an\u2019 a jet. Then climb Roseberry Topping at neet an\u2019 face t\u2019 Great Barghest itself.',
-      offer: 'You can offer the visitor the final task: with both amulet halves, the bell clapper and a piece of jet, they can forge the Amulet of the Moors at a joiner\u2019s bench. Then they must climb Roseberry Topping \u2014 the lone crooked peak far to the north-west \u2014 AT NIGHT, and face the Great Barghest that has been taking your sheep. You are deadly serious, and you tell them the whole village is behind them.',
+      offer: 'You can offer the visitor the final task: with both amulet halves, the bell clapper and a piece of jet, they can forge the Amulet of the Moors at a joiner\u2019s bench. Then they must climb Roseberry Topping \u2014 the lone crooked peak far to the south-west \u2014 AT NIGHT, and face the Great Barghest that has been taking your sheep. You are deadly serious, and you tell them the whole village is behind them.',
       steps: [
         { kind: 'collect', item: I.AMULET, n: 1, objective: 'Forge t\u2019 Amulet o\u2019 t\u2019 Moors (bench: both halves + clapper + jet)' },
         { kind: 'kill', mob: 'greatbarghest', n: 1, spawnAt: { x: ROSEBERRY.x, z: ROSEBERRY.z, r: 20, night: true },
@@ -141,7 +141,7 @@ function buildArc(geo) {
         text: 'Moorstead turns out on t\u2019 green for thee. James shakes thi hand like a pump handle. \u201cTha\u2019s freedom o\u2019 these moors now, as long as tha carries that amulet. Nowt dark\u2019ll come near thee.\u201d',
       },
       clues: [
-        { holder: 'harry', text: 'T\u2019 big one lives on Roseberry Topping \u2014 that lonely pointy hill way off north-west! Dad says only go wi\u2019 t\u2019 amulet finished. An\u2019 at neet! It only comes out at neet!' },
+        { holder: 'harry', text: 'T\u2019 big one lives on Roseberry Topping \u2014 that lonely pointy hill way off south-west! Dad says only go wi\u2019 t\u2019 amulet finished. An\u2019 at neet! It only comes out at neet!' },
         { holder: 'glinda', text: 'On t\u2019 crooked hill that stands alone, ring true an\u2019 stand thy ground. A hound fears nowt but a bell that\u2019s found its tongue.' },
       ],
     },
@@ -194,7 +194,7 @@ function buildDraculaArc(geo) {
       id: 'drac3', giver: 'museum', minStanding: 0, needs: 'drac2',
       title: 'Holy Water',
       desc: 'T\u2019 ruined abbey on t\u2019 cliffs still has a font where pilgrims drew water. Fill a flask frae it \u2014 tha\u2019ll need it.',
-      offer: 'You can offer the visitor the next step: the old abbey ruin on the cliffs east of here still has a holy water font in the nave. They must go there and draw water from it. The old stories say consecrated ground and holy water are the first defence against what walks from Whitby out onto the moors.',
+      offer: 'You can offer the visitor the next step: the old abbey ruin on the cliffs north of here still has a holy water font in the nave. They must go there and draw water from it. The old stories say consecrated ground and holy water are the first defence against what walks from Whitby out onto the moors.',
       steps: [
         { kind: 'visit', x: font.x, z: font.z, r: 8, effect: 'dropHolyWater',
           objective: 'Draw holy water frae t\u2019 abbey font' },
@@ -229,8 +229,8 @@ function buildDraculaArc(geo) {
     drac5: {
       id: 'drac5', giver: 'museum', minStanding: 0, needs: 'drac4',
       title: 'He Walks at Neet',
-      desc: 'Count Dracula walks t\u2019 open moor after dark \u2014 one figure, deadly unless tha\u2019s armed wi\u2019 thi holy stake. Face him on t\u2019 lonely ground east o\u2019 t\u2019 causey, at neet. Moor shelters\u2019ll hide thee; villages are safe.',
-      offer: 'You can offer the visitor the final task: Count Dracula walks the open moor at night — one figure, immensely dangerous unless they carry the holy water stake. They must face him on the lonely ground east of Wade\'s Causeway, AT NIGHT, stake in hand. Stone moor shelters and lit villages are sanctuary. Slaying him will make the moors far safer to explore after dark.',
+      desc: 'Count Dracula walks t\u2019 open moor after dark \u2014 one figure, deadly unless tha\u2019s armed wi\u2019 thi holy stake. Face him on t\u2019 lonely ground north o\u2019 t\u2019 causey, at neet. Moor shelters\u2019ll hide thee; villages are safe.',
+      offer: 'You can offer the visitor the final task: Count Dracula walks the open moor at night — one figure, immensely dangerous unless they carry the holy water stake. They must face him on the lonely ground north of Wade\'s Causeway, AT NIGHT, stake in hand. Stone moor shelters and lit villages are sanctuary. Slaying him will make the moors far safer to explore after dark.',
       steps: [
         { kind: 'kill', mob: 'dracula', n: 1,
           spawnAt: { x: DRACULA_MOOR.x, z: DRACULA_MOOR.z, r: DRACULA_MOOR.r, night: true },

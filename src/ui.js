@@ -1,6 +1,7 @@
 // All DOM UI: title, HUD, inventory/crafting/smelting, chat, quests, pause, death, minimap, toasts.
 import { B, I, RECIPES, SMELTS, FUELS, FOODS, TOOLS, itemName, maxStack, CREATIVE_ITEMS, CHUNK, WATER_LEVEL } from './defs.js';
 import { getIconURL } from './textures.js';
+import { CASTLE } from './geography.js';
 
 const PIX = {
   heart: ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'],
@@ -749,9 +750,9 @@ export class UI {
     const d = img.data;
     let curKey = null, cols = null;
     for (let sy = 0; sy < span; sy++) {
-      const wz = pz - (span >> 1) + sy;
+      const wx = px + (span >> 1) - sy;   // screen up = north (+x)
       for (let sx = 0; sx < span; sx++) {
-        const wx = px - (span >> 1) + sx;
+        const wz = pz - (span >> 1) + sx; // screen right = east (+z)
         const cx = Math.floor(wx / CHUNK), cz = Math.floor(wz / CHUNK);
         const k = cx + ',' + cz;
         if (k !== curKey) { curKey = k; cols = world.surfaceColors(cx, cz); }
@@ -773,8 +774,8 @@ export class UI {
     if (net && net.remotes && net.remotes.size) {
       for (const r of net.remotes.values()) {
         const p = r.mob ? r.mob.pos : r.target; if (!p) continue;
-        const sx = (p.x - player.pos.x) * scale + size / 2;
-        const sy = (p.z - player.pos.z) * scale + size / 2;
+        const sx = (p.z - player.pos.z) * scale + size / 2;   // right = east (+z)
+        const sy = -(p.x - player.pos.x) * scale + size / 2;  // up = north (+x)
         if (sx < 3 || sx > size - 3 || sy < 3 || sy > size - 3) continue;
         ctx.fillStyle = '#5ad0ff'; ctx.strokeStyle = '#002'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(sx, sy, 3, 0, 7); ctx.fill(); ctx.stroke();
@@ -783,7 +784,7 @@ export class UI {
     // player arrow
     ctx.save();
     ctx.translate(size / 2, size / 2);
-    ctx.rotate(-player.yaw);
+    ctx.rotate(-player.yaw - Math.PI / 2);
     ctx.fillStyle = '#fff';
     ctx.strokeStyle = '#000';
     ctx.beginPath();
@@ -814,44 +815,48 @@ export class UI {
     const note = (x, z) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); };
     for (const v of geo.villages) note(v.x, v.z);
     for (const s of geo.railway()) note(s.x, s.z);
-    for (const [x, z] of [[-700, -880], [540, 680], [-380, -620], [-260, 380]]) note(x, z);
+    for (const [x, z] of [[-700, -880], [540, 680], [-380, -620], [-260, 380], [CASTLE.x, CASTLE.z]]) note(x, z);
     note(player.pos.x, player.pos.z);
-    minX -= 120; maxX += 200; minZ -= 120; maxZ += 120; // pad, wi' room for t' sea to t' east
+    // North is +x (up). The North Sea lies off +x, so pad there (the top).
+    minX -= 140; maxX += 200; minZ -= 140; maxZ += 140;
     const C = this.bigMap, W = C.width, H = C.height;
-    const ww = maxX - minX, wh = maxZ - minZ;
-    const sc = Math.min(W / ww, H / wh);
-    const offX = (W - ww * sc) / 2, offZ = (H - wh * sc) / 2;
-    this._mapXf = { s: sc, offX, offZ, minX, minZ };
-    const w2x = x => offX + (x - minX) * sc, w2y = z => offZ + (z - minZ) * sc;
+    const wwX = maxX - minX, wwZ = maxZ - minZ; // height spans world-x (N-S), width spans world-z (E-W)
+    const sc = Math.min(W / wwZ, H / wwX);
+    const offH = (W - wwZ * sc) / 2, offV = (H - wwX * sc) / 2;
+    this._mapXf = { s: sc, offH, offV, minZ, maxX };
+    // project world (x,z) -> screen: north (+x) up, east (+z) right
+    const w2x = (x, z) => offH + (z - minZ) * sc;
+    const w2y = (x, z) => offV + (maxX - x) * sc;
     const base = this.mapBase; base.width = W; base.height = H;
     const b = base.getContext('2d');
     b.fillStyle = '#0e1118'; b.fillRect(0, 0, W, H);
-    const CELLS = 150, stepX = ww / CELLS, stepZ = wh / CELLS;          // coarse terrain tint
-    const cw = Math.ceil(W / CELLS) + 1, cyh = Math.ceil(H / CELLS) + 1;
-    for (let gz = 0; gz < CELLS; gz++) for (let gx = 0; gx < CELLS; gx++) {
-      b.fillStyle = this.mapTint(geo, minX + (gx + 0.5) * stepX, minZ + (gz + 0.5) * stepZ);
-      b.fillRect(Math.floor(w2x(minX + gx * stepX)), Math.floor(w2y(minZ + gz * stepZ)), cw, cyh);
+    const CELLS = 170, stepX = wwX / CELLS, stepZ = wwZ / CELLS;        // coarse terrain tint
+    const cw = Math.ceil(stepZ * sc) + 2, ch = Math.ceil(stepX * sc) + 2;
+    for (let i = 0; i < CELLS; i++) for (let j = 0; j < CELLS; j++) {
+      const wx = minX + (i + 0.5) * stepX, wz = minZ + (j + 0.5) * stepZ;
+      b.fillStyle = this.mapTint(geo, wx, wz);
+      b.fillRect(Math.floor(w2x(wx, wz) - cw / 2), Math.floor(w2y(wx, wz) - ch / 2), cw, ch);
     }
     const path = geo.railPath().pts;                                    // t' railway
     b.lineJoin = 'round';
     b.strokeStyle = '#1c1c1c'; b.lineWidth = 4; b.beginPath();
-    path.forEach((pt, i) => { const X = w2x(pt.x), Y = w2y(pt.z); i ? b.lineTo(X, Y) : b.moveTo(X, Y); }); b.stroke();
+    path.forEach((pt, i) => { const X = w2x(pt.x, pt.z), Y = w2y(pt.x, pt.z); i ? b.lineTo(X, Y) : b.moveTo(X, Y); }); b.stroke();
     b.strokeStyle = '#cbb784'; b.lineWidth = 1.4; b.stroke();
     for (const st of geo.railway()) {                                   // stations
-      const X = w2x(st.x), Y = w2y(st.z);
+      const X = w2x(st.x, st.z), Y = w2y(st.x, st.z);
       b.fillStyle = '#1c1c1c'; b.fillRect(X - 3, Y - 3, 6, 6);
       b.fillStyle = '#e8d8a0'; b.fillRect(X - 2, Y - 2, 4, 4);
       b.fillStyle = '#d8c89a'; b.font = '10px sans-serif'; b.textAlign = 'left'; b.fillText(st.name, X + 5, Y + 3);
     }
     for (const v of geo.villages) {                                     // villages
-      const X = w2x(v.x), Y = w2y(v.z);
+      const X = w2x(v.x, v.z), Y = w2y(v.x, v.z);
       b.fillStyle = '#caa84a'; b.strokeStyle = '#000'; b.lineWidth = 1.5;
       b.beginPath(); b.arc(X, Y, 5, 0, 7); b.fill(); b.stroke();
       b.fillStyle = '#fff'; b.font = 'bold 12px sans-serif'; b.textAlign = 'left'; b.fillText(v.name, X + 7, Y + 4);
     }
     b.fillStyle = '#a59c8c'; b.font = 'italic 11px sans-serif';         // landmarks
-    for (const [label, x, z] of [['Roseberry Topping', -700, -880], ['Hole of Horcum', 540, 680], ['Wainstones', -380, -620], ['Rosedale Kilns', -260, 380], ['Whitby Abbey', geo.abbeySite().x, geo.abbeySite().z]]) {
-      b.fillText('▲ ' + label, w2x(x) + 4, w2y(z));
+    for (const [label, x, z] of [['Roseberry Topping', -700, -880], ['Hole of Horcum', 540, 680], ['Wainstones', -380, -620], ['Rosedale Kilns', -260, 380], ['Whitby Abbey', geo.abbeySite().x, geo.abbeySite().z], ["Merlin's Keep", CASTLE.x, CASTLE.z]]) {
+      b.fillText('▲ ' + label, w2x(x, z) + 4, w2y(x, z));
     }
     b.fillStyle = '#d8b95a'; b.font = 'bold 16px sans-serif'; b.textAlign = 'center'; b.fillText('N ↑', W - 34, 26);
     this.mapBaseKey = world.gen.seed;
@@ -861,20 +866,20 @@ export class UI {
     const ctx = this.bigMap.getContext('2d');
     ctx.drawImage(this.mapBase, 0, 0);
     const xf = this._mapXf; if (!xf) return;
-    const w2x = x => xf.offX + (x - xf.minX) * xf.s, w2y = z => xf.offZ + (z - xf.minZ) * xf.s;
+    const w2x = (x, z) => xf.offH + (z - xf.minZ) * xf.s, w2y = (x, z) => xf.offV + (xf.maxX - x) * xf.s;
     net = net || (this.game && this.game.net);
     if (net && net.remotes) {                                           // other folk, named
       ctx.font = '11px sans-serif'; ctx.textAlign = 'left';
       for (const r of net.remotes.values()) {
         const p = r.mob ? r.mob.pos : r.target; if (!p) continue;
-        const X = w2x(p.x), Y = w2y(p.z);
+        const X = w2x(p.x, p.z), Y = w2y(p.x, p.z);
         ctx.fillStyle = '#5ad0ff'; ctx.strokeStyle = '#013'; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(X, Y, 4, 0, 7); ctx.fill(); ctx.stroke();
         ctx.fillStyle = '#cdefff'; ctx.fillText(r.name || 'rambler', X + 6, Y + 3);
       }
     }
-    const X = w2x(player.pos.x), Y = w2y(player.pos.z);                  // thee
-    ctx.save(); ctx.translate(X, Y); ctx.rotate(-player.yaw);
+    const X = w2x(player.pos.x, player.pos.z), Y = w2y(player.pos.x, player.pos.z);  // thee
+    ctx.save(); ctx.translate(X, Y); ctx.rotate(-player.yaw - Math.PI / 2);
     ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(6, 7); ctx.lineTo(0, 3); ctx.lineTo(-6, 7); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.restore();

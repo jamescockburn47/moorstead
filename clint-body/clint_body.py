@@ -122,13 +122,12 @@ def _load_world() -> None:
 def _compass(dx: float, dz: float) -> str:
     """Return an 8-point compass label for a displacement vector.
 
-    Coordinate convention: +x is East, +z is South (matches the game renderer).
-    Compass bearing: 0=North, 90=East, 180=South, 270=West.
+    Coordinate convention: NORTH is +x, EAST is +z (the map reads with Whitby
+    and the coast at the top). Compass bearing: 0=North(+x), 90=East(+z).
     """
     if dx == 0.0 and dz == 0.0:
         return "here"
-    # atan2(dx, -dz): North (+z→ south so negate dz) at 0°, East at 90°
-    angle = math.degrees(math.atan2(dx, -dz)) % 360
+    angle = math.degrees(math.atan2(dz, dx)) % 360
     dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
     idx = int((angle + 22.5) / 45) % 8
     return dirs[idx]
