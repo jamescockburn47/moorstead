@@ -17,6 +17,7 @@ import { initTelemetry } from './telemetry.js';
 import { buildTrain } from './train.js';
 import { Rails } from './rails.js';
 import { seasonState, seasonStateAtPhase, bilberryInSeason } from './season.js';
+import { startLiveWeather } from './weather-live.js';
 
 const RAIL_VMAX = 11;  // blocks a second flat out — t' pace of a heritage steamer
 const RAIL_ACC = 0.18; // gentle acceleration: she works up to speed an' brakes early
@@ -121,6 +122,7 @@ class Game {
 
     this.clock = new THREE.Clock();
     this.setupDebug();
+    startLiveWeather(); // poll the real moor weather (Open-Meteo); harmless at the title, degrades to random
     // Bug-capture telemetry: forward uncaught errors to the relay bot over the
     // existing multiplayer WS. Closures read this.net / this.debug at report
     // time so they work whether or not the net is connected yet.

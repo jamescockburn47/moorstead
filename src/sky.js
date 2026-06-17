@@ -1,8 +1,17 @@
 // Day/night cycle, moorland weather (clear / misty / fog / rain), rain particles.
 import * as THREE from 'three';
+import { currentWeather } from './weather-live.js';
 
 const DAY_LENGTH = 1800; // seconds per full day — a proper half-hour, not a rush
 // (t' shared-moor relay must agree: worldsvc/server.py DAY_LENGTH)
+
+// weather-change toasts, shared by t' random machine an' t' live-weather feed
+const WEATHER_MSG = {
+  clear: "Sky's clearin' up. Grand.",
+  misty: 'A mist hangs ower t’ moor.',
+  rain: 'It’s silin’ it down!',
+  fog: 'Fog’s rollin’ in thick. Mind tha doesn’t get lost.',
+};
 
 function lerpC(a, b, t) { return a.clone().lerp(b, t); }
 
@@ -165,6 +174,23 @@ export class Sky {
     if (!prevNight && this.isNight()) msg = { type: 'night' };
     else if (prevT < 0.74 && this.time >= 0.74) msg = { type: 'dusk' };
 
+    // live moor weather frae Open-Meteo when we have a sample: it drives t'
+    // weather state directly an' parks t' random timer. Falls back to t' random
+    // machine below on any fetch fault (currentWeather() returns null).
+    const live = currentWeather();
+    if (live) {
+      this.liveRain = live.rainAmount;
+      this.liveFog = live.fogFar;
+      if (live.state !== this.weather) {
+        this.weather = live.state;
+        msg = msg || { type: 'weather', text: WEATHER_MSG[live.state] };
+      }
+      this.weatherTimer = 1e9; // park t' random machine while live weather rules
+    } else {
+      this.liveRain = null;
+      this.liveFog = null;
+    }
+
     // weather state machine — t' moors are rarely kind
     this.weatherTimer -= dt;
     if (this.weatherTimer <= 0) {
@@ -249,7 +275,7 @@ export class Sky {
     this.domeMat.uniforms.topColor.value.copy(sky).lerp(new THREE.Color(0x21426a), 0.5 * dayness);
 
     // fog distance
-    let baseFog = { clear: 150, misty: 70, rain: 95, fog: 30 }[this.weather];
+    let baseFog = (this.liveFog != null) ? this.liveFog : { clear: 150, misty: 70, rain: 95, fog: 30 }[this.weather];
     if (this.dread > 0.05) baseFog = Math.min(baseFog, 55 - this.dread * 22);
     if (this.moorFog > 0.01) baseFog = Math.min(baseFog, 150 - this.moorFog * 143); // ~7 at full: hand-afore-face stuff
     this.fogTargetFar = baseFog;
@@ -268,7 +294,7 @@ export class Sky {
     this.clouds.material.opacity = 0.25 + grey * 0.55;
 
     // rain
-    const targetRain = this.weather === 'rain' ? 1 : 0;
+    const targetRain = (this.liveRain != null) ? this.liveRain : (this.weather === 'rain' ? 1 : 0);
     this.rainAmount += (targetRain - this.rainAmount) * Math.min(1, dt * 0.8);
     this.rain.material.opacity = this.rainAmount * 0.5;
     if (this.rainAmount > 0.02) {
