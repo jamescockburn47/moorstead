@@ -29,6 +29,7 @@ function build(yearPhase) {
     snowiness: bump(yearPhase, 0.875, 0.08),      // peak in deep winter
     greenness: 0.5 + 0.5 * Math.cos((yearPhase - 0.18) * Math.PI * 2),
     warmth: Math.cos((yearPhase - 0.375) * Math.PI * 2), // -1 winter .. +1 summer
+    autumn: bump(yearPhase, 0.625, 0.10),                // peak mid-autumn (leaf-turn / bracken rust)
   };
 }
 

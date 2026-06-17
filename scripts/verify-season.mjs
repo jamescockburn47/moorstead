@@ -63,8 +63,15 @@ const DAY = 86400 * 1000;
     if (s.snowiness < 0 || s.snowiness > 1) inRange = false;
     if (s.greenness < 0 || s.greenness > 1) inRange = false;
     if (s.warmth < -1.0001 || s.warmth > 1.0001) inRange = false;
+    if (s.autumn < 0 || s.autumn > 1) inRange = false;
   }
   (inRange ? ok : bad)('all seasonal scalars stay within range across the year');
+}
+
+// autumn peaks mid-autumn, not in spring
+{
+  (seasonStateAtPhase(0.625).autumn > 0.9 ? ok : bad)('autumn peaks mid-autumn');
+  (seasonStateAtPhase(0.125).autumn < 0.1 ? ok : bad)('no autumn tint in spring');
 }
 
 // bilberries bear at the bloom peak, bare in winter

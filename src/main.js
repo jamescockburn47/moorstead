@@ -5,8 +5,8 @@ import * as THREE from 'three';
 import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_HASHES } from './defs.js';
 import { strSeed } from './noise.js';
 import { protectedAt } from './landmarks.js';
-import { initMaterials } from './mesher.js';
-import { getIconURL } from './textures.js';
+import { initMaterials, setSnowLevel } from './mesher.js';
+import { getIconURL, retintAtlasForSeason } from './textures.js';
 import { World } from './world.js';
 import { Player } from './player.js';
 import * as npc from './npc.js';
@@ -67,6 +67,7 @@ class Game {
     this.heldIconId = -1;
     this.seasonOverride = null; // dev: set 0..1 to force a year phase (moorstead.debug.setSeason)
     this.season = null;         // cached per-frame season, read by sky/audio/foraging
+    this._seasonBucket = -1;    // throttles the atlas re-tint to ~40 steps a year
 
     // renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -1913,6 +1914,9 @@ class Game {
         ? seasonStateAtPhase(this.seasonOverride)
         : seasonState();
       this.season = season; // cached for other systems + the debug API
+      setSnowLevel(season.snowiness); // height-gated snow on the tops (cheap uniform)
+      const sbk = Math.floor(season.yearPhase * 40);
+      if (sbk !== this._seasonBucket) { this._seasonBucket = sbk; retintAtlasForSeason(season); } // heather purple, bracken rust…
       const msg = this.sky.update(dt, this.player.pos, season);
       if (msg) {
         if (msg.type === 'night') {

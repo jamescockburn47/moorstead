@@ -5,10 +5,34 @@ import { tileUV, buildAtlas } from './textures.js';
 
 let materials = null;
 
+// snow-on-t'-tops: a height-gated white wash injected into t' opaque terrain
+// material, gated to up-facing faces above a snow-line. Driven each frame frae
+// season.snowiness via setSnowLevel; no chunk re-mesh needed.
+const snowUniforms = { uSnowLine: { value: 64 }, uSnowAmt: { value: 0 } };
+export function setSnowLevel(snowiness) {
+  const s = snowiness < 0 ? 0 : snowiness > 1 ? 1 : snowiness;
+  snowUniforms.uSnowAmt.value = s;
+  snowUniforms.uSnowLine.value = 64 - s * 34; // t' snow-line creeps down as winter deepens
+}
+function addSnow(mat) {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uSnowLine = snowUniforms.uSnowLine;
+    shader.uniforms.uSnowAmt = snowUniforms.uSnowAmt;
+    shader.vertexShader = 'varying float vSnowY;\nvarying float vSnowUp;\n' + shader.vertexShader
+      .replace('#include <begin_vertex>',
+        '#include <begin_vertex>\n  vSnowY = (modelMatrix * vec4(transformed, 1.0)).y;\n  vSnowUp = normalize(mat3(modelMatrix) * objectNormal).y;');
+    shader.fragmentShader = 'uniform float uSnowLine;\nuniform float uSnowAmt;\nvarying float vSnowY;\nvarying float vSnowUp;\n' + shader.fragmentShader
+      .replace('#include <color_fragment>',
+        '#include <color_fragment>\n  float snow = uSnowAmt * smoothstep(uSnowLine, uSnowLine + 10.0, vSnowY) * smoothstep(0.2, 0.75, vSnowUp);\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.96, 1.0), snow);');
+  };
+  mat.customProgramCacheKey = () => 'terrain-snow';
+  return mat;
+}
+
 export function initMaterials() {
   const atlas = buildAtlas();
   materials = {
-    opaque: new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true }),
+    opaque: addSnow(new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true })),
     cutout: new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }),
     liquid: new THREE.MeshLambertMaterial({
       map: atlas, vertexColors: true, transparent: true, opacity: 0.78,

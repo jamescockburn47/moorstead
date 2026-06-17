@@ -415,25 +415,76 @@ const TILE_PAINTERS = {
   [TILE.TER_YELLOW](p) { p.speckle(0xe9d79a, 0.07); p.dots(0xd6c081, 8); },
 };
 
-let atlasCanvas = null;
+let atlasCanvas = null;   // the LIVE atlas (may be season-tinted)
+let baseCanvas = null;    // untinted base, kept so seasonal tints don't compound
+let atlasTexture = null;
 
 export function buildAtlas() {
-  atlasCanvas = document.createElement('canvas');
-  atlasCanvas.width = ATLAS_TILES * T;
-  atlasCanvas.height = ATLAS_TILES * T;
-  const ctx = atlasCanvas.getContext('2d');
-  ctx.clearRect(0, 0, atlasCanvas.width, atlasCanvas.height);
+  // paint t' untinted base once
+  baseCanvas = document.createElement('canvas');
+  baseCanvas.width = baseCanvas.height = ATLAS_TILES * T;
+  const bctx = baseCanvas.getContext('2d');
+  bctx.clearRect(0, 0, baseCanvas.width, baseCanvas.height);
   for (const [tileId, fn] of Object.entries(TILE_PAINTERS)) {
     const id = +tileId;
     const tx = (id % ATLAS_TILES) * T, ty = Math.floor(id / ATLAS_TILES) * T;
-    fn(new Painter(ctx, tx, ty, 1000 + id * 7));
+    fn(new Painter(bctx, tx, ty, 1000 + id * 7));
   }
-  const tex = new THREE.CanvasTexture(atlasCanvas);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.generateMipmaps = false;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+  // t' live atlas starts as a copy o' t' base
+  atlasCanvas = document.createElement('canvas');
+  atlasCanvas.width = atlasCanvas.height = ATLAS_TILES * T;
+  atlasCanvas.getContext('2d', { willReadFrequently: true }).drawImage(baseCanvas, 0, 0);
+  atlasTexture = new THREE.CanvasTexture(atlasCanvas);
+  atlasTexture.magFilter = THREE.NearestFilter;
+  atlasTexture.minFilter = THREE.NearestFilter;
+  atlasTexture.generateMipmaps = false;
+  atlasTexture.colorSpace = THREE.SRGBColorSpace;
+  return atlasTexture;
+}
+
+// ---- seasonal re-tint o' t' growing things (re-paints tiles in place; no chunk re-mesh) ----
+const SEASON_TILES = [TILE.GRASS_TOP, TILE.GRASS_SIDE, TILE.HEATHER, TILE.BRACKEN, TILE.FERN, TILE.BILBERRY, TILE.GORSE];
+function blendPx(d, i, r, g, b, amt) {
+  d[i] += (r - d[i]) * amt; d[i + 1] += (g - d[i + 1]) * amt; d[i + 2] += (b - d[i + 2]) * amt;
+}
+function desatPx(d, i, amt) {
+  const y = d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
+  d[i] += (y - d[i]) * amt; d[i + 1] += (y - d[i + 1]) * amt; d[i + 2] += (y - d[i + 2]) * amt;
+}
+function seasonShiftPx(tile, d, i, s) {
+  const winter = s.warmth < 0 ? -s.warmth : 0;
+  if (tile === TILE.HEATHER) {
+    blendPx(d, i, 150, 74, 168, s.heatherBloom * 0.7);  // late-summer bloom: t' whole plant purples
+    blendPx(d, i, 92, 74, 56, winter * 0.45);           // winter: browned off
+  } else if (tile === TILE.BRACKEN || tile === TILE.FERN) {
+    blendPx(d, i, 156, 86, 38, s.autumn * 0.6);         // autumn rust
+    blendPx(d, i, 120, 100, 74, winter * 0.4);          // dead-brown in winter
+  } else if (tile === TILE.GRASS_TOP || tile === TILE.GRASS_SIDE) {
+    blendPx(d, i, 96, 132, 58, s.greenness * 0.22);     // spring/summer flush
+    desatPx(d, i, winter * 0.4); blendPx(d, i, 150, 148, 118, winter * 0.22); // winter: pale an' strawy
+  } else if (tile === TILE.GORSE) {
+    desatPx(d, i, winter * 0.3);
+  } else if (tile === TILE.BILBERRY) {
+    blendPx(d, i, 150, 80, 50, s.autumn * 0.35); desatPx(d, i, winter * 0.4);
+  }
+}
+export function retintAtlasForSeason(season) {
+  if (!atlasCanvas || !baseCanvas || !atlasTexture) return;
+  const ctx = atlasCanvas.getContext('2d', { willReadFrequently: true });
+  for (const tile of SEASON_TILES) {
+    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    ctx.clearRect(tx, ty, T, T);
+    ctx.drawImage(baseCanvas, tx, ty, T, T, tx, ty, T, T); // reset frae base so tints don't stack
+    const img = ctx.getImageData(tx, ty, T, T);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 8) continue; // leave t' transparent cutout background be
+      seasonShiftPx(tile, d, i, season);
+    }
+    ctx.putImageData(img, tx, ty);
+  }
+  atlasTexture.needsUpdate = true;
+  tileColorCache.clear();
 }
 
 // UV rect for a tile: returns [u0, v0, u1, v1] (v0 = bottom)
