@@ -5,6 +5,7 @@ import { moveEntity, boxCollides, unstick } from './physics.js';
 const GRAVITY = 26;
 const JUMP_VEL = 8.6;
 const WALK = 4.3, SPRINT = 6.4, SNEAK = 1.6, FLY = 11, FLY_FAST = 22;
+const MOUNT_WALK = 8.5; // a pony fair shifts compared to shanks's pony
 
 export class Player {
   constructor(world) {
@@ -18,6 +19,7 @@ export class Player {
     this.air = 10;
     this.creative = false;
     this.flying = false;
+    this.mounted = false; // up on a moorland pony
     this.dead = false;
     this.deathCause = '';
     this.fallStart = null;
@@ -69,7 +71,7 @@ export class Player {
 
     const sneaking = input.keys['ShiftLeft'] && !this.flying;
     let sprinting = input.keys['KeyZ'] && fwd > 0 && this.hunger > 6 && !sneaking;
-    let speed = this.flying ? (sprinting ? FLY_FAST : FLY) : sprinting ? SPRINT : sneaking ? SNEAK : WALK;
+    let speed = this.flying ? (sprinting ? FLY_FAST : FLY) : this.mounted ? MOUNT_WALK : sprinting ? SPRINT : sneaking ? SNEAK : WALK;
     if (inBog) speed *= 0.3;
     else if (inWater) speed *= 0.55;
     this.sprinting = sprinting;
@@ -99,7 +101,7 @@ export class Player {
       this.vel.y -= GRAVITY * dt;
       this.vel.y = Math.max(this.vel.y, -50);
       if (input.keys['Space'] && this.onGround) {
-        this.vel.y = JUMP_VEL;
+        this.vel.y = this.mounted ? JUMP_VEL * 1.25 : JUMP_VEL;
         this.onGround = false;
         this.exhaustion += 0.1;
         if (audio) audio.jump();

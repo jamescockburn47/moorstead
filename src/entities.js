@@ -168,6 +168,24 @@ function makeLlama() {
   return { group: g, legs, body, head };
 }
 
+function makePony() {
+  const g = new THREE.Group();
+  const HIDE = 0x3a2a1e, MANE = 0x18110b, MUZZLE = 0x5a4636;
+  const body = box(0.72, 0.78, 1.5, HIDE); body.position.y = 1.02; g.add(body);
+  const neck = box(0.42, 0.62, 0.5, HIDE); neck.position.set(0, 1.4, 0.78); neck.rotation.x = -0.5; g.add(neck);
+  const head = box(0.36, 0.42, 0.64, HIDE); head.position.set(0, 1.66, 1.08); head.rotation.x = -0.22; g.add(head);
+  const muzzle = box(0.3, 0.26, 0.22, MUZZLE); muzzle.position.set(0, 1.54, 1.38); g.add(muzzle);
+  for (const x of [-0.13, 0.13]) { const ear = box(0.1, 0.18, 0.08, HIDE); ear.position.set(x, 1.88, 0.98); g.add(ear); }
+  for (const x of [-0.12, 0.12]) { const eye = box(0.06, 0.06, 0.04, 0x0c0a08); eye.position.set(x, 1.66, 1.34); g.add(eye); }
+  const mane = box(0.16, 0.72, 0.34, MANE); mane.position.set(0, 1.52, 0.64); mane.rotation.x = -0.5; g.add(mane);
+  const tail = box(0.16, 0.62, 0.18, MANE); tail.position.set(0, 1.0, -0.8); tail.rotation.x = 0.45; g.add(tail);
+  const legs = [];
+  for (const [x, z] of [[-0.26, 0.5], [0.26, 0.5], [-0.26, -0.5], [0.26, -0.5]]) {
+    const l = box(0.18, 0.86, 0.18, 0x281c12); l.position.set(x, 0.43, z); g.add(l); legs.push(l);
+  }
+  return { group: g, legs, body, head };
+}
+
 function makePheasant() {
   const g = new THREE.Group();
   const body = box(0.34, 0.34, 0.56, 0x7a4a26); body.position.y = 0.36; g.add(body);
@@ -510,6 +528,11 @@ export const MOB_TYPES = {
     hostile: false, drops: [[B.WOOL, 1, 2]], cap: 4, name: 'Pack Llama',
     habitat: 'pasture', group: [2, 3],
   },
+  pony: {
+    make: makePony, hw: 0.42, h: 1.7, hp: 18, speed: 1.7, fleeSpeed: 3.2,
+    hostile: false, drops: [], cap: 4, name: 'Moorland Pony',
+    habitat: 'moor', group: [2, 3], // half-wild, but they'll let thee up
+  },
   pheasant: {
     make: makePheasant, hw: 0.2, h: 0.85, hp: 3, speed: 1.6, fleeSpeed: 4.6,
     hostile: false, drops: [[I.RAW_GROUSE, 1, 1]], cap: 5, name: 'Pheasant',
@@ -827,6 +850,7 @@ export class Entities {
 
     for (const mob of this.mobs) {
       if (mob.dead) continue;
+      if (mob.ridden) continue; // a ridden pony is posed by the game, not its AI
       // hold physics for owt standing on ungenerated ground
       if (!this.world.isLoaded(mob.pos.x, mob.pos.z)) continue;
       const t = mob.t;

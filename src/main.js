@@ -79,6 +79,7 @@ class Game {
     this._seasonBucket = -1;    // throttles the atlas re-tint to ~40 steps a year
     this.trainFolk = [];        // local folk ridin' t' carriage right now
     this.lastDwellStation = -1; // which platform she's stood at (for boarding)
+    this.mount = null;          // the moorland pony tha's ridin', or null
 
     // renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -402,6 +403,7 @@ class Game {
       if (e.code === 'Space') this.input.jumpTapped = true;
 
       if (this.state === 'playing') {
+        if (e.code === 'KeyF' && this.mount) { this.dismountPony(); return; }
         if (e.code === 'KeyE') this.openInventory();
         if (e.code === 'KeyQ') this.openBoard(false);
         if (e.code === 'KeyT' && this.netActive) { e.preventDefault(); this.openNetChat(); return; }
@@ -1320,6 +1322,42 @@ class Game {
     ui.show('boardScreen');
   }
 
+  // ---- moorland ponies: a rideable mount 'twixt shanks's pony an' t' railway ----
+  mountPony(pony) {
+    if (this.mount || !pony || pony.dead) return;
+    this.mount = pony;
+    pony.ridden = true;
+    this.player.mounted = true;
+    this.player.flying = false;
+    this.player.pos = { x: pony.pos.x, y: pony.pos.y + 0.2, z: pony.pos.z };
+    this.audio.thud && this.audio.thud();
+    this.ui.toast('<b>Up tha gets!</b> Ride on wi’ <b>WASD</b> — she fair shifts ower t’ moor an’ leaps a wall. <b>F</b> to get down.', 7000);
+  }
+
+  dismountPony() {
+    const p = this.mount; if (!p) return;
+    p.ridden = false;
+    p.pos = { x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z };
+    p.home = { x: p.pos.x, z: p.pos.z };
+    if (p.model) p.model.group.position.set(p.pos.x, p.pos.y, p.pos.z);
+    this.mount = null;
+    this.player.mounted = false;
+    this.ui.toast('Tha’s down. She’ll graze where tha left her.', 3000);
+  }
+
+  updateMount() {
+    const p = this.mount; if (!p) return;
+    if (p.dead) { this.mount = null; this.player.mounted = false; return; }
+    // the pony carries thee: it sits under thi feet, facing where tha looks
+    p.pos.x = this.player.pos.x; p.pos.y = this.player.pos.y; p.pos.z = this.player.pos.z;
+    const g = p.model.group;
+    g.position.set(this.player.pos.x, this.player.pos.y - 0.15, this.player.pos.z);
+    g.rotation.y = this.player.yaw + Math.PI;
+    const moving = Math.hypot(this.player.vel.x, this.player.vel.z) > 0.6;
+    p.walkPhase = (p.walkPhase || 0) + (moving ? 0.22 : 0);
+    if (p.model.legs) p.model.legs.forEach((l, i) => { l.rotation.x = moving ? Math.sin(p.walkPhase + i * Math.PI / 2) * 0.5 : 0; });
+  }
+
   // ---- local folk ridin' t' carriage: board, sit, natter, alight ----
   trainSeatWorld(seatIdx) {
     const cg = this.train.carriage.group;
@@ -1882,6 +1920,10 @@ class Game {
       const eye = this.player.eyePos();
       const d = this.lookDir();
       const mobHit = this.entities.raycastMobs(eye.x, eye.y, eye.z, d.x, d.y, d.z, 4.5);
+      if (mobHit && mobHit.mob.type === 'pony' && !this.mount && (!hit || mobHit.dist < hit.dist)) {
+        this.mountPony(mobHit.mob);
+        return;
+      }
       if (mobHit && mobHit.mob.type === 'villager' && (!hit || mobHit.dist < hit.dist)) {
         if (mobHit.mob.isRemotePlayer) {
           this.ui.toast(`That\u2019s <b>${mobHit.mob.displayName}</b> \u2014 another living soul. Press <b>T</b> to talk to t\u2019 moor.`, 4500);
@@ -2096,6 +2138,7 @@ class Game {
         // UI open: physics still ticks but wi' no input
         this.player.update(dt, { keys: {}, jumpTapped: false }, this.audio);
       }
+      if (this.mount) this.updateMount(); // carry the pony along under the rider
 
       // streaming
       this.world.update(this.player.pos.x, this.player.pos.z);
