@@ -575,6 +575,8 @@ class Game {
     const tRow = ui.el('div', 'admin-btns', panel);
     const train = ui.el('button', 'mc', tRow, 'Board t’ Train (ride owt, Esc to step off)');
     train.addEventListener('click', () => this.wardenBoardTrain());
+    const pony = ui.el('button', 'mc', tRow, 'Find a Pony (drop by t’ nearest)');
+    pony.addEventListener('click', () => this.wardenToPony());
     ui.el('div', 'r-needs', panel, 'Whisk thissen anywhere:');
     const tp = ui.el('div', 'admin-tp', panel);
     const geo = this.world.gen.geo;
@@ -591,6 +593,14 @@ class Game {
                                  ['T’ Wainstones', -380, -620], ['Rosedale Kilns', -260, 380]]) {
       const b = ui.el('button', 'mc chat-btn', tp, label);
       b.addEventListener('click', () => this.adminTeleport(x, z, label));
+    }
+    // newer spots worth a warden's eye: the Whitby museum
+    if (geo.museumSite) {
+      const ms = geo.museumSite();
+      if (ms) {
+        const mb = ui.el('button', 'mc chat-btn', tp, 'Whitby Museum');
+        mb.addEventListener('click', () => this.adminTeleport(ms.x, ms.z, 'Whitby Museum'));
+      }
     }
     // drop in on a player (shared moor only — t' relay answers wardens wi' t' map)
     if (this.netActive && this.net && this.net.connected) {
@@ -635,6 +645,41 @@ class Game {
     this.wardenDrop = { label, t: 0 };
     this.resume();
     this.ui.toast(`Dropping in ower <b>${label}</b>...`, 2500);
+  }
+
+  // Warden shortcut: drop by t' nearest grazin' pony so tha can climb straight on;
+  // if there's none about, set down on t' open moor where they roam an' they'll spawn near.
+  wardenToPony() {
+    const live = this.entities.mobs.filter(m => m.type === 'pony' && !m.dead);
+    if (live.length) {
+      let best = live[0], bd = Infinity;
+      for (const m of live) {
+        const d = Math.hypot(m.pos.x - this.player.pos.x, m.pos.z - this.player.pos.z);
+        if (d < bd) { bd = d; best = m; }
+      }
+      this.adminTeleport(Math.floor(best.pos.x), Math.floor(best.pos.z), 'a grazin’ pony');
+    } else {
+      const moor = this.findOpenMoor(this.player.pos.x, this.player.pos.z) || { x: -380, z: -620 };
+      this.ui.toast('No ponies in sight — droppin’ on t’ open moor; they’ll not be far.', 4500);
+      this.adminTeleport(moor.x, moor.z, 'the open moor');
+    }
+  }
+
+  // Find an open-moor tile near (cx,cz): high, dry, no dale, no coast, away frae t' villages.
+  findOpenMoor(cx, cz) {
+    const gen = this.world.gen, geo = gen.geo;
+    for (let r = 40; r <= 520; r += 40) {
+      for (let a = 0; a < 12; a++) {
+        const ang = a / 12 * Math.PI * 2;
+        const x = Math.round(cx + Math.cos(ang) * r), z = Math.round(cz + Math.sin(ang) * r);
+        const h = gen.height(x, z);
+        if (h >= 30 && h <= 42 && geo.bogginess(x, z) < 0.3 && geo.daleness(x, z) < 0.45 &&
+            geo.coastT(x, z) === 0 && !geo.inVillage(x, z, 14)) {
+          return { x, z };
+        }
+      }
+    }
+    return null;
   }
 
   // Warden boards t' moving train wherever she is on t' line — no booking, no

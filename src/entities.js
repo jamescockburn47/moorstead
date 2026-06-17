@@ -170,18 +170,36 @@ function makeLlama() {
 
 function makePony() {
   const g = new THREE.Group();
-  const HIDE = 0x3a2a1e, MANE = 0x18110b, MUZZLE = 0x5a4636;
-  const body = box(0.72, 0.78, 1.5, HIDE); body.position.y = 1.02; g.add(body);
-  const neck = box(0.42, 0.62, 0.5, HIDE); neck.position.set(0, 1.4, 0.78); neck.rotation.x = -0.5; g.add(neck);
-  const head = box(0.36, 0.42, 0.64, HIDE); head.position.set(0, 1.66, 1.08); head.rotation.x = -0.22; g.add(head);
-  const muzzle = box(0.3, 0.26, 0.22, MUZZLE); muzzle.position.set(0, 1.54, 1.38); g.add(muzzle);
-  for (const x of [-0.13, 0.13]) { const ear = box(0.1, 0.18, 0.08, HIDE); ear.position.set(x, 1.88, 0.98); g.add(ear); }
-  for (const x of [-0.12, 0.12]) { const eye = box(0.06, 0.06, 0.04, 0x0c0a08); eye.position.set(x, 1.66, 1.34); g.add(eye); }
-  const mane = box(0.16, 0.72, 0.34, MANE); mane.position.set(0, 1.52, 0.64); mane.rotation.x = -0.5; g.add(mane);
-  const tail = box(0.16, 0.62, 0.18, MANE); tail.position.set(0, 1.0, -0.8); tail.rotation.x = 0.45; g.add(tail);
+  // a stocky moorland pony — bay brown wi' black points (mane, tail, lower legs),
+  // a mealy muzzle an' feathered fetlocks. Built an' eyeballed frae two angles afore shipping.
+  const BODY = 0x4d3925, BELLY = 0x402f1d, PT = 0x161009, MEALY = 0xa08a6a, HOOF = 0x0d0a07;
+  // a deep barrel, rounded fore an' aft so she reads stocky, not a plank on legs
+  const body = box(0.8, 0.82, 1.3, BODY); body.position.y = 1.1; g.add(body);
+  const chest = box(0.84, 0.78, 0.5, BODY); chest.position.set(0, 1.04, 0.5); g.add(chest);
+  const rump = box(0.84, 0.82, 0.46, BODY); rump.position.set(0, 1.12, -0.54); g.add(rump);
+  const belly = box(0.72, 0.46, 1.14, BELLY); belly.position.set(0, 0.76, -0.02); g.add(belly);
+  // an arched neck wi' a black mane laid flush down the crest (so it can't poke up)
+  const neck = box(0.46, 0.85, 0.54, BODY); neck.position.set(0, 1.5, 0.6); neck.rotation.x = -0.5; g.add(neck);
+  const mane = box(0.16, 0.82, 0.14, PT); mane.position.set(0, 1.48, 0.36); mane.rotation.x = -0.5; g.add(mane);
+  // a neat head dropped forward to a pale muzzle, a forelock between the ears
+  const head = box(0.4, 0.44, 0.72, BODY); head.position.set(0, 1.9, 1.06); head.rotation.x = -0.2; g.add(head);
+  const muzzle = box(0.34, 0.32, 0.26, MEALY); muzzle.position.set(0, 1.76, 1.46); g.add(muzzle);
+  const forelock = box(0.24, 0.16, 0.1, PT); forelock.position.set(0, 2.0, 1.28); g.add(forelock);
+  for (const x of [-0.12, 0.12]) { const ear = box(0.1, 0.18, 0.09, BODY); ear.position.set(x, 2.08, 0.96); g.add(ear); }
+  for (const x of [-0.16, 0.16]) {
+    const ring = box(0.11, 0.11, 0.04, MEALY); ring.position.set(x, 1.86, 1.3); g.add(ring);
+    const eye = box(0.06, 0.06, 0.05, 0x0a0806); eye.position.set(x, 1.86, 1.33); g.add(eye);
+  }
+  // a thick black tail near to the hocks
+  const tail = box(0.2, 0.84, 0.22, PT); tail.position.set(0, 0.9, -0.82); tail.rotation.x = 0.3; g.add(tail);
+  // four short legs — bay to the knee, then a black sock, a feathered fetlock an' a hoof;
+  // the sock, feather an' hoof are children so they swing along as the leg strides
   const legs = [];
-  for (const [x, z] of [[-0.26, 0.5], [0.26, 0.5], [-0.26, -0.5], [0.26, -0.5]]) {
-    const l = box(0.18, 0.86, 0.18, 0x281c12); l.position.set(x, 0.43, z); g.add(l); legs.push(l);
+  for (const [x, z] of [[-0.26, 0.42], [0.26, 0.42], [-0.26, -0.46], [0.26, -0.46]]) {
+    const l = box(0.21, 0.66, 0.21, BODY); l.position.set(x, 0.46, z); g.add(l); legs.push(l);
+    const sock = box(0.2, 0.34, 0.2, PT); sock.position.set(0, -0.2, 0); l.add(sock);
+    const feather = box(0.27, 0.2, 0.27, PT); feather.position.set(0, -0.28, 0); l.add(feather);
+    const hoof = box(0.22, 0.12, 0.22, HOOF); hoof.position.set(0, -0.36, 0); l.add(hoof);
   }
   return { group: g, legs, body, head };
 }
