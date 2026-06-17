@@ -8,6 +8,7 @@ import { HEIGHT, WATER_LEVEL } from './defs.js';
 
 const GRAVITY = 26;
 
+const PRINT_GEOM = new THREE.PlaneGeometry(0.34, 0.5); // shared geom for the barghest's dawn-prints
 function box(w, h, d, color, emissive = 0) {
   const m = new THREE.Mesh(
     new THREE.BoxGeometry(w, h, d),
@@ -580,6 +581,8 @@ export class Entities {
     this.particles = [];
     this.spawnTimer = 0;
     this.particleGeom = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+    this.prints = [];      // t' barghest's fading dawn paw-prints
+    this.printDay = -1;
   }
 
   // ---------- villagers ----------
@@ -684,7 +687,24 @@ export class Entities {
       return (counts[k] || 0) < cap;
     });
     if (!types.length) return;
-    const type = types[(Math.random() * types.length) | 0];
+    // t' season shapes t' moor: birds throng in spring, but in deep winter
+    // little new ventures out.
+    const season = this.game && this.game.season;
+    if (season && season.warmth < 0 && Math.random() < (-season.warmth) * 0.5) return;
+    let type;
+    if (season) {
+      const spring = Math.max(0, Math.min(1, season.greenness));
+      const wts = types.map(k =>
+        k === 'curlew' ? 0.5 + spring * 2.5            // curlews come back to nest in spring
+          : (k === 'grouse' || k === 'pheasant') ? 0.7 + spring * 1.2
+          : k === 'crow' ? 1 + (1 - spring) * 0.8      // crows commoner in t' lean months
+          : 1);
+      let r = Math.random() * wts.reduce((a, b) => a + b, 0);
+      type = types[types.length - 1];
+      for (let i = 0; i < types.length; i++) { r -= wts[i]; if (r <= 0) { type = types[i]; break; } }
+    } else {
+      type = types[(Math.random() * types.length) | 0];
+    }
     const t = MOB_TYPES[type];
     if (t.hostile && day <= 2 && Math.random() < 0.5) return; // first neets: a taster, not a massacre
     const ang = Math.random() * Math.PI * 2;
@@ -717,6 +737,14 @@ export class Entities {
       const extra = t.group[0] + ((Math.random() * (t.group[1] - t.group[0] + 1)) | 0) - 1;
       for (let i = 0; i < extra; i++) {
         this.spawnNear(type, x + ((Math.random() * 10 - 5) | 0), z + ((Math.random() * 10 - 5) | 0));
+      }
+    }
+    // spring lambing: ewes come wi' lambs at heel (they follow their mother, not thee)
+    if (type === 'sheep' && season && season.greenness > 0.55 && Math.random() < 0.7) {
+      const nLambs = 1 + ((Math.random() * 2) | 0);
+      for (let i = 0; i < nLambs; i++) {
+        const lamb = this.spawnMob('lamb', x + 0.5 + (Math.random() * 2 - 1), surfY + 1.0, z + 0.5 + (Math.random() * 2 - 1));
+        if (lamb) { lamb.naturalLamb = true; lamb.mother = mob; }
       }
     }
     return mob;
@@ -830,8 +858,16 @@ export class Entities {
 
       let wishX = 0, wishZ = 0, speed = 0;
 
-      // lost lambs trot after thee once tha's found 'em
-      if (t.follower && distP < 26 && !player.dead) {
+      // natural spring lambs trot after their mother ewe, not after thee
+      if (mob.naturalLamb) {
+        const ewe = (mob.mother && !mob.mother.dead) ? mob.mother : null;
+        if (ewe) {
+          const lx = ewe.pos.x - mob.pos.x, lz = ewe.pos.z - mob.pos.z, ld = Math.hypot(lx, lz);
+          if (ld > 1.6) { wishX = lx / (ld || 1); wishZ = lz / (ld || 1); speed = t.speed; }
+          mob.state = 'follow';
+        }
+      } else if (t.follower && distP < 26 && !player.dead) {
+        // lost lambs trot after thee once tha's found 'em
         if (distP > 2.4) {
           const inv = distP || 1;
           wishX = dx / inv; wishZ = dz / inv; speed = t.speed;
@@ -886,8 +922,21 @@ export class Entities {
         if (audio) audio.mobAmbient(mob.type, distP);
       }
 
+      // red grouse drum an' display at spring dawn
+      if (mob.type === 'grouse' && this.game && this.game.season && this.game.season.greenness > 0.5) {
+        const tm = this.game.sky ? this.game.sky.time : 0.5;
+        if (tm > 0.18 && tm < 0.33) {
+          mob.drumCd = (mob.drumCd || 0) - dt;
+          if (mob.drumCd <= 0) {
+            mob.drumCd = 4 + Math.random() * 6;
+            if (distP < 40 && audio) audio.grouseCall(0.22);
+            mob.vel.y = Math.max(mob.vel.y, 2.2); // a little display hop
+          }
+        }
+      }
+
       if (mob.state === 'follow') {
-        if (!(t.follower && distP < 26)) mob.state = 'idle';
+        if (!mob.naturalLamb && !(t.follower && distP < 26)) mob.state = 'idle';
         // wish already set above
       } else if (mob.state === 'flee') {
         mob.fleeTimer -= dt;
@@ -1286,12 +1335,52 @@ export class Entities {
     this.updateMobs(dt, player, isNight, audio);
     this.updateDrops(dt, player, audio, onPickup);
     this.updateParticles(dt);
+    this.updatePrints(dt);
+    // t' barghest's dawn-prints: a fading trail left on t' moor at first light
+    const sky = this.game && this.game.sky;
+    if (sky && sky.time > 0.17 && sky.time < 0.24 && this.printDay !== sky.day) {
+      this.printDay = sky.day;
+      if (Math.random() < 0.6) this.spawnDawnPrints(player);
+    }
+  }
+
+  // a trail o' dark paw-prints, as if summat passed in t' night; fades ower a minute
+  spawnDawnPrints(player) {
+    const geo = this.world.gen.geo;
+    if (geo.inVillage(player.pos.x, player.pos.z, 16)) return; // only out on t' open moor
+    const start = Math.random() * Math.PI * 2;
+    const sx = player.pos.x + Math.cos(start) * (8 + Math.random() * 10);
+    const sz = player.pos.z + Math.sin(start) * (8 + Math.random() * 10);
+    const dir = Math.random() * Math.PI * 2, nx = Math.cos(dir + Math.PI / 2), nz = Math.sin(dir + Math.PI / 2);
+    for (let i = 0; i < 14; i++) {
+      const off = (i % 2 ? 0.16 : -0.16);
+      const px = sx + Math.cos(dir) * 0.9 * i + nx * off;
+      const pz = sz + Math.sin(dir) * 0.9 * i + nz * off;
+      let y = null;
+      for (let yy = HEIGHT - 2; yy > 1; yy--) { if (this.world.getBlock(Math.floor(px), yy, Math.floor(pz)) !== B.AIR) { y = yy + 1; break; } }
+      if (y == null) continue;
+      const m = new THREE.Mesh(PRINT_GEOM, new THREE.MeshBasicMaterial({ color: 0x0a0a12, transparent: true, opacity: 0.5, depthWrite: false }));
+      m.rotation.x = -Math.PI / 2; m.rotation.z = -dir;
+      m.position.set(px, y + 0.03, pz);
+      this.scene.add(m);
+      this.prints.push({ mesh: m, life: 80 + Math.random() * 30 });
+    }
+  }
+
+  updatePrints(dt) {
+    for (let i = this.prints.length - 1; i >= 0; i--) {
+      const p = this.prints[i];
+      p.life -= dt;
+      if (p.life <= 0) { this.scene.remove(p.mesh); p.mesh.material.dispose(); this.prints.splice(i, 1); }
+      else p.mesh.material.opacity = Math.min(0.5, p.life / 40 * 0.5);
+    }
   }
 
   clear() {
     for (const m of this.mobs) this.scene.remove(m.model.group);
     for (const d of this.drops) this.scene.remove(d.spr);
     for (const p of this.particles) this.scene.remove(p.m);
-    this.mobs = []; this.drops = []; this.particles = [];
+    for (const p of this.prints) { this.scene.remove(p.mesh); p.mesh.material.dispose(); }
+    this.mobs = []; this.drops = []; this.particles = []; this.prints = [];
   }
 }

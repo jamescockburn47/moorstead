@@ -2085,12 +2085,38 @@ class Game {
     this.sky.setDread(dread);
     this.ui.setDread(dread);
 
+    // place-based ambience signals (beck / coast / inn), refreshed ~3x a second
+    this._ambTimer = (this._ambTimer || 0) - dt;
+    if (this._ambTimer <= 0) {
+      this._ambTimer = 0.33;
+      const geo = this.world && this.world.gen && this.world.gen.geo;
+      const p = this.player.pos, px = Math.floor(p.x), pz = Math.floor(p.z), py = Math.floor(p.y);
+      if (geo) {
+        this._onCoast = geo.coastT(px, pz) > 0 ? 1 : 0;
+        let vd = 1e9;
+        for (const v of geo.villages) { const d = Math.hypot(v.x - p.x, v.z - p.z); if (d < vd) vd = d; }
+        const evening = this.sky.time > 0.6 || this.sky.time < 0.05; // dusk through t' small hours
+        this._nearInn = (evening && vd < 16) ? 1 : 0;
+        let water = 0;
+        for (const [dx, dz] of [[0, 0], [3, 0], [-3, 0], [0, 3], [0, -3], [4, 4], [-4, 4], [4, -4], [-4, -4]]) {
+          if (this.world.getBlock(px + dx, py - 1, pz + dz) === B.WATER || this.world.getBlock(px + dx, py, pz + dz) === B.WATER) { water = 1; break; }
+        }
+        this._nearWater = water || this._onCoast;
+      }
+    }
+    const trainDist = this.trainState ? Math.hypot(this.trainState.x - this.player.pos.x, this.trainState.z - this.player.pos.z) : null;
+
     this.audio.update(dt, {
       rain: this.sky.rainAmount,
       windiness: Math.min(1, Math.max(0, (this.player.pos.y - 26) / 20)),
       isNight: this.sky.isNight(),
       nearSheep,
       dread,
+      season: this.season,
+      nearWater: this._nearWater || 0,
+      onCoast: this._onCoast || 0,
+      nearInn: this._nearInn || 0,
+      trainDist,
     });
 
     // HUD
