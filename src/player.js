@@ -136,6 +136,12 @@ export class Player {
     if (this.swimGrace > 0 && this.hitWall && wantsMove && !this.flying) {
       this.vel.y = Math.max(this.vel.y, inBog ? 5.5 : 7.8);
     }
+    // a pony leaps a low step of its own accord — no need to press jump, but
+    // only a one-block rise (clear above her head), never a proper cliff
+    if (this.mounted && this.hitWall && wantsMove && this.onGround && !this.flying &&
+        !boxCollides(this.world, this.pos.x, this.pos.y + 1.25, this.pos.z, this.hw, 0.7)) {
+      this.vel.y = Math.max(this.vel.y, JUMP_VEL * 1.1);
+    }
 
     // sneak edge-guard: don't walk off edges while sneaking
     if (sneaking && wasGround && !this.onGround && this.vel.y <= 0) {

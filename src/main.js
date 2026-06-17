@@ -1329,6 +1329,7 @@ class Game {
     pony.ridden = true;
     this.player.mounted = true;
     this.player.flying = false;
+    this._savedEye = this.player.eye; this.player.eye = 2.35; // sit up on her back, see ower t' moor
     this.player.pos = { x: pony.pos.x, y: pony.pos.y + 0.2, z: pony.pos.z };
     this.audio.thud && this.audio.thud();
     this.ui.toast('<b>Up tha gets!</b> Ride on wi’ <b>WASD</b> — she fair shifts ower t’ moor an’ leaps a wall. <b>F</b> to get down.', 7000);
@@ -1342,6 +1343,7 @@ class Game {
     if (p.model) p.model.group.position.set(p.pos.x, p.pos.y, p.pos.z);
     this.mount = null;
     this.player.mounted = false;
+    this.player.eye = this._savedEye || 1.62;
     this.ui.toast('Tha’s down. She’ll graze where tha left her.', 3000);
   }
 
@@ -1510,11 +1512,11 @@ class Game {
     if (!loco || !loco.parent) return;
     // sit at the driver's side spectacle, leaning out a touch so tha sees up the
     // line past the boiler (a centred footplate eye just stares at the black firebox)
-    const cab = new THREE.Vector3(1.0, 2.62, -1.7).applyQuaternion(loco.quaternion).add(loco.position);
+    const cab = new THREE.Vector3(0.7, 3.25, -1.5).applyQuaternion(loco.quaternion).add(loco.position);
     this.player.pos = { x: cab.x, y: cab.y - this.player.eye, z: cab.z };
     this.player.vel = { x: 0, y: 0, z: 0 };
     const locoYaw = loco.rotation.y || 0;
-    if (!this.driveYawSet) { this.player.yaw = locoYaw + Math.PI - 0.12; this.player.pitch = -0.04; this.driveBaseYaw = locoYaw; this.driveYawSet = true; }
+    if (!this.driveYawSet) { this.player.yaw = locoYaw + Math.PI - 0.06; this.player.pitch = -0.12; this.driveBaseYaw = locoYaw; this.driveYawSet = true; }
     else { let dY = locoYaw - this.driveBaseYaw; while (dY > Math.PI) dY -= Math.PI * 2; while (dY < -Math.PI) dY += Math.PI * 2; if (Math.abs(dY) > 1e-4) { this.player.yaw += dY; this.driveBaseYaw = locoYaw; } }
     let h = this._driveHud;
     if (!h) {
