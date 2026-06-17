@@ -227,19 +227,34 @@ export class AudioEngine {
   baa(vol = 0.3) {
     if (!this.ctx) return;
     const t0 = this.ctx.currentTime;
-    const o = this.ctx.createOscillator();
-    o.type = 'sawtooth';
-    const base = 180 + Math.random() * 90;
-    o.frequency.setValueAtTime(base, t0);
-    // vibrato = t' bleat
-    const lfo = this.ctx.createOscillator(); lfo.frequency.value = 9;
-    const lfoG = this.ctx.createGain(); lfoG.gain.value = base * 0.12;
+    const dur = 0.45 + Math.random() * 0.55;
+    const base = 200 + Math.random() * 130;          // ewes an' lambs all sound different
+    const o = this.ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(base * 1.06, t0);
+    o.frequency.linearRampToValueAtTime(base, t0 + dur * 0.5);
+    o.frequency.linearRampToValueAtTime(base * 0.9, t0 + dur);
+    // t' bleat: a fast, irregular wobble in pitch
+    const lfo = this.ctx.createOscillator(); lfo.type = 'square'; lfo.frequency.value = 11 + Math.random() * 7;
+    const lfoG = this.ctx.createGain(); lfoG.gain.value = base * (0.05 + Math.random() * 0.04);
     lfo.connect(lfoG).connect(o.frequency);
-    const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1200;
+    // two nasal formants give it t' sheep timbre, not a buzz
+    const f1 = this.ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.value = 780 + Math.random() * 120; f1.Q.value = 4;
+    const f2 = this.ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = 1850; f2.Q.value = 7;
+    const lp = this.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200;
     const g = this.ctx.createGain();
-    this.env(g, t0, 0.05, vol, 0.55);
-    o.connect(f).connect(g).connect(this.master);
-    o.start(t0); o.stop(t0 + 0.8); lfo.start(t0); lfo.stop(t0 + 0.8);
+    // tremolo on t' volume = t' wavering bleat
+    const trem = this.ctx.createOscillator(); trem.type = 'sine'; trem.frequency.value = 12 + Math.random() * 7;
+    const tremG = this.ctx.createGain(); tremG.gain.value = vol * 0.22;
+    trem.connect(tremG).connect(g.gain);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + 0.05);
+    g.gain.setValueAtTime(vol, t0 + dur - 0.12);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(f1); o.connect(f2); f1.connect(lp); f2.connect(lp); lp.connect(g).connect(this.master);
+    this.noiseBurst(t0, 0.05, vol * 0.10, 2400, 'highpass'); // a breath at t' off
+    o.start(t0); o.stop(t0 + dur + 0.05);
+    lfo.start(t0); lfo.stop(t0 + dur + 0.05);
+    trem.start(t0); trem.stop(t0 + dur + 0.05);
   }
 
   // red grouse: "go-back go-back go-back"
@@ -277,17 +292,27 @@ export class AudioEngine {
   moo(vol = 0.3) {
     if (!this.ctx) return;
     const t0 = this.ctx.currentTime;
-    const o = this.ctx.createOscillator();
-    o.type = 'sawtooth';
-    const base = 150 + Math.random() * 40;
-    o.frequency.setValueAtTime(base * 1.2, t0);
-    o.frequency.linearRampToValueAtTime(base, t0 + 0.3);
-    o.frequency.linearRampToValueAtTime(base * 0.85, t0 + 1.0);
-    const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700;
+    const dur = 1.0 + Math.random() * 0.8;
+    const base = 125 + Math.random() * 55;
+    const o = this.ctx.createOscillator(); o.type = 'sawtooth';
+    // a moo swells up then falls away
+    o.frequency.setValueAtTime(base * 0.9, t0);
+    o.frequency.linearRampToValueAtTime(base * 1.12, t0 + dur * 0.35);
+    o.frequency.linearRampToValueAtTime(base * 0.78, t0 + dur);
+    const lfo = this.ctx.createOscillator(); lfo.frequency.value = 5; // slow vibrato
+    const lfoG = this.ctx.createGain(); lfoG.gain.value = base * 0.03; lfo.connect(lfoG).connect(o.frequency);
+    // big chesty formants
+    const f1 = this.ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.value = 300 + Math.random() * 140; f1.Q.value = 5;
+    const f2 = this.ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = 680; f2.Q.value = 3;
+    const lp = this.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1100;
     const g = this.ctx.createGain();
-    this.env(g, t0, 0.12, vol, 0.9);
-    o.connect(f).connect(g).connect(this.master);
-    o.start(t0); o.stop(t0 + 1.2);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + 0.2);
+    g.gain.setValueAtTime(vol, t0 + dur - 0.3);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(f1); o.connect(f2); f1.connect(lp); f2.connect(lp); lp.connect(g).connect(this.master);
+    this.noiseBurst(t0 + dur * 0.62, 0.2, vol * 0.10, 480, 'lowpass'); // a breathy snort to finish
+    o.start(t0); o.stop(t0 + dur + 0.1); lfo.start(t0); lfo.stop(t0 + dur + 0.1);
   }
 
   bullSnort(vol = 0.32) {

@@ -23,6 +23,7 @@ export class Player {
     this.fallStart = null;
     this.hurtFlash = 0;
     this.hungerTick = 0; this.regenTick = 0; this.exhaustion = 0;
+    this.wetness = 0; // soaked through in t' rain; dries under cover or by a fire
     this.slots = new Array(36).fill(null); // {id, n, dur?}
     this.hotbar = 0;
     this.fuelBank = 0;
@@ -189,8 +190,8 @@ export class Player {
           if (this.health > 1) this.damage(1, 'Tha clammed to deeath');
         }
       }
-      // regen when well fed
-      if (this.hunger >= 16 && this.health < 20) {
+      // regen when well fed — but not while tha's soaked through an' shiverin'
+      if (this.hunger >= 16 && this.health < 20 && this.wetness < 0.6) {
         this.regenTick += dt;
         if (this.regenTick > 3) {
           this.regenTick = 0;

@@ -73,28 +73,7 @@ export class Sky {
     }));
     this.scene.add(this.stars);
 
-    // low drifting cloud sheet
-    const cc = document.createElement('canvas'); cc.width = cc.height = 256;
-    const cx = cc.getContext('2d');
-    cx.clearRect(0, 0, 256, 256);
-    for (let i = 0; i < 1800; i++) {
-      const x = Math.random() * 256, y = Math.random() * 256;
-      const r = 6 + Math.random() * 18;
-      const a = Math.random() * 0.05;
-      cx.fillStyle = `rgba(235,238,242,${a})`;
-      cx.beginPath(); cx.arc(x, y, r, 0, 7); cx.fill();
-    }
-    const cloudTex = new THREE.CanvasTexture(cc);
-    cloudTex.wrapS = cloudTex.wrapT = THREE.RepeatWrapping;
-    cloudTex.repeat.set(12, 12);
-    this.cloudTex = cloudTex;
-    this.clouds = new THREE.Mesh(
-      new THREE.PlaneGeometry(3000, 3000),
-      new THREE.MeshBasicMaterial({ map: cloudTex, transparent: true, opacity: 0.7, fog: false, depthWrite: false })
-    );
-    this.clouds.rotation.x = Math.PI / 2;
-    this.clouds.position.y = 110;
-    scene.add(this.clouds);
+    // (clouds are rendered inside the sky dome shader below — no flat plane lid)
 
     // sky dome — a gradient frae horizon to zenith, so t' sky has depth an'
     // wraps round to t' horizon all about, not a flat lid overhead. Horizon
@@ -105,7 +84,10 @@ export class Sky {
       uniforms: {
         topColor: { value: new THREE.Color(0x2f5074) },
         bottomColor: { value: new THREE.Color(0x9fb6c8) },
+        cloudCol: { value: new THREE.Color(0xe8edf2) },
         exponent: { value: 0.7 },
+        uTime: { value: 0 },
+        uClouds: { value: 0.3 },
       },
       vertexShader: `
         varying vec3 vDir;
@@ -114,13 +96,27 @@ export class Sky {
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }`,
       fragmentShader: `
-        uniform vec3 topColor;
-        uniform vec3 bottomColor;
-        uniform float exponent;
+        uniform vec3 topColor, bottomColor, cloudCol;
+        uniform float exponent, uTime, uClouds;
         varying vec3 vDir;
+        float hash(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
+        float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          float a = hash(i), b = hash(i + vec2(1.0, 0.0)), c = hash(i + vec2(0.0, 1.0)), d = hash(i + vec2(1.0, 1.0));
+          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y); }
+        float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++){ v += a * noise(p); p *= 2.0; a *= 0.5; } return v; }
         void main() {
-          float t = pow(clamp(vDir.y, 0.0, 1.0), exponent);
-          gl_FragColor = vec4(mix(bottomColor, topColor, t), 1.0);
+          vec3 dir = normalize(vDir);
+          float t = pow(clamp(dir.y, 0.0, 1.0), exponent);
+          vec3 col = mix(bottomColor, topColor, t);
+          float up = clamp(dir.y, 0.0, 1.0);
+          if (up > 0.02) {
+            vec2 uv = dir.xz / max(dir.y, 0.06) * 0.55 + uTime * vec2(0.012, 0.007);
+            float n = fbm(uv);
+            float cover = 0.62 - uClouds * 0.42;
+            float cloud = smoothstep(cover, cover + 0.2, n) * smoothstep(0.05, 0.4, up);
+            col = mix(col, cloudCol, cloud * 0.85);
+          }
+          gl_FragColor = vec4(col, 1.0);
         }`,
     });
     this.dome = new THREE.Mesh(new THREE.SphereGeometry(500, 24, 16), this.domeMat);
@@ -165,7 +161,7 @@ export class Sky {
   }
 
   // returns a weather-change message when t' weather turns, else null
-  update(dt, playerPos, season = null) {
+  update(dt, playerPos, season = null, covered = false) {
     let msg = null;
     const prevNight = this.isNight();
     const prevT = this.time;
@@ -286,18 +282,18 @@ export class Sky {
     this.stars.material.opacity = Math.max(0, -sunY * 2) * (1 - grey * 0.8);
     this.stars.position.set(playerPos.x, 0, playerPos.z);
 
-    // clouds drift on t' wind
-    this.cloudTex.offset.x += dt * 0.004;
-    this.cloudTex.offset.y += dt * 0.0015;
-    this.clouds.position.x = playerPos.x;
-    this.clouds.position.z = playerPos.z;
-    this.clouds.material.opacity = 0.25 + grey * 0.55;
+    // drift t' dome clouds on t' wind; coverage frae t' weather, lit by day
+    this.cloudT = (this.cloudT || 0) + dt;
+    const cu = this.domeMat.uniforms;
+    cu.uTime.value = this.cloudT;
+    cu.uClouds.value += (grey - cu.uClouds.value) * Math.min(1, dt * 0.5);
+    cu.cloudCol.value.setRGB(0.16, 0.18, 0.22).lerp(new THREE.Color(0.91, 0.93, 0.95), dayness);
 
     // rain
     const targetRain = (this.liveRain != null) ? this.liveRain : (this.weather === 'rain' ? 1 : 0);
     this.rainAmount += (targetRain - this.rainAmount) * Math.min(1, dt * 0.8);
-    this.rain.material.opacity = this.rainAmount * 0.5;
-    if (this.rainAmount > 0.02) {
+    this.rain.material.opacity = covered ? 0 : this.rainAmount * 0.5; // no rain through a roof
+    if (!covered && this.rainAmount > 0.02) {
       const p = this.rain.geometry.attributes.position;
       for (let i = 0; i < this.rainCount; i++) {
         let y = p.array[i * 3 + 1] - dt * 22;

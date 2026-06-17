@@ -1919,7 +1919,27 @@ class Game {
       setSnowLevel(season.snowiness); // height-gated snow on the tops (cheap uniform)
       const sbk = Math.floor(season.yearPhase * 40);
       if (sbk !== this._seasonBucket) { this._seasonBucket = sbk; retintAtlasForSeason(season); } // heather purple, bracken rust…
-      const msg = this.sky.update(dt, this.player.pos, season);
+      // is there a roof overhead? (stops rain fallin' through ceilings + drives wetness)
+      const _pp = this.player.pos, _px = Math.floor(_pp.x), _pz = Math.floor(_pp.z), _ph = Math.floor(_pp.y + this.player.eye);
+      let covered = false;
+      for (let yy = _ph + 1; yy <= _ph + 6; yy++) {
+        const ab = this.world.getBlock(_px, yy, _pz);
+        if (ab !== B.AIR && ab !== B.WATER && !isCutout(ab)) { covered = true; break; }
+      }
+      const msg = this.sky.update(dt, this.player.pos, season, covered);
+      // wetness: tha gets soaked out in t' rain (or t' beck) an' dries under cover or by a fire.
+      // soaked through, tha can't rest up (no regen) an' tha burns scran keepin' warm.
+      if (!this.player.creative) {
+        const pl = this.player;
+        const inRain = this.sky.rainAmount > 0.25 && !covered;
+        const inBeck = pl.feetBlock() === B.WATER || pl.headBlock() === B.WATER;
+        const byFire = this.world.nearLight(_pp.x, _pp.z, 4);
+        if (inRain || inBeck) pl.wetness = Math.min(1, pl.wetness + dt * 0.05);
+        else pl.wetness = Math.max(0, pl.wetness - dt * (byFire ? 0.16 : covered ? 0.09 : 0.03));
+        if (pl.wetness > 0.5) pl.exhaustion += dt * (pl.wetness - 0.5) * 0.4;
+        if (pl.wetness > 0.7 && !pl._soaked) { pl._soaked = true; this.ui.toast('Tha&rsquo;s wringin&rsquo; wet through &mdash; get under cover or by a fire afore tha catches thi deeath.', 4500); }
+        else if (pl.wetness < 0.25 && pl._soaked) { pl._soaked = false; this.ui.toast('Tha&rsquo;s dried off. Grand.', 2500); }
+      } else { this.player.wetness = 0; }
       if (msg) {
         if (msg.type === 'night') {
           const dracHunt = this.quests.draculaHuntActive() && !this.quests.draculaDone();
