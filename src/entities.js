@@ -4,6 +4,7 @@ import { B, I, BLOCKS, isSolid } from './defs.js';
 import { moveEntity } from './physics.js';
 import { getIconURL, tileColor } from './textures.js';
 import { hash2i } from './noise.js';
+import { TAME_GOAL, FOLLOW_RANGE, feedTrust, chooseName } from './pets.js';
 import { HEIGHT, WATER_LEVEL } from './defs.js';
 
 const GRAVITY = 26;
@@ -202,6 +203,90 @@ function makePony() {
     const hoof = box(0.22, 0.12, 0.22, HOOF); hoof.position.set(0, -0.36, 0); l.add(hoof);
   }
   return { group: g, legs, body, head };
+}
+
+// ---- companions: dog, cat, pig, rat ----
+function makeDog() {
+  const g = new THREE.Group();
+  const DARK = 0x20242a, WHITE = 0xe6e2d6;
+  const body = box(0.42, 0.42, 0.9, DARK); body.position.y = 0.5; g.add(body);
+  const bib = box(0.44, 0.32, 0.42, WHITE); bib.position.set(0, 0.46, 0.3); g.add(bib);
+  const neck = box(0.3, 0.3, 0.3, DARK); neck.position.set(0, 0.6, 0.5); g.add(neck);
+  const head = box(0.32, 0.32, 0.36, DARK); head.position.set(0, 0.72, 0.7); g.add(head);
+  const blaze = box(0.12, 0.32, 0.22, WHITE); blaze.position.set(0, 0.72, 0.86); g.add(blaze);
+  const snout = box(0.18, 0.16, 0.22, DARK); snout.position.set(0, 0.66, 0.92); g.add(snout);
+  const nose = box(0.1, 0.09, 0.08, 0x0a0a0a); nose.position.set(0, 0.68, 1.04); g.add(nose);
+  for (const x of [-0.12, 0.12]) { const ear = box(0.1, 0.16, 0.08, DARK); ear.position.set(x, 0.9, 0.62); g.add(ear); }
+  const tail = box(0.12, 0.14, 0.4, WHITE); tail.position.set(0, 0.52, -0.56); tail.rotation.x = 0.6; g.add(tail);
+  const legs = [];
+  for (const [x, z] of [[-0.14, 0.3], [0.14, 0.3], [-0.14, -0.3], [0.14, -0.3]]) {
+    const l = box(0.13, 0.5, 0.13, DARK); l.position.set(x, 0.25, z); g.add(l); legs.push(l);
+    const sock = box(0.14, 0.18, 0.14, WHITE); sock.position.set(0, -0.16, 0); l.add(sock);
+  }
+  return { group: g, legs, body, head };
+}
+
+function makeCat() {
+  const g = new THREE.Group();
+  const FUR = 0x4a4038;
+  const body = box(0.28, 0.3, 0.62, FUR); body.position.y = 0.42; g.add(body);
+  const head = box(0.28, 0.26, 0.26, FUR); head.position.set(0, 0.56, 0.4); g.add(head);
+  const snout = box(0.14, 0.12, 0.1, FUR); snout.position.set(0, 0.5, 0.54); g.add(snout);
+  for (const x of [-0.09, 0.09]) { const ear = box(0.08, 0.12, 0.06, FUR); ear.position.set(x, 0.72, 0.36); g.add(ear); }
+  for (const x of [-0.07, 0.07]) { const eye = box(0.05, 0.05, 0.03, 0x9ac04a, 0x507018); eye.position.set(x, 0.56, 0.52); g.add(eye); }
+  const tail = box(0.1, 0.1, 0.46, FUR); tail.position.set(0, 0.56, -0.34); tail.rotation.x = -0.9; g.add(tail);
+  const legs = [];
+  for (const [x, z] of [[-0.09, 0.22], [0.09, 0.22], [-0.09, -0.22], [0.09, -0.22]]) {
+    const l = box(0.09, 0.42, 0.09, FUR); l.position.set(x, 0.21, z); g.add(l); legs.push(l);
+  }
+  return { group: g, legs, body, head };
+}
+
+function makePig() {
+  const g = new THREE.Group();
+  const PINK = 0xd29a90, DARK = 0xae766c;
+  const body = box(0.62, 0.56, 0.95, PINK); body.position.y = 0.55; g.add(body);
+  const head = box(0.42, 0.4, 0.36, PINK); head.position.set(0, 0.56, 0.62); g.add(head);
+  const snout = box(0.26, 0.2, 0.14, DARK); snout.position.set(0, 0.5, 0.82); g.add(snout);
+  for (const x of [-0.06, 0.06]) { const n = box(0.05, 0.05, 0.04, 0x6a4a44); n.position.set(x, 0.5, 0.9); g.add(n); }
+  for (const x of [-0.14, 0.14]) { const ear = box(0.12, 0.14, 0.06, PINK); ear.position.set(x, 0.76, 0.6); ear.rotation.x = 0.3; g.add(ear); }
+  const tail = box(0.06, 0.16, 0.06, PINK); tail.position.set(0, 0.62, -0.5); tail.rotation.x = -0.5; g.add(tail);
+  const legs = [];
+  for (const [x, z] of [[-0.2, 0.3], [0.2, 0.3], [-0.2, -0.3], [0.2, -0.3]]) {
+    const l = box(0.16, 0.34, 0.16, DARK); l.position.set(x, 0.17, z); g.add(l); legs.push(l);
+  }
+  return { group: g, legs, body, head };
+}
+
+function makeRat() {
+  const g = new THREE.Group();
+  const FUR = 0x4a4038, PINK = 0xc89890;
+  const body = box(0.2, 0.2, 0.42, FUR); body.position.y = 0.18; g.add(body);
+  const head = box(0.16, 0.16, 0.2, FUR); head.position.set(0, 0.2, 0.3); g.add(head);
+  const snout = box(0.08, 0.08, 0.12, FUR); snout.position.set(0, 0.17, 0.42); g.add(snout);
+  for (const x of [-0.07, 0.07]) { const ear = box(0.08, 0.08, 0.03, PINK); ear.position.set(x, 0.3, 0.26); g.add(ear); }
+  const tail = box(0.04, 0.04, 0.5, PINK); tail.position.set(0, 0.16, -0.42); g.add(tail);
+  const legs = [];
+  for (const [x, z] of [[-0.08, 0.14], [0.08, 0.14], [-0.08, -0.14], [0.08, -0.14]]) {
+    const l = box(0.05, 0.16, 0.05, PINK); l.position.set(x, 0.08, z); g.add(l); legs.push(l);
+  }
+  return { group: g, legs, body, head };
+}
+
+// A kept beast's name floats over her head — green, so tha can tell thi own frae a villager.
+function makePetPlate(name) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 56;
+  const x = c.getContext('2d');
+  x.font = 'bold 26px "Segoe UI", sans-serif';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.strokeStyle = 'rgba(0,0,0,0.85)'; x.lineWidth = 6; x.strokeText(name, 128, 28);
+  x.fillStyle = '#bfe6a4'; x.fillText(name, 128, 28);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(c), transparent: true, depthTest: false, opacity: 0.95,
+  }));
+  spr.scale.set(1.7, 0.37, 1); spr.renderOrder = 50;
+  return spr;
 }
 
 function makePheasant() {
@@ -531,6 +616,7 @@ export const MOB_TYPES = {
   sheep: {
     make: makeSheep, hw: 0.45, h: 1.1, hp: 8, speed: 1.6, fleeSpeed: 4.2,
     hostile: false, drops: [[I.RAW_MUTTON, 1, 2], [B.WOOL, 1, 2]], cap: 8, name: 'Swaledale Yow',
+    tameable: true, tameFood: [I.BILBERRIES],
   },
   grouse: {
     make: makeGrouse, hw: 0.2, h: 0.6, hp: 3, speed: 1.4, fleeSpeed: 3.8,
@@ -540,7 +626,8 @@ export const MOB_TYPES = {
   hare: {
     make: makeHare, hw: 0.2, h: 0.7, hp: 4, speed: 2.6, fleeSpeed: 6.4,
     hostile: false, drops: [], cap: 4, name: 'Brown Hare',
-    shy: true, shyRadius: 7, fleeFor: 4, // bolts t' moment tha gets near
+    shy: true, shyRadius: 7, fleeFor: 4, // bolts t' moment tha gets near — unless tha holds her food
+    tameable: true, tameFood: [I.BILBERRIES],
   },
   barghest: {
     make: makeBarghest, hw: 0.45, h: 1.6, hp: 22, speed: 4.0, fleeSpeed: 4.6,
@@ -555,6 +642,7 @@ export const MOB_TYPES = {
     make: makeCow, hw: 0.55, h: 1.45, hp: 12, speed: 1.2, fleeSpeed: 2.8,
     hostile: false, drops: [[I.RAW_BEEF, 1, 2]], cap: 8, name: 'Dale Cow',
     habitat: 'pasture', group: [2, 4],
+    tameable: true, tameFood: [I.BILBERRIES],
   },
   bull: {
     make: makeBull, hw: 0.6, h: 1.6, hp: 20, speed: 3.8, fleeSpeed: 3.0,
@@ -570,6 +658,30 @@ export const MOB_TYPES = {
     make: makePony, hw: 0.42, h: 1.7, hp: 18, speed: 1.7, fleeSpeed: 3.2,
     hostile: false, drops: [], cap: 4, name: 'Moorland Pony',
     habitat: 'moor', group: [2, 3], // half-wild, but they'll let thee up
+  },
+  // ---- beasts a body can keep: feed 'em their favourite an' they'll throw their lot in wi' thee ----
+  dog: {
+    make: makeDog, hw: 0.32, h: 0.85, hp: 12, speed: 2.2, fleeSpeed: 3.0,
+    hostile: false, drops: [], cap: 2, name: 'Moor Sheepdog', habitat: 'edge',
+    tameable: true, tameFood: [I.RAW_MUTTON, I.COOKED_MUTTON, I.RAW_BEEF, I.COOKED_BEEF, I.RAW_GROUSE],
+  },
+  cat: {
+    make: makeCat, hw: 0.22, h: 0.6, hp: 8, speed: 2.0, fleeSpeed: 4.2,
+    hostile: false, drops: [], cap: 2, name: 'Farm Cat', habitat: 'edge',
+    shy: true, shyRadius: 4, fleeFor: 2,
+    tameable: true, tameFood: [I.RAW_TROUT, I.SEA_FISH, I.COOKED_FISH, I.RAW_GROUSE],
+  },
+  pig: {
+    make: makePig, hw: 0.36, h: 0.9, hp: 12, speed: 1.4, fleeSpeed: 2.6,
+    hostile: false, drops: [[I.RAW_BEEF, 1, 1]], cap: 3, name: 'Saddleback Pig',
+    habitat: 'pasture', group: [1, 3],
+    tameable: true, tameFood: [I.BILBERRIES, I.RAW_BEEF, I.COOKED_BEEF, I.RAW_MUTTON],
+  },
+  rat: {
+    make: makeRat, hw: 0.16, h: 0.3, hp: 4, speed: 2.4, fleeSpeed: 4.4,
+    hostile: false, drops: [], cap: 3, name: 'Moor Rat', habitat: 'edge', night: true,
+    shy: true, shyRadius: 4, fleeFor: 2,
+    tameable: true, tameFood: [I.BILBERRIES, I.RAW_GROUSE, I.RAW_MUTTON],
   },
   pheasant: {
     make: makePheasant, hw: 0.2, h: 0.85, hp: 3, speed: 1.6, fleeSpeed: 4.6,
@@ -885,6 +997,138 @@ export class Entities {
     mob.dead = true;
   }
 
+  // ---------- taming & companions ----------
+  // Feed a tameable beast its favourite scran. Returns 'wrongfood', {tamed:false,progress}
+  // or {tamed:true,name} once she throws her lot in wi' thee.
+  tameStep(mob, foodId, player) {
+    if (mob.owner || !mob.t.tameable || !mob.t.tameFood || !mob.t.tameFood.includes(foodId)) return 'wrongfood';
+    const res = feedTrust(mob.tameProg || 0, Math.random);
+    mob.tameProg = res.trust;
+    mob.flash = 0.15;
+    mob.state = 'idle'; mob.fleeTimer = 0; // she settles as she comes round to thee
+    if (res.tamed) {
+      const taken = (player.pets || []).map(p => p.name);
+      const name = chooseName(Math.random, taken);
+      this.makeCompanion(mob, name);
+      return { tamed: true, name };
+    }
+    return { tamed: false, progress: Math.min(1, mob.tameProg / TAME_GOAL) };
+  }
+
+  // Turn a beast into a kept companion: named, follows thee, never despawns.
+  makeCompanion(mob, name) {
+    mob.owner = true;
+    mob.petName = name;
+    mob.petKind = mob.type;
+    mob.state = 'follow';
+    mob.naturalLamb = false;
+    if (mob.label) { mob.model.group.remove(mob.label); mob.label = null; }
+    if (mob.plate) mob.model.group.remove(mob.plate);
+    const plate = makePetPlate(name);
+    plate.position.y = (mob.t.h || 1) + 0.55;
+    mob.model.group.add(plate);
+    mob.plate = plate;
+  }
+
+  // Re-spawn saved companions at the player's heel on load.
+  restorePets(list, player) {
+    if (!list || !list.length) return;
+    for (const p of list) {
+      if (!MOB_TYPES[p.kind]) continue;
+      const m = this.spawnMob(p.kind, player.pos.x + (Math.random() * 2 - 1), player.pos.y + 1, player.pos.z + (Math.random() * 2 - 1));
+      if (m) this.makeCompanion(m, p.name);
+    }
+  }
+
+  // The work a kept beast does each frame. Returns true if she's "away" (skip her update).
+  companionBenefit(mob, dt, player, isNight, audio) {
+    // caught miles behind (tha teleported?) — she pops back to heel
+    if (Math.hypot(player.pos.x - mob.pos.x, player.pos.z - mob.pos.z) > 70) {
+      mob.pos.x = player.pos.x + (Math.random() * 2 - 1);
+      mob.pos.z = player.pos.z + (Math.random() * 2 - 1);
+      mob.pos.y = player.pos.y + 1; mob.vel.x = mob.vel.y = mob.vel.z = 0;
+    }
+    // a cat sent scouting: away (hidden) on a timer, then back wi' summat in her teeth
+    if (mob.scoutT !== undefined) {
+      mob.scoutT -= dt;
+      if (mob.scoutT <= 0) {
+        mob.scoutT = undefined;
+        mob.model.group.visible = true;
+        mob.pos.x = player.pos.x + (Math.random() * 2 - 1);
+        mob.pos.z = player.pos.z + (Math.random() * 2 - 1);
+        mob.pos.y = player.pos.y + 0.5; mob.vel.x = mob.vel.y = mob.vel.z = 0;
+        this.petReward(mob, player, 'cat');
+      }
+      return true;
+    }
+    // a good dog drives neet-things off thee (not bosses — they're thine to face)
+    if (mob.petKind === 'dog') {
+      mob.wardCd = (mob.wardCd || 0) - dt;
+      if (mob.wardCd <= 0) {
+        mob.wardCd = 0.9;
+        for (const h of this.mobs) {
+          if (h.dead || !h.t || !h.t.hostile || h.t.boss) continue;
+          const hd = Math.hypot(h.pos.x - player.pos.x, h.pos.z - player.pos.z);
+          if (hd < 8.5) {
+            const inv = hd || 1;
+            this.hurtMob(h, 3, (h.pos.x - player.pos.x) / inv, (h.pos.z - player.pos.z) / inv, audio, player);
+          }
+        }
+      }
+    }
+    // a pig's snuffle recharges over time
+    if (mob.petKind === 'pig' && mob.snuffleCd > 0) mob.snuffleCd -= dt;
+    // a rat forages i' t' dark as tha mines
+    if (mob.petKind === 'rat') {
+      const surf = this.world.gen.height(Math.floor(player.pos.x), Math.floor(player.pos.z));
+      if (player.pos.y < surf - 4) {
+        mob.forageCd = (mob.forageCd === undefined ? 30 : mob.forageCd) - dt;
+        if (mob.forageCd <= 0) { mob.forageCd = 40 + Math.random() * 50; this.petReward(mob, player, 'rat'); }
+      }
+    }
+    return false; // dog/pig/rat/sheep keep following normally
+  }
+
+  // Send a cat off to scout (frae the interact path). Returns true if she went.
+  catScout(mob) {
+    if (mob.petKind !== 'cat' || mob.scoutT !== undefined) return false;
+    mob.scoutT = 22 + Math.random() * 12;
+    mob.model.group.visible = false;
+    return true;
+  }
+
+  // A pig snuffles up a buried find on command, then needs a minute. Returns the outcome.
+  pigSnuffle(mob, player) {
+    if (mob.petKind !== 'pig') return 'notpig';
+    if (mob.snuffleCd > 0) return 'tired';
+    mob.snuffleCd = 24;
+    this.petReward(mob, player, 'pig');
+    return 'snuffled';
+  }
+
+  // Drop a companion's find at thi feet, wi' a word about it.
+  petReward(mob, player, kind) {
+    const R = Math.random();
+    let item, n = 1, msg;
+    if (kind === 'cat') {
+      if (R < 0.05) { item = I.JET_GEM; msg = 'fetched thee a chunk o’ jet'; }
+      else if (R < 0.5) { item = I.RAW_GROUSE; msg = 'dropped a grouse at thi feet'; }
+      else if (R < 0.78) { item = I.RAW_MUTTON; msg = 'brought back a bit o’ mutton'; }
+      else { item = I.BILBERRIES; n = 2; msg = 'turned up a handful o’ bilberries'; }
+    } else if (kind === 'pig') {
+      if (R < 0.12) { item = I.JET_GEM; msg = 'rooted up a lump o’ jet'; }
+      else if (R < 0.32) { item = I.AMMONITE; msg = 'snouted out a snakestone'; }
+      else if (R < 0.58) { item = I.RAW_IRON; msg = 'turned up some ironstone'; }
+      else { item = I.COAL_LUMP; n = 1 + ((Math.random() * 2) | 0); msg = 'rooted out a bit o’ coal'; }
+    } else { // rat
+      if (R < 0.07) { item = I.JET_GEM; msg = 'dragged back a scrap o’ jet'; }
+      else if (R < 0.52) { item = I.COAL_LUMP; msg = 'found coal i’ t’ dark'; }
+      else { item = I.RAW_IRON; msg = 'turned up some ironstone'; }
+    }
+    this.spawnDrop(player.pos.x + (Math.random() - 0.5), player.pos.y + 0.5, player.pos.z + (Math.random() - 0.5), item, n);
+    if (this.game && this.game.ui) this.game.ui.toast(`<b>${mob.petName}</b> ${msg}.`, 4000);
+  }
+
   updateMobs(dt, player, isNight, audio) {
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
@@ -911,8 +1155,11 @@ export class Entities {
         continue;
       }
 
-      // despawn: too far, hostiles at dawn, day-birds at dusk (bosses/followers linger)
-      if ((distP > (t.boss || t.follower ? 140 : 90)) || (t.night && !isNight) || (t.day && isNight)) {
+      // a kept beast: she earns her keep, follows thee, an' never wanders off for good
+      if (mob.owner && this.companionBenefit(mob, dt, player, isNight, audio)) continue; // away scouting → skip
+
+      // despawn: too far, hostiles at dawn, day-birds at dusk (bosses/followers/pets linger)
+      if (!mob.owner && ((distP > (t.boss || t.follower ? 140 : 90)) || (t.night && !isNight) || (t.day && isNight))) {
         if ((t.night && !isNight) || (t.day && isNight)) this.burst(mob.pos.x, mob.pos.y + 1, mob.pos.z, [30, 30, 40], 8);
         this.scene.remove(mob.model.group);
         mob.dead = true;
@@ -938,11 +1185,11 @@ export class Entities {
           if (ld > 1.6) { wishX = lx / (ld || 1); wishZ = lz / (ld || 1); speed = t.speed; }
           mob.state = 'follow';
         }
-      } else if (t.follower && distP < 26 && !player.dead) {
-        // lost lambs trot after thee once tha's found 'em
+      } else if ((mob.owner || t.follower) && distP < (mob.owner ? FOLLOW_RANGE : 26) && !player.dead) {
+        // a kept beast (or a found lamb) trots after thee, keeping close
         if (distP > 2.4) {
           const inv = distP || 1;
-          wishX = dx / inv; wishZ = dz / inv; speed = t.speed;
+          wishX = dx / inv; wishZ = dz / inv; speed = mob.owner ? t.speed * 1.3 : t.speed;
         }
         mob.state = 'follow';
       } else if (t.hostile && distP < (t.boss ? 40 : 28) && !player.dead && !player.creative) {
@@ -981,7 +1228,8 @@ export class Entities {
         else if (mob.state === 'chase' && distP > t.aggroRadius + 9) mob.state = 'idle';
       }
       // shy beasts bolt t' moment tha gets near (hare, lizard, curlew, pheasant, grouse)
-      if (t.shy && mob.state !== 'chase' && mob.state !== 'flee' && !player.dead && !player.creative && distP < (t.shyRadius || 8)) {
+      const calmFood = t.tameable && !mob.owner && player.heldItem && player.heldItem() && t.tameFood && t.tameFood.includes(player.heldItem().id);
+      if (t.shy && !calmFood && mob.state !== 'chase' && mob.state !== 'flee' && !player.dead && !player.creative && distP < (t.shyRadius || 8)) {
         mob.state = 'flee'; mob.fleeTimer = t.fleeFor || 3;
         if (t.flush) {
           // game birds don't leg it — they FLUSH: clatter up off t' ground an' away
@@ -1008,7 +1256,7 @@ export class Entities {
       }
 
       if (mob.state === 'follow') {
-        if (!mob.naturalLamb && !(t.follower && distP < 26)) mob.state = 'idle';
+        if (!mob.naturalLamb && !mob.owner && !(t.follower && distP < 26)) mob.state = 'idle';
         // wish already set above
       } else if (mob.state === 'flee') {
         mob.fleeTimer -= dt;

@@ -56,6 +56,7 @@ function lerpAngle(a, b, t) {
   return a + d * t;
 }
 import { Entities } from './entities.js';
+import { PET_BENEFIT } from './pets.js';
 import { Sky } from './sky.js';
 import { AudioEngine } from './audio.js';
 import { UI } from './ui.js';
@@ -271,6 +272,7 @@ class Game {
 
     if (meta) {
       this.player.deserialize(meta.player);
+      this.entities.restorePets(this.player.pets, this.player); // thi kept beasts come back to heel
       this.sky.deserialize(meta.sky);
       this.quests.deserialize(meta.quests);
     } else if (this.auth && this.auth.name) {
@@ -1204,6 +1206,7 @@ class Game {
       const sv = this.net.savedState;
       if (sv && sv.player) {
         this.player.deserialize(sv.player);
+        this.entities.restorePets(this.player.pets, this.player); // thi kept beasts come back to heel
         this.quests.deserialize(sv.quests);
         this.ui.invDirty = true;
         this.ui.toast('Welcome back to t\u2019 shared moor \u2014 thi things are as tha left \u2019em.', 6000);
@@ -1979,6 +1982,13 @@ class Game {
         this.openChat(mobHit.mob);
         return;
       }
+      // a kept beast tha's giving an order, or a tameable beast tha's feeding
+      if (mobHit && (!hit || mobHit.dist < hit.dist)) {
+        const m = mobHit.mob;
+        if (m.owner) { this.petInteract(m); return; }
+        const fh = this.player.heldItem();
+        if (m.t && m.t.tameable && fh && m.t.tameFood && m.t.tameFood.includes(fh.id)) { this.feedTame(m, fh); return; }
+      }
     }
 
     // interactable blocks
@@ -2047,6 +2057,40 @@ class Game {
     const eph = this.beachEphemeral(px, py, pz);
     if (this.net) this.net.sendEdit(px, py, pz, held.id, eph ? { revert: cur } : null);
     if (eph) this.queueBeachRevert(px, py, pz, cur, held.id);
+  }
+
+  // ---------------- taming & companions ----------------
+  // Feed a tameable beast its favourite scran; enough goes an' she's thine.
+  feedTame(m, held) {
+    const r = this.entities.tameStep(m, held.id, this.player);
+    if (r === 'wrongfood') { this.ui.toast('She’ll not take to that, love.'); return; }
+    this.player.consumeHeld();
+    this.ui.invDirty = true;
+    if (this.audio && this.audio.place) this.audio.place();
+    if (r.tamed) {
+      (this.player.pets || (this.player.pets = [])).push({ kind: m.petKind, name: r.name });
+      const benefit = PET_BENEFIT[m.petKind];
+      this.ui.toast(`<b>${r.name}</b> has taken to thee — she’s thine now, an’ she’ll follow tha about.` + (benefit ? ` She ${benefit}.` : ''), 7000);
+      this.saveNow(false);
+    } else {
+      const pct = Math.round(r.progress * 100);
+      this.ui.toast(`She takes it frae thi hand… (${pct}%${pct >= 60 ? ', warmin’ to thee' : ''})`, 2500);
+    }
+  }
+
+  // Right-click a kept beast to set her to her work.
+  petInteract(m) {
+    const k = m.petKind;
+    if (k === 'cat') {
+      if (this.entities.catScout(m)) this.ui.toast(`<b>${m.petName}</b> slinks off to scout t’ ground… she’ll bring summat back.`, 4500);
+      else this.ui.toast(`<b>${m.petName}</b>’s already off scoutin’.`, 2500);
+    } else if (k === 'pig') {
+      if (this.entities.pigSnuffle(m, this.player) === 'tired') this.ui.toast(`<b>${m.petName}</b>’s snuffled herself out — give her a minute.`, 2500);
+    } else if (k === 'dog') {
+      this.ui.toast(`<b>${m.petName}</b> looks up at thee, tail going — she keeps t’ neet-things off thee.`, 3500);
+    } else {
+      this.ui.toast(`<b>${m.petName}</b>’s at thi heel.`, 2500);
+    }
   }
 
   // ---------------- fishing: cast an' wait ----------------
