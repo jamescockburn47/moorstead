@@ -21,6 +21,13 @@ import { startLiveWeather } from './weather-live.js';
 
 const RAIL_VMAX = 11;  // blocks a second flat out — t' pace of a heritage steamer
 const RAIL_ACC = 0.18; // gentle acceleration: she works up to speed an' brakes early
+// driving t' engine yourself (take t' regulator):
+const DRIVE_MAXACC = 0.55; // tractive accel at full regulator + full boiler pressure
+const DRIVE_BRAKE = 1.4;   // braking decel when tha pulls t' brake on
+const DRIVE_DRAG = 0.05;   // rolling resistance (per unit speed)
+const DRIVE_GRADE = 7;     // how hard t' gradients pull on her
+const DRIVE_VMAX = 13;     // flat-out, a touch brisker than t' timetabled service
+const DRIVE_RAKE = 11.6;   // keep t' whole rake on t' line (buffer stops)
 const DWELL_T = 30;    // thirty seconds stood at each platform, doors open
 
 // where is she an' how fast, tt seconds into a leg o' length len?
@@ -409,6 +416,10 @@ class Game {
         if (e.code === 'KeyN' || e.code === 'Escape') this.cancelSleep('Up an’ about again, then.');
       } else if (this.state === 'riding') {
         if (e.code === 'Escape' && this.ride && this.ride.warden) this.wardenLeaveTrain();
+      } else if (this.state === 'driving') {
+        if (e.code === 'KeyE' || e.code === 'Escape') this.leaveDrive();
+        else if (e.code === 'KeyR' && this.drive) { this.drive.reverser *= -1; this.ui.toast(this.drive.reverser > 0 ? 'Reverser set forrard.' : 'Reverser set back.', 1500); }
+        else if (e.code === 'KeyF') this.shovelCoal();
       }
     });
     document.addEventListener('keyup', e => { this.keys[e.code] = false; });
@@ -429,7 +440,7 @@ class Game {
     canvas.addEventListener('contextmenu', e => e.preventDefault());
 
     document.addEventListener('mousemove', e => {
-      if ((this.state !== 'playing' && this.state !== 'riding') || document.pointerLockElement !== canvas) return;
+      if ((this.state !== 'playing' && this.state !== 'riding' && this.state !== 'driving') || document.pointerLockElement !== canvas) return;
       const sens = 0.0023;
       this.player.yaw -= e.movementX * sens;
       this.player.pitch -= e.movementY * sens;
@@ -1266,9 +1277,140 @@ class Game {
         }
       });
     }
+    // a goods consignment waiting to be shifted — haul it by driving the engine
+    {
+      const dests = stations.filter(d => d !== st);
+      const gdest = dests[(stIdx * 7 + 3) % dests.length];
+      const gdi = stations.indexOf(gdest);
+      const gd = lineDist(st, gdest) | 0;
+      const reward = Math.max(2, Math.ceil(gd / 300) + 1);
+      const grow = ui.el('div', 'recipe quest-row', list);
+      grow.innerHTML = `<div class="r-name"><b>\u{1F4E6} Goods for ${gdest.name}</b><br><span class="r-needs">${gd}m down t’ line — take the regulator an’ haul her there for <b>${reward}× coal</b></span></div>`;
+      const laden = this.pendingGoods || (this.drive && this.drive.goods);
+      const gb = ui.el('button', 'mc chat-btn', grow, laden ? 'Already laden' : 'Load the wagon');
+      if (!laden) gb.addEventListener('click', () => {
+        this.pendingGoods = { dest: gdi, reward, from: stIdx };
+        this.closeScreens();
+        this.ui.toast(`<b>Consignment loaded for ${gdest.name}.</b> Take the regulator an’ haul her down t’ line.`, 5000);
+      });
+    }
+    if (hereNow) {
+      const drv = ui.el('button', 'mc chat-btn', ui.boardPanel, '🚂 Take the regulator — drive her yourself');
+      drv.style.marginTop = '8px';
+      drv.addEventListener('click', () => this.enterDrive(stIdx));
+    }
     const close = ui.el('button', 'mc', ui.boardPanel, 'Not today, ta');
     close.addEventListener('click', () => this.closeScreens());
     ui.show('boardScreen');
+  }
+
+  // ---- driving t' engine yourself: take t' regulator, fire t' boiler ----
+  // Whilst tha drives, t' train follows THY chainage (this.drive.s) instead o'
+  // t' timetable — local to thee, so t' shared service is unaffected.
+  enterDrive(stIdx) {
+    const sched = this.trainSchedule();
+    if (!(sched.mode === 'dwell' && sched.i === stIdx)) {
+      this.ui.toast('She’s not at t’ platform yet — wait while she’s stood in.'); return;
+    }
+    this.closeScreens();
+    this.state = 'driving';
+    this.clearKeys();
+    this.drive = {
+      s: sched.s, v: 0, reverser: 1, regulator: 0, pressure: 0.7,
+      goods: this.pendingGoods || null,
+    };
+    this.pendingGoods = null;
+    this.driveYawSet = false;
+    this.player.flying = false;
+    if (!this.train) this.train = buildTrain();
+    this.lockPointer();
+    this.ui.toast('<b>Tha’s on t’ footplate.</b> <b>W</b> regulator &middot; <b>S</b>/space brake &middot; <b>R</b> reverser &middot; <b>F</b> shovel coal &middot; <b>E</b> step down.', 8000);
+  }
+
+  leaveDrive() {
+    if (!this.drive) { this.state = 'playing'; return; }
+    const geo = this.world.gen.geo;
+    const st = geo.railway();
+    const stS = geo.railPath().stationS;
+    let best = 0, bd = 1e9;
+    for (let i = 0; i < st.length; i++) { const d = Math.abs(stS[i] - this.drive.s); if (d < bd) { bd = d; best = i; } }
+    if (this.drive.goods && bd < 24 && Math.abs(this.drive.v) < 0.4) this.deliverGoods(best);
+    const here = st[best];
+    const gy = this.world.gen.height(Math.floor(here.x), Math.floor(here.z + 2));
+    this.player.pos = { x: here.x + 0.5, y: gy + 2.2, z: here.z + 2.5 };
+    this.player.vel = { x: 0, y: 0, z: 0 };
+    this.drive = null;
+    this.state = 'playing';
+    if (this._driveHud) this._driveHud.style.display = 'none';
+    this.ui.toast(`Tha’s brought her to a stand an’ stepped down at <b>${here.name}</b>.`, 4000);
+  }
+
+  shovelCoal() {
+    const d = this.drive; if (!d) return;
+    if (!this.player.creative) {
+      if (this.player.countItem(I.COAL_LUMP) <= 0) { this.ui.toast('No coal left for t’ firebox!'); return; }
+      this.player.removeItem(I.COAL_LUMP, 1); this.ui.invDirty = true;
+    }
+    d.pressure = Math.min(1, d.pressure + 0.12);
+    this.audio.smelt && this.audio.smelt();
+  }
+
+  // physics tick — advance t' engine frae t' controls (runs afore updateTrainWorld)
+  driveTick(dt) {
+    const d = this.drive; if (!d) return;
+    const geo = this.world.gen.geo;
+    const len = geo.railPath().length;
+    const k = this.keys;
+    const throttle = k['KeyW'] || k['ArrowUp'];
+    const braking = k['KeyS'] || k['ArrowDown'] || k['Space'];
+    d.regulator += ((throttle ? 1 : 0) - d.regulator) * Math.min(1, dt * 1.6);
+    const sp = geo.samplePos(Math.max(0, Math.min(len, d.s)));
+    const grade = sp.grade || 0;
+    const effort = d.regulator * d.pressure * DRIVE_MAXACC * d.reverser;
+    d.v += (effort - DRIVE_DRAG * d.v - grade * DRIVE_GRADE) * dt;
+    if (braking) { const dv = DRIVE_BRAKE * dt; d.v = Math.abs(d.v) <= dv ? 0 : d.v - Math.sign(d.v) * dv; }
+    d.v = Math.max(-DRIVE_VMAX, Math.min(DRIVE_VMAX, d.v));
+    d.s += d.v * dt;
+    if (d.s < DRIVE_RAKE) { d.s = DRIVE_RAKE; d.v = 0; }
+    if (d.s > len - DRIVE_RAKE) { d.s = len - DRIVE_RAKE; d.v = 0; }
+    d.pressure = Math.max(0, Math.min(1, d.pressure - (d.regulator * 0.045 + 0.005) * dt));
+    if (d.pressure < 0.12 && !d._lowWarned) { d._lowWarned = true; this.ui.toast('Steam’s low — shovel some coal on (<b>F</b>)!', 3000); }
+    if (d.pressure > 0.32) d._lowWarned = false;
+  }
+
+  // lock t' camera to t' footplate an' draw t' cab gauges (runs after the rake's posed)
+  driveCam() {
+    const d = this.drive; if (!d) return;
+    const loco = this.train && this.train.loco.group;
+    if (!loco || !loco.parent) return;
+    // sit at the driver's side spectacle, leaning out a touch so tha sees up the
+    // line past the boiler (a centred footplate eye just stares at the black firebox)
+    const cab = new THREE.Vector3(1.0, 2.62, -1.7).applyQuaternion(loco.quaternion).add(loco.position);
+    this.player.pos = { x: cab.x, y: cab.y - this.player.eye, z: cab.z };
+    this.player.vel = { x: 0, y: 0, z: 0 };
+    if (!this.driveYawSet) { this.player.yaw = (loco.rotation.y || 0) + Math.PI - 0.12; this.player.pitch = -0.04; this.driveYawSet = true; }
+    let h = this._driveHud;
+    if (!h) {
+      h = document.createElement('div'); h.id = 'driveHud';
+      h.style.cssText = 'position:fixed;left:50%;bottom:78px;transform:translateX(-50%);font-family:ui-monospace,monospace;font-size:13px;color:#ffe9b0;background:rgba(20,16,12,0.74);border:1px solid #6a5430;border-radius:8px;padding:7px 14px;text-align:center;pointer-events:none;z-index:40;line-height:1.6;letter-spacing:0.5px';
+      document.body.appendChild(h); this._driveHud = h;
+    }
+    h.style.display = 'block';
+    const mph = Math.round(Math.abs(d.v) * 2.4);
+    const bar = (frac, col) => { const n = Math.max(0, Math.min(14, Math.round(frac * 14))); return `<span style="color:${col}">${'█'.repeat(n)}</span><span style="opacity:0.25">${'█'.repeat(14 - n)}</span>`; };
+    const goods = d.goods ? `<br><span style="color:#9ec27a">Goods for ${this.world.gen.geo.railway()[d.goods.dest].name}</span>` : '';
+    h.innerHTML = `<b>${mph} mph</b>${d.v < -0.1 ? ' ◄ reverse' : d.reverser < 0 ? ' (reverser set back)' : ''}<br>`
+      + `Regulator ${bar(d.regulator, '#9ec27a')}<br>`
+      + `Steam ${bar(d.pressure, d.pressure < 0.15 ? '#e0662e' : '#d8b95a')}${goods}`;
+  }
+
+  deliverGoods(stIdx) {
+    const g = this.drive && this.drive.goods; if (!g || g.dest !== stIdx) return;
+    const st = this.world.gen.geo.railway();
+    this.player.addItem(I.COAL_LUMP, g.reward); this.ui.invDirty = true;
+    this.drive.goods = null;
+    this.ui.toast(`<b>Consignment delivered to ${st[stIdx].name}!</b> ${g.reward}× coal for thi trouble — word gets round tha’s a steady hand.`, 6000);
+    this.audio.pickup && this.audio.pickup();
   }
 
   // T' one true train: rendered out on t' moor for all to see, boarded at
@@ -1277,8 +1419,11 @@ class Game {
     if (!this.world || this.state === 'title' || this.state === 'loading') return;
     const geo = this.world.gen.geo;
     const st = geo.railway();
-    const s = this.trainSchedule();
-    const fwd = s.dir === 0 ? 1 : -1;
+    const driving = this.state === 'driving' && this.drive;
+    const s = driving
+      ? { s: this.drive.s, mode: Math.abs(this.drive.v) > 0.08 ? 'run' : 'dwell', dir: 0, speed: Math.abs(this.drive.v) }
+      : this.trainSchedule();
+    const fwd = driving ? 1 : (s.dir === 0 ? 1 : -1);
     // Anchor on t' carriage — it stays put at t' platform. T' loco leads smokebox-
     // first BOTH ways: at a terminus she RUNS ROUND (t' loco slides end to end on a
     // loop beside t' rake during t' dwell), so she never flips through hersen nor
@@ -1286,7 +1431,7 @@ class Game {
     const RAKE = 11.2, len = geo.railPath().length, nSt = geo.railway().length;
     const cc = Math.max(RAKE, Math.min(len - RAKE, s.s - RAKE * fwd));
     let locoSign = fwd, loopLat = 0, runround = false;
-    if (s.mode === 'dwell' && ((s.dir === 0 && s.i === 0) || (s.dir === 1 && s.i === nSt - 1))) {
+    if (!driving && s.mode === 'dwell' && ((s.dir === 0 && s.i === 0) || (s.dir === 1 && s.i === nSt - 1))) {
       runround = true;                                          // a terminus reversal dwell
       const ph = 1 - Math.max(0, Math.min(1, (s.dwellLeft || 0) / DWELL_T)); // 0 in -> 1 away
       locoSign = fwd * (2 * ph - 1);                            // loco end: arrival -> departure
@@ -1303,7 +1448,7 @@ class Game {
 
     const p = this.player.pos;
     const near = Math.hypot(x - p.x, z - p.z) < 260;
-    const show = (near || this.state === 'riding') && this.world.isLoaded(Math.floor(x), Math.floor(z));
+    const show = (driving || near || this.state === 'riding') && this.world.isLoaded(Math.floor(x), Math.floor(z));
     if (!this.train) this.train = buildTrain();
     const parts = this.train.parts;
     if (show) {
@@ -1327,7 +1472,8 @@ class Game {
         const ppitch = -Math.atan(psp.grade * fwd);
         pg.rotation.x += (ppitch - pg.rotation.x) * Math.min(1, dt * 4);
         if (moving && part.wheels) {
-          for (const w of part.wheels) w.rotateZ(-fwd * speed * dt / (w.userData.r || 0.62));
+          const wsign = driving ? (Math.sign(this.drive.v) || 1) : fwd;
+          for (const w of part.wheels) w.rotateZ(-wsign * speed * dt / (w.userData.r || 0.62));
         }
       }
       // coupling rods ride t' crank pins, quartered like t' real thing
@@ -1356,7 +1502,7 @@ class Game {
       const key = s.mode + (s.mode === 'dwell' ? s.i : s.from);
       if (key !== this.lastTrainKey) {
         this.lastTrainKey = key;
-        if (near && this.state !== 'riding') {
+        if (near && this.state !== 'riding' && !driving) {
           this.audio.whistle && this.audio.whistle(0.35);
           if (s.mode === 'dwell') this.ui.toast(`T\u2019 train\u2019s come in at <b>${st[s.i].name}</b> \u2014 ${Math.round(s.dwellLeft)}s at t\u2019 platform.`, 5000);
         }
@@ -1824,11 +1970,14 @@ class Game {
     const paused = this.state === 'paused';
 
     if (!paused) {
+      if (this.state === 'driving') this.driveTick(dt); // advance the engine afore she's posed
       // t' one true train: always running, visible to all
       this.updateTrainWorld(dt);
       if (this.rails) this.rails.update(dt, this.player.pos);
       if (this.state === 'riding' && this.ride) {
         this.updateRide();
+      } else if (this.state === 'driving') {
+        this.driveCam();
       }
       // player
       if (playing && !this.player.dead) {
