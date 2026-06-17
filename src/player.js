@@ -317,6 +317,7 @@ export class Player {
       name: this.name, npcRewards: this.npcRewards,
       milestonesDone: this.milestonesDone, milestonesSteered: this.milestonesSteered,
       bairnFresh: this.bairnFresh,
+      pets: this.pets || [],
     };
   }
 
@@ -334,5 +335,6 @@ export class Player {
     this.milestonesDone = d.milestonesDone || [];
     this.milestonesSteered = !!d.milestonesSteered;
     this.bairnFresh = !!d.bairnFresh;
+    this.pets = d.pets || [];
   }
 }

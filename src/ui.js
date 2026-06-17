@@ -356,6 +356,24 @@ export class UI {
 <li>She sits &rsquo;twixt shanks&rsquo;s pony an&rsquo; t&rsquo; railway: quicker than walkin&rsquo;, an&rsquo; free to roam where no rails run.</li>
 </ul>`,
 
+      'Pets': `
+<h3>Tamin&rsquo; beasts &amp; keepin&rsquo; pets &#128054;</h3>
+<p>Near any beast tha meets can be won ower wi&rsquo; patience an&rsquo; t&rsquo; right scran. A kept beast follows tha about &mdash; an&rsquo; some earn their keep proper.</p>
+<ul>
+<li><b>To tame one</b>: hold its favourite food an&rsquo; <b>right-click t&rsquo; beast</b> to feed it. Do it a few times ower &mdash; she warms to thee, then throws her lot in wi&rsquo; thee an&rsquo; teks a name.</li>
+<li><b>Shy beasts</b> (a cat, a hare) bolt when tha gets near &mdash; but <b>hold their food</b> an&rsquo; they&rsquo;ll stand for thee.</li>
+<li>Once she&rsquo;s thine she <b>follows tha</b> everywhere, won&rsquo;t wander off, an&rsquo; finds her way back if tha gets parted. <b>Right-click her</b> to set her to her work.</li>
+</ul>
+<h3>What they&rsquo;re good for</h3>
+<ul>
+<li>&#128021; <b>Sheepdog</b> &mdash; feed her <b>meat</b>. She <b>keeps t&rsquo; neet-things off thee</b>: nowt dark will close on thee while she&rsquo;s at heel.</li>
+<li>&#128008; <b>Cat</b> &mdash; feed her <b>fish</b>. <b>Right-click to send her scoutin&rsquo;</b>; she slinks off an&rsquo; slinks back wi&rsquo; summat in her teeth.</li>
+<li>&#128055; <b>Pig</b> &mdash; feed her <b>bilberries or meat</b>. <b>Right-click to snuffle</b> &mdash; she roots up buried finds: jet, snakestones, coal.</li>
+<li>&#128000; <b>Rat</b> &mdash; feed her <b>scraps</b>. She <b>forages i&rsquo; t&rsquo; dark</b> as tha mines, turnin&rsquo; up odd bits.</li>
+<li>&#128017; <b>Sheep, cows an&rsquo; hares</b> tek to <b>bilberries</b> &mdash; no job o&rsquo; work in &rsquo;em, but they&rsquo;ll trail after thee like owd friends.</li>
+</ul>
+<p class="how-note">Find dogs an&rsquo; cats about t&rsquo; village edges, pigs on t&rsquo; pasture, an&rsquo; rats out at neet. Thi kept beasts are saved wi&rsquo; thi world.</p>`,
+
       'Craft & Cook': `
 <h3>Crafting</h3>
 <ul>
