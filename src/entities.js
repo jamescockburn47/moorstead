@@ -312,6 +312,26 @@ function makeNameplate(text) {
   return spr;
 }
 
+// A faint floating prompt so a body knows a pony'll let thee up.
+function makeRideLabel() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 56;
+  const x = c.getContext('2d');
+  x.font = 'bold 23px "Segoe UI", sans-serif';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.strokeStyle = 'rgba(0,0,0,0.85)'; x.lineWidth = 5;
+  x.strokeText('right-click to ride', 128, 28);
+  x.fillStyle = '#ffe9b0';
+  x.fillText('right-click to ride', 128, 28);
+  const tex = new THREE.CanvasTexture(c);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, transparent: true, depthTest: false, opacity: 0,
+  }));
+  spr.scale.set(1.7, 0.37, 1);
+  spr.renderOrder = 50;
+  return spr;
+}
+
 // A spoken line floating ower a villager's head.
 function makeBubble(text) {
   const c = document.createElement('canvas');
@@ -657,6 +677,12 @@ export class Entities {
       walkPhase: Math.random() * 10,
     };
     this.mobs.push(mob);
+    if (type === 'pony') {
+      const label = makeRideLabel();
+      label.position.set(0, 2.5, 0);
+      model.group.add(label);
+      mob.label = label;
+    }
     return mob;
   }
 
@@ -850,6 +876,10 @@ export class Entities {
 
     for (const mob of this.mobs) {
       if (mob.dead) continue;
+      if (mob.label) { // pony's "right-click to ride" prompt — fades in close, gone once tha's up
+        const ldx = player.pos.x - mob.pos.x, ldz = player.pos.z - mob.pos.z;
+        mob.label.material.opacity = (!mob.ridden && Math.hypot(ldx, ldz) < 9) ? 0.9 : 0;
+      }
       if (mob.ridden) continue; // a ridden pony is posed by the game, not its AI
       // hold physics for owt standing on ungenerated ground
       if (!this.world.isLoaded(mob.pos.x, mob.pos.z)) continue;

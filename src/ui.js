@@ -115,6 +115,11 @@ export class UI {
     this.titleScreen = this.el('div', 'overlay', body); this.titleScreen.id = 'title-screen';
     this.el('h1', 'title', this.titleScreen, 'MOORSTEAD');
     this.el('div', 'subtitle', this.titleScreen, 'A reet grand voxel adventure on t&rsquo; North York Moors');
+    const blurb = this.el('div', 'subtitle', this.titleScreen,
+      'A whole Yorkshire moor that carries on without thee &mdash; seven villages of folk who&rsquo;ll learn thi name, ' +
+      'a steam railway tha can <b>ride or drive</b>, half-wild <b>ponies</b> to saddle, jet to mine, ' +
+      'crofts to raise, an&rsquo; owd <b>folklore</b> stirrin&rsquo; after dark.');
+    blurb.style.cssText = 'max-width:600px;margin:12px auto 8px;font-size:14px;line-height:1.65;opacity:0.9';
     // login (invite code) — shown till tha's claimed thi place in t' village
     this.loginBox = this.el('div', 'login-box', this.titleScreen);
     this.el('div', 'login-title', this.loginBox, 'Tha&rsquo;ll need thi invite to settle in Moorstead');
@@ -135,6 +140,7 @@ export class UI {
     this.btnShared = this.el('button', 'mc', this.titleScreen, 'T&rsquo; Shared Moor &mdash; Play Wi&rsquo; Others');
     this.btnContinue = this.el('button', 'mc', this.titleScreen, 'Carry On Where Tha Left Off');
     this.btnHow = this.el('button', 'mc', this.titleScreen, 'Ow Ter Play');
+    this.el('div', 'muted-note', this.titleScreen, 'New to t&rsquo; moor? <b>Give &lsquo;Ow Ter Play&rsquo; a read</b> &mdash; how to build, ride, drive an&rsquo; stay alive.');
     this.el('div', 'muted-note', this.titleScreen, 'Watch thissen at neet &mdash; t&rsquo; barghest walks when t&rsquo; sun goes down.');
     this.el('div', 'title-foot', this.titleScreen, 'Made wi&rsquo; nowt but procedural generation &mdash; not a single asset file');
 
@@ -259,6 +265,7 @@ export class UI {
 <b>Esc</b> Pause / close a screen<br>
 <b>Space &times;2</b> Toggle flying (creative mode only)
 </div>
+<p class="how-note"><b>Ridin&rsquo; &amp; drivin&rsquo;:</b> on a pony or t&rsquo; footplate, <b>W A S D</b> shifts thee; <b>F</b> gets thee down off a pony (or shovels coal when tha&rsquo;s drivin&rsquo;); <b>E</b> brings t&rsquo; train to a stand. Full details under <b>Ponies</b> an&rsquo; <b>T&rsquo; Railway</b>.</p>
 <p class="how-note">Creative mode lives in t&rsquo; pause menu: fly, infinite blocks, instant digging, nowt can hurt thee.</p>`,
 
       'Staying Alive': `
@@ -267,6 +274,7 @@ export class UI {
 <li><b>Hunger</b> drains as tha walks, sprints, jumps an&rsquo; digs. Below 6 pies tha can&rsquo;t sprint; at nowt, tha starves down to half a heart. Eat wi&rsquo; right-click: bilberries (+3), raw mutton (+3), <b>roast mutton (+8)</b>, grouse. Cook on a range.</li>
 <li><b>Health</b> heals on its own when tha&rsquo;s well fed (16+ hunger). Otherwise: eat, wait, or stay out o&rsquo; trouble.</li>
 <li><b>Falling</b> hurts past 3 blocks. <b>Water</b>: tha can swim (Space), but air bubbles run out &mdash; surface afore they do.</li>
+<li><b>Keep dry.</b> Caught out in t&rsquo; rain (or wadin&rsquo; t&rsquo; beck) an&rsquo; tha gets <b>soaked through</b> &mdash; soaked, tha can&rsquo;t rest up nor heal, an&rsquo; tha burns thi scran keepin&rsquo; warm. Get <b>under a roof or by a fire</b> an&rsquo; tha&rsquo;ll soon dry off.</li>
 <li><b>Bogs</b> on t&rsquo; high moor are t&rsquo; dark pools in t&rsquo; peat. They grip thee, sink thee, and they&rsquo;re hungry. Skirt round, or sprint-jump if tha must.</li>
 <li><b>Neet</b> belongs to t&rsquo; <b>barghest</b> (great black hound, eyes like coals) and <b>boggarts</b> (little horrors frae t&rsquo; mires). They walk frae dusk till dawn, out on t&rsquo; open moor only &mdash; <b>Moorstead ground is hallowed; nowt dark sets foot on it</b>. Tha can sprint faster than a barghest. Just.</li>
 <li><b>Dark things fear flame.</b> Craft <b>torches</b> (1 stick + 1 coal = 4, no bench needed): a <b>placed</b> torch or lantern wards off all but t&rsquo; worst within ~9 blocks an&rsquo; stops owt rising nearby &mdash; plant a ring o&rsquo; them an&rsquo; camp anywhere. A torch <b>in thi hand</b> lights thi way an&rsquo; sees off boggarts, but a barghest&rsquo;s bolder than that.</li>
@@ -319,7 +327,25 @@ export class UI {
 <li><b>To ride</b>: find t&rsquo; station platform (lantern, departures board, signpost), <b>right-click t&rsquo; board</b>, pick where tha&rsquo;s bound an&rsquo; pay t&rsquo; fare &mdash; <b>coal lumps</b>, more for further (free in creative). Then be <b>stood on t&rsquo; platform when she calls</b> &mdash; t&rsquo; board says how long. She waits half a minute at each stop, doors open.</li>
 <li>Aboard, tha gets a <b>window seat</b> &mdash; watch t&rsquo; dales an&rsquo; embankments roll by. She&rsquo;ll set thee down at thi stop wi&rsquo; a whistle.</li>
 <li>Miss her an&rsquo; thi fare comes back. Stations are <b>safe, lit ground</b> at neet an&rsquo; all.</li>
-<li>It&rsquo;s t&rsquo; fastest way across t&rsquo; map by far &mdash; an&rsquo; t&rsquo; bonniest. Walk out to a viaduct embankment at dusk an&rsquo; wait for her lamp.</li>
+<li>It&rsquo;s t&rsquo; fastest way across t&rsquo; map by far &mdash; an&rsquo; t&rsquo; bonniest.</li>
+<li><b>Folk ride wi&rsquo; thee.</b> Locals get on at t&rsquo; platforms an&rsquo; tek a seat in thi carriage &mdash; <b>right-click one for a natter</b>. They&rsquo;ll share t&rsquo; news, a tip worth knowin&rsquo;, an&rsquo; now an&rsquo; then a <b>parcel to run</b> to their stop for a bit o&rsquo; coal.</li>
+</ul>
+<h3>Drive her thissen &#128642;</h3>
+<ul>
+<li>When she&rsquo;s <b>stood at thi platform</b>, t&rsquo; board offers <b>&ldquo;Take the regulator&rdquo;</b> &mdash; climb on t&rsquo; footplate an&rsquo; drive her thissen.</li>
+<li><b>W</b> opens t&rsquo; regulator (faster), <b>S</b> or <b>space</b> brakes, <b>R</b> throws t&rsquo; reverser to back her up. <b>E</b> brings her to a stand an&rsquo; gets thee down.</li>
+<li><b>Fire t&rsquo; boiler.</b> Watch t&rsquo; steam gauge &mdash; <b>F shovels coal</b> on t&rsquo; fire to keep her pressed up. Let t&rsquo; fire die an&rsquo; she&rsquo;ll not pull. A long climb&rsquo;s a proper job.</li>
+<li><b>Goods runs.</b> At a station, <b>load a wagon</b> (or tek a passenger&rsquo;s parcel) bound for another stop; drive her there an&rsquo; <b>step down for coal</b>.</li>
+</ul>`,
+
+      'Ponies': `
+<h3>Moorland ponies &#128052;</h3>
+<p>Half-wild ponies graze t&rsquo; open moor &mdash; shaggy, dark, sure-footed little things. They&rsquo;ll let a body up.</p>
+<ul>
+<li><b>Find one grazin&rsquo;</b> out on t&rsquo; heather, walk up to her, an&rsquo; <b>right-click to climb on.</b></li>
+<li><b>W A S D</b> to ride &mdash; she fair shifts, near twice walkin&rsquo; pace, an&rsquo; she&rsquo;ll <b>leap a low wall hersen</b>, no need to jump. Grand for crossin&rsquo; t&rsquo; tops.</li>
+<li><b>F</b> to get down. She&rsquo;ll graze where tha left her till tha wants her again.</li>
+<li>She sits &rsquo;twixt shanks&rsquo;s pony an&rsquo; t&rsquo; railway: quicker than walkin&rsquo;, an&rsquo; free to roam where no rails run.</li>
 </ul>`,
 
       'Craft & Cook': `
