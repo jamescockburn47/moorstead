@@ -1388,7 +1388,9 @@ class Game {
     const cab = new THREE.Vector3(1.0, 2.62, -1.7).applyQuaternion(loco.quaternion).add(loco.position);
     this.player.pos = { x: cab.x, y: cab.y - this.player.eye, z: cab.z };
     this.player.vel = { x: 0, y: 0, z: 0 };
-    if (!this.driveYawSet) { this.player.yaw = (loco.rotation.y || 0) + Math.PI - 0.12; this.player.pitch = -0.04; this.driveYawSet = true; }
+    const locoYaw = loco.rotation.y || 0;
+    if (!this.driveYawSet) { this.player.yaw = locoYaw + Math.PI - 0.12; this.player.pitch = -0.04; this.driveBaseYaw = locoYaw; this.driveYawSet = true; }
+    else { let dY = locoYaw - this.driveBaseYaw; while (dY > Math.PI) dY -= Math.PI * 2; while (dY < -Math.PI) dY += Math.PI * 2; if (Math.abs(dY) > 1e-4) { this.player.yaw += dY; this.driveBaseYaw = locoYaw; } }
     let h = this._driveHud;
     if (!h) {
       h = document.createElement('div'); h.id = 'driveHud';
@@ -1528,10 +1530,19 @@ class Game {
     const seat = seatLocal.applyQuaternion(cg.quaternion).add(cg.position);
     this.player.pos = { x: seat.x, y: seat.y - this.player.eye, z: seat.z };
     this.player.vel = { x: 0, y: 0, z: 0 };
+    // pin t' rider to t' carriage: swing their POV by however much she's turned
+    // (a curve, or a reversal at t' terminus) so they allus face t' way o' travel
+    const carYaw = cg.rotation.y;
     if (!this.rideYawSet) {
-      this.player.yaw = ts.rotY + Math.PI;
+      this.player.yaw = carYaw + Math.PI;
       this.player.pitch = 0;
+      this.rideBaseYaw = carYaw;
       this.rideYawSet = true;
+    } else {
+      let dY = carYaw - this.rideBaseYaw;
+      while (dY > Math.PI) dY -= Math.PI * 2;
+      while (dY < -Math.PI) dY += Math.PI * 2;
+      if (Math.abs(dY) > 1e-4) { this.player.yaw += dY; this.rideBaseYaw = carYaw; }
     }
     // arrived?
     if (ts.s.mode === 'dwell' && ts.s.i === this.ride.destIdx) {
