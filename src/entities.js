@@ -1127,6 +1127,19 @@ export class Entities {
       }
       return;
     }
+    // folk ridin' t' train: t' game seats them in t' carriage, we just dress 'em
+    if (mob.onTrain) {
+      mob.model.group.position.set(mob.pos.x, mob.pos.y, mob.pos.z);
+      mob.model.group.rotation.y = (mob.yaw || 0) + Math.PI;
+      const tgt = (distP < 16 && !mob.chatting) ? 1 : 0;
+      mob.plate.material.opacity += (tgt - mob.plate.material.opacity) * Math.min(1, dt * 8);
+      if (mob.bubble) {
+        mob.bubbleT -= dt;
+        mob.bubble.material.opacity = Math.max(0, Math.min(1, mob.bubbleT));
+        if (mob.bubbleT <= 0) { mob.model.group.remove(mob.bubble); mob.bubble = null; }
+      }
+      return;
+    }
     // frozen till t' world's built under their feet (far-off villages)
     if (!this.world.isLoaded(Math.floor(mob.pos.x), Math.floor(mob.pos.z))) {
       mob.model.group.position.set(mob.pos.x, mob.pos.y, mob.pos.z);

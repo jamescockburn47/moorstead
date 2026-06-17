@@ -18,6 +18,7 @@ import { buildTrain } from './train.js';
 import { Rails } from './rails.js';
 import { seasonState, seasonStateAtPhase, bilberryInSeason } from './season.js';
 import { startLiveWeather } from './weather-live.js';
+import { boardingFolk } from './trainfolk.js';
 
 const RAIL_VMAX = 11;  // blocks a second flat out — t' pace of a heritage steamer
 const RAIL_ACC = 0.18; // gentle acceleration: she works up to speed an' brakes early
@@ -76,6 +77,8 @@ class Game {
     this.seasonOverride = null; // dev: set 0..1 to force a year phase (moorstead.debug.setSeason)
     this.season = null;         // cached per-frame season, read by sky/audio/foraging
     this._seasonBucket = -1;    // throttles the atlas re-tint to ~40 steps a year
+    this.trainFolk = [];        // local folk ridin' t' carriage right now
+    this.lastDwellStation = -1; // which platform she's stood at (for boarding)
 
     // renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -723,6 +726,7 @@ class Game {
     let roster = await npc.fetchRoster();
     const online = !!roster && roster.length > 0;
     if (!online) roster = npc.FALLBACK_ROSTER;
+    this.roster = roster; // kept so train folk can be drawn frae t' same personas
     const geo = this.world.gen.geo;
     for (const c of roster) {
       // folk live all ower t' moors now — t' roster says which settlement
@@ -936,6 +940,13 @@ class Game {
     this.mouseDown = [false, false, false];
     this.clearKeys();
     villager.chatting = true;
+    // a passenger's parcel becomes an errand: see it to their stop for coal
+    if (villager.onTrain && villager.trainParcel && this.pendingGoods == null && !(this.drive && this.drive.goods)) {
+      const stns = this.world.gen.geo.railway();
+      this.pendingGoods = { dest: villager.parcelDest, reward: 3 + ((Math.random() * 3) | 0), from: -1, parcel: villager.trainParcel };
+      villager.trainParcel = null;
+      villager.chatLog.push({ who: 'sys', text: `Tha takes ${this.pendingGoods.parcel} into thi care for <b>${stns[villager.parcelDest].name}</b>. Drive (or ride) her there an’ it’s delivered.` });
+    }
     document.exitPointerLock?.();
     this.ui.chatWaiting = false;
     this.ui.openChat(villager, !!this.player.name);
@@ -965,6 +976,11 @@ class Game {
     this.ui.chatInput.value = '';
     v.chatLog.push({ who: 'you', text });
     if (!v.charId) {
+      if (v.onTrain && v.cannedReplies && v.cannedReplies.length) {
+        v.chatLog.push({ who: 'them', text: v.cannedReplies[(Math.random() * v.cannedReplies.length) | 0] });
+        this.ui.renderChatLog();
+        return;
+      }
       v.chatLog.push({ who: 'sys', text: `${v.displayName} says nowt \u2014 t\u2019 village brain in\u2019t running.` });
       this.ui.renderChatLog();
       return;
@@ -1304,6 +1320,77 @@ class Game {
     ui.show('boardScreen');
   }
 
+  // ---- local folk ridin' t' carriage: board, sit, natter, alight ----
+  trainSeatWorld(seatIdx) {
+    const cg = this.train.carriage.group;
+    const off = [[0.55, -0.7], [-0.55, -0.7], [0.55, 1.0], [-0.55, 1.0]][seatIdx % 4];
+    const sl = this.train.seat.clone();
+    sl.x = off[0]; sl.z += off[1] + 0.7;
+    const w = sl.applyQuaternion(cg.quaternion).add(cg.position);
+    return { x: w.x, y: cg.position.y + 1.15, z: w.z, yaw: cg.rotation.y };
+  }
+
+  seatTrainFolk() {
+    if (!this.train || !this.train.carriage.group.parent) return;
+    for (const f of this.trainFolk) {
+      const m = f.mob; if (!m || m.dead) continue;
+      const sw = this.trainSeatWorld(f.seatIdx);
+      m.pos.x = sw.x; m.pos.y = sw.y; m.pos.z = sw.z; m.yaw = sw.yaw;
+    }
+  }
+
+  boardTrainFolk(stIdx) {
+    if (!this.train || this.trainFolk.length >= 2 || Math.random() < 0.45) return;
+    const st = this.world.gen.geo.railway();
+    const dests = st.map((s, i) => i).filter(i => i !== stIdx);
+    if (!dests.length) return;
+    const destIdx = dests[(Math.random() * dests.length) | 0];
+    const folk = boardingFolk((Date.now() ^ (stIdx * 2654435761)) >>> 0, this.roster || npc.FALLBACK_ROSTER, st[destIdx].name);
+    const taken = new Set(this.trainFolk.map(f => f.seatIdx));
+    if (this.state === 'riding') taken.add(0);
+    let seatIdx = 1; for (let i = 0; i < 4; i++) { if (!taken.has(i)) { seatIdx = i; break; } }
+    const sw = this.trainSeatWorld(seatIdx);
+    const mob = this.entities.spawnVillager(folk.charId, folk.name, sw.x, sw.y, sw.z);
+    if (!mob) return;
+    mob.onTrain = true; mob.yaw = sw.yaw;
+    mob.trainParcel = folk.parcel; mob.parcelDest = destIdx;
+    mob.cannedReplies = folk.canned;
+    mob.chatLog.push({ who: 'them', text: folk.greet });
+    mob.chatLog.push({ who: 'them', text: folk.tip });
+    if (folk.parcel) mob.chatLog.push({ who: 'them', text: `Here — would tha do us a turn? I've ${folk.parcel} for <b>${st[destIdx].name}</b> an’ me knees is gone. See it there an’ there's a bit o’ coal in it for thee.` });
+    this.trainFolk.push({ mob, seatIdx, destStation: destIdx });
+  }
+
+  alightTrainFolk(stIdx) {
+    this.trainFolk = this.trainFolk.filter(f => {
+      if (f.destStation !== stIdx) return true;
+      if (f.mob && !f.mob.dead) {
+        this.scene.remove(f.mob.model.group); f.mob.dead = true;
+        const i = this.entities.mobs.indexOf(f.mob); if (i >= 0) this.entities.mobs.splice(i, 1);
+      }
+      return false;
+    });
+  }
+
+  clearTrainFolk() {
+    for (const f of this.trainFolk) {
+      if (f.mob && !f.mob.dead) {
+        this.scene.remove(f.mob.model.group); f.mob.dead = true;
+        const i = this.entities.mobs.indexOf(f.mob); if (i >= 0) this.entities.mobs.splice(i, 1);
+      }
+    }
+    this.trainFolk = [];
+  }
+
+  deliverPendingParcel() {
+    const g = this.pendingGoods; if (!g) return;
+    const st = this.world.gen.geo.railway();
+    this.player.addItem(I.COAL_LUMP, g.reward); this.ui.invDirty = true;
+    this.pendingGoods = null;
+    this.ui.toast(`<b>${g.parcel ? 'Parcel' : 'Goods'} delivered to ${st[g.dest].name}!</b> ${g.reward}× coal for thi trouble.`, 6000);
+    this.audio.pickup && this.audio.pickup();
+  }
+
   // ---- driving t' engine yourself: take t' regulator, fire t' boiler ----
   // Whilst tha drives, t' train follows THY chainage (this.drive.s) instead o'
   // t' timetable — local to thee, so t' shared service is unaffected.
@@ -1512,6 +1599,17 @@ class Game {
     } else if (parts[0].group.parent) {
       for (const part of parts) this.scene.remove(part.group);
     }
+    // local folk ridin' t' carriage: board/alight at platforms, seated as she rolls
+    if (show && !driving && this.train.carriage.group.parent) {
+      if (s.mode === 'dwell' && this.lastDwellStation !== s.i) {
+        this.lastDwellStation = s.i;
+        this.alightTrainFolk(s.i);
+        this.boardTrainFolk(s.i);
+      } else if (s.mode === 'run') { this.lastDwellStation = -1; }
+      this.seatTrainFolk();
+    } else if (!show && this.trainFolk.length) {
+      this.clearTrainFolk();
+    }
   }
 
   // riding: thi seat is in t' carriage, wherever she is on t' curve
@@ -1547,6 +1645,7 @@ class Game {
     // arrived?
     if (ts.s.mode === 'dwell' && ts.s.i === this.ride.destIdx) {
       const end = this.world.gen.geo.railway()[this.ride.destIdx];
+      if (this.pendingGoods && this.pendingGoods.dest === this.ride.destIdx) this.deliverPendingParcel();
       const g = this.world.gen.height(Math.floor(end.x), Math.floor(end.z + 2));
       this.player.pos = { x: end.x + 0.5, y: g + 2.2, z: end.z + 2.5 };
       this.ride = null;
