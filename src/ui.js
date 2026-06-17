@@ -2,6 +2,7 @@
 import { B, I, RECIPES, SMELTS, FUELS, FOODS, TOOLS, itemName, maxStack, CREATIVE_ITEMS, CHUNK, WATER_LEVEL } from './defs.js';
 import { getIconURL } from './textures.js';
 import { CASTLE } from './geography.js';
+import { TitleFlyover } from './titlescene.js';
 
 const PIX = {
   heart: ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'],
@@ -115,24 +116,11 @@ export class UI {
     this.titleScreen = this.el('div', 'overlay', body); this.titleScreen.id = 'title-screen';
     this.el('h1', 'title', this.titleScreen, 'MOORSTEAD');
     this.el('div', 'subtitle', this.titleScreen, 'A reet grand voxel adventure on t&rsquo; North York Moors');
-    // a procedural moorland scene behind it all — no asset files: heather tops an' standing
-    // stones, a moor village wi' its church, a steam train puffing across, ponies an' sheep below
+    // a LIVE moor fly-over behind it all — procedural, no asset files (see titlescene.js).
+    // A dark scrim over it keeps the text readable; falls back to the CSS gradient if WebGL won't start.
     const scene = this.el('div', 'title-scene', this.titleScreen);
-    scene.innerHTML = `
-<svg viewBox="0 0 1000 200" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg">
-  <path d="M0 118 Q160 92 330 114 T660 106 T1000 120 V200 H0Z" fill="#544c66" opacity="0.55"/>
-  <g fill="#4a4458" opacity="0.85"><rect x="44" y="96" width="9" height="24" transform="rotate(-7 48 108)"/><rect x="60" y="103" width="8" height="17" transform="rotate(4 64 111)"/></g>
-  <path d="M0 144 Q200 118 432 140 T762 137 T1000 150 V200 H0Z" fill="#3e4838"/>
-  <g fill="#2a322e"><rect x="118" y="118" width="14" height="30"/><polygon points="116,118 134,118 125,105"/><rect x="136" y="131" width="22" height="17"/><polygon points="134,131 160,131 147,122"/><rect x="98" y="134" width="16" height="14"/><polygon points="96,134 116,134 106,127"/></g>
-  <g transform="translate(556 124)" fill="#11171d"><rect x="66" y="3" width="42" height="15" rx="2"/><rect x="112" y="3" width="42" height="15" rx="2"/><rect x="18" y="5" width="46" height="13" rx="2"/><rect x="46" y="-3" width="19" height="11"/><rect x="24" y="-7" width="8" height="11"/><rect x="23" y="-9" width="10" height="3"/><circle cx="28" cy="20" r="5"/><circle cx="46" cy="20" r="5"/><circle cx="86" cy="20" r="3.5"/><circle cx="132" cy="20" r="3.5"/></g>
-  <g fill="#cfc8ba">
-    <circle cx="584" cy="113" r="7"><animateTransform attributeName="transform" type="translate" values="0 0;-30 -58" dur="3.8s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;0.5;0" dur="3.8s" repeatCount="indefinite"/></circle>
-    <circle cx="584" cy="113" r="6"><animateTransform attributeName="transform" type="translate" values="0 0;-24 -52" dur="3.8s" begin="1.3s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;0.45;0" dur="3.8s" begin="1.3s" repeatCount="indefinite"/></circle>
-    <circle cx="584" cy="113" r="5"><animateTransform attributeName="transform" type="translate" values="0 0;-18 -46" dur="3.8s" begin="2.5s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;0.4;0" dur="3.8s" begin="2.5s" repeatCount="indefinite"/></circle>
-  </g>
-  <path d="M0 168 Q250 150 520 166 T1000 167 V200 H0Z" fill="#19212a"/>
-  <g fill="#0d131a"><g transform="translate(300 156)"><rect x="0" y="2" width="22" height="9" rx="2"/><rect x="17" y="-4" width="6" height="9"/><rect x="20" y="-7" width="9" height="5" rx="1"/><rect x="2" y="11" width="3" height="7"/><rect x="16" y="11" width="3" height="7"/><rect x="-3" y="1" width="4" height="9"/></g><ellipse cx="690" cy="176" rx="7" ry="4"/><ellipse cx="712" cy="178" rx="6" ry="3.5"/></g>
-</svg>`;
+    this.flyoverCanvas = this.el('canvas', 'title-flyover', scene);
+    this.el('div', 'title-scrim', scene);
     // what the world IS, at a glance — not a changelog
     const feats = this.el('div', 'title-feats', this.titleScreen);
     feats.innerHTML =
@@ -457,7 +445,18 @@ export class UI {
     }
     if (name) this[name].classList.remove('hidden');
     this.hud.classList.toggle('hidden', name === 'titleScreen' || name === 'loadingScreen');
+    // run the live fly-over only while the title's up; pause it the moment we leave
+    if (name === 'titleScreen') this._startFlyover(); else this._stopFlyover();
   }
+
+  _startFlyover() {
+    try {
+      if (!this.flyover && this.flyoverCanvas) this.flyover = new TitleFlyover(this.flyoverCanvas);
+      this.flyover && this.flyover.start();
+    } catch (e) { /* WebGL unavailable — the CSS gradient stands in */ }
+  }
+
+  _stopFlyover() { if (this.flyover) this.flyover.stop(); }
 
   // hidden on t' bairns' world so survival actually holds; shown everywhere else
   setCreativeButtonVisible(show) {

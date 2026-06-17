@@ -115,12 +115,16 @@ input.seed {
 
 /* procedural moorland scene + feature strip on the title */
 .title-scene {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 210px;
-  z-index: 0; pointer-events: none; opacity: 0.92;
-  -webkit-mask-image: linear-gradient(to top, #000 62%, transparent);
-  mask-image: linear-gradient(to top, #000 62%, transparent);
+  position: absolute; inset: 0;
+  z-index: 0; pointer-events: none; overflow: hidden;
 }
-.title-scene svg { width: 100%; height: 100%; display: block; }
+.title-flyover { width: 100%; height: 100%; display: block; }
+.title-scrim {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 44%, rgba(8,10,14,0.26), rgba(8,10,14,0.60) 82%),
+    linear-gradient(180deg, rgba(8,10,14,0.58) 0%, rgba(8,10,14,0.16) 30%, rgba(8,10,14,0.20) 62%, rgba(8,10,14,0.56) 100%);
+}
 #title-screen > *:not(.title-scene) { position: relative; z-index: 1; }
 .title-feats {
   display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;
