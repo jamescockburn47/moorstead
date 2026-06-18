@@ -1794,7 +1794,7 @@ class Game {
         if (!pg.parent) { this.scene.add(pg); pg.rotation.order = 'YXZ'; }
         if (flipping) {
           // rigid rake, centred on the platform, turning as one
-          const d = part.offset + 5.3;               // centre on the tender so she spins about her middle
+          const d = part.offset + 8.55;              // centre on the rake midpoint so she spins about her middle
           pg.position.x = fsp.x + Math.sin(flipHeading) * d;
           pg.position.z = fsp.z + Math.cos(flipHeading) * d;
           const fdeck = fsp.deck + 1;

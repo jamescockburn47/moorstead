@@ -934,6 +934,8 @@ export class Entities {
       break;
     }
     if (surfY < 0) return;
+    // t' lineside fence pens beasts off t' railway — nowt walks on t' track (birds fly ower)
+    if (!t.fly) { const ri = geo.railInfo(x, z); if (ri && ri.d < 3.2) return; }
     // right beast for t' right ground
     if (t.habitat && !this.habitatOk(t, geo, x, z, surfY, surfB)) return;
     const mob = this.spawnMob(type, x + 0.5, t.fly ? surfY + (t.flyBand || 14) : surfY + 1.05, z + 0.5);
@@ -960,6 +962,8 @@ export class Entities {
   spawnNear(type, x, z) {
     if (!this.world.isLoaded(x, z)) return;
     const t = MOB_TYPES[type];
+    if (!t.fly) { const ri = this.world.gen.geo.railInfo(x, z); if (ri && ri.d < 3.0) return; } // not on t' track
+
     for (let y = HEIGHT - 2; y > 1; y--) {
       const b = this.world.getBlock(x, y, z);
       if (b === B.AIR) continue;
@@ -1202,6 +1206,7 @@ export class Entities {
   }
 
   updateMobs(dt, player, isNight, audio) {
+    const geo = this.world.gen.geo;
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
       this.spawnTimer = 2.5;
@@ -1371,6 +1376,16 @@ export class Entities {
 
       mob.vel.x += (wishX * speed - mob.vel.x) * Math.min(1, 10 * dt);
       mob.vel.z += (wishZ * speed - mob.vel.z) * Math.min(1, 10 * dt);
+
+      // t' lineside fence: shove any beast that wanders onto t' track back off it
+      if (!t.fly && mob.type !== 'coble') {
+        const ri = geo.railInfo(mob.pos.x, mob.pos.z);
+        if (ri && ri.d < 2.8) {
+          let nx = mob.pos.x - ri.px, nz = mob.pos.z - ri.pz;
+          const nl = Math.hypot(nx, nz);
+          if (nl > 0.05) { nx /= nl; nz /= nl; const push = (2.8 - ri.d) * 9; mob.vel.x += nx * push * dt; mob.vel.z += nz * push * dt; }
+        }
+      }
 
       const feet = this.world.getBlock(Math.floor(mob.pos.x), Math.floor(mob.pos.y + 0.2), Math.floor(mob.pos.z));
       const inLiq = feet === B.WATER || feet === B.BOG;

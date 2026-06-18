@@ -22,6 +22,10 @@ export class Rails {
     this.sleeperMat = new THREE.MeshLambertMaterial({ color: 0x4a3a2c });
     this.skirtMat = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.ballastMat = new THREE.MeshLambertMaterial({ color: 0x6b6258 }); // smooth trackbed crown
+    this.fenceMat = new THREE.MeshLambertMaterial({ color: 0x6b5a44 });    // timber lineside fence
+    this.postGeom = new THREE.BoxGeometry(0.12, 0.72, 0.12);              // a fence post, under a block high
+    this.fenceRailGeom = new THREE.BoxGeometry(0.06, 0.1, 1);
+    this.bridgeMat = new THREE.MeshLambertMaterial({ color: 0x70695e });   // stone overbridge
   }
 
   // nearest chainage to a point — coarse stride scan, it's only for t' window
@@ -166,6 +170,71 @@ export class Rails {
     sleepers.instanceMatrix.needsUpdate = true;
     this.scene.add(sleepers);
     this.meshes.push(sleepers);
+
+    // --- lineside fencing: a low post-an'-rail fence either side, kept under a block
+    //     high so she reads as a fence (not a tunnel) an' keeps folk an' beasts off t' line ---
+    {
+      const FOFF = 2.55, FH = 0.72, EVERY = 3.0, idq = new THREE.Quaternion();
+      const nP = Math.floor((s1 - s0) / EVERY);
+      const posts = new THREE.InstancedMesh(this.postGeom, this.fenceMat, Math.max(1, nP * 2));
+      const frails = new THREE.InstancedMesh(this.fenceRailGeom, this.fenceMat, seg * 2);
+      let pi = 0, fri = 0;
+      for (let k = 0; k < nP; k++) {
+        const sp = this.geo.samplePos(s0 + k * EVERY);
+        for (const side of [-1, 1]) {
+          m.compose(new THREE.Vector3(sp.x + sp.tz * side * FOFF, sp.deck + 1.0 + FH / 2, sp.z - sp.tx * side * FOFF), idq, new THREE.Vector3(1, 1, 1));
+          posts.setMatrixAt(pi++, m);
+        }
+      }
+      for (let i = i0; i < i1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        const ds = Math.max(b.s - a.s, 0.001);
+        const tx = (b.x - a.x) / ds, tz = (b.z - a.z) / ds;
+        e.set(0, Math.atan2(b.x - a.x, b.z - a.z), 0); q.setFromEuler(e);
+        const segLen = Math.hypot(b.x - a.x, b.z - a.z) + 0.06;
+        for (const side of [-1, 1]) {
+          m.compose(new THREE.Vector3((a.x + b.x) / 2 + tz * side * FOFF, (a.deck + b.deck) / 2 + 1.0 + FH - 0.06, (a.z + b.z) / 2 - tx * side * FOFF), q, new THREE.Vector3(1, 1, segLen));
+          frails.setMatrixAt(fri++, m);
+        }
+      }
+      posts.count = pi; posts.instanceMatrix.needsUpdate = true; this.scene.add(posts); this.meshes.push(posts);
+      frails.count = fri; frails.instanceMatrix.needsUpdate = true; this.scene.add(frails); this.meshes.push(frails);
+    }
+
+    // --- stone overbridges (as on t' real NYMR): a stone span carried ower t' line
+    //     on grounded abutments, wi' parapets; the train runs through t' portal beneath ---
+    {
+      const bpos = [];
+      const pushBox = (cx, cy, cz, w, h, d, yaw) => {
+        const hx = w / 2, hy = h / 2, hz = d / 2, c = Math.cos(yaw), s = Math.sin(yaw);
+        const C = (sx, sy, sz) => { const lx = sx * hx, lz = sz * hz; return [cx + lx * c + lz * s, cy + sy * hy, cz - lx * s + lz * c]; };
+        const v = [C(-1,-1,-1), C(1,-1,-1), C(1,1,-1), C(-1,1,-1), C(-1,-1,1), C(1,-1,1), C(1,1,1), C(-1,1,1)];
+        const F = [[0,1,2,3], [5,4,7,6], [4,0,3,7], [1,5,6,2], [3,2,6,7], [0,4,5,1]];
+        for (const f of F) { const [a, b, cc, dd] = f; bpos.push(...v[a], ...v[b], ...v[cc], ...v[a], ...v[cc], ...v[dd]); }
+      };
+      const SP = 200, clear = 4.6;
+      for (let bk = Math.floor(s0 / SP); bk <= Math.ceil(s1 / SP); bk++) {
+        const h = ((bk * 2654435761) >>> 0) / 4294967296;
+        if (h > 0.6) continue;                                   // a stone bridge ower t' line every third o' a mile or so
+        const sb = bk * SP + (h - 0.275) * 130;                  // jittered along t' line
+        if (sb < s0 + 10 || sb > s1 - 10) continue;
+        const sp = this.geo.samplePos(sb);
+        if (this.geo.coastT && this.geo.coastT(sp.x, sp.z) > 0.05) continue; // not out ower t' sands
+        const yaw = Math.atan2(sp.tx, sp.tz);
+        const base = sp.deck + 1.0, abH = clear + 4;
+        for (const side of [-1, 1]) pushBox(sp.x + sp.tz * side * 3.4, base + clear / 2 - 1.5, sp.z - sp.tx * side * 3.4, 2.0, abH, 3.6, yaw); // grounded abutments
+        pushBox(sp.x, base + clear + 0.6, sp.z, 9.4, 1.2, 3.8, yaw);                                       // the deck span
+        for (const off of [-1.85, 1.85]) pushBox(sp.x + sp.tx * off, base + clear + 1.55, sp.z + sp.tz * off, 9.4, 0.8, 0.4, yaw); // parapets
+      }
+      if (bpos.length) {
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.Float32BufferAttribute(bpos, 3));
+        geom.computeVertexNormals();
+        const bridges = new THREE.Mesh(geom, this.bridgeMat);
+        bridges.userData.ownGeometry = true;
+        this.scene.add(bridges); this.meshes.push(bridges);
+      }
+    }
   }
 
   clear() {
@@ -186,5 +255,9 @@ export class Rails {
     this.sleeperMat.dispose();
     this.skirtMat.dispose();
     this.ballastMat.dispose();
+    this.fenceMat.dispose();
+    this.postGeom.dispose();
+    this.fenceRailGeom.dispose();
+    this.bridgeMat.dispose();
   }
 }
