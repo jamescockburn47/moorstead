@@ -672,6 +672,7 @@ export const MOB_TYPES = {
     make: makePony, hw: 0.42, h: 1.7, hp: 18, speed: 1.7, fleeSpeed: 3.2,
     hostile: false, drops: [], cap: 12, name: 'Moorland Pony',
     habitat: 'moor', group: [2, 3], // half-wild, but they'll let thee up
+    tameable: true, tameFood: [I.BILBERRIES], // feed her bilberries to win her over an' keep her
   },
   // ---- beasts a body can keep: feed 'em their favourite an' they'll throw their lot in wi' thee ----
   dog: {
@@ -1103,18 +1104,25 @@ export class Entities {
     mob.plate = plate;
   }
 
-  // Re-spawn saved companions at the player's heel on load.
+  // Re-spawn saved beasts on load: followers come to thi heel, penned farm stock
+  // come back at their own home spot (so thi farm's still there when tha returns).
   restorePets(list, player) {
     if (!list || !list.length) return;
     for (const p of list) {
       if (!MOB_TYPES[p.kind]) continue;
-      const m = this.spawnMob(p.kind, player.pos.x + (Math.random() * 2 - 1), player.pos.y + 1, player.pos.z + (Math.random() * 2 - 1));
-      if (m) this.makeCompanion(m, p.name);
+      if (p.stay && p.home) {
+        const m = this.spawnMob(p.kind, p.home.x, p.home.y ?? (player.pos.y), p.home.z);
+        if (m) { this.makeCompanion(m, p.name); m.stay = true; m.home = { x: p.home.x, y: p.home.y ?? m.pos.y, z: p.home.z }; }
+      } else {
+        const m = this.spawnMob(p.kind, player.pos.x + (Math.random() * 2 - 1), player.pos.y + 1, player.pos.z + (Math.random() * 2 - 1));
+        if (m) this.makeCompanion(m, p.name);
+      }
     }
   }
 
   // The work a kept beast does each frame. Returns true if she's "away" (skip her update).
   companionBenefit(mob, dt, player, isNight, audio) {
+    if (mob.stay) return false; // penned farm stock: no following, no popping to heel — she bides at home
     // caught miles behind (tha teleported?) — she pops back to heel
     if (Math.hypot(player.pos.x - mob.pos.x, player.pos.z - mob.pos.z) > 70) {
       mob.pos.x = player.pos.x + (Math.random() * 2 - 1);
@@ -1304,8 +1312,18 @@ export class Entities {
 
       let wishX = 0, wishZ = 0, speed = 0;
 
-      // natural spring lambs trot after their mother ewe, not after thee
-      if (mob.naturalLamb) {
+      // a kept beast told to STAY: she grazes in her pen, tethered to her home spot,
+      // never follows nor despawns — that's thi farm.
+      if (mob.owner && mob.stay && mob.home) {
+        const hx = mob.home.x - mob.pos.x, hz = mob.home.z - mob.pos.z, hd = Math.hypot(hx, hz);
+        if (hd > 6) { wishX = hx / hd; wishZ = hz / hd; speed = t.speed * 0.7; mob.state = 'wander'; } // amble back home
+        else if (mob.stateTimer <= 0) {
+          mob.stateTimer = 3 + Math.random() * 5;
+          mob.state = Math.random() < 0.5 ? 'wander' : 'idle';
+          if (mob.state === 'wander') mob.wanderYaw = Math.random() * Math.PI * 2;
+        }
+        if (mob.state === 'wander' && hd <= 6) { wishX = Math.cos(mob.wanderYaw); wishZ = Math.sin(mob.wanderYaw); speed = t.speed * 0.45; }
+      } else if (mob.naturalLamb) {
         const ewe = (mob.mother && !mob.mother.dead) ? mob.mother : null;
         if (ewe) {
           const lx = ewe.pos.x - mob.pos.x, lz = ewe.pos.z - mob.pos.z, ld = Math.hypot(lx, lz);

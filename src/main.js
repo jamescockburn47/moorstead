@@ -56,7 +56,7 @@ function lerpAngle(a, b, t) {
   return a + d * t;
 }
 import { Entities } from './entities.js';
-import { PET_BENEFIT } from './pets.js';
+import { PET_BENEFIT, PET_KINDS } from './pets.js';
 import { EXTRA_FOLK, moodWord } from './villagerlife.js';
 import { Sky } from './sky.js';
 import { AudioEngine } from './audio.js';
@@ -1508,12 +1508,21 @@ class Game {
     const p = this.mount; if (!p) return;
     p.ridden = false;
     p.pos = { x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z };
-    p.home = { x: p.pos.x, z: p.pos.z };
+    p.home = { x: p.pos.x, y: p.pos.y, z: p.pos.z };
     if (p.model) p.model.group.position.set(p.pos.x, p.pos.y, p.pos.z);
     this.mount = null;
     this.player.mounted = false;
     this.player.eye = this._savedEye || 1.62;
-    this.ui.toast('Tha’s down. She’ll graze where tha left her.', 3000);
+    if (p.owner) {
+      // a kept pony bides where tha gets off — that's her pen
+      p.stay = true;
+      const rec = (this.player.pets || []).find(q => q.name === p.petName);
+      if (rec) { rec.stay = true; rec.home = { ...p.home }; }
+      this.saveNow(false);
+      this.ui.toast('Tha’s down. She’ll bide here an’ graze — fence her in, or sneak + right-click to bring her to heel.', 5500);
+    } else {
+      this.ui.toast('Tha’s down. She’ll graze where tha left her — feed her <b>bilberries</b> to tame her an’ keep her for good.', 5500);
+    }
   }
 
   updateMount() {
@@ -2189,28 +2198,20 @@ class Game {
       const eye = this.player.eyePos();
       const d = this.lookDir();
       const mobHit = this.entities.raycastMobs(eye.x, eye.y, eye.z, d.x, d.y, d.z, 4.5);
-      if (mobHit && mobHit.mob.type === 'coble' && !this.boat && !this.mount && (!hit || mobHit.dist < hit.dist)) {
-        this.enterBoat(mobHit.mob);
-        return;
-      }
-      if (mobHit && mobHit.mob.type === 'pony' && !this.mount && (!hit || mobHit.dist < hit.dist)) {
-        this.mountPony(mobHit.mob);
-        return;
-      }
-      if (mobHit && mobHit.mob.type === 'villager' && (!hit || mobHit.dist < hit.dist)) {
-        if (mobHit.mob.isRemotePlayer) {
-          this.ui.toast(`That\u2019s <b>${mobHit.mob.displayName}</b> \u2014 another living soul. Press <b>T</b> to talk to t\u2019 moor.`, 4500);
-          return;
-        }
-        this.openChat(mobHit.mob);
-        return;
-      }
-      // a kept beast tha's giving an order, or a tameable beast tha's feeding
       if (mobHit && (!hit || mobHit.dist < hit.dist)) {
         const m = mobHit.mob;
-        if (m.owner) { this.petInteract(m); return; }
         const fh = this.player.heldItem();
-        if (m.t && m.t.tameable && fh && m.t.tameFood && m.t.tameFood.includes(fh.id)) { this.feedTame(m, fh); return; }
+        // sneak + right-click thi OWN beast: keep her here (start a pen) or bring her to heel
+        if (m.owner && this.keys['ShiftLeft']) { this.petKeep(m); return; }
+        if (m.type === 'coble' && !this.boat && !this.mount) { this.enterBoat(m); return; }
+        // feed a tameable beast its favourite scran to win her over (a pony an' all)
+        if (!m.owner && m.t && m.t.tameable && fh && m.t.tameFood && m.t.tameFood.includes(fh.id)) { this.feedTame(m, fh); return; }
+        if (m.type === 'pony' && !this.mount) { this.mountPony(m); return; }
+        if (m.type === 'villager') {
+          if (m.isRemotePlayer) { this.ui.toast(`That\u2019s <b>${m.displayName}</b> \u2014 another living soul. Press <b>T</b> to talk to t\u2019 moor.`, 4500); return; }
+          this.openChat(m); return;
+        }
+        if (m.owner) { this.petInteract(m); return; }
       }
     }
 
@@ -2292,9 +2293,16 @@ class Game {
     this.ui.invDirty = true;
     if (this.audio && this.audio.place) this.audio.place();
     if (r.tamed) {
-      (this.player.pets || (this.player.pets = [])).push({ kind: m.petKind, name: r.name });
-      const benefit = PET_BENEFIT[m.petKind];
-      this.ui.toast(`<b>${r.name}</b> has taken to thee — she’s thine now, an’ she’ll follow tha about.` + (benefit ? ` She ${benefit}.` : ''), 7000);
+      const farm = !PET_KINDS.includes(m.petKind); // dog/cat/pig/rat follow; horses, cattle, sheep are farm stock
+      const rec = { kind: m.petKind, name: r.name, stay: farm };
+      if (farm) { m.stay = true; m.home = { x: m.pos.x, y: m.pos.y, z: m.pos.z }; rec.home = { ...m.home }; }
+      (this.player.pets || (this.player.pets = [])).push(rec);
+      if (farm) {
+        this.ui.toast(`<b>${r.name}</b> is thine now — she’ll bide here an’ graze. <b>Fence her in</b> for a proper pen; sneak + right-click her to lead her elsewhere.`, 8000);
+      } else {
+        const benefit = PET_BENEFIT[m.petKind];
+        this.ui.toast(`<b>${r.name}</b> has taken to thee — she’ll follow tha about.` + (benefit ? ` She ${benefit}.` : '') + ` (Sneak + right-click to leave her grazing.)`, 8000);
+      }
       this.saveNow(false);
     } else {
       const pct = Math.round(r.progress * 100);
@@ -2315,6 +2323,23 @@ class Game {
     } else {
       this.ui.toast(`<b>${m.petName}</b>’s at thi heel.`, 2500);
     }
+  }
+
+  // Sneak + right-click thi own beast: leave her grazing here (start/extend a pen) or fetch her to heel.
+  petKeep(m) {
+    m.stay = !m.stay;
+    const rec = (this.player.pets || []).find(p => p.name === m.petName);
+    if (m.stay) {
+      m.home = { x: m.pos.x, y: m.pos.y, z: m.pos.z };
+      if (rec) { rec.stay = true; rec.home = { ...m.home }; }
+      this.ui.toast(`<b>${m.petName}</b> will bide here an’ graze. Fence her in for thi farm.`, 5000);
+    } else {
+      m.home = null;
+      if (rec) { rec.stay = false; rec.home = null; }
+      this.ui.toast(`<b>${m.petName}</b> falls in at thi heel — lead her where tha wants her.`, 4000);
+    }
+    if (this.audio && this.audio.place) this.audio.place();
+    this.saveNow(false);
   }
 
   // ---------------- fishing: cast an' wait ----------------
