@@ -504,7 +504,10 @@ export class UI {
   openChat(villager, playerHasName) {
     this.chatVillager = villager;
     this.chatName.textContent = villager.displayName;
-    this.chatTier.textContent = villager.charId ? (villager.tier ? `(${villager.tier})` : '') : '(t\u2019 brain\u2019s asleep)';
+    const brainDown = this.game && this.game.brainUp === false;
+    this.chatTier.textContent = villager.charId
+      ? (villager.tier ? `(${villager.tier})` : '')
+      : (brainDown ? '(t\u2019 brain\u2019s asleep)' : '(a passer-by \u2014 won\u2019t recall thee)');
     this.chatNameRow.classList.toggle('hidden', playerHasName);
     this.chatInputRow.classList.toggle('hidden', !playerHasName);
     this.renderChatLog();
@@ -519,7 +522,9 @@ export class UI {
     if (!v.chatLog.length) {
       this.el('div', 'chat-msg sys', this.chatMsgs,
         v.charId ? `${v.displayName} looks up as tha comes ower.` :
-          'T&rsquo; village brain in&rsquo;t running &mdash; start <i>run_v2.bat</i> in yorkshire_bot and they&rsquo;ll find their tongues.');
+          (this.game && this.game.brainUp === false
+            ? 'T&rsquo; village brain in&rsquo;t running &mdash; they&rsquo;ll potter abaht but say nowt till it wakes.'
+            : `${v.displayName} gives thee a nod &mdash; happy to natter, though a passer-by&rsquo;ll not recall thee after.`));
     }
     for (const m of v.chatLog) {
       const cls = m.who === 'you' ? 'you' : m.who === 'sys' ? 'sys' : 'them';
