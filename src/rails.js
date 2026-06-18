@@ -25,7 +25,7 @@ export class Rails {
     this.fenceMat = new THREE.MeshLambertMaterial({ color: 0x6b5a44 });    // timber lineside fence
     this.postGeom = new THREE.BoxGeometry(0.12, 0.72, 0.12);              // a fence post, under a block high
     this.fenceRailGeom = new THREE.BoxGeometry(0.06, 0.1, 1);
-    this.bridgeMat = new THREE.MeshLambertMaterial({ color: 0x70695e });   // stone overbridge
+    this.bridgeMat = new THREE.MeshLambertMaterial({ vertexColors: true }); // stone overbridge (coursed, vertex-shaded)
   }
 
   // nearest chainage to a point — coarse stride scan, it's only for t' window
@@ -201,18 +201,27 @@ export class Rails {
       frails.count = fri; frails.instanceMatrix.needsUpdate = true; this.scene.add(frails); this.meshes.push(frails);
     }
 
-    // --- stone overbridges (as on t' real NYMR): a stone span carried ower t' line
-    //     on grounded abutments, wi' parapets; the train runs through t' portal beneath ---
+    // --- stone overbridges (as on t' real NYMR): a coursed-stone ARCH carried ower
+    //     t' line — solid abutments, a stepped arch ring, spandrel walls, a road
+    //     deck an' parapets; t' train runs through t' arched portal beneath ---
     {
-      const bpos = [];
-      const pushBox = (cx, cy, cz, w, h, d, yaw) => {
+      const bpos = [], bcol = [];
+      // deterministic coursing: jitter a base stone colour per block so she reads
+      // as weathered masonry, not a flat grey slab
+      const shade = (base, seed) => {
+        const f = Math.sin(seed * 12.9898) * 43758.5453; const j = f - Math.floor(f);
+        const m = 0.84 + j * 0.30; return [base[0] * m, base[1] * m, base[2] * m];
+      };
+      const pushBox = (cx, cy, cz, w, h, d, yaw, col) => {
         const hx = w / 2, hy = h / 2, hz = d / 2, c = Math.cos(yaw), s = Math.sin(yaw);
         const C = (sx, sy, sz) => { const lx = sx * hx, lz = sz * hz; return [cx + lx * c + lz * s, cy + sy * hy, cz - lx * s + lz * c]; };
         const v = [C(-1,-1,-1), C(1,-1,-1), C(1,1,-1), C(-1,1,-1), C(-1,-1,1), C(1,-1,1), C(1,1,1), C(-1,1,1)];
         const F = [[0,1,2,3], [5,4,7,6], [4,0,3,7], [1,5,6,2], [3,2,6,7], [0,4,5,1]];
         for (const f of F) { const [a, b, cc, dd] = f; bpos.push(...v[a], ...v[b], ...v[cc], ...v[a], ...v[cc], ...v[dd]); }
+        for (let k = 0; k < 36; k++) bcol.push(col[0], col[1], col[2]);
       };
-      const SP = 200, clear = 4.6;
+      const STONE = [0.56, 0.50, 0.41], SPAN = [0.60, 0.55, 0.46], ROAD = [0.45, 0.41, 0.35];
+      const SP = 230, clearW = 3.0, clearH = 4.4, R = 3.0, PIER = 2.4, DEPTH = 4.2, SINK = 3.5;
       for (let bk = Math.floor(s0 / SP); bk <= Math.ceil(s1 / SP); bk++) {
         const h = ((bk * 2654435761) >>> 0) / 4294967296;
         if (h > 0.6) continue;                                   // a stone bridge ower t' line every third o' a mile or so
@@ -221,14 +230,40 @@ export class Rails {
         const sp = this.geo.samplePos(sb);
         if (this.geo.coastT && this.geo.coastT(sp.x, sp.z) > 0.05) continue; // not out ower t' sands
         const yaw = Math.atan2(sp.tx, sp.tz);
-        const base = sp.deck + 1.0, abH = clear + 4;
-        for (const side of [-1, 1]) pushBox(sp.x + sp.tz * side * 3.4, base + clear / 2 - 1.5, sp.z - sp.tx * side * 3.4, 2.0, abH, 3.6, yaw); // grounded abutments
-        pushBox(sp.x, base + clear + 0.6, sp.z, 9.4, 1.2, 3.8, yaw);                                       // the deck span
-        for (const off of [-1.85, 1.85]) pushBox(sp.x + sp.tx * off, base + clear + 1.55, sp.z + sp.tz * off, 9.4, 0.8, 0.4, yaw); // parapets
+        const px = sp.tz, pz = -sp.tx;                           // unit perpendicular (across t' line)
+        const base = sp.deck + 1.0;
+        const springY = base + clearH, crownY = springY + R, deckY = crownY + 0.5;
+        // a box spanning perp u0..u1 an' height y0..y1, full depth along t' line
+        const slab = (u0, u1, y0, y1, col, seed) => {
+          const uc = (u0 + u1) / 2, yc = (y0 + y1) / 2;
+          pushBox(sp.x + px * uc, yc, sp.z + pz * uc, Math.abs(u1 - u0), Math.abs(y1 - y0), DEPTH, yaw, shade(col, seed));
+        };
+        // 1) abutment piers, grounded into t' banking, up to t' springline
+        slab(-(clearW + PIER), -clearW, base - SINK, springY, STONE, sb + 1);
+        slab(clearW, clearW + PIER, base - SINK, springY, STONE, sb + 2);
+        // 2) stepped arch ring round t' portal
+        const N = 13;
+        for (let k = 0; k <= N; k++) {
+          const a = Math.PI * k / N, u = R * Math.cos(a), y = springY + R * Math.sin(a);
+          pushBox(sp.x + px * u, y, sp.z + pz * u, 1.5, 1.5, DEPTH, yaw, shade(STONE, sb + 10 + k));
+        }
+        // 3) spandrel walls — fill frae t' arch extrados up to t' deck
+        for (let u = -R; u <= R + 0.01; u += 0.7) {
+          const y0 = springY + Math.sqrt(Math.max(0, R * R - u * u));
+          if (y0 < deckY) slab(u - 0.4, u + 0.4, y0, deckY + 0.02, SPAN, sb + 40 + u);
+        }
+        // 4) road deck across t' top, an' 5) parapets down each side o' t' road
+        const HW = clearW + PIER + 0.3;
+        slab(-HW, HW, deckY, deckY + 1.0, ROAD, sb + 70);
+        for (const o of [-1, 1]) {
+          const off = o * (DEPTH / 2 - 0.25);
+          pushBox(sp.x + sp.tx * off, deckY + 1.0 + 0.55, sp.z + sp.tz * off, HW * 2, 1.1, 0.45, yaw, shade(STONE, sb + 80 + o));
+        }
       }
       if (bpos.length) {
         const geom = new THREE.BufferGeometry();
         geom.setAttribute('position', new THREE.Float32BufferAttribute(bpos, 3));
+        geom.setAttribute('color', new THREE.Float32BufferAttribute(bcol, 3));
         geom.computeVertexNormals();
         const bridges = new THREE.Mesh(geom, this.bridgeMat);
         bridges.userData.ownGeometry = true;
