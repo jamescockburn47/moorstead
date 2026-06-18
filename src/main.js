@@ -144,7 +144,22 @@ class Game {
       () => this.net   || null,
       () => this.debug || null,
     );
+    // Shared-moor connection diagnostics — type `netDiag()` in the console any time
+    // the thread drops to see WHY (close-reason taxonomy, drop counts, RTT, recent log).
+    if (typeof window !== 'undefined') window.netDiag = () => this.netDiag();
     this.renderer.setAnimationLoop(() => this.frame());
+  }
+
+  // Pretty-print the shared-moor connection report to the console an' return it.
+  netDiag() {
+    if (!this.net) { console.log('%cMoorstead net: not on the shared moor.', 'color:#c93'); return null; }
+    const r = this.net.report();
+    console.log(`%cMoorstead net — ${r.state}`, 'font-weight:bold;color:#6a9',
+      `· up ${r.uptimeSec}s · connects ${r.connects} · drops ${r.drops} · RTT ${r.lastRttMs ?? '—'}ms · msg-age ${r.lastMsgAgeSec ?? '—'}s`);
+    if (r.drops) console.log('drops by cause:', r.dropsByKind, '| last:', r.lastDrop);
+    if (console.table) console.table(r.recent);
+    console.log(r);
+    return r;
   }
 
   // ---------------- dev introspection ----------------
@@ -665,6 +680,30 @@ class Game {
       const x = parseInt(ix.value, 10), z = parseInt(iz.value, 10);
       if (Number.isFinite(x) && Number.isFinite(z)) this.adminTeleport(x, z, `${x}, ${z}`);
     });
+
+    // ---- shared-moor connection health (so the dropped-thread gremlin is visible) ----
+    if (this.netActive && this.net) {
+      ui.el('div', 'r-needs', panel, 'Shared Moor — connection:');
+      const diagBox = ui.el('pre', '', panel);
+      diagBox.style.cssText = 'font:10px/1.4 monospace;white-space:pre-wrap;color:#d2d8cc;background:rgba(0,0,0,0.28);padding:6px 8px;margin:4px 0;max-height:190px;overflow:auto;border-radius:4px;';
+      const paint = () => {
+        if (!this.net || this.ui.adminPanel.classList.contains('hidden')) return;
+        const r = this.net.report(), ld = r.lastDrop;
+        const kinds = Object.entries(r.dropsByKind).map(([k, n]) => `${k}×${n}`).join(', ') || 'none';
+        diagBox.textContent =
+          `state     ${r.state}\n` +
+          `uptime    ${r.uptimeSec}s   (session ${r.sessionAgeSec}s)\n` +
+          `connects  ${r.connects}    drops ${r.drops}    downtime ${r.totalDowntimeSec}s\n` +
+          `last msg  ${r.lastMsgAgeSec ?? '—'}s ago    RTT ${r.lastRttMs ?? '—'}ms    others ${r.remotes}\n` +
+          `causes    ${kinds}\n` +
+          (ld ? `last drop ${ld.kind} (code ${ld.code}${ld.wasClean ? ', clean' : ''}${ld.hidden ? ', tab hidden' : ''}, lasted ${Math.round((ld.upMs || 0) / 1000)}s)\n` : '') +
+          `\nrecent:\n` + r.recent.slice(-8).map(e => `  ${e.ago.padStart(5)}  ${e.kind}${e.detail && typeof e.detail === 'object' ? ' ' + (e.detail.kind || JSON.stringify(e.detail)) : (e.detail ? ' ' + e.detail : '')}`).join('\n');
+      };
+      paint();
+      clearInterval(this._diagPaint);
+      this._diagPaint = setInterval(paint, 1000);
+      ui.el('div', 'r-needs', panel, 'Full log: type netDiag() in the browser console.');
+    }
   }
 
   // Warden travel: tha doesn't walk, tha ARRIVES — dropped frae t' sky,
