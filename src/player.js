@@ -6,6 +6,7 @@ const GRAVITY = 26;
 const JUMP_VEL = 8.6;
 const WALK = 4.3, SPRINT = 6.4, SNEAK = 1.6, FLY = 11, FLY_FAST = 22;
 const MOUNT_WALK = 8.5; // a pony fair shifts compared to shanks's pony
+const SWIM_TIRE = 12;   // seconds treading deep water before tha tires an' starts to go under
 
 export class Player {
   constructor(world) {
@@ -58,6 +59,13 @@ export class Player {
     const inWater = this.feetBlock() === B.WATER || this.headBlock() === B.WATER;
     const inBog = this.feetBlock() === B.BOG || this.headBlock() === B.BOG;
     const inLiquid = inWater || inBog;
+    // treading deep water tires thee — tha can't keep thi head up forever, so the open
+    // sea is a real danger to swim (make for shore, the shallows, or a coble). Standing
+    // on a shallow bottom (onGround) is wading, not treading, so it doesn't tire thee.
+    const treading = inWater && !this.onGround && !this.flying;
+    if (treading) this.swimTime = (this.swimTime || 0) + dt;
+    else this.swimTime = Math.max(0, (this.swimTime || 0) - dt * 1.5);
+    const tiring = this.swimTime > SWIM_TIRE;
 
     // ----- movement intent -----
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
@@ -94,7 +102,7 @@ export class Player {
       const sink = inBog ? 3 : 5;
       this.vel.y -= sink * dt * 2;
       this.vel.y = Math.max(this.vel.y, inBog ? -0.8 : -2.2);
-      if (input.keys['Space']) this.vel.y += (inBog ? 5 : 14) * dt;
+      if (input.keys['Space']) this.vel.y += (inBog ? 5 : (tiring ? 4.5 : 14)) * dt;
       this.vel.y = Math.min(this.vel.y, inBog ? 1.2 : 3.5);
       this.fallStart = null;
     } else {
@@ -168,7 +176,7 @@ export class Player {
     // ----- survival ticks -----
     if (!this.creative && !this.god) {
       // drowning / bog suffocation
-      const headIn = isLiquid(this.headBlock());
+      const headIn = isLiquid(this.headBlock()) || (tiring && inWater); // a tired swimmer slips under
       if (headIn) {
         this.air -= dt;
         if (this.air < 0) {
@@ -176,7 +184,7 @@ export class Player {
           this.drownTick = (this.drownTick || 0) + dt;
           if (this.drownTick > 1) {
             this.drownTick = 0;
-            this.damage(2, this.headBlock() === B.BOG ? 'T\u2019 bog swallowed thee' : 'Tha drowned in t\u2019 beck');
+            this.damage(2, this.headBlock() === B.BOG ? 'T\u2019 bog swallowed thee' : 'Tha drowned');
             if (audio) audio.hurt();
           }
         }

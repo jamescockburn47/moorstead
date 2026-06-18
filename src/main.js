@@ -411,7 +411,13 @@ class Game {
         if (e.code === 'KeyF' && this.mount) { this.dismountPony(); return; }
         if (e.code === 'KeyE') this.openInventory();
         if (e.code === 'KeyQ') this.openBoard(false);
-        if (e.code === 'KeyT' && this.netActive) { e.preventDefault(); this.openNetChat(); return; }
+        if (e.code === 'KeyT') {
+          e.preventDefault();
+          const vv = this.villagerInView();
+          if (vv) { this.openChat(vv); return; }
+          if (this.netActive) { this.openNetChat(); return; }
+          return;
+        }
         if (e.code === 'KeyN') this.trySleep();
         if (e.code === 'KeyM') { this.audio.setMuted(!this.audio.muted); this.ui.toast(this.audio.muted ? 'Sound off.' : 'Sound on.'); }
         const num = parseInt(e.key);
@@ -1004,6 +1010,16 @@ class Game {
       this.standing = label;
       this.quests.refreshOffers();
     } catch { /* brain offline — standing stays unknown */ }
+  }
+
+  // the villager tha's looking at, within talking reach (for the T-to-talk hint + key)
+  villagerInView() {
+    if (!this.world || !this.entities || this.state !== 'playing') return null;
+    const eye = this.player.eyePos();
+    const d = this.lookDir();
+    const hit = this.entities.raycastMobs(eye.x, eye.y, eye.z, d.x, d.y, d.z, 5);
+    if (hit && hit.mob.type === 'villager' && !hit.mob.isRemotePlayer) return hit.mob;
+    return null;
   }
 
   openChat(villager) {
@@ -2536,8 +2552,13 @@ class Game {
 
     // block highlight + interact hint
     if (playing && !this.player.dead) {
+      const vv = this.villagerInView();
       const hit = this.targetBlock();
-      if (hit) {
+      if (vv) {
+        // a villager under the crosshair — talk to them wi' T (shown on screen, not in-world)
+        this.highlight.visible = false;
+        this.ui.interactHint.textContent = `Press T to talk to ${vv.displayName || vv.t.name}`;
+      } else if (hit) {
         this.highlight.visible = true;
         this.highlight.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
         let hint = '';

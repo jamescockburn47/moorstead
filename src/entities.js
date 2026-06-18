@@ -416,14 +416,9 @@ function makeNameplate(text) {
   x.font = 'bold 30px "Segoe UI", sans-serif';
   x.textAlign = 'center'; x.textBaseline = 'middle';
   x.strokeStyle = 'rgba(0,0,0,0.85)'; x.lineWidth = 6;
-  x.strokeText(text, 128, 24);
+  x.strokeText(text, 128, 32);
   x.fillStyle = '#ffe9b0';
-  x.fillText(text, 128, 24);
-  x.font = '20px "Segoe UI", sans-serif';
-  x.strokeStyle = 'rgba(0,0,0,0.8)'; x.lineWidth = 4;
-  x.strokeText('right-click to natter', 128, 50);
-  x.fillStyle = '#cfc8b8';
-  x.fillText('right-click to natter', 128, 50);
+  x.fillText(text, 128, 32);
   const tex = new THREE.CanvasTexture(c);
   const spr = new THREE.Sprite(new THREE.SpriteMaterial({
     map: tex, transparent: true, depthTest: false, opacity: 0,
