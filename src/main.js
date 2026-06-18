@@ -57,7 +57,7 @@ function lerpAngle(a, b, t) {
 }
 import { Entities } from './entities.js';
 import { PET_BENEFIT } from './pets.js';
-import { EXTRA_FOLK } from './villagerlife.js';
+import { EXTRA_FOLK, moodWord } from './villagerlife.js';
 import { Sky } from './sky.js';
 import { AudioEngine } from './audio.js';
 import { UI } from './ui.js';
@@ -1052,7 +1052,26 @@ class Game {
         this.ui.renderChatLog();
         return;
       }
-      v.chatLog.push({ who: 'sys', text: `${v.displayName} says nowt \u2014 t\u2019 village brain in\u2019t running.` });
+      // an unregistered villager: talk to them through the brain's generic
+      // passer-by voice \u2014 proper AI dialogue, just no stored memory or trust
+      this.ui.chatWaiting = true;
+      this.ui.renderChatLog();
+      try {
+        const t0 = performance.now();
+        const persona = { name: v.displayName || v.t.name, role: v.role, village: v.village, mood: moodWord(v.mood == null ? 0.5 : v.mood) };
+        let ctx = this.quests.chatContext(v);
+        if (this.entities.lastBuild && performance.now() - this.entities.lastBuild.t < 120000) {
+          ctx += '\nThe visitor has been building something on the land near here.';
+        }
+        const res = await npc.talkGeneric(persona, text, this.player.name, ctx);
+        this.lastTalkMs = performance.now() - t0;
+        this.lastTalkAt = performance.now();
+        v.chatLog.push({ who: 'them', text: res.reply });
+        if (v.memory) { v.memory.push(text.slice(0, 60)); if (v.memory.length > 4) v.memory.shift(); }
+      } catch {
+        v.chatLog.push({ who: 'sys', text: `${v.displayName} says nowt \u2014 t\u2019 village brain in\u2019t running.` });
+      }
+      this.ui.chatWaiting = false;
       this.ui.renderChatLog();
       return;
     }
