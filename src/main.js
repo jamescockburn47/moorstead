@@ -81,6 +81,7 @@ class Game {
     this.trainFolk = [];        // local folk ridin' t' carriage right now
     this.lastDwellStation = -1; // which platform she's stood at (for boarding)
     this.mount = null;          // the moorland pony tha's ridin', or null
+    this.boat = null;           // the coble tha's sailin', or null
 
     // renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -405,6 +406,7 @@ class Game {
       if (e.code === 'Space') this.input.jumpTapped = true;
 
       if (this.state === 'playing') {
+        if (e.code === 'KeyF' && this.boat) { this.leaveBoat(); return; }
         if (e.code === 'KeyF' && this.mount) { this.dismountPony(); return; }
         if (e.code === 'KeyE') this.openInventory();
         if (e.code === 'KeyQ') this.openBoard(false);
@@ -1408,6 +1410,81 @@ class Game {
     if (p.model.legs) p.model.legs.forEach((l, i) => { l.rotation.x = moving ? Math.sin(p.walkPhase + i * Math.PI / 2) * 0.5 : 0; });
   }
 
+  // ---- cobles: board a moored boat, sail her, step ashore ----
+  enterBoat(coble) {
+    if (this.boat || this.mount || !coble || coble.dead) return;
+    this.boat = coble;
+    coble.ridden = true;
+    this.boatV = 0;
+    this.player.flying = false;
+    this.player.vel = { x: 0, y: 0, z: 0 };
+    this.player.pos = { x: coble.pos.x, y: WATER_LEVEL + 1.1, z: coble.pos.z };
+    if (coble.yaw !== undefined) this.player.yaw = coble.yaw;
+    this.audio.place && this.audio.place();
+    this.ui.toast('<b>Tha&rsquo;s aboard t&rsquo; coble.</b> <b>W</b> to row on, <b>S</b> to back her, <b>look</b> to steer. <b>F</b> to step ashore. Cast a line out at sea for t&rsquo; best fish.', 8000);
+  }
+
+  leaveBoat() {
+    const c = this.boat; if (!c) return;
+    const spot = this.nearestShore(this.player.pos.x, this.player.pos.z);
+    c.ridden = false;
+    c.yaw = this.player.yaw;
+    c.pos = { x: this.player.pos.x, y: WATER_LEVEL + 0.4, z: this.player.pos.z };
+    if (c.model) c.model.group.position.set(c.pos.x, c.pos.y, c.pos.z);
+    this.boat = null;
+    if (spot) {
+      this.player.pos = { x: spot.x + 0.5, y: spot.y + 1, z: spot.z + 0.5 };
+      this.player.vel = { x: 0, y: 0, z: 0 };
+      this.ui.toast('Tha&rsquo;s pulled in an&rsquo; stepped ashore. T&rsquo; coble&rsquo;s moored where tha left her.', 4000);
+    } else {
+      this.ui.toast('Nowt to step onto &mdash; tha&rsquo;s in t&rsquo; watter! Swim for shore.', 4000);
+    }
+  }
+
+  // sail the coble: W rows on, S backs her, the helm follows where tha look
+  updateBoat(dt) {
+    const c = this.boat; if (!c) return;
+    if (c.dead) { this.boat = null; return; }
+    const k = this.keys;
+    const fwd = (k['KeyW'] || k['ArrowUp'] ? 1 : 0) - (k['KeyS'] || k['ArrowDown'] ? 1 : 0);
+    const ACC = 7, MAXV = 7.5, DRAG = 1.4;
+    this.boatV += fwd * ACC * dt;
+    this.boatV -= this.boatV * DRAG * dt;
+    this.boatV = Math.max(-MAXV * 0.5, Math.min(MAXV, this.boatV));
+    const yaw = this.player.yaw;
+    const dirx = -Math.sin(yaw), dirz = -Math.cos(yaw);
+    const nav = (x, z) => this.world.getBlock(Math.floor(x), WATER_LEVEL, Math.floor(z)) === B.WATER;
+    let nx = c.pos.x + dirx * this.boatV * dt;
+    let nz = c.pos.z + dirz * this.boatV * dt;
+    if (!nav(nx, c.pos.z)) { nx = c.pos.x; this.boatV *= 0.4; }
+    if (!nav(c.pos.x, nz)) { nz = c.pos.z; this.boatV *= 0.4; }
+    c.pos.x = nx; c.pos.z = nz; c.pos.y = WATER_LEVEL + 0.4;
+    c.bob = (c.bob || 0) + dt;
+    const bob = Math.sin(c.bob * 1.6) * 0.05;
+    const g = c.model.group;
+    g.position.set(c.pos.x, c.pos.y + bob, c.pos.z);
+    g.rotation.y = yaw + Math.PI;
+    g.rotation.z = Math.sin(c.bob * 1.1) * 0.04;
+    this.player.pos = { x: c.pos.x, y: WATER_LEVEL + 1.1 + bob, z: c.pos.z };
+    this.player.vel = { x: 0, y: 0, z: 0 };
+    this.player.onGround = true;
+  }
+
+  // nearest dry land beside thee, to step out onto
+  nearestShore(px, pz) {
+    for (let r = 1; r <= 5; r++) {
+      for (let a = 0; a < 16; a++) {
+        const ang = a / 16 * Math.PI * 2;
+        const x = Math.floor(px + Math.cos(ang) * r), z = Math.floor(pz + Math.sin(ang) * r);
+        for (let y = WATER_LEVEL + 4; y >= WATER_LEVEL; y--) {
+          const b = this.world.getBlock(x, y, z);
+          if (b !== B.AIR && b !== B.WATER && isSolid(b) && this.world.getBlock(x, y + 1, z) === B.AIR) return { x, y, z };
+        }
+      }
+    }
+    return null;
+  }
+
   // ---- local folk ridin' t' carriage: board, sit, natter, alight ----
   trainSeatWorld(seatIdx) {
     const cg = this.train.carriage.group;
@@ -1970,6 +2047,10 @@ class Game {
       const eye = this.player.eyePos();
       const d = this.lookDir();
       const mobHit = this.entities.raycastMobs(eye.x, eye.y, eye.z, d.x, d.y, d.z, 4.5);
+      if (mobHit && mobHit.mob.type === 'coble' && !this.boat && !this.mount && (!hit || mobHit.dist < hit.dist)) {
+        this.enterBoat(mobHit.mob);
+        return;
+      }
       if (mobHit && mobHit.mob.type === 'pony' && !this.mount && (!hit || mobHit.dist < hit.dist)) {
         this.mountPony(mobHit.mob);
         return;
@@ -2108,11 +2189,13 @@ class Game {
     // float rides t' top o' t' water column
     let sy = w.y;
     while (sy < HEIGHT - 1 && this.world.getBlock(w.x, sy + 1, w.z) === B.WATER) sy++;
-    const coast = this.world.gen.geo.coastT(w.x, w.z) > 0.1;
+    const ct = this.world.gen.geo.coastT(w.x, w.z);
+    const coast = ct > 0.1;
+    const deep = ct > 0.5 || !!this.boat; // out in t' deep (or fishing frae a coble) gives the best of it
     const bob = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 5), new THREE.MeshBasicMaterial({ color: 0xd83a2a }));
     bob.position.set(w.x + 0.5, sy + 1.02, w.z + 0.5);
     this.scene.add(bob);
-    this.fishing = { active: true, state: 'waiting', bob, x: w.x, y: sy + 1, z: w.z, coast,
+    this.fishing = { active: true, state: 'waiting', bob, x: w.x, y: sy + 1, z: w.z, coast, deep,
       t: 0, biteAt: 2.5 + Math.random() * (coast ? 4 : 6), biteWindow: 0, baseY: sy + 1.02 };
     this.audio.place && this.audio.place();
     this.ui.toast('Line’s in t’ watter — wait for a bite…', 2500);
@@ -2141,12 +2224,21 @@ class Game {
 
   landFish() {
     const f = this.fishing;
-    const fish = f.coast ? (Math.random() < 0.8 ? I.SEA_FISH : I.RAW_TROUT)   // mackerel an' cod off t' coast
-                         : (Math.random() < 0.85 ? I.RAW_TROUT : I.SEA_FISH); // trout in t' becks an' tarns
-    this.player.addItem(fish, 1);
+    if (f.deep && Math.random() < 0.09) {
+      // the deep gives up odd treasures — sea-washed jet, a snakestone, a lump o' sea-coal
+      const finds = [[I.JET_GEM, 'sea-washed jet'], [I.AMMONITE, 'a snakestone off t’ sea bed'], [I.COAL_LUMP, 'a lump o’ sea-coal']];
+      const [it, nm] = finds[(Math.random() * finds.length) | 0];
+      this.player.addItem(it, 1);
+      this.ui.toast(`Summat snagged on thi hook out in t’ deep — <b>${nm}</b>!`, 4500);
+    } else {
+      const fish = f.coast ? (Math.random() < 0.8 ? I.SEA_FISH : I.RAW_TROUT)   // mackerel an' cod off t' coast
+                           : (Math.random() < 0.85 ? I.RAW_TROUT : I.SEA_FISH); // trout in t' becks an' tarns
+      const n = (f.deep && Math.random() < 0.4) ? 2 : 1; // a fuller net out at sea
+      this.player.addItem(fish, n);
+      this.ui.toast(`Tha’s landed <b>${n > 1 ? 'a fine haul o’ sea fish' : (fish === I.SEA_FISH ? 'a fine sea fish' : 'a bonny brown trout')}</b>!`, 3000);
+    }
     this.ui.invDirty = true;
     this.audio.pickup && this.audio.pickup();
-    this.ui.toast(`Tha’s landed <b>${fish === I.SEA_FISH ? 'a fine sea fish' : 'a bonny brown trout'}</b>!`, 3000);
     this.endFishing();
   }
 
@@ -2224,7 +2316,8 @@ class Game {
       }
       // player
       if (playing && !this.player.dead) {
-        this.player.update(dt, this.input, this.audio);
+        if (this.boat) this.updateBoat(dt);
+        else this.player.update(dt, this.input, this.audio);
       } else if (!playing && this.state !== 'riding') {
         // UI open: physics still ticks but wi' no input
         this.player.update(dt, { keys: {}, jumpTapped: false }, this.audio);
