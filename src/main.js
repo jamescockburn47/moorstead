@@ -314,6 +314,7 @@ class Game {
       this.ui.show('titleScreen'); // and its UI (startWorld showed the loading panel)
       this.titlePreview = true;
       this.titleT = 0;
+      this.titleCamY = null;       // re-anchor the orbit height cleanly on (re)start
       this.sky.time = 0.30;        // a touch after sunrise
       this.sky.forceClear = true;  // a clear morning, never the live moor mizzle
       const geo = this.world.gen.geo;
@@ -2378,7 +2379,14 @@ class Game {
         this.updateTrainWorld(dt); // the one true train, on its real schedule
         const ts = this.trainState;
         const ax = ts ? ts.x : this.player.pos.x, az = ts ? ts.z : this.player.pos.z;
-        const gy = this.world.gen.height(Math.floor(ax), Math.floor(az));
+        // Follow the SMOOTH rail deck under the train (not the stepped raw terrain),
+        // then damp it — so the orbit glides over cuttings an' embankments instead of
+        // jumping up an' down at every gradient change.
+        const cs = ts && ts.s && typeof ts.s.s === 'number' ? ts.s.s : null;
+        const anchorY = cs != null ? this.world.gen.geo.samplePos(cs).deck
+                                   : this.world.gen.height(Math.floor(ax), Math.floor(az));
+        this.titleCamY = this.titleCamY == null ? anchorY : this.titleCamY + (anchorY - this.titleCamY) * Math.min(1, dt * 3);
+        const gy = this.titleCamY;
         this.player.pos.x = ax; this.player.pos.y = gy + 2; this.player.pos.z = az; // centre everything on the train
         const ready = this.world.readyAround(ax, az, 1);
         for (let i = 0; i < (ready ? 2 : 6); i++) this.world.update(ax, az);
