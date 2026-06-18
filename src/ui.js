@@ -357,22 +357,29 @@ export class UI {
 </ul>`,
 
       'Pets': `
-<h3>Tamin&rsquo; beasts &amp; keepin&rsquo; pets &#128054;</h3>
-<p>Near any beast tha meets can be won ower wi&rsquo; patience an&rsquo; t&rsquo; right scran. A kept beast follows tha about &mdash; an&rsquo; some earn their keep proper.</p>
+<h3>Tamin&rsquo; beasts, keepin&rsquo; pets &amp; buildin&rsquo; a farm &#128054;</h3>
+<p>Near any beast tha meets can be won ower wi&rsquo; patience an&rsquo; t&rsquo; right scran &mdash; then kept at thi heel, or set to graze in a pen o&rsquo; thi own makin&rsquo;.</p>
 <ul>
-<li><b>To tame one</b>: hold its favourite food an&rsquo; <b>right-click t&rsquo; beast</b> to feed it. Do it a few times ower &mdash; she warms to thee, then throws her lot in wi&rsquo; thee an&rsquo; teks a name.</li>
+<li><b>To tame one</b>: hold its favourite food an&rsquo; <b>right-click t&rsquo; beast</b> to feed it. Do it a few times ower &mdash; she warms to thee, then throws her lot in wi&rsquo; thee an&rsquo; teks a name. <b>Ponies, sheep an&rsquo; cattle</b> tek to <b>bilberries</b>.</li>
 <li><b>Shy beasts</b> (a cat, a hare) bolt when tha gets near &mdash; but <b>hold their food</b> an&rsquo; they&rsquo;ll stand for thee.</li>
-<li>Once she&rsquo;s thine she <b>follows tha</b> everywhere, won&rsquo;t wander off, an&rsquo; finds her way back if tha gets parted. <b>Right-click her</b> to set her to her work.</li>
+<li><b>Dogs, cats, pigs an&rsquo; rats</b> become <b>companions</b> &mdash; they follow tha everywhere an&rsquo; earn their keep (below).</li>
+<li><b>Horses, cattle, sheep an&rsquo; llamas</b> become <b>farm stock</b> &mdash; once tamed they <b>bide where tha won &rsquo;em ower an&rsquo; graze</b>, an&rsquo; they <b>never wander off nor vanish</b>.</li>
 </ul>
-<h3>What they&rsquo;re good for</h3>
+<h3>Build thi own farm &#127806;</h3>
+<ul>
+<li>Tame a beast where tha wants thi farm &mdash; she&rsquo;ll <b>stop there an&rsquo; graze</b>. <b>Fence a pen</b> round her (cobble, planks, owt) &mdash; build it <b>two blocks high</b> so she can&rsquo;t hop out.</li>
+<li><b>Sneak (hold Shift) + right-click</b> any beast o&rsquo; thine to swap her &rsquo;twixt <b>&lsquo;graze here&rsquo;</b> an&rsquo; <b>&lsquo;follow me&rsquo;</b> &mdash; so tha can lead her to a fresh pen, then set her down.</li>
+<li>A <b>tamed pony</b>: right-click to ride, <b>F</b> to get down &mdash; she bides where tha leaves her. Ride her home an&rsquo; build her a stable.</li>
+<li>Thi whole farm is <b>saved wi&rsquo; thi world</b> &mdash; thi beasts are there when tha comes back.</li>
+</ul>
+<h3>What companions are good for</h3>
 <ul>
 <li>&#128021; <b>Sheepdog</b> &mdash; feed her <b>meat</b>. She <b>keeps t&rsquo; neet-things off thee</b>: nowt dark will close on thee while she&rsquo;s at heel.</li>
-<li>&#128008; <b>Cat</b> &mdash; feed her <b>fish</b>. <b>Right-click to send her scoutin&rsquo;</b>; she slinks off an&rsquo; slinks back wi&rsquo; summat in her teeth.</li>
-<li>&#128055; <b>Pig</b> &mdash; feed her <b>bilberries or meat</b>. <b>Right-click to snuffle</b> &mdash; she roots up buried finds: jet, snakestones, coal.</li>
-<li>&#128000; <b>Rat</b> &mdash; feed her <b>scraps</b>. She <b>forages i&rsquo; t&rsquo; dark</b> as tha mines, turnin&rsquo; up odd bits.</li>
-<li>&#128017; <b>Sheep, cows an&rsquo; hares</b> tek to <b>bilberries</b> &mdash; no job o&rsquo; work in &rsquo;em, but they&rsquo;ll trail after thee like owd friends.</li>
+<li>&#128008; <b>Cat</b> &mdash; feed her <b>fish</b>. <b>Right-click to send her scoutin&rsquo;</b>; she slinks back wi&rsquo; summat in her teeth.</li>
+<li>&#128055; <b>Pig</b> &mdash; feed her <b>bilberries or meat</b>. <b>Right-click to snuffle</b> up buried finds: jet, snakestones, coal.</li>
+<li>&#128000; <b>Rat</b> &mdash; feed her <b>scraps</b>. She <b>forages i&rsquo; t&rsquo; dark</b> as tha mines.</li>
 </ul>
-<p class="how-note">Find dogs an&rsquo; cats about t&rsquo; village edges, pigs on t&rsquo; pasture, an&rsquo; rats out at neet. Thi kept beasts are saved wi&rsquo; thi world.</p>`,
+<p class="how-note">Find dogs an&rsquo; cats about t&rsquo; village edges, pigs on t&rsquo; pasture, ponies, sheep an&rsquo; cattle out on t&rsquo; moor, an&rsquo; rats out at neet. Thi kept beasts are saved wi&rsquo; thi world.</p>`,
 
       'Coast & Sea': `
 <h3>T&rsquo; coast &amp; t&rsquo; open sea &#9973;</h3>
