@@ -150,7 +150,7 @@ export class UI {
     this.btnHow = this.el('button', 'mc', this.titleScreen, 'Ow Ter Play');
     this.el('div', 'muted-note', this.titleScreen, 'New to t&rsquo; moor? <b>Give &lsquo;Ow Ter Play&rsquo; a read</b> &mdash; how to build, ride, drive an&rsquo; stay alive.');
     this.el('div', 'muted-note', this.titleScreen, 'Watch thissen at neet &mdash; t&rsquo; barghest walks when t&rsquo; sun goes down.');
-    this.el('div', 'title-foot', this.titleScreen, 'Made wi&rsquo; nowt but procedural generation &mdash; not a single asset file');
+    this.el('div', 'title-foot', this.titleScreen, 'Created purely with AI by a non-coder &middot; procedurally generated, not a single asset file &middot; villagers, jobs an&rsquo; adventures run on large local AI models');
 
     // ---------- pause ----------
     this.pauseScreen = this.el('div', 'overlay hidden', body);

@@ -107,6 +107,7 @@ input.seed {
 }
 
 #title-screen {
+  justify-content: flex-start; gap: 9px; padding: 2.2vh 0 34px; overflow-y: auto;
   background:
     radial-gradient(ellipse at 50% 110%, rgba(106, 84, 140, 0.35), transparent 55%),
     linear-gradient(#1a2028 0%, #2c3440 45%, #4a4252 70%, #3a4434 100%);
