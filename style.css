@@ -122,8 +122,8 @@ input.seed {
 .title-scrim {
   position: absolute; inset: 0;
   background:
-    radial-gradient(ellipse at 50% 44%, rgba(8,10,14,0.26), rgba(8,10,14,0.60) 82%),
-    linear-gradient(180deg, rgba(8,10,14,0.58) 0%, rgba(8,10,14,0.16) 30%, rgba(8,10,14,0.20) 62%, rgba(8,10,14,0.56) 100%);
+    radial-gradient(ellipse at 50% 42%, rgba(10,12,18,0.10), rgba(10,12,18,0.40) 86%),
+    linear-gradient(180deg, rgba(10,12,18,0.42) 0%, rgba(10,12,18,0.08) 34%, rgba(10,12,18,0.12) 60%, rgba(10,12,18,0.44) 100%);
 }
 #title-screen > *:not(.title-scene) { position: relative; z-index: 1; }
 .title-feats {

@@ -41,7 +41,7 @@ export class TitleFlyover {
     const c = new THREE.Color();
     const H = (x, z) => {
       // rolling tops, a gentle grassy dale through the middle, an' a carved bowl for the tarn
-      const h = 5 + fbm2(x * 0.011 + 40, z * 0.011 - 17, 4, this.seed) * 19;
+      const h = 5 + fbm2(x * 0.011 + 40, z * 0.011 - 17, 4, this.seed) * 24;
       const dale = Math.exp(-((z + 6) * (z + 6)) / 3200) * 5;
       const pond = Math.exp(-(((x + 70) * (x + 70) + (z - 60) * (z - 60))) / 240) * 7;
       return h - dale - pond + fbm2(x * 0.05, z * 0.05, 2, this.seed + 9) * 1.5;
@@ -54,12 +54,12 @@ export class TitleFlyover {
       // colour by height + a heather/bracken noise
       const heather = noise2(x * 0.03 + 5, z * 0.03, this.seed + 3);
       const t = Math.min(1, Math.max(0, y / 22));
-      if (y < 1.2) c.setHex(0x405230);                        // boggy tarn-side green
-      else if (t < 0.36) c.setHex(0x4a5a30);                  // dale grass
-      else if (heather > 0.6 && t < 0.8) c.setHex(0x6a4f6e);  // heather purple
-      else if (t < 0.62) c.lerpColors(new THREE.Color(0x4a5a30), new THREE.Color(0x5d5a34), (t - 0.36) / 0.26);
-      else if (t < 0.86) c.setHex(0x6b5a36);                  // bracken brown on the shoulders
-      else c.setHex(0x7d7560);                                // bare gritstone tops
+      if (y < 1.2) c.setHex(0x46562f);                        // boggy tarn-side green
+      else if (y > 16.5) c.setHex(0xeef2f6);                  // snow on the caps
+      else if (y > 13) c.lerpColors(new THREE.Color(0x6f5d38), new THREE.Color(0xeef2f6), (y - 13) / 3.5); // snowline dusting the tops
+      else if (heather > 0.6 && t > 0.34) c.setHex(0x6f5470); // heather purple on the moor
+      else if (t < 0.34) c.setHex(0x53612f);                  // dale grass
+      else c.lerpColors(new THREE.Color(0x53612f), new THREE.Color(0x67632f), (t - 0.34) / 0.3); // moor grass into bracken
       // a touch of per-vertex variation so it isn't flat
       const j = (hash2i((x * 4) | 0, (z * 4) | 0, this.seed) - 0.5) * 0.06;
       col[i * 3] = Math.max(0, c.r + j); col[i * 3 + 1] = Math.max(0, c.g + j); col[i * 3 + 2] = Math.max(0, c.b + j);
@@ -73,11 +73,13 @@ export class TitleFlyover {
 
   _sky() {
     const geo = new THREE.SphereGeometry(420, 24, 16);
-    const top = new THREE.Color(0x2c3e62), hor = new THREE.Color(0xdcb98a);
+    // sunrise: a bright gold horizon warming up through rose to a pale morning blue
+    const zenith = new THREE.Color(0x6f9fd4), midSky = new THREE.Color(0xe7a98c), horizon = new THREE.Color(0xffd9a0);
     const pos = geo.attributes.position, col = new Float32Array(pos.count * 3), c = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
-      const yy = pos.getY(i) / 420; // -1..1
-      c.copy(hor).lerp(top, Math.max(0, Math.min(1, yy * 1.5 + 0.12)));
+      const yy = Math.max(0, Math.min(1, pos.getY(i) / 420 * 0.5 + 0.5)); // 0 horizon .. 1 zenith
+      if (yy < 0.5) c.copy(horizon).lerp(midSky, yy / 0.5);
+      else c.copy(midSky).lerp(zenith, (yy - 0.5) / 0.5);
       col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -186,18 +188,21 @@ export class TitleFlyover {
     r.setPixelRatio(Math.min(devicePixelRatio || 1, 1.6));
     this.renderer = r;
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0xdcb98a, 120, 360);
+    this.scene.fog = new THREE.Fog(0xf2dcb4, 175, 470); // pale dawn haze, pushed back so the moor reads clear
     this.camera = new THREE.PerspectiveCamera(52, 1, 0.5, 700);
 
     this.scene.add(this._sky());
-    // golden-hour light from a low sun
-    const sunDir = new THREE.Vector3(0.5, 0.42, -0.76).normalize();
-    const sun = new THREE.DirectionalLight(0xffe6ba, 1.3); sun.position.copy(sunDir).multiplyScalar(120); this.scene.add(sun);
-    this.scene.add(new THREE.HemisphereLight(0xc2ccdc, 0x4a4430, 0.62));
-    // sun glow sprite on the horizon
+    // a low rising sun — bright morning light
+    const sunDir = new THREE.Vector3(0.46, 0.20, -0.86).normalize();
+    const sun = new THREE.DirectionalLight(0xfff0d2, 1.5); sun.position.copy(sunDir).multiplyScalar(120); this.scene.add(sun);
+    this.scene.add(new THREE.HemisphereLight(0xdce8f4, 0x6a5e44, 0.9)); // bright morning fill
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.18));
+    // the rising sun: a bright core inside a warm halo, low on the horizon
     const gtex = puffTexture();
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: gtex, color: 0xffdca0, transparent: true, depthWrite: false, opacity: 0.9, fog: false }));
-    glow.scale.set(60, 60, 1); glow.position.copy(sunDir).multiplyScalar(330); this.scene.add(glow);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: gtex, color: 0xffe6b0, transparent: true, depthWrite: false, opacity: 0.85, fog: false }));
+    halo.scale.set(115, 115, 1); halo.position.copy(sunDir).multiplyScalar(340); this.scene.add(halo);
+    const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: gtex, color: 0xfff7e2, transparent: true, depthWrite: false, opacity: 1, fog: false }));
+    core.scale.set(36, 36, 1); core.position.copy(sunDir).multiplyScalar(345); this.scene.add(core);
 
     this.scene.add(this._terrain());
 
@@ -252,8 +257,8 @@ export class TitleFlyover {
       // camera: a slow elliptical fly-over, banking into the turn, looking forward-down
       const a = t * 0.085;
       const cam = this.camera;
-      cam.position.set(Math.cos(a) * 96, 30 + Math.sin(a * 1.3) * 6, Math.sin(a) * 80 + 6);
-      const look = new THREE.Vector3(Math.cos(a + 0.7) * 30, 6, Math.sin(a + 0.7) * 26 + 10);
+      cam.position.set(Math.cos(a) * 90, 27 + Math.sin(a * 1.3) * 5, Math.sin(a) * 76 + 6);
+      const look = new THREE.Vector3(Math.cos(a + 0.7) * 24, 11, Math.sin(a + 0.7) * 22 + 12);
       cam.lookAt(look);
       cam.rotation.z += Math.sin(a) * 0.05; // gentle bank
 
