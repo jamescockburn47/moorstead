@@ -338,6 +338,7 @@ export class Gen {
       data[IDX(c.lx, c.deck, c.lz)] = c.d < 1.4 ? B.GRAVEL : c.d < 2.2 ? B.COBBLE : B.GRASS;
     }
     this.stampStations(data, cx, cz);
+    this.stampBridges(data, cx, cz);
     return data;
   }
 
@@ -497,6 +498,61 @@ export class Gen {
 
       if (isBig) this.stampFootbridge(put, cell, g, aHalf);
       if (s.name === 'Grosmont') this.stampTerrace(put, cell);
+    }
+  }
+
+  // simple low stone-arch overbridges — REAL voxel masonry (dressed stone) carried
+  // ower t' line where she runs in a cutting, so t' arch sits natural in t' bank an'
+  // is textured an' lit like t' rest o' t' world (no flat overlay slab). Stamped
+  // AFTER t' loading-gauge re-clear, so nowt erases her; she leaves t' portal clear.
+  stampBridges(data, cx, cz) {
+    const x0 = cx * CHUNK, z0 = cz * CHUNK;
+    const put = (wx, wy, wz, id) => {
+      const lx = wx - x0, lz = wz - z0;
+      if (lx >= 0 && lx < CHUNK && lz >= 0 && lz < CHUNK && wy > 0 && wy < HEIGHT) data[IDX(lx, wy, lz)] = id;
+    };
+    const path = this.geo.railPath();
+    const SP = 240, OPEN = 3, ABE = 5, AD = 2;     // half-span, abutment edge, half-depth along t' line
+    for (let bk = 1; bk * SP < path.length; bk++) {
+      const hsh = ((bk * 2654435761) >>> 0) / 4294967296;
+      if (hsh > 0.62) continue;                    // not every slot earns a bridge
+      const sb = bk * SP + (hsh - 0.3) * 130;      // jittered along t' line
+      if (sb < 60 || sb > path.length - 60) continue;
+      if (path.stationS.some(ss => Math.abs(ss - sb) < 40)) continue; // well clear o' stations
+      const sp = this.geo.samplePos(sb);
+      if (sp.x < x0 - 22 || sp.x > x0 + CHUNK + 22 || sp.z < z0 - 22 || sp.z > z0 + CHUNK + 22) continue;
+      if (this.geo.coastT && this.geo.coastT(sp.x, sp.z) > 0.05) continue; // not out ower t' sands
+      if (this.geo.inVillage && this.geo.inVillage(sp.x, sp.z, 18)) continue;
+      const deck = Math.round(sp.deck);
+      const ux = sp.tx, uz = sp.tz, px = uz, pz = -ux;
+      const cell = (a, w) => [Math.round(sp.x + ux * a + px * w), Math.round(sp.z + uz * a + pz * w)];
+      // t' moors line mostly runs at grade, so t' overbridge springs frae t' lineside
+      // ground an' arches ower. Skip only where t' line stands proud on an embankment
+      // (an arch'd float) or runs low by t' water.
+      let gMax = 0;
+      for (const a of [-AD, 0, AD]) for (const w of [ABE + 1, -(ABE + 1)]) { const c = cell(a, w); gMax = Math.max(gMax, this.geo.height(c[0], c[1])); }
+      if (gMax < deck - 1 || deck < WATER_LEVEL + 2) continue;
+      const floor = deck - 1, road = deck + 7;     // a low arch: t' road just one block ower t' crown
+      const crownU = deck + 6;                      // arch underside ower t' track (clears t' loco funnel at deck+4.6)
+      const springU = crownU - 2;                   // springs two blocks lower — a low segmental arch
+      const underside = (w) => {
+        const t = Math.min(1, Math.abs(w) / OPEN);
+        return Math.round(springU + (crownU - springU) * Math.sqrt(Math.max(0, 1 - t * t)));
+      };
+      for (let a = -AD; a <= AD; a++) {
+        for (let w = -ABE; w <= ABE; w++) {
+          const [wx, wz] = cell(a, w);
+          if (Math.abs(w) <= OPEN) {
+            const u = underside(w);
+            for (let y = deck + 1; y < u; y++) put(wx, y, wz, B.AIR);      // keep t' portal clear for t' train
+            for (let y = u; y <= road; y++) put(wx, y, wz, B.STONEBRICK);  // arch ring + spandrel ower t' opening
+          } else {
+            for (let y = floor; y <= road; y++) put(wx, y, wz, B.STONEBRICK); // dressed-stone abutment / wing wall
+          }
+          if (Math.abs(a) === AD) put(wx, road + 1, wz, B.STONEBRICK);     // a low parapet down each side o' t' road
+          else put(wx, road, wz, B.COBBLE);                                // cobbled lane atween t' parapets
+        }
+      }
     }
   }
 
