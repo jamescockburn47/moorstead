@@ -1834,6 +1834,7 @@ class Game {
         });
       }
       if (moving) {
+        // t' chuff on t' beat (sound only)
         this.trainChuff = (this.trainChuff || 0) - dt;
         if (this.trainChuff <= 0) {
           this.trainChuff = Math.max(0.16, 8 / Math.max(speed, 3));
@@ -1841,9 +1842,17 @@ class Game {
           if (dNow < 150 || this.state === 'riding') {
             this.audio.noiseBurst && this.audio.noiseBurst(this.audio.ctx ? this.audio.ctx.currentTime : 0, 0.09, Math.max(0.03, 0.14 - dNow / 1500), 600, 'bandpass');
           }
-          const lg = this.train.loco.group;
-          const fn = this.train.funnel.clone().applyQuaternion(lg.quaternion).add(lg.position);
-          this.entities.burst(fn.x, fn.y, fn.z, [228, 228, 232], 5);
+        }
+        // steam: a steady stream o' soft puffs frae t' funnel — they billow an' trail
+        // back ower t' rake, leaving a line o' little clouds (not a spat pellet)
+        this.steamTimer = (this.steamTimer || 0) - dt;
+        if (this.steamTimer <= 0) {
+          this.steamTimer = 0.11;
+          if (Math.hypot(x - p.x, z - p.z) < 220 || driving || this.state === 'riding') {
+            const lg = this.train.loco.group;
+            const fn = this.train.funnel.clone().applyQuaternion(lg.quaternion).add(lg.position);
+            this.entities.steamPuff(fn.x, fn.y, fn.z, Math.sin(rotY), Math.cos(rotY));
+          }
         }
       }
       // whistle when she arrives or departs near thee
