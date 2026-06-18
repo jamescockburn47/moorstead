@@ -296,11 +296,13 @@ export function buildTrain() {
   const loco = buildLoco();
   const tender = buildTender();
   const carriage = buildCarriage();
+  const carriage2 = buildCarriage();
   return {
     parts: [
       { ...loco, offset: 0 },        // schedule chainage = loco centre
       { ...tender, offset: -5.3 },
       { ...carriage, offset: -11.2 },
+      { ...carriage2, offset: -17.1 }, // a second coach on the rake
     ],
     funnel: loco.funnel,
     seat: carriage.seat,

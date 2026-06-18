@@ -667,7 +667,7 @@ export class Geography {
           // report out to t' lineside verge (banks an' cuttin' tops); every
           // consumer gates on its own smaller distance, so this only widens reach
           if (d < 6 && (!best || d < best.d)) {
-            best = { d, along: a.s + Math.sqrt(L2) * t, deck: a.deck + (b.deck - a.deck) * t };
+            best = { d, along: a.s + Math.sqrt(L2) * t, deck: a.deck + (b.deck - a.deck) * t, px: a.x + dx * t, pz: a.z + dz * t };
           }
         }
       }
