@@ -852,15 +852,18 @@ class Game {
     const geo = this.world.gen.geo;
     const nameHash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
     const workSpot = (v, name) => { const hh = nameHash(name), a = (hh % 628) / 100, d = 8 + hh % 11; return { x: v.x + Math.cos(a) * d, z: v.z + Math.sin(a) * d }; };
+    // each body gets their OWN spot about the green (scattered, not stacked on the centre)
+    // so a midday gathering fills the green rather than piling on one tile.
+    const socialSpot = (v, name) => { const hh = nameHash(name + '~green'), a = (hh % 628) / 100, d = 2 + hh % 8; return { x: v.x + Math.cos(a) * d, z: v.z + Math.sin(a) * d }; };
     const placeFolk = (id, name, village, role, roam) => {
       let x, z, green = null, work = null;
       if (village) {
         const sp = geo.npcSpot(name, village); x = sp[0]; z = sp[1];
-        green = { x: village.x, z: village.z }; work = workSpot(village, name);
+        green = socialSpot(village, name); work = workSpot(village, name);
       } else { // a free moor-wanderer — starts out on the country near Moorstead
         const base = geo.village, hh = nameHash(name), a = (hh % 628) / 100, d = 40 + hh % 60;
         x = base.x + Math.cos(a) * d; z = base.z + Math.sin(a) * d;
-        green = { x: base.x, z: base.z };
+        green = socialSpot(base, name);
       }
       const h = this.world.gen.height(Math.floor(x), Math.floor(z));
       this.entities.spawnVillager(id, name, x + 0.5, h + 1.1, z + 0.5, {
