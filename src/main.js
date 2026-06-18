@@ -57,6 +57,7 @@ function lerpAngle(a, b, t) {
 }
 import { Entities } from './entities.js';
 import { PET_BENEFIT } from './pets.js';
+import { EXTRA_FOLK } from './villagerlife.js';
 import { Sky } from './sky.js';
 import { AudioEngine } from './audio.js';
 import { UI } from './ui.js';
@@ -779,15 +780,34 @@ class Game {
     if (!online) roster = npc.FALLBACK_ROSTER;
     this.roster = roster; // kept so train folk can be drawn frae t' same personas
     const geo = this.world.gen.geo;
+    const nameHash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+    const workSpot = (v, name) => { const hh = nameHash(name), a = (hh % 628) / 100, d = 8 + hh % 11; return { x: v.x + Math.cos(a) * d, z: v.z + Math.sin(a) * d }; };
+    const placeFolk = (id, name, village, role, roam) => {
+      let x, z, green = null, work = null;
+      if (village) {
+        const sp = geo.npcSpot(name, village); x = sp[0]; z = sp[1];
+        green = { x: village.x, z: village.z }; work = workSpot(village, name);
+      } else { // a free moor-wanderer — starts out on the country near Moorstead
+        const base = geo.village, hh = nameHash(name), a = (hh % 628) / 100, d = 40 + hh % 60;
+        x = base.x + Math.cos(a) * d; z = base.z + Math.sin(a) * d;
+        green = { x: base.x, z: base.z };
+      }
+      const h = this.world.gen.height(Math.floor(x), Math.floor(z));
+      this.entities.spawnVillager(id, name, x + 0.5, h + 1.1, z + 0.5, {
+        village: village ? village.name : null,
+        house: village ? geo.npcHome(name, village) : null,
+        role, roam, green, work,
+      });
+    };
     for (const c of roster) {
       // folk live all ower t' moors now — t' roster says which settlement
       const village = (c.village && geo.villages.find(v => v.name.toLowerCase() === c.village.toLowerCase())) || geo.village;
-      const [x, z] = geo.npcSpot(c.name, village);
-      const h = this.world.gen.height(Math.floor(x), Math.floor(z));
-      this.entities.spawnVillager(c.id, c.name, x + 0.5, h + 1.1, z + 0.5, {
-        village: village.name,
-        house: geo.npcHome(c.name, village),
-      });
+      placeFolk(c.id, c.name, village, null, false);
+    }
+    // fill the parish out — extra folk (canned voice), some that roam beyond the village
+    for (const f of EXTRA_FOLK) {
+      const village = f.village ? (geo.villages.find(v => v.name.toLowerCase() === f.village.toLowerCase()) || geo.village) : null;
+      placeFolk(null, f.name, village, f.role, !!f.roam);
     }
     this.ui.toast(online
       ? '<b>Right-click</b> t&rsquo; folk o&rsquo; t&rsquo; moors for a natter &mdash; every settlement&rsquo;s got its own. After dark, knock on their doors.'
@@ -2130,6 +2150,7 @@ class Game {
     if (BLOCKS[held.id].kind === 'cutout' && !isSolid(this.world.getBlock(px, py - 1, pz))) return;
 
     this.world.setBlock(px, py, pz, held.id);
+    this.entities.lastBuild = { x: px + 0.5, z: pz + 0.5, t: performance.now() }; // so nosy folk can come have a look
     if (!this.player.creative) this.player.consumeHeld();
     this.audio.place();
     this.ui.invDirty = true;
