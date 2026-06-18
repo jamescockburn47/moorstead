@@ -1812,16 +1812,18 @@ class Game {
       ? { s: this.drive.s, mode: Math.abs(this.drive.v) > 0.08 ? 'run' : 'dwell', dir: 0, speed: Math.abs(this.drive.v) }
       : this.trainSchedule();
     const fwd = driving ? 1 : (s.dir === 0 ? 1 : -1);
-    // The rake keeps ONE fixed layout (loco at the lead end, carriages trailing) an'
-    // a steady heading along the line. At a terminus she simply INVERTS: she dwells,
-    // then shuttles back the way she came (propelling) — so she never sweeps a 180°
-    // arc through the station buildings. cc = lead chainage, clamped onto the line.
+    // T' loco leads smokebox-first BOTH ways. At a terminus she FLIPS in place at the
+    // platform during the dwell — turns clean about an' sets off the other way — rather
+    // than sweeping a 180° arc through the station buildings. cc = lead chainage.
+    const nSt = st.length;
+    const atTerminus = !driving && s.mode === 'dwell' && (s.i === 0 || s.i === nSt - 1);
+    const poseFwd = atTerminus ? -fwd : fwd; // face the way she'll DEPART while she stands
     const RAKE = 11.2, len = geo.railPath().length;
-    const cc = Math.max(RAKE, Math.min(len - RAKE, s.s - RAKE));
+    const cc = Math.max(RAKE, Math.min(len - RAKE, s.s - RAKE * poseFwd));
     const csp = geo.samplePos(cc);
     const x = csp.x, z = csp.z;
     let rotY = this.trainRot || 0, moving = false, speed = 0;
-    if (Math.hypot(csp.tx, csp.tz) > 0.01) rotY = Math.atan2(csp.tx, csp.tz); // steady heading — no flip
+    if (Math.hypot(csp.tx, csp.tz) > 0.01) rotY = Math.atan2(csp.tx * poseFwd, csp.tz * poseFwd);
     if (s.mode === 'run') { moving = true; speed = s.speed; }
     this.trainRot = rotY;
     this.trainState = { x, z, rotY, s };
@@ -1835,28 +1837,28 @@ class Game {
       for (const part of parts) {
         const pg = part.group;
         if (!pg.parent) { this.scene.add(pg); pg.rotation.order = 'YXZ'; }
-        // each body takes its own fixed spot on t' spline (loco at the lead) so she
-        // bends honestly through t' curves an' noses into t' gradients — same layout
-        // whichever way she's running, so a terminus is just a reverse, not a flip.
+        // each body takes its own spot on t' spline (loco leads, rake trails) so she
+        // bends honestly through t' curves an' noses into t' gradients; poseFwd flips
+        // her about in place at a terminus so she's smokebox-first whichever way she runs.
         const distC = part.offset + RAKE;            // carriage 0, tender 5.9, loco 11.2
-        const psp = geo.samplePos(cc + distC);
+        const psp = geo.samplePos(cc + distC * poseFwd);
         pg.position.x = psp.x;
         pg.position.z = psp.z;
         const deck = psp.deck + 1;
         pg.position.y = pg.position.y ? pg.position.y + (deck - pg.position.y) * Math.min(1, dt * 6) : deck;
-        pg.rotation.y = (Math.hypot(psp.tx, psp.tz) > 0.01) ? Math.atan2(psp.tx, psp.tz) : pg.rotation.y;
-        const ppitch = -Math.atan(psp.grade);
+        pg.rotation.y = (Math.hypot(psp.tx, psp.tz) > 0.01) ? Math.atan2(psp.tx * poseFwd, psp.tz * poseFwd) : pg.rotation.y;
+        const ppitch = -Math.atan(psp.grade * poseFwd);
         pg.rotation.x += (ppitch - pg.rotation.x) * Math.min(1, dt * 4);
         if (moving && part.wheels) {
-          // the rake keeps a fixed heading, so the wheels roll with the actual travel
-          // direction — forward when she leads, backward when she propels home.
-          const roll = driving ? (Math.sign(this.drive.v) || 1) : fwd;
+          // the loco leads its travel direction both ways, so the wheels always roll
+          // FORWARD on the schedule; only a player-driven loco reverses.
+          const roll = driving ? (Math.sign(this.drive.v) || 1) : 1;
           for (const w of part.wheels) w.rotateZ(roll * speed * dt / (w.userData.r || 0.62));
         }
       }
       // coupling rods ride t' crank pins, quartered like t' real thing
       if (moving && this.train.loco.rods) {
-        const roll = driving ? (Math.sign(this.drive.v) || 1) : fwd;
+        const roll = driving ? (Math.sign(this.drive.v) || 1) : 1;
         this.train.rodPhase = (this.train.rodPhase || 0) + roll * speed * dt / 0.62;
         this.train.loco.rods.forEach((rod, i) => {
           const th = this.train.rodPhase + i * Math.PI / 2;

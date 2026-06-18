@@ -992,7 +992,7 @@ export class Entities {
   rescueStuck(mob) {
     const sx = Math.floor(mob.pos.x), sz = Math.floor(mob.pos.z);
     let best = null, bestY = -1;
-    for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) {
+    for (let dx = -5; dx <= 5; dx++) for (let dz = -5; dz <= 5; dz++) {
       const x = sx + dx, z = sz + dz;
       if (!this.world.isLoaded(x, z)) continue;
       for (let y = HEIGHT - 2; y > 1; y--) {
@@ -1002,7 +1002,8 @@ export class Entities {
         break;
       }
     }
-    if (best) { mob.pos.x = best.x + 0.5; mob.pos.z = best.z + 0.5; mob.pos.y = best.y + 1.05; mob.vel.x = mob.vel.y = mob.vel.z = 0; }
+    if (best) { mob.pos.x = best.x + 0.5; mob.pos.z = best.z + 0.5; mob.pos.y = best.y + 1.05; mob.vel.x = mob.vel.y = mob.vel.z = 0; return true; }
+    return false;
   }
 
   // warden helper: drop a wee group of beasts on t' ground near (x,z), cap or no cap
@@ -1455,6 +1456,21 @@ export class Entities {
         }
       }
 
+      // land beasts shy off open water — they'll not walk out onto t' sea (which left
+      // 'em paddling on t' surface). Turn back at t' water's edge an' pick a new way.
+      if (!t.fly && !mob.owner && (Math.abs(wishX) > 0.1 || Math.abs(wishZ) > 0.1)) {
+        const ax = Math.floor(mob.pos.x + wishX * 1.1), az = Math.floor(mob.pos.z + wishZ * 1.1);
+        // find the surface in the column ahead (the sea sits LOWER than the shore, so a
+        // plain same-level check misses the ledge); turn back if she'd step onto water.
+        let surfAhead = B.AIR;
+        for (let y = Math.floor(mob.pos.y) + 1; y > Math.floor(mob.pos.y) - 14; y--) { const b = this.world.getBlock(ax, y, az); if (b !== B.AIR) { surfAhead = b; break; } }
+        if (surfAhead === B.WATER) {
+          wishX = -wishX; wishZ = -wishZ;
+          mob.wanderYaw = Math.atan2(wishZ, wishX);
+          mob.vel.x *= 0.4; mob.vel.z *= 0.4;
+        }
+      }
+
       const feet = this.world.getBlock(Math.floor(mob.pos.x), Math.floor(mob.pos.y + 0.2), Math.floor(mob.pos.z));
       const inLiq = feet === B.WATER || feet === B.BOG;
       if (inLiq) {
@@ -1462,21 +1478,35 @@ export class Entities {
       } else {
         mob.vel.y -= GRAVITY * dt;
       }
+      const preX = mob.pos.x, preZ = mob.pos.z;
       moveEntity(this.world, mob, dt);
       // hop up single blocks
       if (mob.hitWall && mob.onGround && (Math.abs(wishX) > 0.1 || Math.abs(wishZ) > 0.1)) {
         mob.vel.y = 7.5;
       }
-
-      // stuck rescue: a beast that's wandered into a player's pit or a bog pool an'
-      // can't climb out (no progress while wanting to move, or stood in liquid) gets
-      // popped onto t' nearest dry surface — so holes an' bogs don't quietly swallow
-      // t' moor's animals.
+      // open water is a WALL for land beasts. The sea sits LOWER than the shore, so scan
+      // the column below her feet for the first solid/liquid.
       if (!t.fly && !mob.owner) {
-        const wishing = Math.abs(wishX) > 0.1 || Math.abs(wishZ) > 0.1;
-        if (inLiq || (wishing && Math.hypot(mob.vel.x, mob.vel.z) < 0.25)) mob.stuckT = (mob.stuckT || 0) + dt;
-        else mob.stuckT = 0;
-        if (mob.stuckT > 4) { this.rescueStuck(mob); mob.stuckT = 0; }
+        const fx = Math.floor(mob.pos.x), fz = Math.floor(mob.pos.z), fy0 = Math.floor(mob.pos.y + 0.2);
+        const seaUnder = (cx, cz) => { for (let y = fy0; y > fy0 - 16; y--) { const b = this.world.getBlock(cx, y, cz); if (b !== B.AIR) return b === B.WATER; } return false; };
+        if (seaUnder(fx, fz)) {
+          if ((preX !== mob.pos.x || preZ !== mob.pos.z) && !seaUnder(Math.floor(preX), Math.floor(preZ))) {
+            // she stepped FROM dry land out over the sea — shove her straight back
+            mob.pos.x = preX; mob.pos.z = preZ; mob.vel.x = 0; mob.vel.z = 0; mob.waterT = 0;
+          } else {
+            // genuinely adrift (fell in, or no dry land to step back to) — let her go so
+            // nowt's ever seen paddling on t' surface
+            mob.waterT = (mob.waterT || 0) + dt;
+            if (mob.waterT > 1.0) { this.scene.remove(mob.model.group); mob.dead = true; continue; }
+          }
+        } else {
+          mob.waterT = 0;
+          // stuck in a dug pit (wanting to move but going nowhere): pop her onto dry land
+          if ((Math.abs(wishX) > 0.1 || Math.abs(wishZ) > 0.1) && Math.hypot(mob.vel.x, mob.vel.z) < 0.25) {
+            mob.stuckT = (mob.stuckT || 0) + dt;
+            if (mob.stuckT > 4) { this.rescueStuck(mob); mob.stuckT = 0; }
+          } else mob.stuckT = 0;
+        }
       }
 
       // face movement direction
