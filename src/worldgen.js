@@ -523,7 +523,7 @@ export class Gen {
       if (sp.x < x0 - 22 || sp.x > x0 + CHUNK + 22 || sp.z < z0 - 22 || sp.z > z0 + CHUNK + 22) continue;
       if (this.geo.coastT && this.geo.coastT(sp.x, sp.z) > 0.05) continue; // not out ower t' sands
       if (this.geo.inVillage && this.geo.inVillage(sp.x, sp.z, 18)) continue;
-      const deck = Math.round(sp.deck);
+      const deck = Math.floor(sp.deck); // match t' rail carve + clearance check (both floor t' deck)
       const ux = sp.tx, uz = sp.tz, px = uz, pz = -ux;
       const cell = (a, w) => [Math.round(sp.x + ux * a + px * w), Math.round(sp.z + uz * a + pz * w)];
       // t' moors line mostly runs at grade, so t' overbridge springs frae t' lineside
@@ -532,12 +532,15 @@ export class Gen {
       let gMax = 0;
       for (const a of [-AD, 0, AD]) for (const w of [ABE + 1, -(ABE + 1)]) { const c = cell(a, w); gMax = Math.max(gMax, this.geo.height(c[0], c[1])); }
       if (gMax < deck - 1 || deck < WATER_LEVEL + 2) continue;
-      const floor = deck - 1, road = deck + 7;     // a low arch: t' road just one block ower t' crown
-      const crownU = deck + 6;                      // arch underside ower t' track (clears t' loco funnel at deck+4.6)
-      const springU = crownU - 2;                   // springs two blocks lower — a low segmental arch
+      const crownU = deck + 7, springU = deck + 5; // soffit sits ABOVE t' loading gauge (deck+1..deck+5) wi' a block to spare
+      const floor = deck - 1, road = crownU + 1;
+      // a FLAT soffit across t' gauge width (|w|<=2), curving down to t' springs
+      // beyond — so t' train's road is always clear, even wi' deck-rounding wobble.
       const underside = (w) => {
-        const t = Math.min(1, Math.abs(w) / OPEN);
-        return Math.round(springU + (crownU - springU) * Math.sqrt(Math.max(0, 1 - t * t)));
+        const aw = Math.abs(w);
+        if (aw <= 2) return crownU;
+        const f = (aw - 2) / Math.max(1, OPEN - 2);
+        return Math.round(crownU - (crownU - springU) * f);
       };
       for (let a = -AD; a <= AD; a++) {
         for (let w = -ABE; w <= ABE; w++) {

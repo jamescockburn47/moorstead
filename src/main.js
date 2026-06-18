@@ -695,8 +695,9 @@ class Game {
       this.adminTeleport(Math.floor(best.pos.x), Math.floor(best.pos.z), 'a grazin’ pony');
     } else {
       const moor = this.findOpenMoor(this.player.pos.x, this.player.pos.z) || { x: -380, z: -620 };
-      this.ui.toast('No ponies in sight — droppin’ on t’ open moor; they’ll not be far.', 4500);
+      this.ui.toast('No ponies in sight — droppin’ on t’ open moor an’ whistlin’ a few up.', 4500);
       this.adminTeleport(moor.x, moor.z, 'the open moor');
+      this.dropPonies = { x: moor.x, z: moor.z }; // conjure a band once we land (chunk's loaded)
     }
   }
 
@@ -2491,6 +2492,11 @@ class Game {
           const d = this.wardenDrop; this.wardenDrop = null;
           this.landImpact(wp.pos.x, wp.pos.y, wp.pos.z, true);
           this.ui.toast(`<b>${d.label}</b>. T' ground remembers thee.`, 3500);
+          if (this.dropPonies) { // warden "find a pony" — make sure there's a band to climb on
+            const dp = this.dropPonies; this.dropPonies = null;
+            const n = this.entities.forceSpawnGroup('pony', dp.x, dp.z, 3);
+            if (n) this.ui.toast(`<b>${n} moorland ${n > 1 ? 'ponies' : 'pony'}</b> graze nearby — right-click to climb up.`, 5000);
+          }
         }
       }
 

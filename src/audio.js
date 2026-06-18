@@ -90,10 +90,10 @@ export class AudioEngine {
     this.rainGain.gain.setTargetAtTime(rain * 0.10, t, 1.0);
 
     // continuous beds: t' beck, t' sea swell, an' t' tap-room murmur
-    this.beckGain.gain.setTargetAtTime(nearWater * 0.055, t, 0.6);
+    this.beckGain.gain.setTargetAtTime(nearWater * 0.075, t, 0.6);
     this.beckFilter.frequency.setTargetAtTime(1000 + Math.sin(t * 0.7) * 260, t, 0.5); // burble
-    this.surfGain.gain.setTargetAtTime(onCoast * (0.045 + (Math.sin(t * 0.18) * 0.5 + 0.5) * 0.05), t, 0.8); // swell
-    this.pubGain.gain.setTargetAtTime(nearInn * 0.045, t, 0.7);
+    this.surfGain.gain.setTargetAtTime(onCoast * (0.06 + (Math.sin(t * 0.18) * 0.5 + 0.5) * 0.06), t, 0.8); // swell
+    this.pubGain.gain.setTargetAtTime(nearInn * 0.06, t, 0.7);
     this.pubFilter.frequency.setTargetAtTime(440 + Math.sin(t * 1.3) * 80, t, 0.3); // murmur wobble
 
     // tap-room one-shots of an evening: pots, a laugh, t' hearth, a dog
@@ -121,22 +121,23 @@ export class AudioEngine {
       }
     }
 
-    // occasional ambient calls — t' mix shifts wi' t' season
+    // ambient wildlife calls — frequent enough that t' moor feels alive; t' mix shifts wi' t' season
     this.ambientTimer -= dt;
     if (this.ambientTimer <= 0) {
-      this.ambientTimer = 9 + Math.random() * 16;
+      this.ambientTimer = 5 + Math.random() * 8;             // ~3x as often as afore
       const spring = season ? Math.max(0, Math.min(1, season.greenness)) : 0.5;
       const winterHush = season ? (season.warmth < 0 ? -season.warmth : 0) : 0;
       const r = Math.random();
-      if (Math.random() < winterHush * 0.5) {
-        // deep winter: t' moor's mostly silent but for t' wind
+      if (Math.random() < winterHush * 0.3) {
+        // deep winter: t' moor's quieter, but for t' wind
       } else if (!isNight) {
-        if (r < 0.30 + spring * 0.25) this.curlew();          // spring: curlew-heavy ("lamb when t' curlew calls")
-        else if (r < 0.58 && nearSheep) this.baa(0.25);
-        else if (r < 0.80) this.grouseCall(0.18);
-        else this.crow(0.12);
+        if (nearSheep && r < 0.42) this.baa(0.34);            // a flock about? tha'll hear 'em
+        else if (r < 0.64) this.curlew(0.18);                 // t' moor's signature call
+        else if (r < 0.84) this.grouseCall(0.24);
+        else this.crow(0.16);
       } else {
-        if (r < 0.3) this.owl();
+        if (r < 0.5) this.owl(0.14);
+        else if (r < 0.74) this.crow(0.12);
       }
     }
     // low dread heartbeat — felt afore tha sees him
