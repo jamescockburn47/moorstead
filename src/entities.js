@@ -927,6 +927,9 @@ export class Entities {
     if (!this.world.isLoaded(x, z)) return;
     // nowt nasty walks into Moorstead — t' village is safe ground
     if (t.hostile && geo.inVillage(x, z, 12)) return;
+    // wild beasts keep to t' moor an' t' pasture round about — not in t' village streets
+    // (thi own tamed farm stock are placed separate, so a village farm still stands)
+    if (!t.fly && geo.inVillage(x, z, 6)) return;
     // nor will owt dark rise near a burning light (shelters, torch camps)
     if (t.hostile && this.world.nearLight(x, z, 18)) return;
     // find t' surface block an' its height

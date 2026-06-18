@@ -178,6 +178,7 @@ export class Net {
       if (this.leaving.has(m.pid) || !this.remotes.has(m.pid)) return;
       this.leaving.set(m.pid, setTimeout(() => { this.leaving.delete(m.pid); this.removeRemote(m.pid); }, 25000));
     } else if (m.type === 'chat') {
+      if (m.pid && m.pid === this.diag.pid) return; // don't echo our OWN words back (we already showed "Thee:")
       g.ui.toast(`<b>${m.name}:</b> ${m.text.replace(/</g, '&lt;')}`, 16000);
       const r = this.remotes.get(m.pid);
       if (r && r.mob) g.entities.speak(r.mob, m.text, 18);
@@ -229,7 +230,12 @@ export class Net {
       m.pos.x += (r.target.x - m.pos.x) * k;
       m.pos.y += (r.target.y - m.pos.y) * k;
       m.pos.z += (r.target.z - m.pos.z) * k;
-      if (r.target.yaw !== undefined) m.yaw = r.target.yaw;
+      // ease the heading round (shortest way) instead of snapping — stops Merlin
+      // an' other remotes twitchin' as their reported yaw jumps about
+      if (r.target.yaw !== undefined) {
+        if (m.yaw === undefined) m.yaw = r.target.yaw;
+        else { let dy = r.target.yaw - m.yaw; while (dy > Math.PI) dy -= Math.PI * 2; while (dy < -Math.PI) dy += Math.PI * 2; m.yaw += dy * Math.min(1, dt * 6); }
+      }
     }
     // send our position ~5Hz when it's changed
     this.posTimer -= dt;
