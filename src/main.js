@@ -1816,13 +1816,16 @@ class Game {
         const ppitch = -Math.atan(psp.grade * fwd);
         pg.rotation.x += (ppitch - pg.rotation.x) * Math.min(1, dt * 4);
         if (moving && part.wheels) {
-          const wsign = driving ? (Math.sign(this.drive.v) || 1) : fwd;
-          for (const w of part.wheels) w.rotateZ(-wsign * speed * dt / (w.userData.r || 0.62));
+          // the body always faces its travel direction (heading uses *fwd), so on the
+          // auto schedule the wheels always roll FORWARD; only a driven loco reverses.
+          const roll = driving ? (Math.sign(this.drive.v) || 1) : 1;
+          for (const w of part.wheels) w.rotateZ(roll * speed * dt / (w.userData.r || 0.62));
         }
       }
       // coupling rods ride t' crank pins, quartered like t' real thing
       if (moving && this.train.loco.rods) {
-        this.train.rodPhase = (this.train.rodPhase || 0) - fwd * speed * dt / 0.62;
+        const roll = driving ? (Math.sign(this.drive.v) || 1) : 1;
+        this.train.rodPhase = (this.train.rodPhase || 0) + roll * speed * dt / 0.62;
         this.train.loco.rods.forEach((rod, i) => {
           const th = this.train.rodPhase + i * Math.PI / 2;
           rod.position.y = 0.62 + Math.sin(th) * 0.32;
