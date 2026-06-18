@@ -874,11 +874,12 @@ class Game {
       const village = (c.village && geo.villages.find(v => v.name.toLowerCase() === c.village.toLowerCase())) || geo.village;
       placeFolk(c.id, c.name, village, null, false);
     }
-    // fill the parish out — extra folk (canned voice), some that roam beyond the village
+    // fill the parish out — extra folk (generic AI "passer-by" voice, no stored memory/trust), some that roam beyond the village
     for (const f of EXTRA_FOLK) {
       const village = f.village ? (geo.villages.find(v => v.name.toLowerCase() === f.village.toLowerCase()) || geo.village) : null;
       placeFolk(null, f.name, village, f.role, !!f.roam);
     }
+    this.brainUp = online; // tracks whether the village brain is actually answering
     this.ui.toast(online
       ? '<b>Right-click</b> t&rsquo; folk o&rsquo; t&rsquo; moors for a natter &mdash; every settlement&rsquo;s got its own. After dark, knock on their doors.'
       : 'T&rsquo; villages stand quiet &mdash; t&rsquo; brain in&rsquo;t answering (yet).', 8000);
@@ -901,6 +902,7 @@ class Game {
             || roster.find(c => c.name.toLowerCase().includes(m.t.name.toLowerCase().split(' ').pop()));
           if (hit) m.charId = hit.id;
         }
+        this.brainUp = true;
         this.ui.toast('T&rsquo; village brain&rsquo;s woken up &mdash; t&rsquo; folk have found their tongues!', 6000);
         this.refreshStanding(false);
       } else {
@@ -1146,9 +1148,11 @@ class Game {
         const res = await npc.talkGeneric(persona, text, this.player.name, ctx);
         this.lastTalkMs = performance.now() - t0;
         this.lastTalkAt = performance.now();
+        this.brainUp = true;
         v.chatLog.push({ who: 'them', text: res.reply });
         if (v.memory) { v.memory.push(text.slice(0, 60)); if (v.memory.length > 4) v.memory.shift(); }
       } catch {
+        this.brainUp = false;
         v.chatLog.push({ who: 'sys', text: `${v.displayName} says nowt \u2014 t\u2019 village brain in\u2019t running.` });
       }
       this.ui.chatWaiting = false;
@@ -1162,11 +1166,13 @@ class Game {
       const res = await npc.talk(v.charId, text, this.player.name, this.playerId(), this.quests.chatContext(v));
       this.lastTalkMs = performance.now() - t0;
       this.lastTalkAt = performance.now();
+      this.brainUp = true;
       v.chatLog.push({ who: 'them', text: res.reply });
       v.tier = res.tier;
       this.ui.setChatTier(res.tier);
       this.maybeReward(v, res.tier);
     } catch {
+      this.brainUp = false;
       v.chatLog.push({ who: 'sys', text: 'T\u2019 brain didn\u2019t answer \u2014 is Ollama up an\u2019 running?' });
     }
     this.ui.chatWaiting = false;
