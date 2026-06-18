@@ -628,18 +628,18 @@ function makeWizardExtras(model, s) {
 export const MOB_TYPES = {
   sheep: {
     make: makeSheep, hw: 0.45, h: 1.1, hp: 8, speed: 1.6, fleeSpeed: 4.2,
-    hostile: false, drops: [[I.RAW_MUTTON, 1, 2], [B.WOOL, 1, 2]], cap: 18, name: 'Swaledale Yow',
-    group: [3, 6], // Swaledales graze t' moor in flocks, not singly
+    hostile: false, drops: [[I.RAW_MUTTON, 1, 2], [B.WOOL, 1, 2]], cap: 36, name: 'Swaledale Yow',
+    group: [4, 7], // Swaledales graze t' moor in flocks, not singly
     tameable: true, tameFood: [I.BILBERRIES],
   },
   grouse: {
     make: makeGrouse, hw: 0.2, h: 0.6, hp: 3, speed: 1.4, fleeSpeed: 3.8,
-    hostile: false, drops: [[I.RAW_GROUSE, 1, 1]], cap: 6, name: 'Red Grouse',
+    hostile: false, drops: [[I.RAW_GROUSE, 1, 1]], cap: 10, name: 'Red Grouse',
     habitat: 'moor', shy: true, shyRadius: 6, flush: true, fleeFor: 3,
   },
   hare: {
     make: makeHare, hw: 0.2, h: 0.7, hp: 4, speed: 2.6, fleeSpeed: 6.4,
-    hostile: false, drops: [], cap: 4, name: 'Brown Hare',
+    hostile: false, drops: [], cap: 6, name: 'Brown Hare',
     shy: true, shyRadius: 7, fleeFor: 4, // bolts t' moment tha gets near — unless tha holds her food
     tameable: true, tameFood: [I.BILBERRIES],
   },
@@ -654,7 +654,7 @@ export const MOB_TYPES = {
   // ---- t' living moor: cattle, game birds, fliers, basking lizards ----
   cow: {
     make: makeCow, hw: 0.55, h: 1.45, hp: 12, speed: 1.2, fleeSpeed: 2.8,
-    hostile: false, drops: [[I.RAW_BEEF, 1, 2]], cap: 8, name: 'Dale Cow',
+    hostile: false, drops: [[I.RAW_BEEF, 1, 2]], cap: 12, name: 'Dale Cow',
     habitat: 'pasture', group: [2, 4],
     tameable: true, tameFood: [I.BILBERRIES],
   },
@@ -665,12 +665,12 @@ export const MOB_TYPES = {
   },
   llama: {
     make: makeLlama, hw: 0.45, h: 2.2, hp: 14, speed: 1.4, fleeSpeed: 2.6,
-    hostile: false, drops: [[B.WOOL, 1, 2]], cap: 4, name: 'Pack Llama',
+    hostile: false, drops: [[B.WOOL, 1, 2]], cap: 6, name: 'Pack Llama',
     habitat: 'pasture', group: [2, 3],
   },
   pony: {
     make: makePony, hw: 0.42, h: 1.7, hp: 18, speed: 1.7, fleeSpeed: 3.2,
-    hostile: false, drops: [], cap: 8, name: 'Moorland Pony',
+    hostile: false, drops: [], cap: 12, name: 'Moorland Pony',
     habitat: 'moor', group: [2, 3], // half-wild, but they'll let thee up
   },
   // ---- beasts a body can keep: feed 'em their favourite an' they'll throw their lot in wi' thee ----
@@ -714,7 +714,7 @@ export const MOB_TYPES = {
   },
   crow: {
     make: makeCrow, hw: 0.25, h: 0.4, hp: 3, speed: 4.5, fleeSpeed: 5.0,
-    hostile: false, drops: [], cap: 7, name: 'Carrion Crow',
+    hostile: false, drops: [], cap: 12, name: 'Carrion Crow',
     fly: true, flock: true, flyBand: 16, day: true, group: [3, 6], habitat: 'moor',
   },
   lizard: {
@@ -724,7 +724,7 @@ export const MOB_TYPES = {
   },
   curlew: {
     make: makeCurlew, hw: 0.2, h: 0.95, hp: 3, speed: 1.5, fleeSpeed: 4.4,
-    hostile: false, drops: [], cap: 4, name: 'Curlew',
+    hostile: false, drops: [], cap: 8, name: 'Curlew',
     shy: true, shyRadius: 8, flush: true, fleeFor: 4, habitat: 'moor',
   },
   frog: {
@@ -920,7 +920,7 @@ export class Entities {
     const t = MOB_TYPES[type];
     if (t.hostile && day <= 2 && Math.random() < 0.5) return; // first neets: a taster, not a massacre
     const ang = Math.random() * Math.PI * 2;
-    const dist = t.hostile ? 26 + Math.random() * 22 : 18 + Math.random() * 30;
+    const dist = t.hostile ? 26 + Math.random() * 22 : 24 + Math.random() * 62; // grazers spread right across t' visible moor
     const x = Math.floor(player.pos.x + Math.cos(ang) * dist);
     const z = Math.floor(player.pos.z + Math.sin(ang) * dist);
     if (!this.world.isLoaded(x, z)) return;
@@ -1251,8 +1251,13 @@ export class Entities {
     const geo = this.world.gen.geo;
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
-      this.spawnTimer = 2.5;
-      this.trySpawns(player, isNight, audio);
+      this.spawnTimer = 1.2;
+      // how many WILD beasts are about (not pets, other players, villagers or boats)?
+      let wild = 0;
+      for (const m of this.mobs) { const mt = m.t; if (mt && mt.natural !== false && !m.owner && !m.isRemotePlayer && m.type !== 'villager') wild++; }
+      // fill a sparse moor fast, then ease off so she stays lively as tha roams
+      const burst = wild < 50 ? 5 : wild < 95 ? 2 : 1;
+      for (let i = 0; i < burst; i++) this.trySpawns(player, isNight, audio);
       this.ensureHarbourCobles(player);
     }
 
@@ -1281,7 +1286,7 @@ export class Entities {
       if (mob.owner && this.companionBenefit(mob, dt, player, isNight, audio)) continue; // away scouting → skip
 
       // despawn: too far, hostiles at dawn, day-birds at dusk (bosses/followers/pets linger)
-      if (!mob.owner && ((distP > (t.boss || t.follower ? 140 : 90)) || (t.night && !isNight) || (t.day && isNight))) {
+      if (!mob.owner && ((distP > (t.boss || t.follower ? 140 : 104)) || (t.night && !isNight) || (t.day && isNight))) {
         if ((t.night && !isNight) || (t.day && isNight)) this.burst(mob.pos.x, mob.pos.y + 1, mob.pos.z, [30, 30, 40], 8);
         this.scene.remove(mob.model.group);
         mob.dead = true;
