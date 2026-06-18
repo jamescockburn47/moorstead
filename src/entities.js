@@ -5,6 +5,7 @@ import { moveEntity } from './physics.js';
 import { getIconURL, tileColor } from './textures.js';
 import { hash2i } from './noise.js';
 import { TAME_GOAL, FOLLOW_RANGE, feedTrust, chooseName } from './pets.js';
+import { dayPhase, villagerRemark } from './villagerlife.js';
 import { HEIGHT, WATER_LEVEL } from './defs.js';
 
 const GRAVITY = 26;
@@ -809,6 +810,15 @@ export class Entities {
       state: 'idle', stateTimer: 1 + Math.random() * 4,
       walkPhase: Math.random() * 10, flash: 0, attackCd: 0, fleeTimer: 0,
       chatLog: [],
+      // ---- inner life ----
+      role: opts.role || null,
+      roam: !!opts.roam,
+      work: opts.work || null,    // their daytime patch
+      green: opts.green || null,  // the village green (midday social)
+      mood: Math.max(0.15, Math.min(0.95, 0.55 + (Math.random() * 0.4 - 0.2))),
+      sociable: 0.4 + Math.random() * 0.5,
+      memory: [],
+      nosyCd: 6 + Math.random() * 12,
     };
     this.mobs.push(v);
     return v;
@@ -1549,10 +1559,35 @@ export class Entities {
       }
     }
     if (mob.hailCd > 0) mob.hailCd -= dt;
+    if (mob.nosyCd > 0) mob.nosyCd -= dt;
     let wishX = 0, wishZ = 0, speed = 0;
 
+    // a nosy neighbour breaks off to come have a look an' a word — even out on t' moor,
+    // an' especially if tha's been building near where they find thee
+    if (!mob.nosyApproach && !mob.chatting && !mob.bubble && !player.dead && mob.nosyCd <= 0 && distP < 14 && distP > 2.6) {
+      const lb = this.lastBuild;
+      const nearBuild = !!(lb && (performance.now() - lb.t < 60000) &&
+        Math.hypot(lb.x - mob.pos.x, lb.z - mob.pos.z) < 16 && Math.hypot(lb.x - player.pos.x, lb.z - player.pos.z) < 16);
+      if (nearBuild || mob.roam || (mob.sociable || 0.5) > 0.55 || Math.random() < 0.35) {
+        mob.nosyCd = 20 + Math.random() * 34;
+        mob.nosyApproach = { until: 6, build: nearBuild };
+      }
+    }
+
     // turn to face thee when tha's close (or mid-natter)
-    if (mob.chatting || (distP < 3.5 && !player.dead)) {
+    if (mob.nosyApproach) {
+      mob.nosyApproach.until -= dt;
+      if (distP > 3) {
+        wishX = (player.pos.x - mob.pos.x) / (distP || 1); wishZ = (player.pos.z - mob.pos.z) / (distP || 1);
+        speed = mob.t.speed * 1.1; mob.state = 'approach';
+      } else {
+        mob.yaw = Math.atan2(player.pos.x - mob.pos.x, player.pos.z - mob.pos.z);
+      }
+      if (distP <= 3.2 || mob.nosyApproach.until <= 0) {
+        if (!mob.bubble) this.speak(mob, villagerRemark({ role: mob.role, mood: mob.mood, nearBuild: mob.nosyApproach.build, outside: !mob.village }, Math.random), 8);
+        mob.nosyApproach = null; mob.state = 'greet'; mob.stateTimer = 1.5;
+      }
+    } else if (mob.chatting || (distP < 3.5 && !player.dead)) {
       mob.state = 'greet';
       mob.yaw = Math.atan2(player.pos.x - mob.pos.x, player.pos.z - mob.pos.z);
       if (mob.stateTimer <= 0) mob.stateTimer = 1;
@@ -1598,21 +1633,24 @@ export class Entities {
           wishX = wishZ = speed = 0;
         }
       } else {
-        if (mob.stateTimer <= 0) {
-          mob.stateTimer = 3 + Math.random() * 6;
-          mob.state = Math.random() < 0.55 ? 'wander' : 'idle';
-          if (mob.state === 'wander') {
-            // potter about near home
-            const hx = mob.home.x - mob.pos.x, hz = mob.home.z - mob.pos.z;
-            const homeDist = Math.hypot(hx, hz);
-            if (homeDist > 9) mob.wanderYaw = Math.atan2(hz, hx);
-            else mob.wanderYaw = Math.random() * Math.PI * 2;
+        // daytime routine: at their work of a morning an' afternoon, down the green at midday.
+        // roamers (shepherds, pedlars, the constable) range out on the roads an' moor.
+        const phase = dayPhase(skyT);
+        let tgt;
+        if (mob.roam) {
+          if (mob.stateTimer <= 0 || !mob.roamGoal) {
+            mob.stateTimer = 10 + Math.random() * 18;
+            const base = (phase === 'social' && mob.green) ? mob.green : (mob.home);
+            const a = Math.random() * Math.PI * 2, r = 14 + Math.random() * 34;
+            mob.roamGoal = { x: base.x + Math.cos(a) * r, z: base.z + Math.sin(a) * r };
           }
+          tgt = mob.roamGoal;
+        } else {
+          tgt = (phase === 'social' && mob.green) ? mob.green : (mob.work || mob.home);
         }
-        if (mob.state === 'wander') {
-          wishX = Math.cos(mob.wanderYaw); wishZ = Math.sin(mob.wanderYaw);
-          speed = mob.t.speed;
-        }
+        const d = walkTo(tgt, mob.t.speed);
+        if (d < 3) { wishX = wishZ = 0; speed = 0; mob.vel.x *= 0.8; mob.vel.z *= 0.8; }
+        else if (mob.homeStuck > 6) popTo(tgt);
       }
     }
 
