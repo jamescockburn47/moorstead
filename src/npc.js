@@ -52,6 +52,25 @@ export function talk(characterId, message, playerName, playerId, context) {
   });
 }
 
+// -> {reply, name} (throws when offline). A stateless "passer-by" voice for
+// villagers with no brain character of their own — full AI dialogue, but no
+// stored memory or trust. The persona (name/role/village/mood) is sent each call.
+export function talkGeneric(persona, message, playerName, context) {
+  return req('/api/talk/generic', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: persona.name,
+      role: persona.role || null,
+      village: persona.village || null,
+      mood: persona.mood || null,
+      message,
+      player_name: playerName || null,
+      context: context || null,
+    }),
+  });
+}
+
 // -> {total_trust, standing, next_threshold, progress, villagers}
 export function standing(playerId) {
   return req('/api/standing?player_id=' + encodeURIComponent(playerId || ''), {}, 8000);
