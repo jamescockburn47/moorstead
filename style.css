@@ -107,14 +107,16 @@ input.seed {
 }
 
 #title-screen {
-  justify-content: flex-start; gap: 9px; padding: 2.2vh 0 34px; overflow-y: auto;
+  align-items: flex-start; justify-content: flex-start; gap: 9px; padding: 2.4vh 0 40px 4.5vw; overflow-y: auto;
   background:
     radial-gradient(ellipse at 50% 110%, rgba(106, 84, 140, 0.35), transparent 55%),
     linear-gradient(#1a2028 0%, #2c3440 45%, #4a4252 70%, #3a4434 100%);
 }
 /* once the real voxel world is meshed in behind the UI, drop the gradient to reveal it */
 #title-screen.world-shown { background: none; }
-.title-foot { position: absolute; bottom: 12px; font-size: 12px; color: #8a8478; }
+.title-foot { position: absolute; left: 4.5vw; bottom: 12px; max-width: 60vw; font-size: 12px; color: #9a948a; }
+/* the title menu sits in a left column so it doesn't cover the train; left-align its buttons */
+#title-screen button.mc { margin-left: 0; margin-right: 0; }
 
 /* procedural moorland scene + feature strip on the title */
 .title-scene {
@@ -124,14 +126,13 @@ input.seed {
 .title-flyover { width: 100%; height: 100%; display: block; }
 .title-scrim {
   position: absolute; inset: 0;
-  background:
-    radial-gradient(ellipse at 50% 40%, rgba(10,12,18,0.04), rgba(10,12,18,0.30) 88%),
-    linear-gradient(180deg, rgba(10,12,18,0.34) 0%, rgba(10,12,18,0.04) 36%, rgba(10,12,18,0.06) 62%, rgba(10,12,18,0.36) 100%);
+  /* darken only the left, behind the menu — the train on the right stays clear an' bright */
+  background: linear-gradient(90deg, rgba(8,10,14,0.66) 0%, rgba(8,10,14,0.5) 26%, rgba(8,10,14,0.12) 50%, rgba(8,10,14,0) 72%);
 }
 #title-screen > *:not(.title-scene) { position: relative; z-index: 1; }
 .title-feats {
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;
-  max-width: 660px; margin: 12px auto 4px;
+  display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 10px;
+  max-width: 330px; margin: 12px 0 4px;
 }
 .feat {
   display: flex; flex-direction: column; align-items: center; gap: 3px;
