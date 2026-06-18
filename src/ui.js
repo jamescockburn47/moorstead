@@ -474,8 +474,9 @@ export class UI {
     }
     if (name) this[name].classList.remove('hidden');
     this.hud.classList.toggle('hidden', name === 'titleScreen' || name === 'loadingScreen');
-    // run the live fly-over only while the title's up; pause it the moment we leave
-    if (name === 'titleScreen') this._startFlyover(); else this._stopFlyover();
+    // the title backdrop is now the REAL voxel world (main.js startTitlePreview),
+    // not a mock-up — so the old stand-in fly-over is left off
+    if (name !== 'titleScreen') this._stopFlyover();
   }
 
   _startFlyover() {

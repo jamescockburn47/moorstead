@@ -111,6 +111,8 @@ input.seed {
     radial-gradient(ellipse at 50% 110%, rgba(106, 84, 140, 0.35), transparent 55%),
     linear-gradient(#1a2028 0%, #2c3440 45%, #4a4252 70%, #3a4434 100%);
 }
+/* once the real voxel world is meshed in behind the UI, drop the gradient to reveal it */
+#title-screen.world-shown { background: none; }
 .title-foot { position: absolute; bottom: 12px; font-size: 12px; color: #8a8478; }
 
 /* procedural moorland scene + feature strip on the title */
@@ -122,8 +124,8 @@ input.seed {
 .title-scrim {
   position: absolute; inset: 0;
   background:
-    radial-gradient(ellipse at 50% 42%, rgba(10,12,18,0.10), rgba(10,12,18,0.40) 86%),
-    linear-gradient(180deg, rgba(10,12,18,0.42) 0%, rgba(10,12,18,0.08) 34%, rgba(10,12,18,0.12) 60%, rgba(10,12,18,0.44) 100%);
+    radial-gradient(ellipse at 50% 40%, rgba(10,12,18,0.04), rgba(10,12,18,0.30) 88%),
+    linear-gradient(180deg, rgba(10,12,18,0.34) 0%, rgba(10,12,18,0.04) 36%, rgba(10,12,18,0.06) 62%, rgba(10,12,18,0.36) 100%);
 }
 #title-screen > *:not(.title-scene) { position: relative; z-index: 1; }
 .title-feats {

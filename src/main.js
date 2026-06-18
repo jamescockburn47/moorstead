@@ -253,6 +253,7 @@ class Game {
 
   startWorld(seed, meta, chunks) {
     if (this.world) this.teardownWorld();
+    this.titlePreview = false; // a real world supersedes the title backdrop
     this.seed = seed;
     this.world = new World(this.scene, seed, chunks);
     this.player = new Player(this.world);
@@ -299,6 +300,28 @@ class Game {
       this.scene.remove(o);
     }
     this.scene.fog = null;
+  }
+
+  // The title backdrop is the REAL voxel world, not a mock-up: load the shared
+  // moor on a snowy winter sunrise; the title render branch then flies a slow
+  // orbit following the steam train across the moors. Falls back to the plain
+  // gradient if it can't load.
+  startTitlePreview() {
+    if (this.world || this.titlePreview || this.titlePreviewFailed) return;
+    try {
+      this.startWorld('t-shared-moor', null, new Map()); // builds world+sky+rails+entities on the scene
+      this.state = 'title';        // keep the title up (startWorld switched to 'loading')
+      this.ui.show('titleScreen'); // and its UI (startWorld showed the loading panel)
+      this.titlePreview = true;
+      this.titleT = 0;
+      this.sky.time = 0.30;        // a touch after sunrise
+      this.sky.forceClear = true;  // a clear morning, never the live moor mizzle
+      const geo = this.world.gen.geo;
+      const v = geo.villages.find(x => x.name === 'Goathland') || geo.village;
+      this.player.pos = { x: v.x + 0.5, y: this.world.gen.height(v.x, v.z) + 2, z: v.z + 0.5 };
+    } catch (e) {
+      this.titlePreview = false; this.titlePreviewFailed = true;
+    }
   }
 
   async saveNow(toast = true) {
@@ -1725,7 +1748,7 @@ class Game {
   // T' one true train: rendered out on t' moor for all to see, boarded at
   // platforms, ridden frae a window seat.
   updateTrainWorld(dt) {
-    if (!this.world || this.state === 'title' || this.state === 'loading') return;
+    if (!this.world || this.state === 'loading' || (this.state === 'title' && !this.titlePreview)) return;
     const geo = this.world.gen.geo;
     const st = geo.railway();
     const driving = this.state === 'driving' && this.drive;
@@ -2338,6 +2361,31 @@ class Game {
     const dt = Math.min(0.05, this.clock.getDelta());
 
     if (this.state === 'title') {
+      if (!this.world && !this.titlePreviewFailed) this.startTitlePreview();
+      if (this.titlePreview && this.world) {
+        this.titleT += dt;
+        this.updateTrainWorld(dt); // the one true train, on its real schedule
+        const ts = this.trainState;
+        const ax = ts ? ts.x : this.player.pos.x, az = ts ? ts.z : this.player.pos.z;
+        const gy = this.world.gen.height(Math.floor(ax), Math.floor(az));
+        this.player.pos.x = ax; this.player.pos.y = gy + 2; this.player.pos.z = az; // centre everything on the train
+        const ready = this.world.readyAround(ax, az, 1);
+        for (let i = 0; i < (ready ? 2 : 6); i++) this.world.update(ax, az);
+        this.sky.time = 0.45; // a bright morning — sun well up so the moor itself is lit, not just the sky
+        // warm autumn daylight for a bright, golden scene — but snow still lies on the high caps
+        const lightSeason = seasonStateAtPhase(0.6);
+        setSnowLevel(0.7); // snow on the tops, decoupled frae the (warm) light
+        if (this._seasonBucket !== 99) { this._seasonBucket = 99; retintAtlasForSeason(lightSeason); }
+        this.sky.update(dt, this.player.pos, lightSeason, false);
+        if (this.rails) this.rails.update(dt, { x: ax, z: az });
+        this.entities.update(dt, this.player, false, this.audio, () => {});
+        // a slow aerial orbit, following the steam train across the snowy moor
+        const a = this.titleT * 0.13;
+        this.camera.position.set(ax + Math.cos(a) * 34, gy + 19, az + Math.sin(a) * 34);
+        this.camera.lookAt(ax, gy + 4, az);
+        this.camera.rotation.z += Math.sin(a) * 0.04;
+        if (ready) document.getElementById('title-screen')?.classList.add('world-shown'); // reveal it behind the UI
+      }
       this.renderer.render(this.scene, this.camera);
       return;
     }
