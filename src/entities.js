@@ -771,6 +771,7 @@ export class Entities {
     this.mobs = [];
     this.drops = [];
     this.particles = [];
+    this.steam = [];       // t' loco's steam: soft trailing puffs (not hard pellets)
     this.spawnTimer = 0;
     this.particleGeom = new THREE.BoxGeometry(0.12, 0.12, 0.12);
     this.prints = [];      // t' barghest's fading dawn paw-prints
@@ -1838,10 +1839,60 @@ export class Entities {
     this.particles = this.particles.filter(p => !p.dead);
   }
 
+  // one soft round puff texture, shared by every wisp o' steam
+  steamTex() {
+    if (this._steamTex) return this._steamTex;
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const x = c.getContext('2d');
+    const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(255,255,255,0.95)');
+    g.addColorStop(0.5, 'rgba(252,252,255,0.5)');
+    g.addColorStop(1, 'rgba(250,250,255,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(32, 32, 32, 0, 7); x.fill();
+    this._steamTex = new THREE.CanvasTexture(c);
+    return this._steamTex;
+  }
+
+  // a soft chimney puff: born small at t' funnel, billows out, rises gently an'
+  // fades — emitted in a steady stream it leaves a classic trail o' little clouds.
+  // (fwdx,fwdz) = t' loco's travel direction, so t' plume drifts back off t' stack.
+  steamPuff(x, y, z, fwdx = 0, fwdz = 0) {
+    const mat = new THREE.SpriteMaterial({ map: this.steamTex(), transparent: true, depthWrite: false, opacity: 0 });
+    const tone = 0.84 + Math.random() * 0.15;            // mostly clean steam, a touch o' coal grey
+    mat.color.setRGB(tone, tone, tone * 1.01);
+    const spr = new THREE.Sprite(mat);
+    const s0 = 0.45 + Math.random() * 0.3;
+    spr.scale.setScalar(s0);
+    spr.position.set(x + (Math.random() - 0.5) * 0.3, y + 0.2, z + (Math.random() - 0.5) * 0.3);
+    this.scene.add(spr);
+    const life = 2.0 + Math.random() * 1.3;
+    this.steam.push({
+      spr, life, maxLife: life, s0, grow: 1.9 + Math.random() * 1.4,
+      vx: -fwdx * (0.4 + Math.random() * 0.4) + (Math.random() - 0.5) * 0.5,
+      vy: 1.3 + Math.random() * 0.6,                      // buoyant rise, slows as it cools
+      vz: -fwdz * (0.4 + Math.random() * 0.4) + (Math.random() - 0.5) * 0.5,
+    });
+  }
+
+  updateSteam(dt) {
+    for (const p of this.steam) {
+      p.life -= dt;
+      if (p.life <= 0) { this.scene.remove(p.spr); p.spr.material.dispose(); p.dead = true; continue; }
+      const age = 1 - p.life / p.maxLife;                 // 0 fresh -> 1 spent
+      p.vy *= (1 - dt * 0.6); p.vx *= (1 - dt * 0.5); p.vz *= (1 - dt * 0.5);
+      p.spr.position.x += p.vx * dt; p.spr.position.y += p.vy * dt; p.spr.position.z += p.vz * dt;
+      p.spr.scale.setScalar(p.s0 + age * p.grow);         // billows out as it drifts
+      const fadeIn = Math.min(1, (p.maxLife - p.life) / 0.18);
+      p.spr.material.opacity = Math.max(0, fadeIn * (p.life / p.maxLife) * 0.8);
+    }
+    this.steam = this.steam.filter(p => !p.dead);
+  }
+
   update(dt, player, isNight, audio, onPickup) {
     this.updateMobs(dt, player, isNight, audio);
     this.updateDrops(dt, player, audio, onPickup);
     this.updateParticles(dt);
+    this.updateSteam(dt);
     this.updatePrints(dt);
     // t' barghest's dawn-prints: a fading trail left on t' moor at first light
     const sky = this.game && this.game.sky;
@@ -1887,7 +1938,8 @@ export class Entities {
     for (const m of this.mobs) this.scene.remove(m.model.group);
     for (const d of this.drops) this.scene.remove(d.spr);
     for (const p of this.particles) this.scene.remove(p.m);
+    for (const p of this.steam) { this.scene.remove(p.spr); p.spr.material.dispose(); }
     for (const p of this.prints) { this.scene.remove(p.mesh); p.mesh.material.dispose(); }
-    this.mobs = []; this.drops = []; this.particles = []; this.prints = [];
+    this.mobs = []; this.drops = []; this.particles = []; this.steam = []; this.prints = [];
   }
 }
