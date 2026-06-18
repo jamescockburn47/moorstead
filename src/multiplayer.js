@@ -11,6 +11,8 @@ export class Net {
     this.game = game;
     this.connected = false;
     this.remotes = new Map(); // pid -> {name, mob}
+    this.leaving = new Map(); // pid -> timeout: a grace afore we let a dropped soul go
+    this.keepTimer = null;    // a steady keepalive that survives a backgrounded tab
     this.posTimer = 0;
     this.lastSent = null;
   }
@@ -19,7 +21,17 @@ export class Net {
     return new Promise((resolve, reject) => {
       const url = `${WS_BASE}/ws?room=${room}&pid=${encodeURIComponent(pid)}&name=${encodeURIComponent(name || 'rambler')}`;
       this.ws = new WebSocket(url);
-      this.ws.onopen = () => { this.connected = true; };
+      this.ws.onopen = () => {
+        this.connected = true;
+        this.lastSent = null; // force a position resend after (re)connect
+        // A keepalive on a real timer — NOT the rAF loop, which pauses in a
+        // backgrounded tab. ~25s beats the relay's idle cap even when a hidden
+        // tab throttles us to ~once a minute, so we stop dropping (an' flapping).
+        clearInterval(this.keepTimer);
+        this.keepTimer = setInterval(() => {
+          if (this.connected && this.ws.readyState === 1) this.send({ type: 'timeq' });
+        }, 25000);
+      };
       this.ws.onmessage = e => {
         const m = JSON.parse(e.data);
         if (m.type === 'init') { this.onInit(m); resolve(m); }
@@ -27,6 +39,7 @@ export class Net {
       };
       this.ws.onclose = () => {
         this.connected = false;
+        clearInterval(this.keepTimer);
         if (this.game.netActive) {
           this.game.ui.toast('Lost t\u2019 thread to t\u2019 shared moor \u2014 reconnecting...', 4000);
           setTimeout(() => { if (this.game.netActive) this.connect(room, pid, name).catch(() => {}); }, 4000);
@@ -59,10 +72,17 @@ export class Net {
       const r = this.remotes.get(m.pid);
       if (r) { r.target = m; }
     } else if (m.type === 'join') {
-      this.addRemote(m.pid, m.name, { x: 0, y: 40, z: 0 });
-      g.ui.toast(`<b>${m.name}</b> has come up onto t\u2019 moor.`, 4000);
+      // a flap (a backgrounded tab dropping an' coming straight back) cancels its
+      // pending leave an' makes no fuss \u2014 only a genuinely new soul is announced.
+      const pend = this.leaving.get(m.pid);
+      if (pend) { clearTimeout(pend); this.leaving.delete(m.pid); }
+      const fresh = this.addRemote(m.pid, m.name, { x: 0, y: 40, z: 0 });
+      if (fresh) g.ui.toast(`<b>${m.name}</b> has come up onto t\u2019 moor.`, 4000);
     } else if (m.type === 'leave') {
-      this.removeRemote(m.pid);
+      // hold off \u2014 idle tabs drop an' return constantly. Only let her go if she's
+      // still away after a grace, so folk don't blink in an' out (nor re-announce).
+      if (this.leaving.has(m.pid) || !this.remotes.has(m.pid)) return;
+      this.leaving.set(m.pid, setTimeout(() => { this.leaving.delete(m.pid); this.removeRemote(m.pid); }, 25000));
     } else if (m.type === 'chat') {
       g.ui.toast(`<b>${m.name}:</b> ${m.text.replace(/</g, '&lt;')}`, 16000);
       const r = this.remotes.get(m.pid);
@@ -87,11 +107,12 @@ export class Net {
   sendFx(kind, x, y, z) { this.send({ type: 'fx', kind, x, y, z }); }
 
   addRemote(pid, name, p) {
-    if (this.remotes.has(pid)) return;
+    if (this.remotes.has(pid)) return false;
     const mob = this.game.entities.spawnVillager(pid, name || 'rambler', p.x, p.y, p.z);
     mob.isRemotePlayer = true;
     mob.t.speed = 0; // we drive it frae t' network
     this.remotes.set(pid, { name, mob, target: p });
+    return true;
   }
 
   removeRemote(pid) {
@@ -127,9 +148,7 @@ export class Net {
         this.send({ type: 'pos', x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), yaw: +g.player.yaw.toFixed(2) });
       }
     }
-    // keep t' shared clock honest now an' then
-    this.timeTimer = (this.timeTimer ?? 30) - dt;
-    if (this.timeTimer <= 0) { this.timeTimer = 60; this.send({ type: 'timeq' }); }
+    // (the shared clock is kept honest by the keepalive's timeq, on a real timer)
   }
 
   send(obj) {
@@ -146,6 +165,9 @@ export class Net {
 
   disconnect() {
     this.connected = false;
+    clearInterval(this.keepTimer);
+    for (const t of this.leaving.values()) clearTimeout(t);
+    this.leaving.clear();
     if (this.ws) { try { this.ws.close(); } catch { /* gone */ } }
     for (const pid of [...this.remotes.keys()]) this.removeRemote(pid);
   }
