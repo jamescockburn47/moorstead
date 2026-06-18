@@ -192,7 +192,8 @@ export class Sky {
     this.weatherTimer -= dt;
     if (this.weatherTimer <= 0) {
       const r = Math.random();
-      const next = r < 0.3 ? 'clear' : r < 0.55 ? 'misty' : r < 0.8 ? 'rain' : 'fog';
+      // mostly fair: clear skies the rule, real fog a rare thing (offline fallback only)
+      const next = r < 0.58 ? 'clear' : r < 0.82 ? 'misty' : r < 0.95 ? 'rain' : 'fog';
       if (next !== this.weather) {
         this.weather = next;
         msg = msg || {
@@ -228,7 +229,7 @@ export class Sky {
     else if (sunY > -0.2) col = lerpC(sunX > 0 ? SKY.dawn : SKY.dusk, SKY.night, -sunY / 0.2);
     else col = SKY.night;
     // weather greys t' sky
-    const grey = { clear: 0, misty: 0.35, rain: 0.55, fog: 0.7 }[this.weather];
+    const grey = { clear: 0, misty: 0.13, rain: 0.52, fog: 0.68 }[this.weather];
     let sky = col.clone().lerp(new THREE.Color(0x8a949c).multiplyScalar(0.2 + dayness * 0.8), grey);
     // Count Dracula's presence: sky bruises, fog thickens — dread afore horror
     this.dread += (this.dreadTarget - this.dread) * Math.min(1, dt * 1.8);
@@ -272,13 +273,19 @@ export class Sky {
     this.domeMat.uniforms.topColor.value.copy(sky).lerp(new THREE.Color(0x21426a), 0.5 * dayness);
 
     // fog distance
-    let baseFog = (this.liveFog != null) ? this.liveFog : { clear: 150, misty: 70, rain: 95, fog: 30 }[this.weather];
+    let baseFog = (this.liveFog != null) ? this.liveFog : { clear: 160, misty: 120, rain: 90, fog: 22 }[this.weather];
+    // a 'misty' moor is a soft far haze tha sees through; only 'fog' walls thee in
+    if (this.weather === 'misty') baseFog = Math.max(baseFog, 78);
+    else if (this.weather === 'fog') baseFog = Math.min(baseFog, 28);
     if (this.dread > 0.05) baseFog = Math.min(baseFog, 55 - this.dread * 22);
     if (this.moorFog > 0.01) baseFog = Math.min(baseFog, 150 - this.moorFog * 143); // ~7 at full: hand-afore-face stuff
     this.fogTargetFar = baseFog;
     this.fogFar += (this.fogTargetFar - this.fogFar) * Math.min(1, dt * 0.5);
     this.scene.fog.far = this.fogFar;
-    this.scene.fog.near = Math.max(5, this.fogFar * 0.25);
+    // thick fog fades in over a SHORT band so it genuinely hides what's beyond (not a
+    // pale silhouette); open weather keeps the gentle, distant haze.
+    const nearRatio = 0.25 + 0.35 * Math.max(0, Math.min(1, (55 - this.fogFar) / 35));
+    this.scene.fog.near = Math.max(5, this.fogFar * nearRatio);
 
     this.stars.material.opacity = Math.max(0, -sunY * 2) * (1 - grey * 0.8);
     this.stars.position.set(playerPos.x, 0, playerPos.z);

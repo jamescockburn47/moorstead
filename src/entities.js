@@ -1756,10 +1756,11 @@ export class Entities {
           wishX = wishZ = speed = 0;
         }
       } else {
-        // daytime routine: at their work of a morning an' afternoon, down the green at midday.
+        // daytime routine: at their work of a morning an' afternoon, gathered round the
+        // green at midday — but each to their OWN spot, an' pottering about it, so folk
+        // mill an' shift rather than stack on one tile an' stand like posts.
         // roamers (shepherds, pedlars, the constable) range out on the roads an' moor.
         const phase = dayPhase(skyT);
-        let tgt;
         if (mob.roam) {
           if (mob.stateTimer <= 0 || !mob.roamGoal) {
             mob.stateTimer = 10 + Math.random() * 18;
@@ -1767,13 +1768,22 @@ export class Entities {
             const a = Math.random() * Math.PI * 2, r = 14 + Math.random() * 34;
             mob.roamGoal = { x: base.x + Math.cos(a) * r, z: base.z + Math.sin(a) * r };
           }
-          tgt = mob.roamGoal;
+          const d = walkTo(mob.roamGoal, mob.t.speed);
+          if (d < 3) { wishX = wishZ = 0; speed = 0; mob.vel.x *= 0.8; mob.vel.z *= 0.8; mob.homeStuck = 0; }
+          else if (mob.homeStuck > 6) popTo(mob.roamGoal);
         } else {
-          tgt = (phase === 'social' && mob.green) ? mob.green : (mob.work || mob.home);
+          const anchor = (phase === 'social' && mob.green) ? mob.green : (mob.work || mob.home);
+          // amble to a fresh spot a few steps off the patch every so often, an' glance about
+          if (mob.stateTimer <= 0 || !mob.potterGoal) {
+            mob.stateTimer = 4 + Math.random() * 7;
+            const a = Math.random() * Math.PI * 2, r = (phase === 'social' ? 1.5 + Math.random() * 4 : Math.random() * 3.5);
+            mob.potterGoal = { x: anchor.x + Math.cos(a) * r, z: anchor.z + Math.sin(a) * r };
+            if (Math.random() < 0.4) mob.yaw = Math.random() * Math.PI * 2;
+          }
+          const d = walkTo(mob.potterGoal, mob.t.speed * 0.55);
+          if (d < 1.2) { wishX = wishZ = 0; speed = 0; mob.vel.x *= 0.85; mob.vel.z *= 0.85; mob.homeStuck = 0; }
+          else if (mob.homeStuck > 6) popTo(mob.potterGoal);
         }
-        const d = walkTo(tgt, mob.t.speed);
-        if (d < 3) { wishX = wishZ = 0; speed = 0; mob.vel.x *= 0.8; mob.vel.z *= 0.8; }
-        else if (mob.homeStuck > 6) popTo(tgt);
       }
     }
 
