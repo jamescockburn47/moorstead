@@ -289,6 +289,23 @@ function makePetPlate(name) {
   return spr;
 }
 
+// ---- a Yorkshire coble: high raked bow, square stern, clinker planks ----
+function makeCoble() {
+  const g = new THREE.Group();
+  const HULL = 0x5a3b22, TRIM = 0x3a2616, DECK = 0x6e4a2c, SAIL = 0xe8e2d0;
+  const hull = box(1.1, 0.7, 3.2, HULL); hull.position.y = 0.35; g.add(hull);
+  const well = box(0.8, 0.5, 2.6, DECK); well.position.y = 0.56; g.add(well); // open deck/well
+  const bow = box(0.86, 0.86, 0.95, HULL); bow.position.set(0, 0.5, 1.35); bow.rotation.x = -0.4; g.add(bow); // raked bow, lapped onto the hull
+  const prow = box(0.36, 0.62, 0.5, HULL); prow.position.set(0, 0.94, 1.74); prow.rotation.x = -0.5; g.add(prow);
+  for (const x of [-0.58, 0.58]) { const rail = box(0.1, 0.16, 3.0, TRIM); rail.position.set(x, 0.68, 0); g.add(rail); }
+  const transom = box(1.05, 0.6, 0.2, HULL); transom.position.set(0, 0.4, -1.55); g.add(transom);
+  const thwart = box(0.92, 0.12, 0.42, TRIM); thwart.position.set(0, 0.72, -0.4); g.add(thwart);
+  const mast = box(0.1, 1.7, 0.1, TRIM); mast.position.set(0, 1.45, 0.2); g.add(mast);
+  const sail = box(0.07, 1.05, 0.66, SAIL); sail.position.set(0.02, 1.55, 0.02); g.add(sail);
+  for (const x of [-0.5, 0.5]) { const oar = box(0.07, 0.07, 1.8, 0x7a5836); oar.position.set(x, 0.74, -0.2); g.add(oar); }
+  return { group: g };
+}
+
 function makePheasant() {
   const g = new THREE.Group();
   const body = box(0.34, 0.34, 0.56, 0x7a4a26); body.position.y = 0.36; g.add(body);
@@ -682,6 +699,11 @@ export const MOB_TYPES = {
     hostile: false, drops: [], cap: 3, name: 'Moor Rat', habitat: 'edge', night: true,
     shy: true, shyRadius: 4, fleeFor: 2,
     tameable: true, tameFood: [I.BILBERRIES, I.RAW_GROUSE, I.RAW_MUTTON],
+  },
+  // a moored fishing boat tha can board an' sail — never wild-spawns; t' harbours provide 'em
+  coble: {
+    make: makeCoble, hw: 0.9, h: 1.0, hp: 40, speed: 0, fleeSpeed: 0,
+    hostile: false, drops: [], cap: 0, natural: false, name: 'Coble', vehicle: true,
   },
   pheasant: {
     make: makePheasant, hw: 0.2, h: 0.85, hp: 3, speed: 1.6, fleeSpeed: 4.6,
@@ -1129,11 +1151,57 @@ export class Entities {
     if (this.game && this.game.ui) this.game.ui.toast(`<b>${mob.petName}</b> ${msg}.`, 4000);
   }
 
+  // ---------- cobles (boats) ----------
+  // A moored coble bobs on the swell; the game poses her while she's sailed.
+  floatCoble(mob, dt, distP) {
+    if (distP > 130) { this.scene.remove(mob.model.group); mob.dead = true; return; }
+    mob.bob = (mob.bob || 0) + dt;
+    const y = WATER_LEVEL + 0.4 + Math.sin(mob.bob * 1.4 + mob.pos.x) * 0.06;
+    mob.pos.y = y;
+    const g = mob.model.group;
+    g.position.set(mob.pos.x, y, mob.pos.z);
+    g.rotation.y = mob.yaw || 0;
+    g.rotation.z = Math.sin(mob.bob * 1.1 + mob.pos.z) * 0.03;
+  }
+
+  // Keep a coble or two waiting at the coast towns, so there's allus a boat to take.
+  ensureHarbourCobles(player) {
+    const geo = this.world.gen.geo;
+    const harbours = [geo.pierHead()];
+    const st = (geo.villages || []).find(v => v.name === 'Staithes');
+    if (st) harbours.push({ x: st.x, z: st.z });
+    for (const h of harbours) {
+      if (!h || Math.hypot(player.pos.x - h.x, player.pos.z - h.z) > 95) continue;
+      const near = this.mobs.some(m => m.type === 'coble' && !m.dead && Math.hypot(m.pos.x - h.x, m.pos.z - h.z) < 70);
+      if (near) continue;
+      const cell = this.findSeaCell(h.x, h.z, 44);
+      if (cell) {
+        const m = this.spawnMob('coble', cell.x + 0.5, WATER_LEVEL + 0.4, cell.z + 0.5);
+        if (m) m.yaw = Math.random() * Math.PI * 2;
+      }
+    }
+  }
+
+  // Find an open-water cell (sea, beck or tarn) near a point.
+  findSeaCell(cx, cz, maxR) {
+    for (let r = 2; r <= maxR; r += 2) {
+      for (let a = 0; a < 16; a++) {
+        const ang = a / 16 * Math.PI * 2;
+        const x = Math.round(cx + Math.cos(ang) * r), z = Math.round(cz + Math.sin(ang) * r);
+        if (this.world.getBlock(x, WATER_LEVEL, z) === B.WATER && this.world.getBlock(x, WATER_LEVEL + 1, z) === B.AIR) {
+          return { x, z };
+        }
+      }
+    }
+    return null;
+  }
+
   updateMobs(dt, player, isNight, audio) {
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
       this.spawnTimer = 2.5;
       this.trySpawns(player, isNight, audio);
+      this.ensureHarbourCobles(player);
     }
 
     for (const mob of this.mobs) {
@@ -1149,6 +1217,8 @@ export class Entities {
       const dx = player.pos.x - mob.pos.x;
       const dz = player.pos.z - mob.pos.z;
       const distP = Math.hypot(dx, dz);
+
+      if (mob.type === 'coble') { this.floatCoble(mob, dt, distP); continue; } // a moored boat just bobs
 
       if (mob.type === 'villager') {
         this.updateVillager(mob, dt, player, distP);

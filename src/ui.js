@@ -374,6 +374,17 @@ export class UI {
 </ul>
 <p class="how-note">Find dogs an&rsquo; cats about t&rsquo; village edges, pigs on t&rsquo; pasture, an&rsquo; rats out at neet. Thi kept beasts are saved wi&rsquo; thi world.</p>`,
 
+      'Coast & Sea': `
+<h3>T&rsquo; coast &amp; t&rsquo; open sea &#9973;</h3>
+<p>Follow t&rsquo; railway (or t&rsquo; cliff path) east to t&rsquo; sea &mdash; <b>Whitby</b> under t&rsquo; abbey, an&rsquo; t&rsquo; fishin&rsquo; town o&rsquo; <b>Staithes</b>. There&rsquo;s allus a <b>coble</b> (a Yorkshire fishin&rsquo; boat) moored at t&rsquo; harbour.</p>
+<ul>
+<li><b>To sail</b>: <b>right-click t&rsquo; coble</b> to climb aboard. <b>W</b> rows her on, <b>S</b> backs her, an&rsquo; tha <b>steers wi&rsquo; where tha looks</b>. <b>F</b> to step ashore &mdash; she moors where tha leaves her.</li>
+<li>She only goes where there&rsquo;s watter under her &mdash; t&rsquo; open sea, a wide beck, a tarn. Pull in to a beach or t&rsquo; pier to get off.</li>
+<li><b>Sea fishin&rsquo;</b>: cast a line frae t&rsquo; boat out in t&rsquo; deep for <b>fuller hauls</b> &mdash; an&rsquo; now an&rsquo; then summat snags on thi hook frae t&rsquo; sea bed: sea-washed jet, a snakestone, sea-coal.</li>
+<li>Sell thi catch to t&rsquo; folk at Whitby for coal &mdash; or a proper fish supper.</li>
+</ul>
+<p class="how-note">T&rsquo; sea opens t&rsquo; whole seaward half o&rsquo; t&rsquo; map: t&rsquo; North Sea, Robin Hood&rsquo;s Bay, t&rsquo; heritage coast.</p>`,
+
       'Craft & Cook': `
 <h3>Crafting</h3>
 <ul>
