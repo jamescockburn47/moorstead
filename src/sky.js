@@ -173,7 +173,8 @@ export class Sky {
     // live moor weather frae Open-Meteo when we have a sample: it drives t'
     // weather state directly an' parks t' random timer. Falls back to t' random
     // machine below on any fetch fault (currentWeather() returns null).
-    const live = currentWeather();
+    if (this.forceClear) { this.weather = 'clear'; this.weatherTimer = 1e9; } // title backdrop: always a clear morning
+    const live = this.forceClear ? null : currentWeather();
     if (live) {
       this.liveRain = live.rainAmount;
       this.liveFog = live.fogFar;
