@@ -628,7 +628,8 @@ function makeWizardExtras(model, s) {
 export const MOB_TYPES = {
   sheep: {
     make: makeSheep, hw: 0.45, h: 1.1, hp: 8, speed: 1.6, fleeSpeed: 4.2,
-    hostile: false, drops: [[I.RAW_MUTTON, 1, 2], [B.WOOL, 1, 2]], cap: 8, name: 'Swaledale Yow',
+    hostile: false, drops: [[I.RAW_MUTTON, 1, 2], [B.WOOL, 1, 2]], cap: 18, name: 'Swaledale Yow',
+    group: [3, 6], // Swaledales graze t' moor in flocks, not singly
     tameable: true, tameFood: [I.BILBERRIES],
   },
   grouse: {
@@ -669,7 +670,7 @@ export const MOB_TYPES = {
   },
   pony: {
     make: makePony, hw: 0.42, h: 1.7, hp: 18, speed: 1.7, fleeSpeed: 3.2,
-    hostile: false, drops: [], cap: 4, name: 'Moorland Pony',
+    hostile: false, drops: [], cap: 8, name: 'Moorland Pony',
     habitat: 'moor', group: [2, 3], // half-wild, but they'll let thee up
   },
   // ---- beasts a body can keep: feed 'em their favourite an' they'll throw their lot in wi' thee ----
@@ -774,6 +775,7 @@ export class Entities {
     this.particleGeom = new THREE.BoxGeometry(0.12, 0.12, 0.12);
     this.prints = [];      // t' barghest's fading dawn paw-prints
     this.printDay = -1;
+    this.nosyToken = null; // only ONE villager breaks off to greet thee at a time (no creepy crowds)
   }
 
   // ---------- villagers ----------
@@ -896,12 +898,15 @@ export class Entities {
     // t' season shapes t' moor: birds throng in spring, but in deep winter
     // little new ventures out.
     const season = this.game && this.game.season;
-    if (season && season.warmth < 0 && Math.random() < (-season.warmth) * 0.5) return;
+    if (season && season.warmth < 0 && Math.random() < (-season.warmth) * 0.3) return;
     let type;
     if (season) {
       const spring = Math.max(0, Math.min(1, season.greenness));
       const wts = types.map(k =>
-        k === 'curlew' ? 0.5 + spring * 2.5            // curlews come back to nest in spring
+        k === 'sheep' ? 3.5                            // t' moor should be thick wi' Swaledales
+          : k === 'pony' ? 2.0                         // an' enough ponies that tha can find one
+          : k === 'cow' ? 1.6
+          : k === 'curlew' ? 0.5 + spring * 2.5        // curlews come back to nest in spring
           : (k === 'grouse' || k === 'pheasant') ? 0.7 + spring * 1.2
           : k === 'crow' ? 1 + (1 - spring) * 0.8      // crows commoner in t' lean months
           : 1);
@@ -975,6 +980,42 @@ export class Entities {
       }
       break;
     }
+  }
+
+  // pop a stuck beast onto t' highest dry surface within a few blocks — out o' a
+  // dug pit (t' rim stands higher than t' floor) or off a bog pool.
+  rescueStuck(mob) {
+    const sx = Math.floor(mob.pos.x), sz = Math.floor(mob.pos.z);
+    let best = null, bestY = -1;
+    for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) {
+      const x = sx + dx, z = sz + dz;
+      if (!this.world.isLoaded(x, z)) continue;
+      for (let y = HEIGHT - 2; y > 1; y--) {
+        const b = this.world.getBlock(x, y, z);
+        if (b === B.AIR) continue;
+        if (b !== B.WATER && b !== B.BOG && this.world.getBlock(x, y + 1, z) === B.AIR && y > bestY) { bestY = y; best = { x, z, y }; }
+        break;
+      }
+    }
+    if (best) { mob.pos.x = best.x + 0.5; mob.pos.z = best.z + 0.5; mob.pos.y = best.y + 1.05; mob.vel.x = mob.vel.y = mob.vel.z = 0; }
+  }
+
+  // warden helper: drop a wee group of beasts on t' ground near (x,z), cap or no cap
+  forceSpawnGroup(type, x, z, n) {
+    let spawned = 0;
+    for (let i = 0; i < n; i++) {
+      const ox = Math.floor(x) + ((Math.random() * 8 - 4) | 0), oz = Math.floor(z) + ((Math.random() * 8 - 4) | 0);
+      if (!this.world.isLoaded(ox, oz)) continue;
+      for (let y = HEIGHT - 2; y > 1; y--) {
+        const b = this.world.getBlock(ox, y, oz);
+        if (b === B.AIR) continue;
+        if ((b === B.GRASS || b === B.PEAT || b === B.DIRT || b === B.STONE || b === B.SAND) && this.world.getBlock(ox, y + 1, oz) === B.AIR) {
+          this.spawnMob(type, ox + 0.5, y + 1.05, oz + 0.5); spawned++;
+        }
+        break;
+      }
+    }
+    return spawned;
   }
 
   // is this t' right ground for yon beast?
@@ -1400,6 +1441,17 @@ export class Entities {
         mob.vel.y = 7.5;
       }
 
+      // stuck rescue: a beast that's wandered into a player's pit or a bog pool an'
+      // can't climb out (no progress while wanting to move, or stood in liquid) gets
+      // popped onto t' nearest dry surface — so holes an' bogs don't quietly swallow
+      // t' moor's animals.
+      if (!t.fly && !mob.owner) {
+        const wishing = Math.abs(wishX) > 0.1 || Math.abs(wishZ) > 0.1;
+        if (inLiq || (wishing && Math.hypot(mob.vel.x, mob.vel.z) < 0.25)) mob.stuckT = (mob.stuckT || 0) + dt;
+        else mob.stuckT = 0;
+        if (mob.stuckT > 4) { this.rescueStuck(mob); mob.stuckT = 0; }
+      }
+
       // face movement direction
       const sp = Math.hypot(mob.vel.x, mob.vel.z);
       if (sp > 0.3) mob.yaw = Math.atan2(mob.vel.x, mob.vel.z);
@@ -1570,17 +1622,20 @@ export class Entities {
     }
     if (mob.hailCd > 0) mob.hailCd -= dt;
     if (mob.nosyCd > 0) mob.nosyCd -= dt;
+    if (this.nosyToken === mob && !mob.nosyApproach) this.nosyToken = null; // released when done
     let wishX = 0, wishZ = 0, speed = 0;
 
-    // a nosy neighbour breaks off to come have a look an' a word — even out on t' moor,
-    // an' especially if tha's been building near where they find thee
-    if (!mob.nosyApproach && !mob.chatting && !mob.bubble && !player.dead && mob.nosyCd <= 0 && distP < 14 && distP > 2.6) {
+    // a nosy neighbour breaks off to come have a look an' a word — but only ONE at a
+    // time across t' whole parish (a single token), so folk don't crowd thee; the
+    // rest get on wi' their lives an' trades.
+    if (!this.nosyToken && !mob.nosyApproach && !mob.chatting && !mob.bubble && !player.dead && mob.nosyCd <= 0 && distP < 9 && distP > 2.6) {
       const lb = this.lastBuild;
       const nearBuild = !!(lb && (performance.now() - lb.t < 60000) &&
         Math.hypot(lb.x - mob.pos.x, lb.z - mob.pos.z) < 16 && Math.hypot(lb.x - player.pos.x, lb.z - player.pos.z) < 16);
-      if (nearBuild || mob.roam || (mob.sociable || 0.5) > 0.55 || Math.random() < 0.35) {
-        mob.nosyCd = 20 + Math.random() * 34;
+      if (nearBuild || mob.roam || (mob.sociable || 0.5) > 0.62 || Math.random() < 0.16) {
+        mob.nosyCd = 30 + Math.random() * 40;
         mob.nosyApproach = { until: 6, build: nearBuild };
+        this.nosyToken = mob;
       }
     }
 
@@ -1596,6 +1651,7 @@ export class Entities {
       if (distP <= 3.2 || mob.nosyApproach.until <= 0) {
         if (!mob.bubble) this.speak(mob, villagerRemark({ role: mob.role, mood: mob.mood, nearBuild: mob.nosyApproach.build, outside: !mob.village }, Math.random), 8);
         mob.nosyApproach = null; mob.state = 'greet'; mob.stateTimer = 1.5;
+        if (this.nosyToken === mob) this.nosyToken = null;
       }
     } else if (mob.chatting || (distP < 3.5 && !player.dead)) {
       mob.state = 'greet';
