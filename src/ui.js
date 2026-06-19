@@ -66,6 +66,7 @@ export class UI {
     this.dreadOverlay.id = 'dread-overlay';
 
     const stats = this.el('div', '', this.hud); stats.id = 'stats';
+    this.brassEl = this.el('div', '', stats); this.brassEl.id = 'brass';
     this.heartsEl = this.el('div', '', stats); this.heartsEl.id = 'hearts';
     this.hungerEl = this.el('div', '', stats); this.hungerEl.id = 'hunger';
     this.heartImgs = []; this.foodImgs = [];
@@ -151,6 +152,8 @@ export class UI {
     this.el('div', 'muted-note', this.titleScreen, 'New to t&rsquo; moor? <b>Give &lsquo;Ow Ter Play&rsquo; a read</b> &mdash; how to build, ride, drive an&rsquo; stay alive.');
     this.el('div', 'muted-note', this.titleScreen, 'Watch thissen at neet &mdash; t&rsquo; barghest walks when t&rsquo; sun goes down.');
     this.el('div', 'title-foot', this.titleScreen, 'Created purely with AI by a non-coder &middot; procedurally generated, not a single asset file &middot; villagers, jobs an&rsquo; adventures run on large local AI models');
+    // plain-English link (not dialect) to the full technical write-up — served statically at /about.html
+    this.el('div', 'title-foot title-about', this.titleScreen, '<a href="/about.html" target="_blank" rel="noopener">How Moorstead was built, and how it works: full technical write-up &rarr;</a>');
 
     // ---------- pause ----------
     this.pauseScreen = this.el('div', 'overlay hidden', body);
@@ -568,18 +571,32 @@ export class UI {
         this.renderChatActions();
       });
     }
-    for (const t of q.tradesFor(v.t.name)) {
-      const label = `${t.give[1]}\u00d7 ${itemName(t.give[0])} \u2192 ${t.get[1]}\u00d7 ${itemName(t.get[0])}`;
-      const b = this.el('button', 'mc chat-btn trade-btn' + (t.unlocked ? '' : ' locked'), this.chatQuestRow, label);
-      if (t.unlocked) {
+    const econ = this.game.economy;
+    if (econ) {
+      for (const { id, price } of econ.buyList(v)) {
+        const b = this.el('button', 'mc chat-btn trade-btn', this.chatQuestRow,
+          `Buy ${itemName(id)} for <b>${econ.format(price)}</b>`);
+        if (econ.canAfford(price)) {
+          b.addEventListener('click', () => {
+            if (econ.doBuy(v, id)) {
+              v.chatLog.push({ who: 'sys', text: `Bought ${itemName(id)} for ${econ.format(price)}.` });
+              this.renderChatLog(); this.renderChatActions();
+            }
+          });
+        } else {
+          b.classList.add('locked');
+          this.bindTooltip(b, `Tha needs ${econ.format(price)} for that.`);
+        }
+      }
+      for (const { id, price } of econ.sellList(v)) {
+        const b = this.el('button', 'mc chat-btn trade-btn', this.chatQuestRow,
+          `Sell ${itemName(id)} for <b>${econ.format(price)}</b>`);
         b.addEventListener('click', () => {
-          if (q.doTrade(t)) {
-            v.chatLog.push({ who: 'sys', text: `Swapped: ${label}.` });
-            this.renderChatLog();
+          if (econ.doSell(v, id)) {
+            v.chatLog.push({ who: 'sys', text: `Sold ${itemName(id)} for ${econ.format(price)}.` });
+            this.renderChatLog(); this.renderChatActions();
           }
         });
-      } else {
-        this.bindTooltip(b, 'Tha needs better standing in t\u2019 village for this swap.');
       }
     }
   }
@@ -771,6 +788,7 @@ export class UI {
     const survival = !player.creative;
     this.heartsEl.style.visibility = survival ? 'visible' : 'hidden';
     this.hungerEl.style.visibility = survival ? 'visible' : 'hidden';
+    if (this.brassEl && this.game.economy) this.brassEl.textContent = '¤ ' + this.game.economy.format(player.brass);
 
     // air bubbles
     const showAir = survival && player.air < 10;

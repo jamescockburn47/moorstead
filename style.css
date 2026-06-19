@@ -115,6 +115,10 @@ input.seed {
 /* once the real voxel world is meshed in behind the UI, drop the gradient to reveal it */
 #title-screen.world-shown { background: none; }
 .title-foot { position: absolute; left: 4.5vw; bottom: 12px; max-width: 60vw; font-size: 12px; color: #9a948a; }
+/* plain-English link to the technical write-up — sits just above the dialect foot */
+.title-about { bottom: 34px; max-width: 70vw; font-size: 13px; }
+.title-about a { color: var(--gold); text-decoration: none; border-bottom: 1px dotted rgba(216,185,90,0.5); }
+.title-about a:hover { border-bottom-color: var(--gold); }
 /* the title menu sits in a left column so it doesn't cover the train; left-align its buttons */
 #title-screen button.mc { margin-left: 0; margin-right: 0; }
 
