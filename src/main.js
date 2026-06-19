@@ -57,7 +57,7 @@ function lerpAngle(a, b, t) {
   return a + d * t;
 }
 import { Entities } from './entities.js';
-import { PET_BENEFIT, PET_KINDS } from './pets.js';
+import { PET_BENEFIT, PET_KINDS, TAME_GOAL } from './pets.js';
 import { EXTRA_FOLK, moodWord } from './villagerlife.js';
 import { Sky } from './sky.js';
 import { AudioEngine } from './audio.js';
@@ -1091,6 +1091,23 @@ class Game {
     const hit = this.entities.raycastMobs(eye.x, eye.y, eye.z, d.x, d.y, d.z, 5);
     if (hit && hit.mob.type === 'villager' && !hit.mob.isRemotePlayer) return hit.mob;
     return null;
+  }
+
+  // The nearest un-owned tameable beast tha's roughly facing — a forgiving cone, not a
+  // pin-sharp ray, so feeding an' the "feed her" prompt work even wi' a bairn's loose aim.
+  aimedTameable() {
+    if (!this.world || !this.entities || this.state !== 'playing') return null;
+    const eye = this.player.eyePos(), d = this.lookDir();
+    let best = null, bestDist = Infinity;
+    for (const m of this.entities.mobs) {
+      if (!m || m.dead || m.owner || !m.t || !m.t.tameable || !m.t.tameFood) continue;
+      const vx = m.pos.x - eye.x, vy = (m.pos.y + (m.t.h || 1) * 0.5) - eye.y, vz = m.pos.z - eye.z;
+      const dist = Math.hypot(vx, vy, vz);
+      if (dist < 0.01 || dist > 5) continue;
+      if ((vx * d.x + vy * d.y + vz * d.z) / dist < 0.9) continue; // ~25° cone ahead
+      if (dist < bestDist) { bestDist = dist; best = m; }
+    }
+    return best;
   }
 
   openChat(villager) {
@@ -2272,8 +2289,10 @@ class Game {
     // a fishing rod? cast toward t' watter, or reel in
     if (held.id === I.FISHING_ROD) { this.useRod(); return; }
 
-    // scran
+    // scran — but if tha's holding a beast's favourite an' facing her, feed her instead o' scrannin' it
     if (FOODS[held.id]) {
+      const tame = this.aimedTameable();
+      if (tame && tame.t.tameFood && tame.t.tameFood.includes(held.id)) { this.feedTame(tame, held); return; }
       if (this.player.eat(this.player.hotbar, this.audio)) this.ui.invDirty = true;
       else if (this.player.hunger >= 20) this.ui.toast('Tha&rsquo;s full to bustin&rsquo;.');
       return;
@@ -2739,11 +2758,23 @@ class Game {
     // block highlight + interact hint
     if (playing && !this.player.dead) {
       const vv = this.villagerInView();
+      const tame = vv ? null : this.aimedTameable();
       const hit = this.targetBlock();
       if (vv) {
         // a villager under the crosshair — talk to them wi' T (shown on screen, not in-world)
         this.highlight.visible = false;
         this.ui.interactHint.textContent = `Press T to talk to ${vv.displayName || vv.t.name}`;
+      } else if (tame) {
+        // a tameable beast tha's facing — tell t' player they can feed her, an' wi' what
+        this.highlight.visible = false;
+        const held = this.player.heldItem();
+        const food = tame.t.tameFood || [];
+        if (held && food.includes(held.id)) {
+          const prog = Math.min(TAME_GOAL, Math.round(tame.tameProg || 0));
+          this.ui.interactHint.textContent = `Right-click: feed her (${prog}/${TAME_GOAL} — keep feedin’ her to tame her)`;
+        } else {
+          this.ui.interactHint.textContent = `Hold ${food.length ? itemName(food[0]) : 'her favourite'} an’ right-click to tame her`;
+        }
       } else if (hit) {
         this.highlight.visible = true;
         this.highlight.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
