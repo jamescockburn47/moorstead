@@ -18,6 +18,7 @@ Success: a player can buy or produce goods in one place, **book a shipment** by 
 - The price gradient (booked beats drop-in) as the only anti-cheat.
 - Farm-gate booking: originate a shipment from a pen or farm within reach of the line.
 - Pending shipments persist across save/load.
+- A shallow, slowly-refilling brass purse on each village vendor, so drop-in selling cannot scale into a bulk income route (see §4). This is the minimal local version; full dynamic stock with restock and oversupply price-crashes is SP3.
 
 **Out (later):**
 - The monthly fair and shared cross-player stock (Slice B).
@@ -45,6 +46,8 @@ Success: a player can buy or produce goods in one place, **book a shipment** by 
 - Worst: a drop-in at wherever you are, paid local sell-price minus the penalty.
 - Because the high price is only ever reached by booking a shipment that genuinely moves the goods to another market, there is nothing to game. A drop-in is always available but always worse, so no one is forced to ship and no one profits by faking it. This is what replaces the sealed hold and origin stamps we considered earlier.
 - Tuning target: a booked run to a strong market should clearly beat a drop-in of the same goods, after the delivery wait, by enough that shipping feels worth the bother. Numbers live in the tuning table (§11).
+
+**Why bulk can't take the lazy route.** A worse per-unit price alone would not stop a player who mines a mountain of coal or jet from simply drop-in-selling the lot. So a village vendor has a shallow brass purse that refills slowly: drop-in selling draws it down, and once it is low the vendor pays a pittance or declines until it recovers. A vendor will take a little off your hands, never a wagonload. Bulk income therefore has nowhere to go but a shipment to a market (or, later, the fair), which has the deep pockets to absorb it. Mining a mountain only pays if you ship it; the drop-in stays small change.
 
 ## 5. Booking and delivery
 
@@ -91,11 +94,11 @@ Success: a player can buy or produce goods in one place, **book a shipment** by 
 
 ## 11. Tuning knobs
 
-The drop-in penalty; the per-shipment size cap; the delivery delay per route length; and (carried from SP1) the regional spreads that set how much a good gains by being shipped to the right market.
+The drop-in penalty; the per-shipment size cap; the delivery delay per route length; the village vendor's brass purse size and how fast it refills (this sets how much drop-in trade a vendor absorbs before bulk must be shipped); and (carried from SP1) the regional spreads that set how much a good gains by being shipped to the right market.
 
 ## 12. Testing
 
-- **Headless (extend `scripts/verify-economy.mjs`):** a booked shipment to a dear market beats a drop-in of the same goods (the gradient holds); the drop-in penalty is applied; booking to the current village is refused; `bookShipment` removes the goods and records the locked brass; a shipment past its arrival time credits exactly that brass and clears; pending shipments survive serialize/deserialize.
+- **Headless (extend `scripts/verify-economy.mjs`):** a booked shipment to a dear market beats a drop-in of the same goods (the gradient holds); the drop-in penalty is applied; booking to the current village is refused; `bookShipment` removes the goods and records the locked brass; a shipment past its arrival time credits exactly that brass and clears; pending shipments survive serialize/deserialize; selling in bulk to one village vendor as drop-ins hits steeply diminishing returns as its purse drains, while shipping the same bulk to a market pays in full (drop-in cannot replace shipping for volume).
 - **Live (preview):** book a shipment at a station and confirm the goods leave the pack and the brass arrives after the wait; sell a drop-in and confirm it pays less than the same goods shipped; book from the lineside near a pen (farm-gate).
 
 ## 13. Open decisions (defaults chosen, change at review)
