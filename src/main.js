@@ -11,6 +11,7 @@ import { World } from './world.js';
 import { Player } from './player.js';
 import * as npc from './npc.js';
 import { Quests } from './quests.js';
+import { Economy } from './economy.js';
 import { Milestones } from './milestones.js';
 import { Net } from './multiplayer.js';
 import { initTelemetry } from './telemetry.js';
@@ -280,6 +281,7 @@ class Game {
     this.standing = null;
     this.standingData = null;
     this.quests = new Quests(this);
+    this.economy = new Economy(this);
     this.milestones = new Milestones(this);
     if (this.rails) this.rails.dispose();
     this.rails = new Rails(this.scene, this.world.gen.geo); // t' permanent way, drawn proper
