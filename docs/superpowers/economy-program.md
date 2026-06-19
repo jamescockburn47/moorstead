@@ -56,7 +56,7 @@ Build order: SP1 → SP2 → SP3 → SP4 → SP5, with SP4 a large parallel trac
 
 - All of the above, plus the SP1+SP2 review hardening, is **committed and pushed to `origin/main`** and **deployed to production**. **Git push does NOT auto-deploy** (the GitHub link is metadata-only — verified: a push registered no build): deploy with `npx vercel deploy --prod --yes` from the repo root (Vercel CLI auth is stored locally; `.vercel/` sets the project), or `deploy/ship.ps1`. The current build is **live at www.moorstead.app** (apex `moorstead.app`/`moorcraft.app` 308-redirect there; `/about.html` returns 200). Full deploy flow is in the `moorcraft-evo-stack` memory.
 - `public/about.html` is now **tracked and deployed** — the `/about.html` 404 risk is closed.
-- The game's live tunnel may be **down** (it was taken down for the earlier fine-tune run; restore with `sudo systemctl start sovren-cloudflared` on the EVO box; see the `moorcraft-evo-stack` memory). Unrelated to the economy code.
+- The game's live Cloudflare tunnel (`sovren-cloudflared`) is **up + enabled** (restored 2026-06-19; it had been left failed since the fine-tune takedown, which silently broke **all** logins — the Vercel client still loads, but `/dash` login and the `/ws` relay return 530 without it). **Debug rule:** client-loads-but-can't-log-in ⇒ check `systemctl is-active sovren-cloudflared` on the EVO box first. See the `moorcraft-evo-stack` memory.
 
 ## Spec/plan index
 
