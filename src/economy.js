@@ -177,4 +177,34 @@ export class Economy {
     this.game.audio.pickup();
     return true;
   }
+
+  // --- SP2: drop-in selling, capped by the vendor's shallow brass purse ---
+  purseOf(name) {
+    const key = (name || '').toLowerCase();
+    const purses = this.game.player.vendorPurses;
+    if (purses[key] == null) purses[key] = PURSE_MAX;
+    return purses[key];
+  }
+  refillPurses(now) {
+    const purses = this.game.player.vendorPurses;
+    const dt = Math.max(0, now - (this.game.player.pursesAt || 0));
+    if (dt <= 0) return;
+    for (const k of Object.keys(purses)) purses[k] = Math.min(PURSE_MAX, purses[k] + PURSE_REFILL * dt);
+    this.game.player.pursesAt = now;
+  }
+  dropInSell(villager, itemId) {
+    if (this.game.player.countItem(itemId) < 1) return false;
+    const price = dropInPrice(itemId, this.villageOf(villager), this.standing());
+    if (price == null) return false;
+    const name = villager && villager.t && villager.t.name;
+    if (this.purseOf(name) < price) {
+      this.game.ui.toast(`${(villager && villager.displayName) || 'They'}'ve no more brass to spare just now.`);
+      return false;
+    }
+    this.game.player.removeItem(itemId, 1);
+    this.game.player.vendorPurses[(name || '').toLowerCase()] -= price;
+    this.earn(price);
+    this.game.audio.pickup();
+    return true;
+  }
 }

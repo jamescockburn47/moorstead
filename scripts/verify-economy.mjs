@@ -61,6 +61,7 @@ function fakeGame(brass = STARTING_BRASS, held = {}) {
   return {
     player: {
       brass,
+      shipments: [], vendorPurses: {}, pursesAt: 0,
       countItem(id) { return slots.filter(s => s.id === id).reduce((a, s) => a + s.n, 0); },
       addItem(id, n) { slots.push({ id, n }); return 0; },
       removeItem(id, n) { for (const s of slots) if (s.id === id) { const t = Math.min(n, s.n); s.n -= t; n -= t; } return n; },
@@ -148,6 +149,25 @@ function fakeGame(brass = STARTING_BRASS, held = {}) {
   (p2.vendorPurses['tom'] === 42 && p2.pursesAt === 9 ? ok : bad)('vendor purses survive save/load');
   const p3 = new Player(stub); p3.deserialize({ pos: { x: 0, y: 0, z: 0 } });
   (p3.shipments.length === 0 && p3.pursesAt === 0 ? ok : bad)('an old save migrates to empty trade state');
+}
+
+// --- SP2 Task 3: the vendor purse caps drop-in volume ---
+{
+  const g = fakeGame(0, { [I.JET_GEM]: 50 });
+  const e = new Economy(g);
+  const v = { t: { name: 'fishwife annie', village: 'Whitby' }, displayName: 'Annie' };
+  let sales = 0, refusals = 0;
+  for (let i = 0; i < 50; i++) (e.dropInSell(v, I.JET_GEM) ? sales++ : refusals++);
+  (sales > 0 && refusals > 0 ? ok : bad)(`drop-in sells a few then the purse is tapped (${sales} sold, ${refusals} refused)`);
+  (g.player.brass <= PURSE_MAX ? ok : bad)(`drop-in income is capped by the purse (earned ${g.player.brass}d, cap ${PURSE_MAX}d)`);
+  (g.player.countItem(I.JET_GEM) === 50 - sales ? ok : bad)('only the sold jet left the pack');
+}
+{
+  const g = fakeGame(0, {});
+  const e = new Economy(g);
+  g.player.vendorPurses['annie'] = 0; g.player.pursesAt = 0;
+  e.refillPurses(1);
+  (g.player.vendorPurses['annie'] > 0 ? ok : bad)(`a drained purse refills over time (now ${g.player.vendorPurses['annie']}d)`);
 }
 
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));
