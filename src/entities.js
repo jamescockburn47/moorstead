@@ -7,6 +7,9 @@ import { hash2i } from './noise.js';
 import { TAME_GOAL, FOLLOW_RANGE, feedTrust, chooseName } from './pets.js';
 import { dayPhase, villagerRemark } from './villagerlife.js';
 import { HEIGHT, WATER_LEVEL } from './defs.js';
+import { flockCentroid, driveTarget, dogGoal } from './herding.js';
+
+const HERD_RADIUS = 18; // how near a working dog will gather loose sheep
 
 const GRAVITY = 26;
 
@@ -1259,8 +1262,40 @@ export class Entities {
     return null;
   }
 
+  // --- herding: a working dog (an owned dog) + thi own pressure drive a wild flock ---
+  // Each frame, tags nearby loose sheep with a herdTarget (steered to in the state machine)
+  // and sets the dog's herdGoal (where she flanks/presses). Off with no working dog or on
+  // "heel". Tuning lives in HERD_RADIUS + the pressure strengths + the speed multipliers.
+  herd(dt, player) {
+    const cmd = (this.game && this.game.herdCmd) || 'heel';
+    const dog = this.mobs.find(m => m && !m.dead && m.owner && m.type === 'dog');
+    if (!dog || cmd === 'heel') {
+      if (dog) dog.herdGoal = null;
+      for (const m of this.mobs) if (m && m.herding) { m.herding = false; if (m.state === 'herd') m.state = 'idle'; }
+      return;
+    }
+    const flock = this.mobs.filter(m => m && !m.dead && !m.owner && m.type === 'sheep' &&
+      Math.hypot(m.pos.x - dog.pos.x, m.pos.z - dog.pos.z) < HERD_RADIUS);
+    for (const m of this.mobs) if (m && m.herding && !flock.includes(m)) { m.herding = false; if (m.state === 'herd') m.state = 'idle'; }
+    if (!flock.length) { dog.herdGoal = null; return; }
+    const centroid = flockCentroid(flock.map(m => ({ x: m.pos.x, z: m.pos.z })));
+    if (cmd === 'lie-down') {
+      dog.herdGoal = { x: dog.pos.x, z: dog.pos.z };
+    } else if (cmd === 'walk-on') {
+      // press in toward the flock but hold a stand-off — don't barge through them
+      const vx = dog.pos.x - centroid.x, vz = dog.pos.z - centroid.z, vd = Math.hypot(vx, vz) || 1;
+      dog.herdGoal = { x: centroid.x + (vx / vd) * 4, z: centroid.z + (vz / vd) * 4 };
+    } else {
+      dog.herdGoal = dogGoal(cmd, centroid, dog.pos); // come-bye / away flank around the flock
+    }
+    const pressures = [{ x: dog.pos.x, z: dog.pos.z, strength: 2 }, { x: player.pos.x, z: player.pos.z, strength: 1 }];
+    const target = driveTarget(centroid, pressures);
+    for (const m of flock) { m.herding = true; m.herdTarget = target; m.state = 'herd'; }
+  }
+
   updateMobs(dt, player, isNight, audio) {
     const geo = this.world.gen.geo;
+    this.herd(dt, player);
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
       this.spawnTimer = 1.2;
@@ -1334,6 +1369,11 @@ export class Entities {
           if (ld > 1.6) { wishX = lx / (ld || 1); wishZ = lz / (ld || 1); speed = t.speed; }
           mob.state = 'follow';
         }
+      } else if (mob.herdGoal) {
+        // a working dog away on a flank/command — make for the goal, not back to heel
+        const gx = mob.herdGoal.x - mob.pos.x, gz = mob.herdGoal.z - mob.pos.z, gd = Math.hypot(gx, gz);
+        if (gd > 0.5) { wishX = gx / gd; wishZ = gz / gd; speed = t.speed * 1.5; }
+        mob.state = 'follow'; // reuse 'follow' so the state machine keeps this wish
       } else if ((mob.owner || t.follower) && distP < (mob.owner ? FOLLOW_RANGE : 26) && !player.dead) {
         // a kept beast (or a found lamb) trots after thee, keeping close
         if (distP > 2.4) {
@@ -1426,6 +1466,9 @@ export class Entities {
           if (audio) { audio.hurt(); if (mob.type === 'bull') audio.bullSnort(0.4); else audio.mobAttack('barghest'); }
         }
         if (distP > (t.boss ? 60 : 34) || player.dead || player.creative) mob.state = 'idle';
+      } else if (mob.state === 'herd' && mob.herdTarget) {
+        const tx = mob.herdTarget.x - mob.pos.x, tz = mob.herdTarget.z - mob.pos.z, td = Math.hypot(tx, tz);
+        if (td > 0.6) { wishX = tx / td; wishZ = tz / td; speed = t.speed * 0.85; }
       } else { // idle / wander
         if (mob.stateTimer <= 0) {
           mob.stateTimer = 2 + Math.random() * 5;

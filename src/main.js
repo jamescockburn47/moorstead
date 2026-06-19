@@ -12,6 +12,7 @@ import { Player } from './player.js';
 import * as npc from './npc.js';
 import { Quests } from './quests.js';
 import { Economy, bestMarket, FREIGHT_ALLOWANCE } from './economy.js';
+import { commandFromKey } from './herding.js';
 import { Milestones } from './milestones.js';
 import { Net } from './multiplayer.js';
 import { initTelemetry } from './telemetry.js';
@@ -461,6 +462,17 @@ class Game {
         }
         if (e.code === 'KeyN') this.trySleep();
         if (e.code === 'KeyM') { this.audio.setMuted(!this.audio.muted); this.ui.toast(this.audio.muted ? 'Sound off.' : 'Sound on.'); }
+        // sheepdog whistles (arrow keys) — work a flock wi' thi dog; H brings her to heel
+        const whistle = commandFromKey(e.code);
+        if (whistle || e.code === 'KeyH') {
+          e.preventDefault();
+          this.herdCmd = whistle || 'heel';
+          if (this.entities && this.entities.mobs.some(m => m && m.owner && m.type === 'dog')) {
+            const lbl = { 'come-bye': 'Come bye!', 'away': 'Away!', 'walk-on': 'Walk on.', 'lie-down': 'Lie down.', 'heel': 'Heel!' }[this.herdCmd];
+            this.ui.toast(`\u{1F415} <b>${lbl}</b>`, 1200);
+          }
+          return;
+        }
         const num = parseInt(e.key);
         if (num >= 1 && num <= 9) { this.player.hotbar = num - 1; this.ui.invDirty = true; }
       } else if (this.state === 'inv' || this.state === 'range') {
