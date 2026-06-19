@@ -67,11 +67,15 @@ export function priceOf(itemId, village, side, standingIdx = 0) {
 }
 
 // --- SP2 trade-logistics tuning (all adjustable) ---
+// TIME CONTRACT: the `now` passed to bookShipment/tickShipments/refillPurses is GAME-DAYS,
+// i.e. (sky.day + sky.time) — monotonic and save-persisted, so a shipment booked before a
+// save still arrives after reload. Never wall-clock (performance.now/Date.now): milliseconds
+// would make delivery effectively instant and refill a purse to full every frame.
 export const DROP_IN_PENALTY = 0.6;   // a drop-in pays this fraction of the local sell price
 export const FREIGHT_ALLOWANCE = 96;  // max units a merchant may ship at once (Slice A fixed; SP5 upgrades it)
-export const DELIVERY_DELAY = 0.5;    // game-time a shipment takes to arrive (unit fixed when wired in plan 2)
+export const DELIVERY_DELAY = 0.5;    // game-days a shipment takes to arrive (half a day)
 export const PURSE_MAX = 120;         // a village vendor's drop-in purse cap, in pence
-export const PURSE_REFILL = 120;      // pence a purse recovers per unit of game-time, toward PURSE_MAX
+export const PURSE_REFILL = 120;      // pence a purse recovers per game-day, toward PURSE_MAX (≈ one day to refill)
 
 // What a vendor pays for one unit sold on the spot: the local sell price, penalised.
 export function dropInPrice(itemId, village, standingIdx = 0) {
@@ -112,6 +116,14 @@ export const VENDORS = {
 export function vendorFor(name) {
   const n = (name || '').toLowerCase();
   for (const key of Object.keys(VENDORS)) if (n.includes(key)) return VENDORS[key];
+  return null;
+}
+
+// The stable vendor identity (the matched roster key), used to key the drop-in purse so it
+// tracks the vendor, not a decorated display name like "Fishwife Annie". Null = no vendor.
+export function vendorKey(name) {
+  const n = (name || '').toLowerCase();
+  for (const key of Object.keys(VENDORS)) if (n.includes(key)) return key;
   return null;
 }
 
@@ -180,7 +192,7 @@ export class Economy {
 
   // --- SP2: drop-in selling, capped by the vendor's shallow brass purse ---
   purseOf(name) {
-    const key = (name || '').toLowerCase();
+    const key = vendorKey(name) || (name || '').toLowerCase();
     const purses = this.game.player.vendorPurses;
     if (purses[key] == null) purses[key] = PURSE_MAX;
     return purses[key];
@@ -197,12 +209,13 @@ export class Economy {
     const price = dropInPrice(itemId, this.villageOf(villager), this.standing());
     if (price == null) return false;
     const name = villager && villager.t && villager.t.name;
+    const key = vendorKey(name) || (name || '').toLowerCase();
     if (this.purseOf(name) < price) {
       this.game.ui.toast(`${(villager && villager.displayName) || 'They'}'ve no more brass to spare just now.`);
       return false;
     }
     this.game.player.removeItem(itemId, 1);
-    this.game.player.vendorPurses[(name || '').toLowerCase()] -= price;
+    this.game.player.vendorPurses[key] -= price;
     this.earn(price);
     this.game.audio.pickup();
     return true;
@@ -210,7 +223,15 @@ export class Economy {
 
   // --- SP2: book a forward shipment to a distant market; it pays on arrival ---
   bookShipment(goods, destVillage, originVillage, now) {
-    if (!destVillage || destVillage === originVillage) return { ok: false, why: 'same place' };
+    // Validate the parcel at the engine boundary: counts arrive from UI and a
+    // shipment mints brass, so a malformed parcel must never book (uncheatable money).
+    if (!Array.isArray(goods) || goods.length === 0) return { ok: false, why: 'nothing to ship' };
+    for (const g of goods) {
+      if (!Array.isArray(g) || g.length < 2 || !Number.isInteger(g[1]) || g[1] <= 0)
+        return { ok: false, why: 'bad quantity' };
+    }
+    const norm = s => (s || '').trim().toLowerCase();
+    if (!destVillage || norm(destVillage) === norm(originVillage)) return { ok: false, why: 'same place' };
     const units = goods.reduce((a, g) => a + g[1], 0);
     if (units > FREIGHT_ALLOWANCE) return { ok: false, why: 'over freight allowance' };
     for (const [id, n] of goods) if (this.game.player.countItem(id) < n) return { ok: false, why: 'goods not held' };

@@ -72,6 +72,18 @@ function fakeGame(brass = STARTING_BRASS, held = {}) {
     quests: { standingIndex: () => 0 },
   };
 }
+
+// Wrap a real Player (so serialize/deserialize is genuinely exercised) in a minimal game.
+function gameWith(player) {
+  return {
+    player,
+    ui: { invDirty: false, toast() {} },
+    audio: { pickup() {} },
+    dropAtPlayer() {},
+    quests: { standingIndex: () => 0 },
+    geo: { village: { name: 'Whitby' } },
+  };
+}
 {
   const g = fakeGame(20);
   const e = new Economy(g);
@@ -188,6 +200,67 @@ function fakeGame(brass = STARTING_BRASS, held = {}) {
   (e.bookShipment([[I.COAL_LUMP, 5]], 'Rosedale Abbey', 'Rosedale Abbey', 0).ok === false ? ok : bad)('cannot ship to where you stand');
   (e.bookShipment([[I.COAL_LUMP, 999]], 'Whitby', 'Rosedale Abbey', 0).ok === false ? ok : bad)('over the freight allowance is refused');
   (e.bookShipment([[I.COAL_LUMP, 5]], 'Whitby', 'Rosedale Abbey', 0).ok === true ? ok : bad)('a valid shipment within allowance books');
+}
+
+// --- SP2 Task 5: bookShipment rejects malformed parcels (money is uncheatable) ---
+{
+  const g = fakeGame(0, { [I.COAL_LUMP]: 200 });
+  const e = new Economy(g);
+  (e.bookShipment([], 'Whitby', 'Rosedale Abbey', 0).ok === false ? ok : bad)('an empty parcel is refused');
+  (e.bookShipment([[I.COAL_LUMP, -5]], 'Whitby', 'Rosedale Abbey', 0).ok === false ? ok : bad)('a negative quantity is refused');
+  (e.bookShipment([[I.COAL_LUMP, 2.5]], 'Whitby', 'Rosedale Abbey', 0).ok === false ? ok : bad)('a fractional quantity is refused');
+  (e.bookShipment([[I.COAL_LUMP, 100], [I.COAL_LUMP, -50]], 'Whitby', 'Rosedale Abbey', 0).ok === false ? ok : bad)('a +/- parcel that nets under the cap is still refused');
+  (e.bookShipment([[I.COAL_LUMP, 5]], 'Whitby', 'whitby', 0).ok === false ? ok : bad)('the same place is refused case-insensitively');
+  (g.player.countItem(I.COAL_LUMP) === 200 && g.player.shipments.length === 0 ? ok : bad)('a refused booking removes no goods and records no shipment');
+}
+
+// --- SP2 Task 6: the drop-in purse is keyed to the vendor, not the raw name ---
+{
+  const g = fakeGame(0, { [I.JET_GEM]: 5 });
+  const e = new Economy(g);
+  const v = { t: { name: 'Fishwife Annie', village: 'Whitby' }, displayName: 'Annie' };
+  e.dropInSell(v, I.JET_GEM);
+  (g.player.vendorPurses['annie'] != null ? ok : bad)('the purse is keyed to the vendor (annie)');
+  (g.player.vendorPurses['fishwife annie'] == null ? ok : bad)('the purse is not keyed to the decorated display name');
+}
+
+// --- SP2 Task 7: coverage gaps the review flagged (existing behaviour, pinned) ---
+{
+  // a shipment booked, saved, reloaded, then delivered in the next session
+  const stub = { getBlock() { return 0; }, isLoaded() { return true; } };
+  const p1 = new Player(stub); p1.addItem(I.COAL_LUMP, 20);
+  const e1 = new Economy(gameWith(p1));
+  const r = e1.bookShipment([[I.COAL_LUMP, 10]], 'Whitby', 'Rosedale Abbey', 0);
+  const p2 = new Player(stub); p2.deserialize(p1.serialize());
+  const before = p2.brass;
+  const e2 = new Economy(gameWith(p2));
+  const delivered = e2.tickShipments(DELIVERY_DELAY);
+  (delivered.length === 1 && p2.brass === before + r.brass && p2.shipments.length === 0 ? ok : bad)
+    (`a shipment booked before a save delivers after reload (purse ${p2.brass}d)`);
+}
+{
+  // draining one vendor's purse must leave another's untouched
+  const g = fakeGame(0, { [I.JET_GEM]: 50 });
+  const e = new Economy(g);
+  const annie = { t: { name: 'fishwife annie', village: 'Whitby' }, displayName: 'Annie' };
+  for (let i = 0; i < 50; i++) e.dropInSell(annie, I.JET_GEM);
+  (e.purseOf('owd tom') === PURSE_MAX ? ok : bad)('draining one vendor purse leaves another full');
+}
+{
+  // a refill must clamp at the cap regardless of how long it has been
+  const g = fakeGame(0, {});
+  const e = new Economy(g);
+  g.player.vendorPurses['annie'] = PURSE_MAX - 5; g.player.pursesAt = 0;
+  e.refillPurses(100);
+  (g.player.vendorPurses['annie'] === PURSE_MAX ? ok : bad)('a refill clamps at the cap, never above');
+}
+{
+  // the deal's village: the villager's home if known, else where the player stands
+  const g = fakeGame(0, {});
+  g.geo = { village: { name: 'Staithes' } };
+  const e = new Economy(g);
+  (e.villageOf({ t: { name: 'annie' } }) === 'Staithes' ? ok : bad)('villageOf falls back to the player village');
+  (e.villageOf({ t: { name: 'annie', village: 'Whitby' } }) === 'Whitby' ? ok : bad)('villageOf prefers the villager home');
 }
 
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));

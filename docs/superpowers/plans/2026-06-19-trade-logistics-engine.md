@@ -366,3 +366,16 @@ git commit -m "feat(economy): book and deliver forward shipments with a freight 
 - A per-frame hook in `main.js` that calls `economy.refillPurses(gameTime)` and `economy.tickShipments(gameTime)` with the real game clock (and fixes the `now` unit, so `DELIVERY_DELAY`/`PURSE_REFILL` get real values).
 - Farm-gate: allow the ship panel to open lineside (a proximity check against `rails.js`), not only at stations.
 - Polish: distance-scaled delivery delay so far markets take longer; tie delivery to the train actually reaching the station so it reads as "the train brought it."
+
+## Plan 2 acceptance criteria — from the SP1+SP2 code review (2026-06-19)
+
+These are blocking conditions on the wiring. Numbers map to the review.
+
+- **#2 — the till sell must be *fully replaced*, not duplicated.** Today the live till calls `doSell` (`ui.js:595`), which pays the full destination price instantly with no purse cap — strictly better than shipping, so the trade gradient is currently *inverted* and there is no reason to ship. The wiring must switch the till to `dropInSell` and leave **no** reachable path that still pays the full uncapped `doSell` price. Verify in-game: selling in person pays the penalised drop-in price, the purse taps out after a few sales, and no button pays full price.
+- **#3 — feed game-days, never wall-clock.** `bookShipment`/`tickShipments`/`refillPurses` take `now = sky.day + sky.time` (the TIME CONTRACT comment at the top of the SP2 block in `economy.js` is the source of truth). Passing `performance.now()`/`Date.now()` makes delivery instant and refills a purse every frame. Verify: a shipment booked then save→reload arrives at the right game-time; a drained purse takes ~one game-day to refill, not a frame. `bookShipment`'s `originVillage` should be the player's current village (`geo.village.name`); dest/origin are now compared case-insensitively.
+- **#1 — SP2 is friction, not scarcity (do not mis-tune).** Even after #2, `bookShipment` pays from an effectively infinite destination till, and brass still has no sink. The purse caps only the *local drop-in* path. `PURSE_MAX`/`PURSE_REFILL` are friction knobs, not a money sink — real scarcity (finite vendor brass, stock-based restock, oversupply price-crash) is SP3. Don't crank the purse trying to fake scarcity here.
+
+**Already addressed in the engine (this review, tests added — `verify-economy.mjs` Tasks 5–7, 63 assertions green):**
+- **#4** — `bookShipment` now rejects empty / negative / fractional / mixed-sign parcels and refuses same-place case-insensitively (money is uncheatable at the engine boundary). The ship panel must still pass positive integer counts and should surface the returned `{ok:false, why}` to the player rather than failing silently.
+- **#5** — the drop-in purse is now keyed to the **vendor identity** (`vendorKey`), not the decorated display name, so "Fishwife Annie" and "Annie" share one purse. Any UI showing purse state must resolve via `vendorKey`.
+- Coverage gaps closed: cross-session shipment delivery (book → save → reload → deliver), per-vendor purse independence, refill clamps at `PURSE_MAX`, and `villageOf` home/fallback. The one integration test still owed at wiring time: book → reload → deliver against the *real* game clock once `now` is wired.
