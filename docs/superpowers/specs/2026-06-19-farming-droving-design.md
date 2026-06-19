@@ -8,7 +8,9 @@
 
 Let a player live the hill-farmer fantasy: gather wild Swaledales off the moor with a working sheepdog, keep a flock in a fold, earn official farm status, then **drove the live animals to the market town and sell them there** — without having to be near the railway. Atmospheric (horses, dogs, a flock moving as a body across the moor), legible to a ten-year-old, and solo-complete.
 
-Success: a player can (1) work a sheepdog to gather a scattered flock and pen it; (2) build up to a registered farm and be told, in-game, exactly how; (3) drove the flock to market and get paid. Every step is explained where the player will look.
+Success: a player can (1) work a sheepdog to gather a scattered flock and pen it; (2) build up to a registered farm and be told, in-game, exactly how; (3) drove the flock to market and get paid **handsomely enough that the whole undertaking is plainly worth it**. Every step is explained where the player will look.
+
+**The financial upside is the make-or-break lever.** Droving is the most effort in the game (taming a flock, building a fold, registering, then a risky overland drive). If it doesn't pay clearly more than the easy paths, no one will do it and the whole vertical is dead weight. So the reward must sit at the very top of the income gradient — see §5.
 
 ## 2. Scope — three slices
 
@@ -73,6 +75,7 @@ The farmer's "needn't be near the line" path — the physical alternative to the
 
 - A registered farmer can take a penned flock **off the fold as a mobile herd** and drove it (horse + dog, Slice 1 mechanics) overland to the **market town**.
 - At the market, sell the live herd / **book a price** → brass, integrating with the existing economy (live-animal value via `priceOf`/a livestock price; reuse the SP2 sale/booking primitives where they fit).
+- **The payout — top of the gradient (the make-or-break).** Droving is the highest-effort, highest-risk sale, so it must pay the most. A live, healthy beast at the livestock market is worth more than her wool and a joint of mutton sold piecemeal: define a `livestockPrice` that carries a **drover's premium** over the sum of the animal's products. Reward scales with head delivered, and farm reputation/standing lifts it (SP5). The full income gradient is therefore: drop-in (worst) < rail shipment < **a droved flock at market (best)**. **Tuning target:** a successful drove of a full flock clearly out-earns the same time spent on any other path (e.g. mining + rail-shipping coal) — a memorable payday that funds the next aspiration (more stock, a better fold, a coble, a shop). Losing head en route is the counterweight that keeps it honest, not a way to make it stingy.
 - **Risk en route** (what makes it a journey, not a menu): sheep stray if you lose control, the **barghest** and other night-things prey on a strung-out flock, bogs and the high moor are hazards. Losing head means losing value. Good droving — keeping them bunched, moving by day — pays.
 - Relation to the rail ship-panel: both are "get goods to market." Rail suits anyone near a station; droving suits the off-line farmer and is the atmospheric, hands-on route. Neither is forced.
 
@@ -128,3 +131,4 @@ c. **Farm threshold = 5 head penned + register at the market board for a small f
 d. **Sheep only** for Slice 1–3; cattle later.
 e. **Drove risk** (predation/stray/bog) is real but never a hard fail — you're paid for what arrives.
 f. **Fold** = player-built fenced enclosure, zone-detected; not true geometric containment.
+g. **Financial upside tops the gradient (James's requirement):** a droved flock is the single most lucrative sale in the game, sized so the whole effort is plainly worth it. The exact `livestockPrice` + drover's premium are Slice-3 tuning, measured against the §5 target (must clearly out-earn any other income path).
