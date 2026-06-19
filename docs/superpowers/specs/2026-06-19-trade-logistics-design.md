@@ -19,6 +19,7 @@ Success: a player can buy or produce goods in one place, **book a shipment** by 
 - Farm-gate booking: originate a shipment from a pen or farm within reach of the line.
 - Pending shipments persist across save/load.
 - A shallow, slowly-refilling brass purse on each village vendor, so drop-in selling cannot scale into a bulk income route (see §4). This is the minimal local version; full dynamic stock with restock and oversupply price-crashes is SP3.
+- A capped freight allowance per shipment (how much wagon space the railway will charter a merchant of your standing), modest to start, so a player cannot move unlimited goods at once. Raising it is merchant progression (SP5).
 
 **Out (later):**
 - The monthly fair and shared cross-player stock (Slice B).
@@ -52,7 +53,7 @@ Success: a player can buy or produce goods in one place, **book a shipment** by 
 ## 5. Booking and delivery
 
 - `economy.bookShipment(goods, destinationVillage)`:
-  - Validates: destination is a different village; goods are in the pack; a sensible per-shipment size cap (§11).
+  - Validates: destination is a different village; goods are in the pack; and the shipment is within the player's freight allowance (their haulage capacity, modest to start, upgradeable as a merchant in SP5).
   - Computes the locked total: sum of `priceOf(item, destinationVillage, 'sell', standing)` over the goods, at the moment of booking.
   - Removes the goods from the pack; appends a record to the player's `shipments`.
 - A shipment record: `{ goods: [[id, n], ...], dest, brass, arrivesAt }` where `arrivesAt` is a game-clock time computed from the route length.
@@ -106,3 +107,5 @@ The drop-in penalty; the per-shipment size cap; the delivery delay per route len
 a. **Locked price at booking** (not floating on arrival). Confirmed in design; floating is a later refinement.
 b. **Delivery delay** approximated from route length, tied to train arrival where practical, so it reads as "the train brought it." Exact timing is a tuning value.
 c. **Farm-gate reach** defined as a distance from the rail line; the exact distance is a tuning value, and roads are not required in Slice A.
+d. **Freight allowance fixed in Slice A, upgradeable later.** Slice A ships one starting allowance for everyone; raising it (bigger consignments, packhorses, chartered wagons) is merchant progression in SP5.
+e. **MARKER (program-level, not Slice A): goods need a reason to be bought beyond reselling.** If a good's only use is resale, the market is a hollow loop with no real end-demand. Goods must have genuine utility (fuel, tools, materials, food) and NPCs must actually consume them, so demand is real. This underpins SP3 (NPC demand) and SP4 (NPCs consuming and producing). Flagged so it is not lost; addressed there, not here.
