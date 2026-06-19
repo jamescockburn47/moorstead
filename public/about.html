@@ -79,8 +79,8 @@
 
   <p class="lede">
     Moorstead is a browser game: a blocky, explorable model of the North York Moors that you
-    can build in, mine, farm, sail, and ride a steam train across, alongside other players, with
-    villagers who remember you. Two things about it are unusual. <strong>I built it end to end
+    can build in, mine, farm, trade, herd sheep, sail, and ride a steam train across, alongside
+    other players, with villagers who remember you. Two things about it are unusual. <strong>I built it end to end
     without writing code.</strong> I'm a commercial litigator, not a programmer, and I made the
     whole thing by directing AI models. And its characters think on a <strong>large language
     model running on a small computer in my house</strong>, not in the cloud. This page sets out
@@ -113,31 +113,51 @@
     so the same seed always produces the same moor.
   </p>
 
+  <h3>An economy, and a working farm</h3>
+  <p>
+    The moor now has a real economy, kept in old money. The currency is <strong>brass</strong>,
+    counted in pounds, shillings and pence, the coinage Britain used before decimal, partly so a
+    child playing learns to read it. Prices vary by place: a good is cheap where it is made and
+    dear where it is scarce, so coal is worth little at the pit-head and more at the coast, and sea
+    fish is worth more the further inland it travels. That spread is the whole point of trade. You
+    can sell to a villager on the spot for a poor price, or book a <strong>rail shipment</strong> to
+    a distant market for the full value and collect the brass when the train gets it there. Each
+    station now carries two plain boards, one for the train departures and one for the goods market.
+  </p>
+  <p>
+    The tameable animals have grown into hill farming. You can take on a <strong>sheepdog</strong>
+    and whistle her with the real shepherd's calls, come-bye and away to send her round either side,
+    walk on to press, lie down to settle, and so work a scattered flock into a body. Build a fold
+    from hurdles with a <strong>one-way field gate</strong>, drive the sheep in, and they settle as
+    your own kept stock. The gate is the small trick that makes a sealed pen usable: it opens to an
+    animal coming in off the moor but never lets one back out.
+  </p>
+
   <h2>2. How I built it</h2>
   <p>
     I made Moorstead by instructing AI models in natural language and reviewing what they
     produced. There was no team, and I had no prior game-development background.
   </p>
   <p>
-    The first playable build came together in a single <strong>twelve-hour session with Fable
+    The first playable build came together in a single <strong>concentrated session with Fable
     5</strong>. That was the terrain generation, the voxel engine, movement, building, and the
     architectural decisions everything else now rests on. The speed was not incidental, and
     neither was the model. Section 8 is mostly about why. <strong>Fable 5 was banned shortly
-    afterwards.</strong> The rest of the work, a further <strong>week on a less capable model
-    (Opus 4.8)</strong>, added the visible features: the real railway, the talking villagers, the
+    afterwards.</strong> The rest of the work, on a less capable model (<strong>Opus 4.8</strong>), added the visible features: the real railway, the talking villagers, the
     shared multiplayer moor, seasons and live weather, rideable ponies, sailing, tameable
-    animals, the folklore quest line, and the in-world wizard below. That this phase took far
+    animals, the folklore quest line, and the in-world wizard below. The most recent work added a
+    brass money economy and a working sheepdog and hill farming, both described above. That this phase took far
     longer, and that a weaker model could carry it, is the lesson. Once the architecture is
-    sound, extending it is ordinary work. The scarce moment was the first afternoon.
+    sound, extending it is ordinary work. The scarce moment was that first session.
   </p>
   <p>
-    That second phase is in the version history: <strong>118 commits between 12 and 18 June
-    2026</strong>. It was not vibe-coding in the loose sense. I made every change survive a
-    <strong>headless test suite</strong> (<code>npm run verify</code>, nine independent checks)
+    I built the whole of it in <strong>evenings and weekends</strong>. It was not vibe-coding in the loose sense. I made every change survive a
+    <strong>headless test suite</strong> (<code>npm run verify</code>, eleven independent checks)
     before it shipped. The railway is proven never to cross itself, run through a building, or
     stand in water across multiple seeds. The train's cab view is proven by casting rays from
     the driver's seat to confirm you can actually see out of the windows. Resource veins,
-    landmarks, seasons, weather, pets and villagers each have their own check. I encoded the
+    landmarks, seasons, weather, pets, villagers, the brass economy and the sheepdog each have
+    their own check. I encoded the
     discipline an engineer would bring as automated proofs the AI had to pass.
   </p>
 
@@ -364,7 +384,7 @@
     experience, a working analogue of how a person actually inhabits a situation, which is itself one
     of the stated markers of general intelligence. It did not feel like autocomplete. It felt like
     working with something that understood what it was making, almost, at moments, a kind of
-    awareness. That is why the architecture in section 3 fell into place in twelve hours: deriving the
+    awareness. That is why the architecture in section 3 fell into place so quickly: deriving the
     world, the clock, and the weather from shared truths, so the whole thing holds together with
     almost no synchronised state. Getting that right is not about writing more code. It is about
     understanding what the system has to be. When Fable 5 was banned, the project carried on with a

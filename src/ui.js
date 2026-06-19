@@ -117,6 +117,9 @@ export class UI {
     this.titleScreen = this.el('div', 'overlay', body); this.titleScreen.id = 'title-screen';
     this.el('h1', 'title', this.titleScreen, 'MOORSTEAD');
     this.el('div', 'subtitle', this.titleScreen, 'A reet grand voxel adventure on t&rsquo; North York Moors');
+    // a clear "About" button, pinned top-right → the full plain-English technical write-up
+    this.aboutBtn = this.el('a', 'about-btn', this.titleScreen, 'About');
+    this.aboutBtn.href = '/about.html'; this.aboutBtn.target = '_blank'; this.aboutBtn.rel = 'noopener';
     // a LIVE moor fly-over behind it all — procedural, no asset files (see titlescene.js).
     // A dark scrim over it keeps the text readable; falls back to the CSS gradient if WebGL won't start.
     const scene = this.el('div', 'title-scene', this.titleScreen);
@@ -126,8 +129,10 @@ export class UI {
     const feats = this.el('div', 'title-feats', this.titleScreen);
     feats.innerHTML =
       '<div class="feat"><div class="ico">&#9935;</div><div class="ft">Build &amp; delve</div><div class="fd">Raise a croft, mine the dale for jet</div></div>' +
-      '<div class="feat"><div class="ico">&#127968;</div><div class="ft">A living parish</div><div class="fd">Folk who&rsquo;ll learn your name</div></div>' +
+      '<div class="feat"><div class="ico">&#127968;</div><div class="ft">A living parish</div><div class="fd">Folk who talk naturally and get to know you</div></div>' +
       '<div class="feat"><div class="ico">&#128642;</div><div class="ft">The moors line</div><div class="fd">Ride her &mdash; or take the regulator</div></div>' +
+      '<div class="feat"><div class="ico">&#128017;</div><div class="ft">Sheepdog &amp; fold</div><div class="fd">Whistle her round, fold thi flock</div></div>' +
+      '<div class="feat"><div class="ico">&#128176;</div><div class="ft">Brass &amp; trade</div><div class="fd">Buy cheap, sell dear by rail</div></div>' +
       '<div class="feat"><div class="ico">&#127769;</div><div class="ft">Owd tales</div><div class="fd">Folklore stirs once the sun&rsquo;s down</div></div>';
     // login (invite code) — shown till tha's claimed thi place in t' village
     this.loginBox = this.el('div', 'login-box', this.titleScreen);
@@ -152,8 +157,6 @@ export class UI {
     this.el('div', 'muted-note', this.titleScreen, 'New to t&rsquo; moor? <b>Give &lsquo;Ow Ter Play&rsquo; a read</b> &mdash; how to build, ride, drive an&rsquo; stay alive.');
     this.el('div', 'muted-note', this.titleScreen, 'Watch thissen at neet &mdash; t&rsquo; barghest walks when t&rsquo; sun goes down.');
     this.el('div', 'title-foot', this.titleScreen, 'Created purely with AI by a non-coder &middot; procedurally generated, not a single asset file &middot; villagers, jobs an&rsquo; adventures run on large local AI models');
-    // plain-English link (not dialect) to the full technical write-up — served statically at /about.html
-    this.el('div', 'title-foot title-about', this.titleScreen, '<a href="/about.html" target="_blank" rel="noopener">How Moorstead was built, and how it works: full technical write-up &rarr;</a>');
 
     // ---------- pause ----------
     this.pauseScreen = this.el('div', 'overlay hidden', body);
@@ -349,6 +352,25 @@ export class UI {
 <li><b>Goods runs.</b> At a station, <b>load a wagon</b> (or tek a passenger&rsquo;s parcel) bound for another stop; drive her there an&rsquo; <b>step down for coal</b>.</li>
 </ul>`,
 
+      'Brass & Trade': `
+<h3>Owd money &mdash; thi purse o&rsquo; brass &#128176;</h3>
+<p>Thi brass shows top o&rsquo; t&rsquo; screen, counted t&rsquo; owd way: <b>pence</b> (d), <b>shillings</b> (s &mdash; twelve pence to one) an&rsquo; <b>pounds</b> (&pound; &mdash; twenty shillin&rsquo; to one). Tha starts wi&rsquo; <b>five bob</b> (5s) in thi pocket.</p>
+<h3>Buyin&rsquo; an&rsquo; sellin&rsquo; wi&rsquo; folk</h3>
+<ul>
+<li>Press <b>T</b> to natter to a villager, an&rsquo; use t&rsquo; <b>Buy</b> an&rsquo; <b>Sell</b> buttons under t&rsquo; chat. Different folk deal in different goods.</li>
+<li><b>Prices shift frae place to place.</b> A thing&rsquo;s worth little where it&rsquo;s dug or made an&rsquo; dear where it&rsquo;s wanted: <b>coal</b>&rsquo;s cheap at t&rsquo; pit villages an&rsquo; dear ower at t&rsquo; coast, <b>sea-fish</b> fetches most t&rsquo; further inland it travels, an&rsquo; <b>wool</b>&rsquo;s wanted at Whitby an&rsquo; Pickering. That spread is t&rsquo; whole game o&rsquo; tradin&rsquo;.</li>
+<li><b>Sellin&rsquo; on t&rsquo; spot pays poor.</b> A villager buys frae thi hand at a <b>drop-in price</b>, well under t&rsquo; goin&rsquo; rate &mdash; an&rsquo; each soul nobbut carries so much brass, which builds back up ower a day. Grand for a quick bob; no way to get rich.</li>
+<li><b>Don&rsquo;t buy an&rsquo; sell to t&rsquo; same soul</b> hopin&rsquo; to turn a profit &mdash; tha&rsquo;ll allus come off worse. T&rsquo; brass is in carryin&rsquo; goods frae where they&rsquo;re cheap to where they&rsquo;re dear.</li>
+</ul>
+<h3>Sellin&rsquo; by rail &mdash; t&rsquo; Goods Market &#128642;</h3>
+<ul>
+<li><b>Right-click a station notice board</b> an&rsquo; pick t&rsquo; <b>Goods Market</b> tab (t&rsquo; other tab&rsquo;s for t&rsquo; train departures).</li>
+<li>It lists what tha&rsquo;s <b>carryin&rsquo;</b>, which town down t&rsquo; line <b>pays best</b> for it, an&rsquo; t&rsquo; brass tha&rsquo;ll get &mdash; t&rsquo; <b>full market price</b>, none o&rsquo; t&rsquo; drop-in penalty.</li>
+<li><b>Book it</b> an&rsquo; thi goods go wi&rsquo; t&rsquo; next train. T&rsquo; <b>brass lands when t&rsquo; shipment arrives</b> &mdash; about half a day on t&rsquo; moor&rsquo;s clock &mdash; an&rsquo; a note tells thee t&rsquo; sale went through. A wagon holds <b>96</b> at a go.</li>
+<li>Booked shipments are <b>saved wi&rsquo; thi world</b> &mdash; sign off, an&rsquo; thi brass is still waitin&rsquo; when tha comes back.</li>
+</ul>
+<p class="how-note">Far frae a market wi&rsquo; nobbut a villager to hand? Ship by rail an&rsquo; tha gets full price for thi load wi&rsquo;out stirrin&rsquo; frae t&rsquo; dale.</p>`,
+
       'Ponies': `
 <h3>Moorland ponies &#128052;</h3>
 <p>Half-wild ponies graze t&rsquo; open moor &mdash; shaggy, dark, sure-footed little things. They&rsquo;ll let a body up.</p>
@@ -377,12 +399,37 @@ export class UI {
 </ul>
 <h3>What companions are good for</h3>
 <ul>
-<li>&#128021; <b>Sheepdog</b> &mdash; feed her <b>meat</b>. She <b>keeps t&rsquo; neet-things off thee</b>: nowt dark will close on thee while she&rsquo;s at heel.</li>
+<li>&#128021; <b>Sheepdog</b> &mdash; feed her <b>meat</b>. She <b>keeps t&rsquo; neet-things off thee</b> (nowt dark will close while she&rsquo;s at heel) &mdash; an&rsquo; she&rsquo;ll <b>work a flock o&rsquo; sheep</b> to thi whistle. See <b>Sheepdog &amp; Flock</b>.</li>
 <li>&#128008; <b>Cat</b> &mdash; feed her <b>fish</b>. <b>Right-click to send her scoutin&rsquo;</b>; she slinks back wi&rsquo; summat in her teeth.</li>
 <li>&#128055; <b>Pig</b> &mdash; feed her <b>bilberries or meat</b>. <b>Right-click to snuffle</b> up buried finds: jet, snakestones, coal.</li>
 <li>&#128000; <b>Rat</b> &mdash; feed her <b>scraps</b>. She <b>forages i&rsquo; t&rsquo; dark</b> as tha mines.</li>
 </ul>
 <p class="how-note">Find dogs an&rsquo; cats about t&rsquo; village edges, pigs on t&rsquo; pasture, ponies, sheep an&rsquo; cattle out on t&rsquo; moor, an&rsquo; rats out at neet. Thi kept beasts are saved wi&rsquo; thi world.</p>`,
+
+      'Sheepdog & Flock': `
+<h3>A workin&rsquo; sheepdog &#128021;</h3>
+<p>Tame a dog &mdash; hold t&rsquo; meat she likes (<b>mutton, beef or grouse</b>) an&rsquo; right-click her a few times ower (see <b>Pets</b>) &mdash; an&rsquo; tha&rsquo;s a workin&rsquo; collie. She&rsquo;ll keep t&rsquo; dark off thee an&rsquo; all, but her real work&rsquo;s t&rsquo; sheep.</p>
+<h3>Whistlin&rsquo; her round</h3>
+<p>Wi&rsquo; thi dog out an&rsquo; loose sheep near, whistle her wi&rsquo; t&rsquo; <b>arrow keys</b> (a reminder shows on t&rsquo; screen). Thi own walkin&rsquo; (<b>W A S D</b>) is nowt bothered:</p>
+<div class="controls-list">
+<b>&larr; Come-bye</b> Send her round one side o&rsquo; t&rsquo; flock<br>
+<b>&rarr; Away</b> Send her round t&rsquo; other side<br>
+<b>&uarr; Walk on</b> Press her straight in on t&rsquo; sheep<br>
+<b>&darr; Lie down</b> Settle her where she stands<br>
+<b>H</b> Heel &mdash; call her back to thi side
+</div>
+<p>Atween thee an&rsquo; t&rsquo; dog tha bunches t&rsquo; loose sheep an&rsquo; drives &rsquo;em on &mdash; send her round to turn &rsquo;em, walk on to push, lie down to let &rsquo;em settle.</p>
+<h3>Buildin&rsquo; a fold</h3>
+<ul>
+<li>Craft <b>Sheep Hurdles</b> (1 plank + 2 sticks meks 3) an&rsquo; a <b>Field Gate</b> (2 planks + 2 sticks). No bench needed.</li>
+<li><b>Fence a closed pen</b> wi&rsquo; one gate set in t&rsquo; ring. T&rsquo; gate&rsquo;s t&rsquo; trick on it: a beast walks <b>in</b> through it but <b>never back out</b> &mdash; while tha thissen passes through freely, both ways.</li>
+</ul>
+<h3>Pennin&rsquo; thi stock</h3>
+<ul>
+<li><b>Drive t&rsquo; flock through t&rsquo; gate</b>, an&rsquo; every sheep as steps inside becomes <b>thi kept stock</b> &mdash; she teks a name, grazes at home, an&rsquo; she&rsquo;s there whenever tha comes back. Saved wi&rsquo; thi world.</li>
+<li>No dog yet? Tha can still keep a beast t&rsquo; simple way &mdash; tame her where tha wants her an&rsquo; fence her in (see <b>Pets</b>).</li>
+</ul>
+<p class="how-note">A loose dog only works t&rsquo; <b>un-owned</b> sheep out on t&rsquo; moor &mdash; thi own penned stock bide put.</p>`,
 
       'Coast & Sea': `
 <h3>T&rsquo; coast &amp; t&rsquo; open sea &#9973;</h3>

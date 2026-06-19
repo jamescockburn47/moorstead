@@ -115,10 +115,16 @@ input.seed {
 /* once the real voxel world is meshed in behind the UI, drop the gradient to reveal it */
 #title-screen.world-shown { background: none; }
 .title-foot { position: absolute; left: 4.5vw; bottom: 12px; max-width: 60vw; font-size: 12px; color: #9a948a; }
-/* plain-English link to the technical write-up — sits just above the dialect foot */
-.title-about { bottom: 34px; max-width: 70vw; font-size: 13px; }
-.title-about a { color: var(--gold); text-decoration: none; border-bottom: 1px dotted rgba(216,185,90,0.5); }
-.title-about a:hover { border-bottom-color: var(--gold); }
+/* a clear "About" button pinned top-right of the title screen -> full technical write-up.
+   selector carries id+class+type so it outranks the blanket position:relative on title children */
+#title-screen a.about-btn {
+  position: absolute; top: 16px; right: 18px; z-index: 3;
+  padding: 7px 16px; font-size: 13px; font-weight: 700; letter-spacing: 0.4px;
+  color: var(--gold); text-decoration: none;
+  background: rgba(12, 14, 11, 0.62); border: 1px solid rgba(216, 185, 90, 0.5);
+  border-radius: 8px; box-shadow: 0 2px 14px rgba(0,0,0,0.35);
+}
+#title-screen a.about-btn:hover { background: rgba(216,185,90,0.18); border-color: var(--gold); }
 /* the title menu sits in a left column so it doesn't cover the train; left-align its buttons */
 #title-screen button.mc { margin-left: 0; margin-right: 0; }
 
