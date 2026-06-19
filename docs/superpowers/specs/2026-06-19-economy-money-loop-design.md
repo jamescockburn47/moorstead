@@ -27,6 +27,11 @@ roles is expected to keep growing over the life of the game. So everything that 
 incentive (prices, assets, roles, services) is held as data, not hard-coded, and SP1
 establishes that data-driven spine so new incentives can be added later without rework.
 
+**Captured refinements (2026-06-19, for later sub-projects):**
+- *Travel modes for trade (SP2).* Trade goods are NOT train-only after all. A player may also haul on foot, by horse, or by sea (the Whitby-Staithes coble run), but each carries far less than a freight consignment and so earns far less profit. The train stays the bulk, high-profit channel; foot, horse and sea are low-capacity, low-profit alternatives. Provenance still governs the spread (goods must actually travel from a different village to earn the import price), and the per-mode carry limit, not a ban, is what makes the railway worth using. This supersedes the earlier "train-only hard lock" framing, and SP2 must rework the provenance mechanism so it works across all travel modes, not just station-sealed rail freight.
+- *Player-built settlements and rail links (SP5).* When rich and advanced enough, players can found new settlements and lay new rail links. The top of the aspiration ladder and a major world-shaping money sink; ties to NPC agency (SP4) for peopling new settlements.
+- *Standing gates trade, not just price (SP3 + SP5).* Social standing should affect how MUCH a player can trade and on what terms, not only the price (which SP1 already does). Damaging towns and their surroundings lowers standing (via the existing shame system), which throttles and worsens trade: the anti-griefing lever. Better standing, earned by genuine social interaction and buttering up NPC partners, unlocks larger and better trade. Trade becomes relationship-gated, not purely transactional.
+
 This document specs **only sub-project 1**.
 
 ## 1. Purpose & success criteria
