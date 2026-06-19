@@ -7,7 +7,7 @@ import { hash2i } from './noise.js';
 import { TAME_GOAL, FOLLOW_RANGE, feedTrust, chooseName } from './pets.js';
 import { dayPhase, villagerRemark } from './villagerlife.js';
 import { HEIGHT, WATER_LEVEL } from './defs.js';
-import { flockCentroid, driveTarget, dogGoal } from './herding.js';
+import { flockCentroid, driveTarget, dogGoal, foldAt } from './herding.js';
 
 const HERD_RADIUS = 18; // how near a working dog will gather loose sheep
 
@@ -1291,10 +1291,60 @@ export class Entities {
     const pressures = [{ x: dog.pos.x, z: dog.pos.z, strength: 2 }, { x: player.pos.x, z: player.pos.z, strength: 1 }];
     const target = driveTarget(centroid, pressures);
     for (const m of flock) { m.herding = true; m.herdTarget = target; m.state = 'herd'; }
+    // funnel: a herded sheep near a gate (still outside the fold) aims THROUGH the gateway into
+    // the fold, not just away from the dog — so a bunched flock threads a narrow gate instead of
+    // jamming on the fence beside it.
+    if (this.foldCells && this.foldCells.size && this.gateCells && this.gateCells.length) {
+      for (const m of flock) {
+        if (this.foldCells.has(Math.floor(m.pos.x) + ',' + Math.floor(m.pos.z))) continue; // already inside
+        let near = null, nd = 7;
+        for (const gt of this.gateCells) { const d = Math.hypot(m.pos.x - (gt.x + 0.5), m.pos.z - (gt.z + 0.5)); if (d < nd) { nd = d; near = gt; } }
+        if (!near) continue;
+        // aim straight at the fold cell just INSIDE the gate — threads the opening single-file
+        for (const [nx, nz] of [[near.x + 1, near.z], [near.x - 1, near.z], [near.x, near.z + 1], [near.x, near.z - 1]]) {
+          if (this.foldCells.has(nx + ',' + nz)) { m.herdTarget = { x: nx + 0.5, z: nz + 0.5 }; break; }
+        }
+      }
+    }
+    // pen any driven sheep that's crossed into the fold — she settles as thi stock for good
+    if (this.foldCells && this.foldCells.size) {
+      for (const m of flock) {
+        if (!this.foldCells.has(Math.floor(m.pos.x) + ',' + Math.floor(m.pos.z))) continue;
+        const name = chooseName(Math.random, (player.pets || []).map(p => p.name));
+        this.makeCompanion(m, name);
+        m.stay = true; m.home = { x: m.pos.x, y: m.pos.y, z: m.pos.z }; m.herding = false;
+        (player.pets || (player.pets = [])).push({ kind: 'sheep', name, stay: true, home: { ...m.home } });
+        if (this.game && this.game.ui) this.game.ui.toast(`<b>${name}</b>’s penned — she’s thi stock now.`, 3500);
+      }
+    }
+  }
+
+  // Find the player's fenced fold(s): for each gate nearby, flood-fill its open neighbours;
+  // an enclosed fill is the fold interior. Cached in this.foldCells (cell keys "x,z"), used
+  // by the one-way gate (an animal inside can't leave) and the pen trigger. Throttled.
+  foldScan(player) {
+    const py = Math.round(player.pos.y);
+    const isFence = (x, z) => { for (let y = py - 2; y <= py + 3; y++) { const b = this.world.getBlock(x, y, z); if (b === B.FENCE || b === B.GATE) return true; } return false; };
+    const isGate = (x, z) => { for (let y = py - 2; y <= py + 3; y++) if (this.world.getBlock(x, y, z) === B.GATE) return true; return false; };
+    const cells = new Set(), gates = [];
+    const px = Math.round(player.pos.x), pz = Math.round(player.pos.z), R = 18;
+    for (let x = px - R; x <= px + R; x++) for (let z = pz - R; z <= pz + R; z++) {
+      if (!isGate(x, z)) continue;
+      gates.push({ x, z });
+      for (const [nx, nz] of [[x + 1, z], [x - 1, z], [x, z + 1], [x, z - 1]]) {
+        if (isFence(nx, nz) || cells.has(nx + ',' + nz)) continue;
+        const f = foldAt(nx, nz, isFence, 600);
+        if (f.enclosed) for (const c of f.cells) cells.add(c);
+      }
+    }
+    this.foldCells = cells;
+    this.gateCells = gates;
   }
 
   updateMobs(dt, player, isNight, audio) {
     const geo = this.world.gen.geo;
+    this.foldScanT = (this.foldScanT || 0) - dt;
+    if (this.foldScanT <= 0) { this.foldScanT = 0.5; this.foldScan(player); }
     this.herd(dt, player);
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
@@ -1310,6 +1360,8 @@ export class Entities {
 
     for (const mob of this.mobs) {
       if (mob.dead) continue;
+      // a field gate stands open to an animal frae OUTSIDE the fold (enter), shut frae inside (stay penned)
+      mob.passGate = !(this.foldCells && this.foldCells.has(Math.floor(mob.pos.x) + ',' + Math.floor(mob.pos.z)));
       if (mob.label) { // pony's "right-click to ride" prompt — fades in close, gone once tha's up
         const ldx = player.pos.x - mob.pos.x, ldz = player.pos.z - mob.pos.z;
         mob.label.material.opacity = (!mob.ridden && Math.hypot(ldx, ldz) < 9) ? 0.9 : 0;

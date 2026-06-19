@@ -29,7 +29,8 @@ export const B = {
   FERN: 32, FOXGLOVE: 33, DOG_ROSE: 34, ELDER: 35, MONKEY_LEAVES: 36,
   SLATE: 37, ST_CREAM: 38, ST_RED: 39, RBRICK: 40,
   TER_MINT: 41, TER_BLUE: 42, TER_PINK: 43, TER_YELLOW: 44,
-  FENCE: 45, // sheep hurdle — a buildable stock barrier (farm/droving feature; gate = 46, added with its physics)
+  FENCE: 45, // sheep hurdle — a buildable stock barrier (farm/droving feature)
+  GATE: 46,  // one-way field gate — open to an animal from outside, shut from inside; player passes
 };
 
 // ---- Item ids (blocks double as items; pure items start at 64) ----
@@ -119,6 +120,10 @@ D[B.TER_YELLOW] = { name: 'Cottage Wall (Yellow)', kind: 'solid', tex: { t: TILE
 // (functional — collides, holds a flock); thin post-and-rail art + the one-way gate (B.GATE)
 // land with the herding wiring + physics in the next slice.
 D[B.FENCE] = { name: 'Sheep Hurdle', kind: 'solid', tex: { t: TILE.PLANKS, s: TILE.PLANKS, b: TILE.PLANKS }, hard: 1.2, tool: 'axe', drop: B.FENCE };
+// One-way field gate. Solid by default (so it's a fold boundary an' holds stock), but the
+// physics lets the player through allus, an' an animal through only frae OUTSIDE the fold
+// (see boxCollides + entity.passGate). Log-built, so it reads different frae the hurdle.
+D[B.GATE] = { name: 'Field Gate', kind: 'solid', tex: { t: TILE.LOG_TOP, s: TILE.LOG_SIDE, b: TILE.LOG_TOP }, hard: 1.2, tool: 'axe', drop: B.GATE };
 
 export const BLOCKS = D;
 
@@ -226,6 +231,7 @@ export const RECIPES = [
   { out: I.WOODEN_STAKE, n: 1, needs: [[B.PLANKS, 2], [I.STICK, 2]], bench: true },
   { out: I.HOLY_STAKE, n: 1, needs: [[I.WOODEN_STAKE, 1], [I.HOLY_WATER, 1]], bench: true },
   { out: B.FENCE, n: 3, needs: [[B.PLANKS, 1], [I.STICK, 2]] }, // a hurdle or three frae a plank an' a couple o' sticks
+  { out: B.GATE, n: 1, needs: [[B.PLANKS, 2], [I.STICK, 2]] },  // a field gate frae a couple o' planks an' sticks
 ];
 
 // ---- Smelting (at t' range). Fuel: coal = 4 ops, peat = 1 op ----

@@ -2813,6 +2813,12 @@ class Game {
         else if (hit.id === B.BENCH) hint = 'Right-click: joiner\u2019s bench (craftin\u2019)';
         else if (hit.id === B.RANGE) hint = 'Right-click: t\u2019 range (cookin\u2019 an\u2019 smeltin\u2019)';
         this.ui.interactHint.textContent = hint;
+      } else if (this.entities &&
+        this.entities.mobs.some(m => m && m.owner && m.type === 'dog') &&
+        this.entities.mobs.some(m => m && !m.owner && m.type === 'sheep' && Math.hypot(m.pos.x - this.player.pos.x, m.pos.z - this.player.pos.z) < 20)) {
+        // a working dog an' sheep about — show the whistle commands (legibility)
+        this.highlight.visible = false;
+        this.ui.interactHint.textContent = '🐕 Whistle: ← come-bye  → away  ↑ walk on  ↓ lie down  (H: heel)';
       } else {
         this.highlight.visible = false;
         this.ui.interactHint.textContent = '';

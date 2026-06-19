@@ -1,15 +1,19 @@
 // Voxel AABB collision and DDA raycast.
-import { isSolid, HEIGHT } from './defs.js';
+import { isSolid, HEIGHT, B } from './defs.js';
 
 // Does an AABB centred at (x,z) with half-width hw, feet at y, height h, overlap any solid block?
-export function boxCollides(world, x, y, z, hw, h) {
+// passGate: if set, a field gate (B.GATE) stands open to this body (it's not solid to it).
+export function boxCollides(world, x, y, z, hw, h, passGate = false) {
   const x0 = Math.floor(x - hw), x1 = Math.floor(x + hw);
   const y0 = Math.floor(y), y1 = Math.floor(y + h - 0.001);
   const z0 = Math.floor(z - hw), z1 = Math.floor(z + hw);
   for (let bx = x0; bx <= x1; bx++)
     for (let by = y0; by <= y1; by++)
-      for (let bz = z0; bz <= z1; bz++)
-        if (isSolid(world.getBlock(bx, by, bz))) return true;
+      for (let bz = z0; bz <= z1; bz++) {
+        const id = world.getBlock(bx, by, bz);
+        if (passGate && id === B.GATE) continue; // a gate stands open to this body
+        if (isSolid(id)) return true;
+      }
   return false;
 }
 
@@ -17,13 +21,14 @@ export function boxCollides(world, x, y, z, hw, h) {
 export function moveEntity(world, ent, dt) {
   const p = ent.pos, v = ent.vel;
   ent.hitWall = false;
+  const pg = ent.passGate;
 
   // Y
   let ny = p.y + v.y * dt;
-  if (boxCollides(world, p.x, ny, p.z, ent.hw, ent.h)) {
+  if (boxCollides(world, p.x, ny, p.z, ent.hw, ent.h, pg)) {
     if (v.y < 0) {
       ny = Math.floor(p.y + v.y * dt) + 1.0001;
-      if (boxCollides(world, p.x, ny, p.z, ent.hw, ent.h)) ny = p.y;
+      if (boxCollides(world, p.x, ny, p.z, ent.hw, ent.h, pg)) ny = p.y;
       ent.onGround = true;
     } else {
       ny = p.y;
@@ -36,14 +41,14 @@ export function moveEntity(world, ent, dt) {
 
   // X
   let nx = p.x + v.x * dt;
-  if (boxCollides(world, nx, p.y, p.z, ent.hw, ent.h)) {
+  if (boxCollides(world, nx, p.y, p.z, ent.hw, ent.h, pg)) {
     nx = p.x; v.x = 0; ent.hitWall = true;
   }
   p.x = nx;
 
   // Z
   let nz = p.z + v.z * dt;
-  if (boxCollides(world, p.x, p.y, nz, ent.hw, ent.h)) {
+  if (boxCollides(world, p.x, p.y, nz, ent.hw, ent.h, pg)) {
     nz = p.z; v.z = 0; ent.hitWall = true;
   }
   p.z = nz;

@@ -20,6 +20,7 @@ export class Player {
     this.health = 20; this.hunger = 20;
     this.air = 10;
     this.creative = false;
+    this.passGate = true; // a field gate stands open to the farmer, both ways
     this.flying = false;
     this.mounted = false; // up on a moorland pony
     this.dead = false;
