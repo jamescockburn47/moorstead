@@ -1,5 +1,5 @@
 // Economy logic check — run wi': node scripts/verify-economy.mjs
-import { formatBrass, priceOf, PRICES, vendorFor, VENDORS, Economy, STARTING_BRASS } from '../src/economy.js';
+import { formatBrass, priceOf, PRICES, vendorFor, VENDORS, Economy, STARTING_BRASS, dropInPrice, shipmentValue, FREIGHT_ALLOWANCE, DELIVERY_DELAY, PURSE_MAX } from '../src/economy.js';
 import { I } from '../src/defs.js';
 import { Player } from '../src/player.js';
 
@@ -111,6 +111,27 @@ function fakeGame(brass = STARTING_BRASS, held = {}) {
   const p3 = new Player(stub);
   p3.deserialize({ pos: { x: 0, y: 0, z: 0 } });
   (p3.brass === STARTING_BRASS ? ok : bad)('an old save migrates to the starting purse');
+}
+
+// --- SP2 Task 1: drop-in and shipment pricing ---
+{
+  const localSell = priceOf(I.JET_GEM, 'Whitby', 'sell', 0);
+  const drop = dropInPrice(I.JET_GEM, 'Whitby', 0);
+  (drop < localSell ? ok : bad)(`drop-in pays less than the local sell price (${drop}d vs ${localSell}d)`);
+  (drop >= 1 ? ok : bad)('drop-in never rounds below a penny');
+  (dropInPrice(I.PARCEL, 'Whitby', 0) === null ? ok : bad)('a non-tradeable good has no drop-in price');
+}
+{
+  const goods = [[I.COAL_LUMP, 10], [I.JET_GEM, 2]];
+  const v = shipmentValue(goods, 'Whitby', 0);
+  const expect = priceOf(I.COAL_LUMP, 'Whitby', 'sell', 0) * 10 + priceOf(I.JET_GEM, 'Whitby', 'sell', 0) * 2;
+  (v === expect ? ok : bad)(`shipmentValue sums the destination sell prices (${v}d)`);
+  (shipmentValue([[I.PARCEL, 1]], 'Whitby', 0) === null ? ok : bad)('a parcel of a non-tradeable good has no shipment value');
+}
+{
+  const ship = shipmentValue([[I.COAL_LUMP, 10]], 'Whitby', 0);
+  const drop = dropInPrice(I.COAL_LUMP, 'Rosedale Abbey', 0) * 10;
+  (ship > drop ? ok : bad)(`shipping coal to the coast beats a local drop-in (${ship}d vs ${drop}d)`);
 }
 
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));

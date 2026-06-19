@@ -66,6 +66,31 @@ export function priceOf(itemId, village, side, standingIdx = 0) {
   return Math.max(1, Math.round(base * regionMult(village, itemId) * margin * loyalty));
 }
 
+// --- SP2 trade-logistics tuning (all adjustable) ---
+export const DROP_IN_PENALTY = 0.6;   // a drop-in pays this fraction of the local sell price
+export const FREIGHT_ALLOWANCE = 96;  // max units a merchant may ship at once (Slice A fixed; SP5 upgrades it)
+export const DELIVERY_DELAY = 0.5;    // game-time a shipment takes to arrive (unit fixed when wired in plan 2)
+export const PURSE_MAX = 120;         // a village vendor's drop-in purse cap, in pence
+export const PURSE_REFILL = 120;      // pence a purse recovers per unit of game-time, toward PURSE_MAX
+
+// What a vendor pays for one unit sold on the spot: the local sell price, penalised.
+export function dropInPrice(itemId, village, standingIdx = 0) {
+  const p = priceOf(itemId, village, 'sell', standingIdx);
+  return p == null ? null : Math.max(1, Math.round(p * DROP_IN_PENALTY));
+}
+
+// Total locked brass for a parcel of goods sold at the destination market.
+// goods is [[itemId, count], ...]. Returns null if any good is not tradeable.
+export function shipmentValue(goods, destVillage, standingIdx = 0) {
+  let total = 0;
+  for (const [id, n] of goods) {
+    const p = priceOf(id, destVillage, 'sell', standingIdx);
+    if (p == null) return null;
+    total += p * n;
+  }
+  return total;
+}
+
 // What each villager sells (to you) and buys (from you). Keyed by lowercase substring of the
 // name, so "Owd Tom" matches "tom". Roles shape the stock; "mag" is the general dealer.
 // Data, not code — the roster and stock grow over time without touching the engine.
