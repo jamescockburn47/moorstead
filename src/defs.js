@@ -29,6 +29,7 @@ export const B = {
   FERN: 32, FOXGLOVE: 33, DOG_ROSE: 34, ELDER: 35, MONKEY_LEAVES: 36,
   SLATE: 37, ST_CREAM: 38, ST_RED: 39, RBRICK: 40,
   TER_MINT: 41, TER_BLUE: 42, TER_PINK: 43, TER_YELLOW: 44,
+  FENCE: 45, // sheep hurdle — a buildable stock barrier (farm/droving feature; gate = 46, added with its physics)
 };
 
 // ---- Item ids (blocks double as items; pure items start at 64) ----
@@ -114,6 +115,10 @@ D[B.TER_MINT] = { name: 'Cottage Wall (Mint)', kind: 'solid', tex: { t: TILE.TER
 D[B.TER_BLUE] = { name: 'Cottage Wall (Blue)', kind: 'solid', tex: { t: TILE.TER_BLUE, s: TILE.TER_BLUE, b: TILE.TER_BLUE }, hard: 1.6, tool: 'pick', drop: B.TER_BLUE };
 D[B.TER_PINK] = { name: 'Cottage Wall (Pink)', kind: 'solid', tex: { t: TILE.TER_PINK, s: TILE.TER_PINK, b: TILE.TER_PINK }, hard: 1.6, tool: 'pick', drop: B.TER_PINK };
 D[B.TER_YELLOW] = { name: 'Cottage Wall (Yellow)', kind: 'solid', tex: { t: TILE.TER_YELLOW, s: TILE.TER_YELLOW, b: TILE.TER_YELLOW }, hard: 1.6, tool: 'pick', drop: B.TER_YELLOW };
+// Sheep hurdle: a buildable stock barrier for folds. v1 is a solid cube on the planks tile
+// (functional — collides, holds a flock); thin post-and-rail art + the one-way gate (B.GATE)
+// land with the herding wiring + physics in the next slice.
+D[B.FENCE] = { name: 'Sheep Hurdle', kind: 'solid', tex: { t: TILE.PLANKS, s: TILE.PLANKS, b: TILE.PLANKS }, hard: 1.2, tool: 'axe', drop: B.FENCE };
 
 export const BLOCKS = D;
 
@@ -220,6 +225,7 @@ export const RECIPES = [
   { out: I.AMULET, n: 1, needs: [[I.AMULET_L, 1], [I.AMULET_R, 1], [I.BELL_CLAPPER, 1], [I.JET_GEM, 1]], bench: true },
   { out: I.WOODEN_STAKE, n: 1, needs: [[B.PLANKS, 2], [I.STICK, 2]], bench: true },
   { out: I.HOLY_STAKE, n: 1, needs: [[I.WOODEN_STAKE, 1], [I.HOLY_WATER, 1]], bench: true },
+  { out: B.FENCE, n: 3, needs: [[B.PLANKS, 1], [I.STICK, 2]] }, // a hurdle or three frae a plank an' a couple o' sticks
 ];
 
 // ---- Smelting (at t' range). Fuel: coal = 4 ops, peat = 1 op ----
