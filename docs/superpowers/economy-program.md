@@ -58,6 +58,22 @@ Build order: SP1 → SP2 → SP3 → SP4 → SP5, with SP4 a large parallel trac
 - `public/about.html` is now **tracked and deployed** — the `/about.html` 404 risk is closed.
 - The game's live Cloudflare tunnel (`sovren-cloudflared`) is **up + enabled** (restored 2026-06-19; it had been left failed since the fine-tune takedown, which silently broke **all** logins — the Vercel client still loads, but `/dash` login and the `/ws` relay return 530 without it). **Debug rule:** client-loads-but-can't-log-in ⇒ check `systemctl is-active sovren-cloudflared` on the EVO box first. See the `moorcraft-evo-stack` memory.
 
+## NPC game-knowledge — mini-RAG (shipped 2026-06-19)
+
+A per-question fact-retrieval layer so Merlin **and** the villagers answer "how do I…" gameplay questions (taming, trade, railway, farming, survival…) accurately, each in their own voice. This is the long-standing "Merlin must advise on gameplay" TODO, widened to all NPCs.
+
+- **Corpus (single source):** `src/game-facts.js` — 30 topic-tagged plain-English chunks, BUILT mechanics only. `scripts/sync-facts.mjs` generates `clint-body/game-facts.json` from it (drift-guarded).
+- **Retrieval:** `src/facts.js` `retrieveFacts(message,{affinity,k,maxChars})` — pure lexical term-overlap; `villagerAffinity(name,village)` leans each NPC toward their own patch (so a question is needed first — no fact-dumping). Python port: `clint-body/npc_facts.py`.
+- **Wiring:** villagers — `src/npc.js` folds relevant facts into the brain `context` (client-side, fail-safe try/catch). Merlin — `clint_body.py` `_with_facts` augments his context server-side. The brain's per-NPC persona stays dominant; facts ride in as labelled reference, never recited.
+- **Tests:** `scripts/verify-facts.mjs` (retrieval, affinity, char-budget, drift vs economy constants, JS↔Python sync) is in `npm run verify`; `clint-body/test_facts.py` is the Python parity check.
+- **Deployed + smoke-tested live 2026-06-19:** corpus in the Vercel bundle; clint-body restarted on the EVO ("Loaded 30 game facts"); Merlin and Farmer Harry each answered a trade/farming question accurately and in-voice.
+- **To extend the corpus:** edit `src/game-facts.js` → `node scripts/sync-facts.mjs` → `npm run verify` → redeploy (Vercel **and** scp `clint-body/{clint_body.py,npc_facts.py,game-facts.json}` to the EVO + `sudo systemctl restart clint-body clint-body-bairns`).
+
+## Farming vertical — status (2026-06-19)
+
+- **Slice 1 (herding core): BUILT + live.** Sheepdog arrow-whistles, hurdle/one-way-gate fold, drive a flock in, penning = kept stock. The in-game "Sheepdog & Flock" help tab and the public `about.html` describe exactly this and no more.
+- **Slice 2 (registered-farm gate) + Slice 3 (drove to market for top payout): DESIGNED, NOT BUILT — deliberately deferred.** This is James's balance-sensitive headline ("the most lucrative sale") and a large live-animal subsystem; not shipped unverified overnight to the live (kids') game. Spec ready at `specs/2026-06-19-farming-droving-design.md`. **Next-session ready-state:** Slice 2 = pen ≥ N head → register at a market/station board → a "farm status" flag (no payoff on its own, so build it together with Slice 3); Slice 3 = drove live stock cross-map to a market town for a top-of-gradient payout. The in-game help and about.html intentionally do **not** mention a registered farm or droving yet — neither is reachable. Related accuracy note: a full-price in-person sell exists in `economy.js` (`sellList`/`doSell`) but is **UNWIRED** — in person a sale is always the drop-in price.
+
 ## Spec/plan index
 
 - SP1 spec: `specs/2026-06-19-economy-money-loop-design.md` (also holds the program standing-principle + the captured SP2/SP5 refinements).
