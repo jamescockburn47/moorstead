@@ -1,5 +1,5 @@
 // Herding model check — run wi': node scripts/verify-herding.mjs
-import { flockCentroid, driveTarget, dogGoal, allPenned, commandFromKey, FLANK_RADIUS } from '../src/herding.js';
+import { flockCentroid, driveTarget, dogGoal, allPenned, commandFromKey, FLANK_RADIUS, foldAt, allPennedCells } from '../src/herding.js';
 
 let failed = false;
 const ok = m => console.log('  ok    ' + m);
@@ -56,6 +56,29 @@ const near = (got, want, m, eps = 1e-6) => (Math.abs(got - want) < eps ? ok : ba
   (commandFromKey('ArrowUp') === 'walk-on' ? ok : bad)('up = walk-on');
   (commandFromKey('ArrowDown') === 'lie-down' ? ok : bad)('down = lie-down');
   (commandFromKey('KeyW') === null ? ok : bad)('a non-arrow key is no command');
+}
+
+// --- Task 6: fence-enclosure fold detection (auto-detect a pen) ---
+{
+  // a 5x5 fence ring with a 3x3 open interior; the moor outside is open too
+  const ring = (x, z) => (x >= 0 && x <= 4 && z >= 0 && z <= 4) && (x === 0 || x === 4 || z === 0 || z === 4);
+  const fold = foldAt(2, 2, ring);
+  (fold.enclosed === true ? ok : bad)('a closed fence ring reads as an enclosed fold');
+  (fold.cells && fold.cells.size === 9 ? ok : bad)(`the fold interior is the 3x3 of open cells (got ${fold.cells && fold.cells.size})`);
+  // open the ring at (0,2): the fill escapes to the open moor -> not a fold
+  const ringGap = (x, z) => ring(x, z) && !(x === 0 && z === 2);
+  (foldAt(2, 2, ringGap).enclosed === false ? ok : bad)('a ring with an open gate is not enclosed');
+  // a seed sitting on the fence itself is no interior
+  (foldAt(0, 0, ring).enclosed === false ? ok : bad)('a seed on the fence is no fold');
+}
+
+// --- Task 7: every head penned within the detected fold cells ---
+{
+  const ring = (x, z) => (x >= 0 && x <= 4 && z >= 0 && z <= 4) && (x === 0 || x === 4 || z === 0 || z === 4);
+  const cells = foldAt(2, 2, ring).cells;
+  (allPennedCells([{ x: 1.5, z: 1.2 }, { x: 3.4, z: 2.9 }], cells) === true ? ok : bad)('all heads on fold cells = penned');
+  (allPennedCells([{ x: 1.5, z: 1.2 }, { x: 9, z: 9 }], cells) === false ? ok : bad)('a head off the fold cells = not penned');
+  (allPennedCells([], cells) === false ? ok : bad)('an empty flock is not penned');
 }
 
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));

@@ -7,6 +7,7 @@
 export const DRIVE_DISTANCE = 4; // blocks the flock heads, away from the net pressure
 export const FLANK_RADIUS = 6;   // radius the dog works at, circling the flock
 export const FLANK_STEP = 0.9;   // radians the dog advances around the flock per flank command
+export const FOLD_MAX_CELLS = 600; // a fold whose interior exceeds this reads as "open" (not enclosed)
 
 // The mean position of the flock. positions: [{x,z}, ...]. null for an empty flock.
 export function flockCentroid(positions) {
@@ -52,6 +53,38 @@ export function dogGoal(command, centroid, dogPos, flankRadius = FLANK_RADIUS) {
 export function allPenned(positions, fold) {
   if (!positions.length) return false;
   return positions.every(p => p.x >= fold.x0 && p.x <= fold.x1 && p.z >= fold.z0 && p.z <= fold.z1);
+}
+
+// Auto-detect a fold the player has fenced. Flood-fill the open cells from a seed; a cell is
+// open when isFence(x,z) is false. If fences bound the fill within maxCells, it's an enclosed
+// fold and we return its interior cell-set (keys "x,z") and bounding box; if the fill escapes
+// (an open gate, or no enclosure) it blows past the cap and reads as NOT enclosed. The cap is
+// both the size limit and the enclosure test, so detection is bounded and can't run away.
+export function foldAt(seedX, seedZ, isFence, maxCells = FOLD_MAX_CELLS) {
+  seedX = Math.floor(seedX); seedZ = Math.floor(seedZ);
+  if (isFence(seedX, seedZ)) return { enclosed: false, cells: null, bounds: null };
+  const cells = new Set([seedX + ',' + seedZ]);
+  const queue = [[seedX, seedZ]];
+  let x0 = seedX, z0 = seedZ, x1 = seedX, z1 = seedZ;
+  while (queue.length) {
+    const [x, z] = queue.pop();
+    for (const [nx, nz] of [[x + 1, z], [x - 1, z], [x, z + 1], [x, z - 1]]) {
+      const key = nx + ',' + nz;
+      if (cells.has(key) || isFence(nx, nz)) continue;
+      cells.add(key);
+      if (cells.size > maxCells) return { enclosed: false, cells: null, bounds: null };
+      queue.push([nx, nz]);
+      if (nx < x0) x0 = nx; if (nx > x1) x1 = nx; if (nz < z0) z0 = nz; if (nz > z1) z1 = nz;
+    }
+  }
+  return { enclosed: true, cells, bounds: { x0, z0, x1, z1 } };
+}
+
+// True when every head stands on a cell of a detected fold (the precise check for an
+// arbitrary-shaped pen, vs allPenned's rectangle). cells: the Set from foldAt. Empty = false.
+export function allPennedCells(positions, cells) {
+  if (!positions.length || !cells) return false;
+  return positions.every(p => cells.has(Math.floor(p.x) + ',' + Math.floor(p.z)));
 }
 
 // Map an arrow-key code to a whistle command (the player's own WASD movement is untouched).
