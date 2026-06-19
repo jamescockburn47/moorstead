@@ -64,3 +64,4 @@ Build order: SP1 → SP2 → SP3 → SP4 → SP5, with SP4 a large parallel trac
 - SP1 plan: `plans/2026-06-19-economy-money-loop.md`.
 - SP2 spec: `specs/2026-06-19-trade-logistics-design.md`.
 - SP2 engine plan (built): `plans/2026-06-19-trade-logistics-engine.md`.
+- Farming & droving spec: `specs/2026-06-19-farming-droving-design.md` — the hill-farmer vertical (Slice 1 herding core / Slice 2 registered-farm gate / Slice 3 drove to market; spans SP2/SP4/SP5). Cross-cutting in-game-legibility mandate born from the taming-legibility fix.
