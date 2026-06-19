@@ -347,8 +347,9 @@ git commit -m "feat(herding): commandFromKey — arrow keys to whistles (Slice 1
 ## Plan 2 (the wiring, a separate plan)
 
 - `entities.js`: each frame, gather the player's loose flock (sheep within range of a working dog), move the dog toward `dogGoal(command, …)`, treat the dog + the mounted/​on-foot player as pressures, and steer each flock sheep toward `driveTarget(centroid, pressures)` with separation.
-- Fold definition + detection: how the player marks a fold (a placed gate/marker vs a flood-filled fenced rectangle) → the `{x0,z0,x1,z1}` footprint `allPenned` needs. **This is the main open design call for Plan 2.**
-- On `allPenned` true: settle the flock as stay-at-home stock (`owner`+`stay`+`home`) anchored to the fold; toast; milestone.
+- **New blocks** (`defs.js`/`textures.js`/`physics.js`): `B.FENCE` (a `barrier`-flag block — collides like a solid, draws thin) and `B.GATE` (one-way auto-gate — opens for an animal from outside, shut from inside, always open to the player, counts as a fold boundary), with bench recipes. The gate's conditional collision is a physics special case. (Design: spec §3.6.)
+- Fold detection (resolved — was the open call): `foldAt(seedFromFlock, isFence, …)` with `isFence` true for `B.FENCE` + `B.GATE`; penned = `allPennedCells(flock, fold.cells)`.
+- On penned: settle the flock as stay-at-home stock (`owner`+`stay`+`home`) anchored to the fold; toast; milestone.
 - `main.js`: arrow keys → `commandFromKey` → set the working dog's current command; heel key (H); the gather→pen completion hook.
 - `ui.js`: crosshair command hints ("← come-bye / → away, ↑ walk on, ↓ lie down"), a command reference when a working dog is at heel.
 - Verified in the browser preview (drive a scattered flock through a gate into a fold).

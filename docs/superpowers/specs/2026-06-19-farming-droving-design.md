@@ -48,15 +48,28 @@ You are the *broad* pressure, the dog the *precise* one. On the moorland pony (t
 
 ### 3.4 The gather→pen loop (the demonstrable v1)
 
-Prerequisites: a tamed sheepdog at heel, sheep within reach, and a **fold** — a fenced enclosure the player builds (fence blocks + a gap for the gate already exist).
+Prerequisites: a tamed sheepdog at heel, sheep within reach, and a **fold** — a fenced enclosure the player builds from the new fence and one-way gate blocks (§3.6).
 
-The loop: gather scattered sheep into a bunch with the dog, drive them through the gate into the fold. **Penned** is detected **zone-based** — when every target sheep is inside the fold's footprint — which is simpler and more robust than true geometric containment, while the fence still does the physical work of holding them.
+The loop: gather scattered sheep into a bunch with the dog and drive them toward the gate. The one-way gate opens to let them in from outside and shuts behind them, so a *fully* enclosed pen is reachable — **this fixes the enclosure paradox** (a sealed pen with no opening could never be entered, yet an opening would let the flock escape). **Penned** is detected by `foldAt` (the herding engine): the fences and the gate bound a flood-fill, and a head is penned when it stands on a fold cell (`allPennedCells`). The fences do the physical work of holding them; the one-way gate keeps them from wandering back out.
 
 **The payoff, and the bridge to Slice 2:** on a successful pen, the gathered sheep **settle as stay-at-home stock**, reusing the existing `owner` + `stay` + `home` system, anchored to the fold. Herding is therefore how you *stock your farm* — gather wild Swaledales, pen them, and they're now your kept flock that counts toward farm status.
 
 ### 3.5 Failure & feel
 
 Under the scripted model, mishandling — pressing too hard, flanking from the wrong side — makes the flock overshoot and scatter loosely around the target, costing time to re-gather. (The *dramatic* split-the-flock failure is what the future emergent model would add; under scripted it's a softer setback.) Recoverable, never punishing.
+
+### 3.6 Fence and gate blocks (new)
+
+The fold needs two new blocks — neither exists today (the "lineside fence" is only rendered scenery; there is no buildable fence, so "fence her in" has had nothing to build with).
+
+- **Fence** (`B.FENCE`): a thin, stock-proof barrier. It blocks both animals and the player (so the gate is the only way through) but renders as a thin post-and-rail, not a full wall. The voxel renderer only knows solid cubes and passable cutout-crosses, so this needs a small addition — a **`barrier` flag** that collides like a solid yet draws thin. Craftable from wood at the bench. It is a boundary for fold detection (`foldAt`'s `isFence` returns true for it).
+- **Gate** (`B.GATE`) — the one-way livestock gate that makes a *sealed* fold usable:
+  - **A boundary for fold detection**, so a ring of fences with a gate still reads as fully enclosed (the interior doesn't leak out the gateway).
+  - **One-way for animals:** it opens (becomes passable) for an animal approaching from the **outside** — they walk in — and stays shut for an animal on the **inside**, so penned stock can't wander off. Inside vs outside is read from the detected fold: the gate's interior side is the one facing the fold's cells; a lone gate with no enclosure yet simply opens for any approaching animal.
+  - **Always passable by the player**, both ways — it's the farmer's door.
+  - Collision is therefore **conditional** (per entity, per side), a special case in physics that the solid/cutout binary can't express; the gate visibly swings.
+
+Implementation (Plan 2): add the block ids + atlas tiles + `BLOCKS` defs + bench recipes in `defs.js`/`textures.js`; the `barrier` collision and the gate's conditional passability in `physics.js`; `foldAt`'s `isFence` predicate treats both `B.FENCE` and `B.GATE` as boundaries. Fancier custom fence/gate geometry (proper swinging hurdle) is later polish; the `barrier`-flag thin fence + a swinging-gate visual is the v1.
 
 ## 4. Slice 2 — farm status (the registered farm)
 
@@ -132,3 +145,4 @@ d. **Sheep only** for Slice 1–3; cattle later.
 e. **Drove risk** (predation/stray/bog) is real but never a hard fail — you're paid for what arrives.
 f. **Fold** = player-built fenced enclosure, zone-detected; not true geometric containment.
 g. **Financial upside tops the gradient (James's requirement):** a droved flock is the single most lucrative sale in the game, sized so the whole effort is plainly worth it. The exact `livestockPrice` + drover's premium are Slice-3 tuning, measured against the §5 target (must clearly out-earn any other income path).
+h. **Fence + one-way gate blocks (James's call):** a new `barrier`-flag fence (thin, but collides) and a one-way auto-gate (opens for an animal from outside, shut from inside, always open to the player, counts as a fold boundary). The gate resolves the sealed-pen paradox — animals get in but can't get out. v1 uses the `barrier` flag + a swinging-gate visual; bespoke fence geometry is later polish.
