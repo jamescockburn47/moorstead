@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Moorstead: how I built it and how it works</title>
+  <meta name="description" content="A full technical description of Moorstead, a browser voxel sandbox of the North York Moors that I, a commercial litigator and non-coder, built by directing AI, with local-LLM villagers and a self-hosted multiplayer backend." />
+  <style>
+    :root {
+      --bg: #0a0c10;
+      --panel: rgba(18, 20, 16, 0.88);
+      --border: #4a4438;
+      --gold: #d8b95a;
+      --text: #e8e2d0;
+      --muted: #9a948a;
+      --link: #e0c878;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      background:
+        radial-gradient(1200px 600px at 70% -10%, #1c2418 0%, rgba(28,36,24,0) 60%),
+        linear-gradient(#0a0c10, #0c0f0a 60%, #0a0c10);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      line-height: 1.62;
+      font-size: 17px;
+      padding: 0 20px 120px;
+      min-height: 100%;
+    }
+    .wrap { max-width: 820px; margin: 0 auto; }
+    header { padding: 64px 0 8px; border-bottom: 1px solid var(--border); margin-bottom: 36px; }
+    h1 {
+      font-size: 52px; letter-spacing: 5px; color: var(--gold);
+      font-weight: 800; line-height: 1.05;
+    }
+    .sub { color: #b8b2a0; font-style: italic; font-size: 18px; margin-top: 6px; }
+    .back { display: inline-block; margin-top: 22px; color: var(--link); text-decoration: none;
+            font-size: 14px; border-bottom: 1px dotted rgba(216,185,90,0.45); }
+    .back:hover { border-bottom-color: var(--gold); }
+    h2 {
+      color: var(--gold); font-size: 25px; margin: 44px 0 14px; font-weight: 700;
+      letter-spacing: 0.3px; padding-top: 8px;
+    }
+    h3 { color: #cdbf8e; font-size: 18px; margin: 26px 0 8px; font-weight: 700; }
+    p { margin: 0 0 14px; }
+    a { color: var(--link); }
+    ul { margin: 6px 0 18px; padding-left: 22px; }
+    li { margin: 6px 0; }
+    strong { color: #f0e8cf; }
+    .lede { font-size: 19px; color: #efe8d2; }
+    code {
+      background: rgba(255,255,255,0.06); border: 1px solid #3a3830;
+      border-radius: 4px; padding: 1px 6px; font-size: 14px;
+      font-family: 'Cascadia Code', Consolas, 'Courier New', monospace; color: #e8dca8;
+    }
+    .card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 8px; padding: 18px 22px; margin: 18px 0;
+    }
+    .grid { display: grid; grid-template-columns: 150px 1fr; gap: 6px 18px; font-size: 15px; }
+    .grid dt { color: var(--gold); font-weight: 600; }
+    .grid dd { color: var(--text); }
+    .note { color: var(--muted); font-size: 14.5px; font-style: italic; }
+    hr { border: none; border-top: 1px solid var(--border); margin: 48px 0 0; }
+    footer { color: var(--muted); font-size: 14px; margin-top: 28px; }
+    .tag { display: inline-block; font-size: 12px; color: var(--gold); border: 1px solid var(--border);
+           border-radius: 20px; padding: 2px 11px; margin: 0 6px 6px 0; background: rgba(216,185,90,0.06); }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>MOORSTEAD</h1>
+    <div class="sub">A voxel sandbox of the North York Moors. How I built it, how it works, and what it taught me.</div>
+    <a class="back" href="/">&larr; Back to the moor</a>
+  </header>
+
+  <p class="lede">
+    Moorstead is a browser game: a blocky, explorable model of the North York Moors that you
+    can build in, mine, farm, sail, and ride a steam train across, alongside other players, with
+    villagers who remember you. Two things about it are unusual. <strong>I built it end to end
+    without writing code.</strong> I'm a commercial litigator, not a programmer, and I made the
+    whole thing by directing AI models. And its characters think on a <strong>large language
+    model running on a small computer in my house</strong>, not in the cloud. This page sets out
+    the lot in plain terms: how I built it, the architecture, the multiplayer layer, the AI, and
+    a straight account of what is new here and what is not.
+  </p>
+
+  <div>
+    <span class="tag">Three.js / WebGL</span>
+    <span class="tag">Fully procedural, zero asset files</span>
+    <span class="tag">Self-hosted multiplayer</span>
+    <span class="tag">Local-LLM villagers</span>
+    <span class="tag">Built by directing AI</span>
+  </div>
+
+  <h2>1. What it is</h2>
+  <p>
+    Moorstead is a first-person voxel sandbox, the genre Minecraft made familiar, set on a
+    recognisable North York Moors at true-ish bearings: a high heather plateau cut by named
+    dales, blanket bog on the tops, and the North Sea behind cliffs to the east. The fixed
+    landmarks sit where they really are: Roseberry Topping, the Hole of Horcum, the Wainstones,
+    the Rosedale ironstone kilns, the moor crosses, and the ruined abbey above Whitby. One steam
+    train runs the line, in the shape of the real North Yorkshire Moors Railway.
+  </p>
+  <p>
+    Everything you see is <strong>generated in code</strong>. There is not a single image,
+    sound, or 3D model file in the project. Textures are painted into a canvas at load time,
+    every creature is assembled from boxes in a few lines of geometry, and all the sound is
+    synthesised. The world itself is grown from a single number (a "seed") by noise functions,
+    so the same seed always produces the same moor.
+  </p>
+
+  <h2>2. How I built it</h2>
+  <p>
+    I made Moorstead by instructing AI models in natural language and reviewing what they
+    produced. There was no team, and I had no prior game-development background.
+  </p>
+  <p>
+    The first playable build came together in a single <strong>twelve-hour session with Fable
+    5</strong>. That was the terrain generation, the voxel engine, movement, building, and the
+    architectural decisions everything else now rests on. The speed was not incidental, and
+    neither was the model. Section 8 is mostly about why. <strong>Fable 5 was banned shortly
+    afterwards.</strong> The rest of the work, a further <strong>week on a less capable model
+    (Opus 4.8)</strong>, added the visible features: the real railway, the talking villagers, the
+    shared multiplayer moor, seasons and live weather, rideable ponies, sailing, tameable
+    animals, the folklore quest line, and the in-world wizard below. That this phase took far
+    longer, and that a weaker model could carry it, is the lesson. Once the architecture is
+    sound, extending it is ordinary work. The scarce moment was the first afternoon.
+  </p>
+  <p>
+    That second phase is in the version history: <strong>118 commits between 12 and 18 June
+    2026</strong>. It was not vibe-coding in the loose sense. I made every change survive a
+    <strong>headless test suite</strong> (<code>npm run verify</code>, nine independent checks)
+    before it shipped. The railway is proven never to cross itself, run through a building, or
+    stand in water across multiple seeds. The train's cab view is proven by casting rays from
+    the driver's seat to confirm you can actually see out of the windows. Resource veins,
+    landmarks, seasons, weather, pets and villagers each have their own check. I encoded the
+    discipline an engineer would bring as automated proofs the AI had to pass.
+  </p>
+
+  <h2>3. The architecture</h2>
+  <p>
+    The game is a single-page web application. There is no game engine and no heavy framework,
+    just <strong>Vite</strong> (the build tool) and <strong>Three.js</strong> (a thin WebGL
+    wrapper), with the whole game written as about thirty plain JavaScript modules.
+  </p>
+
+  <h3>The voxel world</h3>
+  <ul>
+    <li><strong>Chunked terrain.</strong> The world is divided into 16&times;64&times;16 columns of
+      blocks, streamed in and out around the player with a per-frame time budget so the
+      framerate stays smooth.</li>
+    <li><strong>Efficient rendering.</strong> Only block faces that touch air are turned into
+      geometry ("culled-face meshing"), with soft shadowing in the corners baked into the mesh
+      ("ambient occlusion") rather than computed by lights every frame.</li>
+    <li><strong>Procedural terrain.</strong> Heights come from layered value-noise (fractal
+      Brownian motion). Caves are carved by 3D noise. Trees, ore and detail are placed by
+      hashing coordinates. All of it is deterministic.</li>
+  </ul>
+
+  <h3>Two ideas that make the rest simple</h3>
+  <p>
+    <strong>The world is a pure function of its seed.</strong> Because every client can compute
+    the identical terrain from the same seed, nobody ever downloads a map. The server only needs
+    to remember the differences players have made, the blocks they have dug or placed. This keeps
+    multiplayer tiny and joins instant.
+  </p>
+  <p>
+    <strong>Time is a pure function of the clock.</strong> The day/night cycle, the seasons, and
+    the train timetable are all computed directly from the real-world time (<code>Date.now()</code>
+    in UTC). Every player's client, and the AI characters, agree on what time it is, what season
+    it is, and where the train is, with no message ever sent between them to synchronise. The
+    shared world stays consistent almost for free.
+  </p>
+  <p class="note">
+    Saves are stored in the browser (IndexedDB): raw chunk bytes plus a little metadata, per
+    account.
+  </p>
+
+  <h3>The weather is the real weather</h3>
+  <p>
+    Moorstead's sky is tied to the live conditions at Goathland, a real North York Moors village
+    that also appears in the game. A small service pulls the current forecast from a free, keyless
+    weather API every fifteen minutes, maps it onto the game's own weather states (clear, misty,
+    rain, fog) along with fog distance and rainfall, and drives the sky from that. When the real
+    moor is under mist, so is the game, within the hour. If the feed fails it falls back quietly to
+    a procedural weather cycle, so the world never depends on the network to have weather at all.
+  </p>
+
+  <h2>4. Where and how it is deployed</h2>
+  <p>
+    Moorstead runs across two very different places at once: a global content-delivery network for
+    the game itself, and a <strong>single small computer in my house</strong> for everything that
+    has to be live and shared.
+  </p>
+
+  <div class="card">
+    <dl class="grid">
+      <dt>Game client</dt><dd>Built with Vite, served as static files from <strong>Vercel</strong>'s CDN at <a href="https://www.moorstead.app">www.moorstead.app</a>.</dd>
+      <dt>Backend host</dt><dd>A self-hosted mini-server at home (an "EVO X2"), running a <strong>Caddy</strong> reverse proxy.</dd>
+      <dt>Exposure</dt><dd>A <strong>Cloudflare tunnel</strong> publishes the home server to the internet with no open inbound ports and automatic TLS.</dd>
+      <dt>The join</dt><dd>Vercel quietly forwards the game's <code>/brain</code> and <code>/dash</code> paths to the home server, so the public site and the home backend look like one origin to the browser.</dd>
+    </dl>
+  </div>
+
+  <p>The home server runs three small services behind the proxy:</p>
+  <ul>
+    <li><strong>The world relay.</strong> A WebSocket server (Python / FastAPI) that carries the multiplayer traffic: presence, chat, and the persistent block edits.</li>
+    <li><strong>The village brain.</strong> An HTTP service (FastAPI) in front of a local large language model. This is what the villagers think on.</li>
+    <li><strong>A parish dashboard.</strong> A private admin panel for me, kept off the public internet.</li>
+  </ul>
+  <p class="note">
+    Deploying is a two-target push: the static client goes to Vercel, and the same build is
+    mirrored to the home server, which keeps the previous build for instant rollback.
+  </p>
+
+  <h2>5. Playing together: the multiplayer layer</h2>
+  <p>
+    There is one shared moor for everyone (a fixed seed), relayed through the home server over
+    WebSockets. Because the terrain is computed from the seed on every machine, the only things
+    that travel over the network are edits and presence: who is where, who said what, and which
+    blocks have changed. That is why joining is instant and the bandwidth is trivial.
+  </p>
+  <ul>
+    <li><strong>Presence and chat.</strong> You see other players move, village chat carries about sixty metres, and the day/night clock is shared by everyone.</li>
+    <li><strong>Worlds by invite.</strong> The prefix of your invite code decides which room you land in. Each room shares the same terrain but keeps its own block edits, so different groups can have their own moor without seeing each other's building.</li>
+    <li><strong>Per-account progress.</strong> Inventory and ventures are saved per account, whichever world you visit.</li>
+    <li><strong>A resilient connection.</strong> The client sorts every disconnect into a clear set of causes, reconnects with exponential backoff and jitter, spots half-open ("zombie") sockets, and holds a short grace period so a backgrounded browser tab does not make you flicker in and out for everyone else.</li>
+  </ul>
+
+  <h3>A separate, walled-off world for children</h3>
+  <p>
+    Moorstead has an entirely separate world for children, sealed off from the adult moor. A child
+    is let into it only by a specific kind of invite token. The token prefix is what does the
+    gating: a child's token routes into the children's room and nowhere else, and an adult token
+    cannot reach the children's room. Children never share a world with adult strangers.
+  </p>
+  <p>Inside it, the rules are tighter, and built in:</p>
+  <ul>
+    <li><strong>Survival mode is locked on</strong> and the creative build-and-destroy tools are hidden, so the world cannot be wiped or grief-built.</li>
+    <li><strong>The real landmarks are protected.</strong> Built stone at or above ground cannot be broken inside a landmark (the abbey, the kilns, the standing stones, the stations, the moor crosses), though a child can always dig underneath and mine freely.</li>
+    <li><strong>A guided first hour</strong> walks a new child through the basics with a ladder of small milestones.</li>
+    <li><strong>A parent sets the limits.</strong> A daily time allowance, quiet hours, an overnight lock, and a manual lock, with a warning before time is up.</li>
+    <li><strong>Merlin is kid-safe here.</strong> The in-world wizard appears in the children's world too, in a mode that governs what he says, and a parent can see the conversations.</li>
+  </ul>
+  <p>
+    These are real constraints, the same guardrail-and-oversight thinking I bring to AI systems in
+    my professional work, here pointed at the problem of a child loose in an online sandbox.
+  </p>
+
+  <h3>How many can play at once</h3>
+  <p>
+    Worth a word on scale, because the architecture has an unusual answer.
+  </p>
+  <p>
+    The server never simulates the world. Terrain, day and night, the seasons, the weather, the
+    train: every client works those out for itself from the seed and the clock. So adding players
+    adds no world-simulation cost at all. The server's only standing job is to pass around three
+    things: where people are, what they type, and which blocks they change. Edits and chat are
+    occasional. The constant cost is position updates.
+  </p>
+  <p>
+    That makes position the binding constraint. Everyone's position has to reach everyone else in
+    the same room, so the relay's work in one room grows with the square of the number of people in
+    it. On the current small home server, one room is comfortable with tens of players in it, and
+    would probably hold into the low hundreds before the position traffic started to tell. I have
+    not load-tested that. Real use has been a household, not a crowd.
+  </p>
+  <p>
+    Rooms are the trick for going wider. Each invite group lives in its own room, walled off from
+    the others, so the load shards. The server's real ceiling is then how many open connections one
+    small machine can hold across all rooms at once, which for an async Python server runs to the
+    hundreds, into the low thousands. So in principle hundreds of people could be playing across many
+    rooms at the same time, on a computer in my house, with no world ever downloaded or simulated on
+    the server.
+  </p>
+  <p>
+    Nothing in the design ties the world to one server. Because terrain is deterministic and only
+    edits and presence are relayed, rooms could be split across more relays, or bigger ones, with no
+    central world to become a bottleneck. The headroom is a hardware question, not a design one.
+  </p>
+
+  <h2>6. The village brain: local-LLM characters</h2>
+  <p>
+    Every settlement is genuinely lived in. The named villagers, the stationmaster and shepherdess
+    at Goathland, the innkeeper and old miner at Rosedale, the fisherfolk at Staithes, the vicar at
+    Pickering, the jet carver at Whitby, and the rest, are <strong>personas served by a large
+    language model running locally</strong>: a Gemma model (around 31&nbsp;billion parameters) under
+    <code>llama.cpp</code> on the home server. No cloud AI is in the conversation loop, there is no
+    per-message cost, and the chat never leaves my hardware.
+  </p>
+  <ul>
+    <li><strong>Memory and standing.</strong> Each villager remembers each visitor: conversation history, a trust tier, and gift preferences, all kept in the brain.</li>
+    <li><strong>Guardrails.</strong> The prompts are hardened to keep characters in role. Out-of-character replies are detected and retried, and speech is filtered before it reaches you. This is the same class of problem I work on professionally: keeping a model on-script and honest.</li>
+    <li><strong>Inner lives, cheaply.</strong> Villagers follow deterministic daily routines and carry small drifting moods, computed as ordinary maths every frame. The language model is not run on a tick. It only dresses the surface when you actually talk to someone. There are around forty villagers, some of whom roam the roads and moor.</li>
+    <li><strong>Graceful offline.</strong> If the brain is down, the villagers still potter about and speak from canned lines. The world never breaks, it just goes quieter.</li>
+  </ul>
+
+  <h2>7. Merlin: the embodiment of my own AI agent</h2>
+  <p>
+    The most unusual character in Moorstead is <strong>Merlin</strong>, a glowing Yorkshire wizard
+    who walks the moor. Merlin is not a bespoke game NPC. He is the <strong>in-world body of a
+    personal AI agent I already had</strong>: my own assistant (I call it "Clint") that runs over
+    WhatsApp and handles my briefings, my tasks, and even its own coding. The same agent now wears
+    three faces:
+  </p>
+  <ul>
+    <li><strong>A private assistant.</strong> Its original job, helping me over WhatsApp.</li>
+    <li><strong>A remote warden.</strong> It runs the live game for me by message: who is online, broadcasting notices, moving players between worlds.</li>
+    <li><strong>Merlin, an in-world character.</strong> The one other players meet inside the game.</li>
+  </ul>
+  <p>
+    Merlin is a <strong>walled-off persona</strong>. The in-world wizard has its own empty memory
+    and only game tools, with no path to my personal data. The separation is deliberate. It is a
+    security boundary, so that nobody can use in-game chat to coax private information out of the
+    assistant that runs my life.
+  </p>
+
+  <h3>What Merlin can actually do</h3>
+  <ul>
+    <li><strong>He knows where you are.</strong> Merlin reads live game state (your position, your inventory, the geography of the world) and gives exact, grounded directions ("south-west, about twelve hundred blocks, to the Rosedale kilns").</li>
+    <li><strong>He comes when called.</strong> Say his name anywhere on the moor and he is conjured to your side within seconds. Several players can each summon their own Merlin at once.</li>
+    <li><strong>He holds a conversation.</strong> Once he is with you, you can just keep talking. He follows you and answers without needing his name each time.</li>
+    <li><strong>He leads and he builds.</strong> Ask him to take you to iron or to a landmark and he physically walks you there. Ask for help and he casts "spells" that place real blocks in the world (a ring of lanterns, a foundation, a standing stone) through the multiplayer relay.</li>
+  </ul>
+
+  <h3>The agent can also write the game</h3>
+  <p>
+    Because Merlin is a real agent, I can ask it in plain English, over WhatsApp, to <strong>add new
+    content to the game itself</strong>. It drives a coding model to write a small, additive feature
+    (a new animal, say), runs that change through a mechanical safety gate that blocks anything
+    touching the engine, world generation, or security, then through the full test suite and a build,
+    and finally proposes it (or, when I explicitly arm it, deploys it). A grazing llama and a robin
+    in Moorstead were written this way. Risky or far-reaching changes are refused by the gate by
+    design, and I promote anything that reaches the public site by hand.
+  </p>
+
+  <h2>8. What is genuinely new here, and what is not</h2>
+  <p>
+    I'd rather be precise than promotional. None of the individual ingredients is a world first.
+    Voxel sandboxes are a mature genre. Self-coding AI agents exist (the "Voyager" Minecraft agent).
+    LLM-driven NPC middleware exists (Inworld, Convai, NVIDIA's ACE). Generative-agent "memory and
+    routine" simulations exist (Stanford's "Smallville" study). Chat-operated admin bots are common.
+    Procedural, asset-free graphics are an old demoscene tradition.
+  </p>
+  <p>Two things here are not routine, and one of them I think is genuinely new.</p>
+
+  <h3>1. What Fable 5 could do, and why it matters beyond a game</h3>
+  <p>
+    I have built a fair number of games with AI by now, and there is a failure mode I had come to
+    expect. The model produces all the elements (a map, enemies, items, rooms) but with no real
+    grasp of how they will interact, or how a person will actually experience them. An enemy gets
+    placed where the player will never meet it. A door opens onto nothing. The parts are all present,
+    and the lived experience is incoherent. The model has assembled a set, not a world.
+  </p>
+  <p>
+    Fable 5 was the first model I used that did not do this. It could reason through the experience
+    itself: what the world needed to feel like from inside it, how a player would move through it,
+    where the moments would land. To my eye that crossed into something near the threshold people
+    mean by AGI. It was not encyclopaedic recall. It was an apparent grasp of lived, in-world
+    experience, a working analogue of how a person actually inhabits a situation, which is itself one
+    of the stated markers of general intelligence. It did not feel like autocomplete. It felt like
+    working with something that understood what it was making, almost, at moments, a kind of
+    awareness. That is why the architecture in section 3 fell into place in twelve hours: deriving the
+    world, the clock, and the weather from shared truths, so the whole thing holds together with
+    almost no synchronised state. Getting that right is not about writing more code. It is about
+    understanding what the system has to be. When Fable 5 was banned, the project carried on with a
+    weaker model, because by then the part that needed real reasoning was already done.
+  </p>
+  <p>
+    This is the lesson I take back to my day job. I'm a commercial litigator, and I build AI systems
+    for legal work. The flow of professional software, how a document or a workflow or a chain of
+    legal reasoning actually moves and connects for the person using it, is every bit as tricky as
+    the flow of a game. The difference is that a game is honest. If the experience is broken you can
+    see it: the enemy stands in the corner doing nothing. In legal or financial software the same
+    incoherence is invisible until it fails in front of a client or a court. A game is one of the few
+    places you can watch a model reason about lived experience and tell at once whether it got it
+    right. I have come to think that building games is a badly undervalued training ground for anyone
+    making serious software in law, finance, or any field where the flow matters and is hard to check.
+  </p>
+
+  <h3>2. An agent that inhabits, operates, and writes its own world</h3>
+  <p>
+    The part I think is genuinely new is structural. In almost every system, three things are kept
+    firmly apart: the content of a product (its characters, its world), the operation of it (the live
+    service and its admins), and the development of it (the people and pipelines that ship new code).
+    In Moorstead, a single agent is all three at once. As Merlin, it is a character you can walk up
+    to and talk to, content standing inside the world. As the warden, it runs the live service:
+    presence, broadcasts, moving players between worlds. As the auto-coder, it writes and ships new
+    content into the running game on request. The world is therefore, in part, grown from inside
+    itself, by one of its own inhabitants.
+  </p>
+  <p>
+    Each of those facets has prior art on its own: self-coding agents, NPC middleware, chat-ops bots.
+    The union is the part I cannot find anywhere else, one agent that is at the same time an
+    inhabitant, the operator, and the author of the same live service. Two deliberate boundaries keep
+    it sane rather than reckless. A security membrane walls the public, in-world Merlin off from the
+    private assistant that runs my life, so in-game chat can never be used to coax out personal data.
+    A mechanical gate refuses to let the auto-coder touch the engine, world generation,
+    authentication, or anything load-bearing, confining it to small additive content that must still
+    pass the full test suite and my own promotion before it can reach the public site. The villagers,
+    and Merlin himself, think on my hardware at zero marginal cost, which is the only reason a world
+    full of live AI characters is affordable to run at all.
+  </p>
+
+  <h3>And my own discipline is built into the safety design</h3>
+  <p>
+    I'm a commercial litigator. My working life is adversarial scrutiny: guardrails, auditability,
+    and never trusting an assertion I cannot verify. It shows here, in the engineering rather than as
+    a slogan. The NPC prompts are hardened against drifting off-script, and retried when they do.
+    Merlin is walled off against exfiltration. The auto-coder is fenced by a gate that assumes it will
+    eventually try something it should not. For "visual" correctness, the test is whether you can
+    actually see out of the train cab, and I prove it by casting rays through the scene rather than
+    trusting a screenshot. When your implementer is a model you must not trust blindly, the expertise
+    that matters most is the expertise in not trusting blindly. That, more than any single feature, is
+    what I brought to a codebase I never typed.
+  </p>
+  <p>
+    The honest summary is two claims and a caveat. The new thing is a live world inhabited, operated,
+    and extended by one agent that is also one of its own characters, walled for safety. The wider
+    lesson, the one I care about most, is that the rare ingredient was not code. It was a model that
+    could reason about lived experience. That is exactly the capability serious software needs and
+    rarely gets to test honestly, and a game is the best honest test of it I know. The caveat is that
+    this is one project by one person. I offer it as evidence, not as a theorem.
+  </p>
+
+  <hr />
+  <footer>
+    <p>
+      <a class="back" href="/">&larr; Back to Moorstead</a>
+    </p>
+    <p style="margin-top:14px">
+      Built by directing AI, by a litigator who doesn't code. Procedurally generated, not a single
+      asset file. The villagers, the ventures, and Merlin the moor-wizard all run on large AI models.
+    </p>
+  </footer>
+
+</div>
+</body>
+</html>

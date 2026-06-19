@@ -2,3 +2,7 @@
 
 node_modules/
 dist/
+
+# local-only — never commit: python bytecode and the live multiplayer room keys
+__pycache__/
+moorstead keys.md
