@@ -52,10 +52,10 @@ Build order: SP1 → SP2 → SP3 → SP4 → SP5, with SP4 a large parallel trac
 3. **SP1 leftovers:** the Exchange teaching screen, converting job rewards to brass, the train fare in brass.
 4. **SP3, SP4, SP5** per the table above.
 
-## Repo and deploy state (2026-06-19)
+## Repo and deploy state (updated 2026-06-19, post-deploy)
 
-- All of the above is **merged to local `main`** (fast-forward). **`origin/main` is NOT pushed**, so no Vercel deploy has been triggered. Pushing `main` deploys the live site.
-- `public/about.html` (the title-screen technical write-up the UI links to) is **untracked**; commit `public/` before any deploy or the `/about.html` link 404s.
+- All of the above, plus the SP1+SP2 review hardening, is **committed and pushed to `origin/main`** and **deployed to production**. **Git push does NOT auto-deploy** (the GitHub link is metadata-only — verified: a push registered no build): deploy with `npx vercel deploy --prod --yes` from the repo root (Vercel CLI auth is stored locally; `.vercel/` sets the project), or `deploy/ship.ps1`. The current build is **live at www.moorstead.app** (apex `moorstead.app`/`moorcraft.app` 308-redirect there; `/about.html` returns 200). Full deploy flow is in the `moorcraft-evo-stack` memory.
+- `public/about.html` is now **tracked and deployed** — the `/about.html` 404 risk is closed.
 - The game's live tunnel may be **down** (it was taken down for the earlier fine-tune run; restore with `sudo systemctl start sovren-cloudflared` on the EVO box; see the `moorcraft-evo-stack` memory). Unrelated to the economy code.
 
 ## Spec/plan index
