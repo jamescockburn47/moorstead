@@ -483,7 +483,7 @@ export class Gen {
         const fr = (a, w, y, id) => { const [wx, wz] = cell(a, sd * w); put(wx, y, wz, id); };
         fr(am - 1, w0, g + 1, B.AIR); fr(am, w0, g + 1, B.AIR); fr(am, w0, g + 2, B.AIR); // doorway
         fr(a0 + 1, w0, g + 2, B.WINDOW); fr(a1 - 1, w0, g + 2, B.WINDOW);
-        const [bx, bz] = cell(am, sd * (w0 - 1)); put(bx, g + 1, bz, B.BOARD); // running-in board
+        // (the running-in board is now a big free-standing departures board on the platform — see below)
         const [chx, chz] = cell(a0 + 1, sd * Math.round(wc));
         for (let y = g + wallH + 1; y <= peak + 2; y++) put(chx, y, chz, B.RBRICK); // chimney
       };
@@ -495,6 +495,16 @@ export class Gen {
       for (const a of [-aHalf + 1, aHalf - 1]) { const c = cell(a, 3); put(c[0], g + 1, c[1], B.LANTERN); }
       let c = cell(0, 4); put(c[0], g + 1, c[1], B.SIGNPOST);
       c = cell(-2, 4); put(c[0], g + 1, c[1], B.BENCH);
+
+      // a big, can't-miss DEPARTURES & MARKET board on every platform: a 3-wide, 2-high
+      // panel on stout posts, stood plain at t' platform edge. Right-click any of it to
+      // open t' boards (nearStation covers the whole structure).
+      for (const ba of [2, 3, 4]) {
+        const [bx, bz] = cell(ba, sides[0] * 4);
+        put(bx, g + 1, bz, B.LOG);    // post
+        put(bx, g + 2, bz, B.BOARD);  // panel (lower)
+        put(bx, g + 3, bz, B.BOARD);  // panel (upper)
+      }
 
       if (isBig) this.stampFootbridge(put, cell, g, aHalf);
       if (s.name === 'Grosmont') this.stampTerrace(put, cell);
