@@ -359,20 +359,22 @@ git commit -m "feat(economy): book and deliver forward shipments with a freight 
 - The engine is complete and tested: drop-in pricing, the purse that caps drop-in volume, shipment booking with the freight cap, timed delivery, and persisted trade state.
 - No live gameplay has changed yet (nothing calls the new methods in-game).
 
-## Plan 2 (the wiring, a separate plan)
+## Plan 2 (the wiring) — rail slice DONE 2026-06-19 (commit ce54627), live-verified
 
-- A "ship goods" panel at a station or port: pick goods + destination, show the locked price, confirm → `bookShipment`.
-- Switch the SP1 till's sell button from `doSell` to `dropInSell` (selling in person becomes the drop-in tier).
-- A per-frame hook in `main.js` that calls `economy.refillPurses(gameTime)` and `economy.tickShipments(gameTime)` with the real game clock (and fixes the `now` unit, so `DELIVERY_DELAY`/`PURSE_REFILL` get real values).
-- Farm-gate: allow the ship panel to open lineside (a proximity check against `rails.js`), not only at stations.
-- Polish: distance-scaled delivery delay so far markets take longer; tie delivery to the train actually reaching the station so it reads as "the train brought it."
+- ✅ **Ship-goods panel** on the station board (`main.js` `openStation`): lists held tradeable goods, auto-routes each to the dearest market (`bestMarket`), shows the locked price, freight-capped, confirm → `bookShipment`; plus an in-transit readout. *Simplification:* v1 auto-picks the best market (one good per booking) rather than a free goods+destination picker — legible for a child; the full picker is a later enhancement.
+- ✅ **Till → drop-in**: the SP1 sell button now calls `dropInSell` at the drop-in price (`ui.js`), via the new `economy.dropInList`. `doSell` is no longer reachable in-game (kept only as a tested primitive). Verified live: jet sells for 20d drop-in, not 34d full.
+- ✅ **Clock tick** (`main.js`, after `sky.update`): `economy.refillPurses(now)` + `economy.tickShipments(now)` with `now = sky.day + sky.time`. Verified live: a booked shipment delivers and credits brass once the clock passes `arrivesAt`.
+- ⬜ **Farm-gate**: open the ship panel lineside (proximity check against `rails.js`), not only at stations.
+- ⬜ **Sea/coble**: Whitby↔Staithes shipping (the station board is rail-only so far).
+- ⬜ **Multi-item parcels** in one booking, and a free goods+destination picker.
+- ⬜ **Polish**: distance-scaled delivery delay; tie delivery to the train actually reaching the station; tune `DELIVERY_DELAY` (0.5 day ≈ 15 real min — possibly long for a child).
 
 ## Plan 2 acceptance criteria — from the SP1+SP2 code review (2026-06-19)
 
-These are blocking conditions on the wiring. Numbers map to the review.
+These are blocking conditions on the wiring. Numbers map to the review. **Status 2026-06-19: #2 and #3 done and live-verified (commit ce54627); #1 remains a standing guard-rail for tuning.**
 
-- **#2 — the till sell must be *fully replaced*, not duplicated.** Today the live till calls `doSell` (`ui.js:595`), which pays the full destination price instantly with no purse cap — strictly better than shipping, so the trade gradient is currently *inverted* and there is no reason to ship. The wiring must switch the till to `dropInSell` and leave **no** reachable path that still pays the full uncapped `doSell` price. Verify in-game: selling in person pays the penalised drop-in price, the purse taps out after a few sales, and no button pays full price.
-- **#3 — feed game-days, never wall-clock.** `bookShipment`/`tickShipments`/`refillPurses` take `now = sky.day + sky.time` (the TIME CONTRACT comment at the top of the SP2 block in `economy.js` is the source of truth). Passing `performance.now()`/`Date.now()` makes delivery instant and refills a purse every frame. Verify: a shipment booked then save→reload arrives at the right game-time; a drained purse takes ~one game-day to refill, not a frame. `bookShipment`'s `originVillage` should be the player's current village (`geo.village.name`); dest/origin are now compared case-insensitively.
+- **#2 — the till sell must be *fully replaced*, not duplicated.** ✅ DONE — till uses `dropInSell`; `doSell` has no in-game caller. Today the live till calls `doSell` (`ui.js:595`), which pays the full destination price instantly with no purse cap — strictly better than shipping, so the trade gradient is currently *inverted* and there is no reason to ship. The wiring must switch the till to `dropInSell` and leave **no** reachable path that still pays the full uncapped `doSell` price. Verify in-game: selling in person pays the penalised drop-in price, the purse taps out after a few sales, and no button pays full price.
+- **#3 — feed game-days, never wall-clock.** ✅ DONE — the main loop passes `now = sky.day + sky.time`. `bookShipment`/`tickShipments`/`refillPurses` take `now = sky.day + sky.time` (the TIME CONTRACT comment at the top of the SP2 block in `economy.js` is the source of truth). Passing `performance.now()`/`Date.now()` makes delivery instant and refills a purse every frame. Verify: a shipment booked then save→reload arrives at the right game-time; a drained purse takes ~one game-day to refill, not a frame. `bookShipment`'s `originVillage` should be the player's current village (`geo.village.name`); dest/origin are now compared case-insensitively.
 - **#1 — SP2 is friction, not scarcity (do not mis-tune).** Even after #2, `bookShipment` pays from an effectively infinite destination till, and brass still has no sink. The purse caps only the *local drop-in* path. `PURSE_MAX`/`PURSE_REFILL` are friction knobs, not a money sink — real scarcity (finite vendor brass, stock-based restock, oversupply price-crash) is SP3. Don't crank the purse trying to fake scarcity here.
 
 **Already addressed in the engine (this review, tests added — `verify-economy.mjs` Tasks 5–7, 63 assertions green):**

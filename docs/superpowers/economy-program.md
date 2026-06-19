@@ -13,7 +13,7 @@ The NPC fine-tuning effort (see the `finetune/` tree and the `moorstead-npc-fine
 | Sub-project | Scope | Status |
 |---|---|---|
 | **SP1 Money loop** | brass currency, vendor till, regional prices, subsistence sinks, the Exchange teaching screen | **Built + live + merged to main.** (Exchange screen + brass payouts/fares were carved to a later slice.) |
-| **SP2 Trade logistics** | book rail/sea shipments, drop-in sales, vendor purse, freight cap, farm-gate | **Engine built + tested, dormant.** Wiring (plan 2) pending. |
+| **SP2 Trade logistics** | book rail/sea shipments, drop-in sales, vendor purse, freight cap, farm-gate | **Rail slice live + verified.** Clock tick, drop-in till, station ship-panel wired + playtested (commit ce54627). Remaining: farm-gate, sea/coble, multi-item parcels, delay tuning. |
 | **SP3 Living market** | dynamic stock-based pricing, vendor restock, oversupply price-crash, shared "moor market report" | Designed in principle, not specced. |
 | **SP4 NPC agency** | NPCs that pathfind, build, and produce/consume goods (extends the existing villager AI + Merlin) | Future. Unlocks hired labour and real NPC demand. |
 | **SP5 Aspiration & competition** | money-gated assets (farm, coble, shop, grand plot, charter/own rail), player-built settlements + rail links, contested roles + leaderboards | Future. The reason to get rich. |
@@ -47,7 +47,7 @@ Build order: SP1 → SP2 → SP3 → SP4 → SP5, with SP4 a large parallel trac
 
 ## What is NOT built yet (the path forward)
 
-1. **SP2 plan 2 (wiring), the immediate next step.** Make the dormant trade engine playable: a "ship goods" panel at stations/ports, switch the till's sell to `dropInSell`, a per-frame clock tick calling `economy.refillPurses(now)` and `economy.tickShipments(now)` with `now = sky.day + sky.time` (game-days — the unit is now decided; see the engine's TIME CONTRACT comment, never wall-clock), and farm-gate lineside booking. The review's blocking acceptance criteria are at the bottom of `plans/2026-06-19-trade-logistics-engine.md` (notably: the till sell must be *fully* switched off `doSell`, or the trade gradient stays inverted). This needs reads into `main.js`/`rails.js`/`ui.js` and is verified via the browser preview.
+1. **SP2 plan 2 (wiring) — rail slice DONE (commit ce54627), live-verified.** The trade engine is now playable on the railway: the clock tick (`now = sky.day + sky.time`) delivers shipments and refills purses, the in-person till sells at the drop-in price (`dropInSell`, not `doSell`), and the station board has a "Ship goods by rail" panel routing each good to its dearest market. **Remaining SP2 wiring:** farm-gate lineside booking (proximity to `rails.js`), sea/coble shipping (Whitby↔Staithes), multi-item parcels + a free goods/destination picker, and delivery-delay tuning / train-arrival tie-in. See the marked checklist at the bottom of `plans/2026-06-19-trade-logistics-engine.md`.
 2. **SP2 Slice B:** the monthly fair (a recurring shared marketplace + the catch-all for isolated sellers) and shared cross-player stock.
 3. **SP1 leftovers:** the Exchange teaching screen, converting job rewards to brass, the train fare in brass.
 4. **SP3, SP4, SP5** per the table above.
