@@ -1,0 +1,446 @@
+[
+  {
+    "topic": "money",
+    "keywords": [
+      "brass",
+      "money",
+      "pence",
+      "shilling",
+      "shillings",
+      "pound",
+      "coin",
+      "wallet",
+      "rich",
+      "pay",
+      "cost",
+      "afford",
+      "purse"
+    ],
+    "text": "Money is brass, in old coin: pence (d), shillings (twelve pence each) and pounds (240 pence). A newcomer starts with five shillings (5s)."
+  },
+  {
+    "topic": "trade",
+    "keywords": [
+      "buy",
+      "sell",
+      "trade",
+      "price",
+      "dear",
+      "cheap",
+      "vendor",
+      "shop",
+      "goods",
+      "spread",
+      "worth"
+    ],
+    "text": "You buy and sell with villagers — press T to talk, then use the Buy and Sell buttons. Different folk deal in different goods, and prices change from place to place: a thing is cheap where it is made and dear where it is wanted."
+  },
+  {
+    "topic": "trade",
+    "keywords": [
+      "sell",
+      "spot",
+      "drop",
+      "poor",
+      "price",
+      "villager",
+      "low"
+    ],
+    "text": "Selling on the spot to a villager pays a poor drop-in price, well under the going rate, and each villager only carries so much brass at a time. For real money, ship by rail."
+  },
+  {
+    "topic": "trade",
+    "keywords": [
+      "coal",
+      "fish",
+      "wool",
+      "price",
+      "pit",
+      "coast",
+      "cheap",
+      "dear",
+      "inland"
+    ],
+    "text": "Coal is cheap at the pit villages and dearer at the coast; sea fish is worth more the further inland it travels; wool sells well at Whitby and Pickering. Carrying goods from where they are cheap to where they are dear is the whole game of trade."
+  },
+  {
+    "topic": "rail-trade",
+    "keywords": [
+      "rail",
+      "ship",
+      "shipment",
+      "market",
+      "goods",
+      "sell",
+      "best",
+      "full",
+      "good",
+      "price",
+      "wagon",
+      "deliver",
+      "board"
+    ],
+    "text": "For the full price, right-click a station notice board and choose the Goods Market tab. It shows what you carry, which town down the line pays best, and books a rail shipment. A wagon holds 96 at once, and the brass arrives with the train about half a day later."
+  },
+  {
+    "topic": "railway",
+    "keywords": [
+      "train",
+      "railway",
+      "ride",
+      "station",
+      "platform",
+      "board",
+      "timetable",
+      "travel",
+      "fare",
+      "departures",
+      "line"
+    ],
+    "text": "One steam train works the whole line. To ride, right-click a station notice board, open the Departures tab, pick where you are bound and pay the fare in coal lumps, then be stood on the platform when she calls."
+  },
+  {
+    "topic": "railway",
+    "keywords": [
+      "drive",
+      "train",
+      "regulator",
+      "footplate",
+      "steam",
+      "coal",
+      "fire",
+      "driver"
+    ],
+    "text": "You can drive the train yourself: when she stands at your platform the board offers \"Take the regulator\". W opens the regulator, S brakes, F shovels coal to keep her steam up, and E brings her to a stand."
+  },
+  {
+    "topic": "sheepdog",
+    "keywords": [
+      "dog",
+      "sheepdog",
+      "tame",
+      "feed",
+      "meat",
+      "collie",
+      "mutton",
+      "beef",
+      "grouse"
+    ],
+    "text": "To get a sheepdog, find a wild dog about the moor edge, hold meat it likes (mutton, beef or grouse) and right-click to feed it a few times until it throws its lot in with you."
+  },
+  {
+    "topic": "sheepdog",
+    "keywords": [
+      "whistle",
+      "dog",
+      "herd",
+      "sheep",
+      "come",
+      "bye",
+      "away",
+      "walk",
+      "lie",
+      "heel",
+      "flock",
+      "drive"
+    ],
+    "text": "With your dog out and loose sheep near, whistle her with the arrow keys: left for come-bye and right for away send her round either side, up for walk-on presses her in, down for lie-down settles her, and H brings her to heel."
+  },
+  {
+    "topic": "fold",
+    "keywords": [
+      "fold",
+      "pen",
+      "fence",
+      "hurdle",
+      "gate",
+      "build",
+      "sheep",
+      "enclose"
+    ],
+    "text": "Build a fold from Sheep Hurdles (one plank and two sticks makes three) and a Field Gate (two planks and two sticks). Fence a closed ring with one gate in it: the gate lets a beast walk in but never back out, while you pass through freely."
+  },
+  {
+    "topic": "fold",
+    "keywords": [
+      "pen",
+      "penned",
+      "stock",
+      "keep",
+      "sheep",
+      "flock",
+      "farm",
+      "graze"
+    ],
+    "text": "Drive a flock through the field gate and every sheep that steps inside becomes your kept stock — it takes a name, grazes at home and is there whenever you come back. You can also keep a tamed beast by fencing it in where it stands."
+  },
+  {
+    "topic": "night",
+    "keywords": [
+      "night",
+      "dark",
+      "barghest",
+      "boggart",
+      "danger",
+      "torch",
+      "light",
+      "shelter",
+      "safe",
+      "monster"
+    ],
+    "text": "At night the barghest and boggarts walk the open moor. Carry or place torches (one stick and one coal makes four) to keep the dark off, shelter in a village or a stone moor shelter, and remember that village and station ground is always safe."
+  },
+  {
+    "topic": "sleep",
+    "keywords": [
+      "sleep",
+      "rest",
+      "night",
+      "bed",
+      "morning",
+      "heal"
+    ],
+    "text": "Sleep the night away by finding a roof and a light — a house, the pub, a moor shelter or your own cottage with a torch in it — and pressing N. You wake at morning with full health. On the shared moor, night only passes when everyone sleeps."
+  },
+  {
+    "topic": "fog",
+    "keywords": [
+      "fog",
+      "mist",
+      "lost",
+      "map",
+      "bearings",
+      "tops",
+      "minimap"
+    ],
+    "text": "Every few days a thick fog comes down on the high tops for half a day and takes the map and bearings with it. Stop, follow a wall or a waymark stone, or lay torches as breadcrumbs until it lifts. The dales and coast stay clear."
+  },
+  {
+    "topic": "food",
+    "keywords": [
+      "health",
+      "hunger",
+      "heal",
+      "eat",
+      "food",
+      "starve",
+      "hungry",
+      "mutton"
+    ],
+    "text": "Hunger drains as you work; eat with right-click (roast mutton is the best filler). Health mends on its own when you are well fed, or fully after a night’s sleep. Dying loses you nothing — you wake on the green with your pockets intact."
+  },
+  {
+    "topic": "pony",
+    "keywords": [
+      "pony",
+      "ride",
+      "horse",
+      "moor",
+      "travel",
+      "mount"
+    ],
+    "text": "Half-wild moor ponies graze the open heather. Walk up and right-click to climb on, ride with WASD (she leaps low walls herself), and press F to get down — she waits where you leave her."
+  },
+  {
+    "topic": "coast",
+    "keywords": [
+      "sail",
+      "boat",
+      "coble",
+      "sea",
+      "coast",
+      "water",
+      "harbour",
+      "row"
+    ],
+    "text": "A coble (a Yorkshire fishing boat) is moored at Whitby and Staithes. Right-click to climb aboard, W rows and you steer by looking, and F steps ashore. She only goes where there is water under her."
+  },
+  {
+    "topic": "fishing",
+    "keywords": [
+      "fish",
+      "fishing",
+      "catch",
+      "sea",
+      "line",
+      "rod"
+    ],
+    "text": "Fish from a harbour or, for fuller hauls, from a boat out in the deep sea. Now and then something snags from the sea bed — sea-washed jet, a snakestone, or sea-coal."
+  },
+  {
+    "topic": "mining",
+    "keywords": [
+      "ore",
+      "mine",
+      "dig",
+      "coal",
+      "iron",
+      "ironstone",
+      "jet",
+      "pick",
+      "vein",
+      "seam",
+      "cave"
+    ],
+    "text": "Dig ore with a pick: coal is shallow, ironstone is deeper (smelt it to ingots), and Whitby jet is the deepest and most precious. Iron and jet are richest near the Rosedale ironstone kilns."
+  },
+  {
+    "topic": "range",
+    "keywords": [
+      "smelt",
+      "range",
+      "iron",
+      "ingot",
+      "cook",
+      "roast",
+      "firebox",
+      "stove"
+    ],
+    "text": "A range cooks and smelts. Right-click it and stoke the firebox first (a lump of coal is worth four goes), then smelt ironstone to iron ingots or roast mutton and grouse."
+  },
+  {
+    "topic": "craft",
+    "keywords": [
+      "craft",
+      "make",
+      "bench",
+      "recipe",
+      "planks",
+      "sticks",
+      "tools",
+      "joiner"
+    ],
+    "text": "Press E to craft. Planks, sticks and a joiner’s bench can be made anywhere; better tools and fittings need you stood by a bench. There is a free bench and range in the pub on the green."
+  },
+  {
+    "topic": "tools",
+    "keywords": [
+      "tool",
+      "pick",
+      "axe",
+      "spade",
+      "sword",
+      "wood",
+      "stone",
+      "iron",
+      "tier",
+      "dig"
+    ],
+    "text": "Tools come in tiers — wood, then gritstone, then iron — each digging faster and lasting longer. Stone and ore need a pick, trees an axe, soil a spade, and beasts respect a sword."
+  },
+  {
+    "topic": "building",
+    "keywords": [
+      "build",
+      "house",
+      "croft",
+      "cottage",
+      "home",
+      "wall",
+      "roof",
+      "thatch"
+    ],
+    "text": "The old croft at the south-east of the green is yours. Raise walls, a thatch roof, a window and a light, and the village watches your progress — your standing rises with every stage you finish."
+  },
+  {
+    "topic": "village",
+    "keywords": [
+      "villager",
+      "folk",
+      "friend",
+      "talk",
+      "gift",
+      "trust",
+      "standing",
+      "friendship",
+      "people"
+    ],
+    "text": "Right-click a villager to talk — they remember you between visits. Chatting and good gifts grow friendship from Stranger up to Close friend, and your standing across the parish opens better swaps and bigger ventures."
+  },
+  {
+    "topic": "ventures",
+    "keywords": [
+      "job",
+      "work",
+      "venture",
+      "quest",
+      "notice",
+      "board",
+      "task",
+      "reward",
+      "adventure"
+    ],
+    "text": "Villagers offer jobs in conversation, and the parish notice board (press Q) lists deliveries, bounties and old riddles. Finished work pays in goods, tools and standing."
+  },
+  {
+    "topic": "quests",
+    "keywords": [
+      "hound",
+      "mires",
+      "mystery",
+      "dracula",
+      "vampire",
+      "whitby",
+      "story",
+      "sheep",
+      "stoker"
+    ],
+    "text": "Two storylines run across the real landmarks: the Hound of the Mires (something is taking sheep at night — start with Farmer James) and Count Dracula (start at the Whitby Dracula Museum; a holy-water stake fells him)."
+  },
+  {
+    "topic": "geography",
+    "keywords": [
+      "where",
+      "place",
+      "village",
+      "direction",
+      "map",
+      "moor",
+      "dale",
+      "town"
+    ],
+    "text": "The settlements are Moorstead, Goathland, Rosedale Abbey, Staithes, Pickering, Grosmont and Whitby on the coast — all on or near the railway. The minimap names where you stand, north up."
+  },
+  {
+    "topic": "landmarks",
+    "keywords": [
+      "landmark",
+      "roseberry",
+      "horcum",
+      "wainstones",
+      "kilns",
+      "abbey",
+      "betty",
+      "cross",
+      "topping"
+    ],
+    "text": "Landmarks worth the trek: Roseberry Topping, the Hole of Horcum, the Wainstones, the Rosedale ironstone kilns, the moor crosses (say hello to Fat Betty) and the ruined abbey above Whitby."
+  },
+  {
+    "topic": "controls",
+    "keywords": [
+      "control",
+      "key",
+      "move",
+      "jump",
+      "sprint",
+      "play",
+      "walk",
+      "keys"
+    ],
+    "text": "Move with WASD, jump with Space, sprint with Z (it outruns a barghest), sneak with Shift. Left-click digs or strikes, right-click places, eats, talks and uses boards. E opens your pockets, Q the journal."
+  },
+  {
+    "topic": "merlin",
+    "keywords": [
+      "merlin",
+      "wizard",
+      "help",
+      "lost",
+      "guide",
+      "magic",
+      "spell"
+    ],
+    "text": "Merlin is the wizard of the moor. Say his name in chat (press T) from anywhere and he comes to you — he leads you to places, points the way, and works spells if you bring him the right token."
+  }
+]

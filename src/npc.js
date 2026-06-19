@@ -2,7 +2,21 @@
 // proxied at /brain by Vite). All calls are best-effort: the game must keep
 // working when the brain's not running.
 
+import { factsContext, villagerAffinity } from './facts.js';
+
 const BASE = '/brain';
+
+// Fold any game facts relevant to the player's message into the situational
+// context. Best-effort and fail-safe: a bad lookup must never break a chat call,
+// and the facts ride in as reference — the brain's persona keeps the NPC in voice.
+function withFacts(message, context, affinity) {
+  try {
+    const block = factsContext(message, { affinity: affinity || [] });
+    return [context, block].filter(Boolean).join('\n\n') || null;
+  } catch {
+    return context || null;
+  }
+}
 
 async function req(path, opts = {}, timeoutMs = 90000) {
   const ctrl = new AbortController();
@@ -47,7 +61,7 @@ export function talk(characterId, message, playerName, playerId, context) {
       message,
       player_name: playerName || null,
       player_id: playerId || null,
-      context: context || null,
+      context: withFacts(message, context),
     }),
   });
 }
@@ -66,7 +80,7 @@ export function talkGeneric(persona, message, playerName, context) {
       mood: persona.mood || null,
       message,
       player_name: playerName || null,
-      context: context || null,
+      context: withFacts(message, context, villagerAffinity(persona.name, persona.village)),
     }),
   });
 }

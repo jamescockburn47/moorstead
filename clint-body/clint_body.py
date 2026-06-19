@@ -40,6 +40,11 @@ from typing import Optional
 import websockets
 from websockets.exceptions import ConnectionClosed
 
+try:
+    import npc_facts  # local module: shared game-facts retrieval (clint-body/npc_facts.py)
+except Exception:  # degrade gracefully if it isn't deployed alongside
+    npc_facts = None
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -102,10 +107,11 @@ log = logging.getLogger("clint-body")
 # ---------------------------------------------------------------------------
 
 _WORLD: dict = {}
+_FACTS: list = []
 
 def _load_world() -> None:
-    """Load merlin-world.json from the same directory as this script.  Fail-safe."""
-    global _WORLD
+    """Load merlin-world.json + game-facts.json from this script's dir.  Fail-safe."""
+    global _WORLD, _FACTS
     try:
         world_path = pathlib.Path(__file__).parent / "merlin-world.json"
         with open(world_path, encoding="utf-8") as f:
@@ -115,6 +121,23 @@ def _load_world() -> None:
     except Exception as exc:
         log.warning("Could not load merlin-world.json (%s) — world context disabled", exc)
         _WORLD = {}
+    _FACTS = npc_facts.load_facts() if npc_facts else []
+    log.info("Loaded %d game facts for Merlin's brain", len(_FACTS))
+
+
+def _with_facts(ctx: str, message: str) -> str:
+    """Append game facts relevant to the player's message to the situational brief.
+    Fail-safe and capped well under the brain's context limit (MAX_CONTEXT_CHARS)."""
+    if not npc_facts or not _FACTS:
+        return ctx
+    try:
+        block = npc_facts.facts_context(_FACTS, message)
+        if block:
+            combined = (ctx + "\n" + block) if ctx else block
+            return combined[:1600]
+    except Exception as exc:
+        log.debug("fact retrieval failed: %s", exc)
+    return ctx
 
 
 # ---------------------------------------------------------------------------
@@ -636,6 +659,7 @@ class Manager:
             ctx = build_context(cpid, sx, sy, sz, self.world_time, _WORLD, self.player_pos)
         except Exception as exc:
             log.debug("context build failed: %s", exc)
+        ctx = _with_facts(ctx, text)
         reply = await asyncio.to_thread(_brain_reply_blocking, text, cname, cpid, ctx)
         if reply:
             m.q.put_nowait(("chat", reply))
@@ -748,6 +772,7 @@ class Manager:
                         ctx = build_context(cpid, px, py, pz, self.world_time, _WORLD, self.player_pos)
                     except Exception as exc:
                         log.debug("context build failed: %s", exc)
+                    ctx = _with_facts(ctx, text)
                     reply = await asyncio.to_thread(_brain_reply_blocking, text, cname, cpid, ctx)
                     if reply:
                         m.q.put_nowait(("chat", reply))
