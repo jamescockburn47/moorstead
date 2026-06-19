@@ -134,5 +134,21 @@ function fakeGame(brass = STARTING_BRASS, held = {}) {
   (ship > drop ? ok : bad)(`shipping coal to the coast beats a local drop-in (${ship}d vs ${drop}d)`);
 }
 
+// --- SP2 Task 2: player trade state persists ---
+{
+  const stub = { getBlock() { return 0; }, isLoaded() { return true; } };
+  const p = new Player(stub);
+  (Array.isArray(p.shipments) && p.shipments.length === 0 ? ok : bad)('a fresh player has no shipments');
+  (p.vendorPurses && typeof p.vendorPurses === 'object' ? ok : bad)('a fresh player has a vendorPurses map');
+  p.shipments.push({ goods: [[I.COAL_LUMP, 3]], dest: 'Whitby', brass: 30, arrivesAt: 5 });
+  p.vendorPurses['tom'] = 42; p.pursesAt = 9;
+  const saved = p.serialize();
+  const p2 = new Player(stub); p2.deserialize(saved);
+  (p2.shipments.length === 1 && p2.shipments[0].dest === 'Whitby' ? ok : bad)('shipments survive save/load');
+  (p2.vendorPurses['tom'] === 42 && p2.pursesAt === 9 ? ok : bad)('vendor purses survive save/load');
+  const p3 = new Player(stub); p3.deserialize({ pos: { x: 0, y: 0, z: 0 } });
+  (p3.shipments.length === 0 && p3.pursesAt === 0 ? ok : bad)('an old save migrates to empty trade state');
+}
+
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));
 process.exit(failed ? 1 : 0);

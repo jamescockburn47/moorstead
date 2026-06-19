@@ -32,6 +32,9 @@ export class Player {
     this.hotbar = 0;
     this.fuelBank = 0;
     this.brass = STARTING_BRASS; // pence in thi purse
+    this.shipments = [];     // goods in transit: {goods:[[id,n]], dest, brass, arrivesAt}
+    this.vendorPurses = {};  // per-vendor drop-in brass remaining (key: lowercase name)
+    this.pursesAt = 0;       // game-time the purses were last refilled
     this.lastJumpPress = 0;
     this.name = ''; // what t' villagers call thee
     this.npcRewards = {}; // charId -> highest friendship tier already rewarded
@@ -324,6 +327,7 @@ export class Player {
       health: this.health, hunger: this.hunger,
       creative: this.creative, flying: this.flying,
       slots: this.slots, hotbar: this.hotbar, fuelBank: this.fuelBank, brass: this.brass,
+      shipments: this.shipments, vendorPurses: this.vendorPurses, pursesAt: this.pursesAt,
       name: this.name, npcRewards: this.npcRewards,
       milestonesDone: this.milestonesDone, milestonesSteered: this.milestonesSteered,
       bairnFresh: this.bairnFresh,
@@ -341,6 +345,9 @@ export class Player {
     this.hotbar = d.hotbar || 0;
     this.fuelBank = d.fuelBank || 0;
     this.brass = d.brass ?? STARTING_BRASS;
+    this.shipments = d.shipments || [];
+    this.vendorPurses = d.vendorPurses || {};
+    this.pursesAt = d.pursesAt || 0;
     this.name = d.name || '';
     this.npcRewards = d.npcRewards || {};
     this.milestonesDone = d.milestonesDone || [];
