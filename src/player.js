@@ -1,5 +1,6 @@
 // Player: movement, survival stats, inventory.
 import { B, BLOCKS, FOODS, TOOLS, maxStack, isLiquid } from './defs.js';
+import { STARTING_BRASS } from './economy.js';
 import { moveEntity, boxCollides, unstick } from './physics.js';
 
 const GRAVITY = 26;
@@ -30,6 +31,7 @@ export class Player {
     this.slots = new Array(36).fill(null); // {id, n, dur?}
     this.hotbar = 0;
     this.fuelBank = 0;
+    this.brass = STARTING_BRASS; // pence in thi purse
     this.lastJumpPress = 0;
     this.name = ''; // what t' villagers call thee
     this.npcRewards = {}; // charId -> highest friendship tier already rewarded
@@ -321,7 +323,7 @@ export class Player {
       pos: this.pos, yaw: this.yaw, pitch: this.pitch,
       health: this.health, hunger: this.hunger,
       creative: this.creative, flying: this.flying,
-      slots: this.slots, hotbar: this.hotbar, fuelBank: this.fuelBank,
+      slots: this.slots, hotbar: this.hotbar, fuelBank: this.fuelBank, brass: this.brass,
       name: this.name, npcRewards: this.npcRewards,
       milestonesDone: this.milestonesDone, milestonesSteered: this.milestonesSteered,
       bairnFresh: this.bairnFresh,
@@ -338,6 +340,7 @@ export class Player {
     this.slots = d.slots || this.slots;
     this.hotbar = d.hotbar || 0;
     this.fuelBank = d.fuelBank || 0;
+    this.brass = d.brass ?? STARTING_BRASS;
     this.name = d.name || '';
     this.npcRewards = d.npcRewards || {};
     this.milestonesDone = d.milestonesDone || [];

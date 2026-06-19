@@ -1,6 +1,7 @@
 // Economy logic check — run wi': node scripts/verify-economy.mjs
 import { formatBrass, priceOf, PRICES, vendorFor, VENDORS, Economy, STARTING_BRASS } from '../src/economy.js';
 import { I } from '../src/defs.js';
+import { Player } from '../src/player.js';
 
 let failed = false;
 const ok = m => console.log('  ok    ' + m);
@@ -94,6 +95,22 @@ function fakeGame(brass = STARTING_BRASS, held = {}) {
   const got = e.doBuy(v, I.COAL_LUMP);
   (got && g.player.brass === 50 - p && g.player.countItem(I.COAL_LUMP) === 1 ? ok : bad)
     (`doBuy charges the buy price and gives the good (paid ${p}d)`);
+}
+
+// --- Task 5: the player's brass wallet (field + save/load + migration) ---
+{
+  const stub = { getBlock() { return 0; }, isLoaded() { return true; } };
+  const p = new Player(stub);
+  (p.brass === STARTING_BRASS ? ok : bad)(`a fresh player starts with ${STARTING_BRASS}d`);
+  p.brass = 123;
+  const saved = p.serialize();
+  (saved.brass === 123 ? ok : bad)('serialize writes brass');
+  const p2 = new Player(stub);
+  p2.deserialize(saved);
+  (p2.brass === 123 ? ok : bad)('deserialize restores brass');
+  const p3 = new Player(stub);
+  p3.deserialize({ pos: { x: 0, y: 0, z: 0 } });
+  (p3.brass === STARTING_BRASS ? ok : bad)('an old save migrates to the starting purse');
 }
 
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));
