@@ -11,7 +11,7 @@ import { World } from './world.js';
 import { Player } from './player.js';
 import * as npc from './npc.js';
 import { Quests } from './quests.js';
-import { Economy } from './economy.js';
+import { Economy, bestMarket, FREIGHT_ALLOWANCE } from './economy.js';
 import { Milestones } from './milestones.js';
 import { Net } from './multiplayer.js';
 import { initTelemetry } from './telemetry.js';
@@ -1475,6 +1475,46 @@ class Game {
         }
       });
     }
+    // ship goods by rail: a forward sale to the market that pays best, brass paid on arrival
+    {
+      const shippable = this.economy.tradeableHeld();
+      const inTransit = this.player.shipments;
+      if (shippable.length || inTransit.length) {
+        ui.el('div', 'inv-title', ui.boardPanel, 'Ship goods by rail');
+        if (inTransit.length) {
+          ui.el('div', 'r-needs', ui.boardPanel,
+            'On t’ way: ' + inTransit.map(sh => `${sh.dest} — <b>${this.economy.format(sh.brass)}</b>`).join('; '));
+        }
+        if (shippable.length) {
+          ui.el('div', 'r-needs', ui.boardPanel,
+            'Send goods to t’ market that pays best — t’ brass lands when t’ train gets ’em there.');
+          const shipList = ui.el('div', 'recipes board-list', ui.boardPanel);
+          const villageNames = stations.map(s => s.name);
+          const s = this.economy.standing();
+          for (const { id, n } of shippable) {
+            const best = bestMarket(id, st.name, villageNames, s);
+            if (!best) continue; // nowhere dearer than here, or par everywhere
+            const shipN = Math.min(n, FREIGHT_ALLOWANCE);
+            const total = best.perUnit * shipN;
+            const row = ui.el('div', 'recipe quest-row', shipList);
+            const capNote = n > FREIGHT_ALLOWANCE ? ` (t’ wagon holds ${FREIGHT_ALLOWANCE} at once)` : '';
+            row.innerHTML = `<div class="r-name"><b>${shipN}× ${itemName(id)} → ${best.village}</b><br>` +
+              `<span class="r-needs">fetches <b>${this.economy.format(total)}</b> there${capNote}</span></div>`;
+            const sb = ui.el('button', 'mc chat-btn trade-btn', row, 'Send it');
+            sb.addEventListener('click', () => {
+              const r = this.economy.bookShipment([[id, shipN]], best.village, st.name, this.sky.day + this.sky.time);
+              if (r.ok) {
+                this.ui.invDirty = true;
+                this.ui.toast(`<b>${shipN}× ${itemName(id)}</b> away to ${best.village} — <b>${this.economy.format(r.brass)}</b> when she lands.`, 5000);
+                this.openStation(st); // refresh: held counts and in-transit have changed
+              } else {
+                this.ui.toast(`Couldn’t book that consignment (${r.why}).`);
+              }
+            });
+          }
+        }
+      }
+    }
     // a goods consignment waiting to be shifted — haul it by driving the engine
     {
       const dests = stations.filter(d => d !== st);
@@ -2608,6 +2648,13 @@ class Game {
         if (ab !== B.AIR && ab !== B.WATER && !isCutout(ab)) { covered = true; break; }
       }
       const msg = this.sky.update(dt, this.player.pos, season, covered);
+
+      // economy on the game clock: deliver any due shipments and refill vendor drop-in purses.
+      // `now` is GAME-DAYS (sky.day + sky.time) — the time contract the trade engine expects.
+      const tradeNow = this.sky.day + this.sky.time;
+      this.economy.refillPurses(tradeNow);
+      this.economy.tickShipments(tradeNow);
+
       // wetness: tha gets soaked out in t' rain (or t' beck) an' dries under cover or by a fire.
       // soaked through, tha can't rest up (no regen) an' tha burns scran keepin' warm.
       if (!this.player.creative) {

@@ -95,6 +95,19 @@ export function shipmentValue(goods, destVillage, standingIdx = 0) {
   return total;
 }
 
+// The dearest market for one good among candidate villages, excluding the origin. Returns
+// { village, perUnit } at the export sell-price, or null if it is tradeable nowhere on offer.
+export function bestMarket(itemId, fromVillage, villages, standingIdx = 0) {
+  let best = null;
+  for (const village of villages) {
+    if (!village || village === fromVillage) continue;
+    const perUnit = priceOf(itemId, village, 'sell', standingIdx);
+    if (perUnit == null) continue;
+    if (!best || perUnit > best.perUnit) best = { village, perUnit };
+  }
+  return best;
+}
+
 // What each villager sells (to you) and buys (from you). Keyed by lowercase substring of the
 // name, so "Owd Tom" matches "tom". Roles shape the stock; "mag" is the general dealer.
 // Data, not code — the roster and stock grow over time without touching the engine.
@@ -166,6 +179,26 @@ export class Economy {
     return v.buys
       .filter(id => this.game.player.countItem(id) > 0)
       .map(id => ({ id, price: priceOf(id, village, 'sell', s) })).filter(x => x.price != null);
+  }
+  // The till's in-person sell is a drop-in: the same goods as sellList, but quoted at the
+  // penalised drop-in price (the convenience tier — ship goods to earn the full spread).
+  dropInList(villager) {
+    const v = vendorFor(villager && villager.t && villager.t.name);
+    if (!v) return [];
+    const village = this.villageOf(villager), s = this.standing();
+    return v.buys
+      .filter(id => this.game.player.countItem(id) > 0)
+      .map(id => ({ id, price: dropInPrice(id, village, s) })).filter(x => x.price != null);
+  }
+  // Held goods that have a price, for the ship panel to offer. [{ id, n }].
+  tradeableHeld() {
+    const out = [];
+    for (const key of Object.keys(PRICES)) {
+      const id = Number(key);
+      const n = this.game.player.countItem(id);
+      if (n > 0) out.push({ id, n });
+    }
+    return out;
   }
 
   doBuy(villager, itemId) {

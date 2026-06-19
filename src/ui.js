@@ -588,11 +588,12 @@ export class UI {
           this.bindTooltip(b, `Tha needs ${econ.format(price)} for that.`);
         }
       }
-      for (const { id, price } of econ.sellList(v)) {
+      for (const { id, price } of econ.dropInList(v)) {
         const b = this.el('button', 'mc chat-btn trade-btn', this.chatQuestRow,
           `Sell ${itemName(id)} for <b>${econ.format(price)}</b>`);
+        this.bindTooltip(b, `A drop-in price, sold on t&rsquo; spot. Ship it by rail to where it&rsquo;s dear an&rsquo; tha&rsquo;ll get more.`);
         b.addEventListener('click', () => {
-          if (econ.doSell(v, id)) {
+          if (econ.dropInSell(v, id)) {
             v.chatLog.push({ who: 'sys', text: `Sold ${itemName(id)} for ${econ.format(price)}.` });
             this.renderChatLog(); this.renderChatActions();
           }

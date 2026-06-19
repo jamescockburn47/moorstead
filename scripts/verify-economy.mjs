@@ -1,5 +1,5 @@
 // Economy logic check — run wi': node scripts/verify-economy.mjs
-import { formatBrass, priceOf, PRICES, vendorFor, VENDORS, Economy, STARTING_BRASS, dropInPrice, shipmentValue, FREIGHT_ALLOWANCE, DELIVERY_DELAY, PURSE_MAX } from '../src/economy.js';
+import { formatBrass, priceOf, PRICES, vendorFor, VENDORS, Economy, STARTING_BRASS, dropInPrice, shipmentValue, FREIGHT_ALLOWANCE, DELIVERY_DELAY, PURSE_MAX, bestMarket } from '../src/economy.js';
 import { I } from '../src/defs.js';
 import { Player } from '../src/player.js';
 
@@ -261,6 +261,32 @@ function gameWith(player) {
   const e = new Economy(g);
   (e.villageOf({ t: { name: 'annie' } }) === 'Staithes' ? ok : bad)('villageOf falls back to the player village');
   (e.villageOf({ t: { name: 'annie', village: 'Whitby' } }) === 'Whitby' ? ok : bad)('villageOf prefers the villager home');
+}
+
+// --- SP2 Task 8: the till's drop-in list (vendor buys, held, at the drop-in price) ---
+{
+  const g = fakeGame(0, { [I.JET_GEM]: 2 });
+  const e = new Economy(g);
+  const annie = { t: { name: 'fishwife annie', village: 'Whitby' } }; // annie buys jet
+  const jet = e.dropInList(annie).find(x => x.id === I.JET_GEM);
+  (jet && jet.price === dropInPrice(I.JET_GEM, 'Whitby', 0) ? ok : bad)(`dropInList quotes the drop-in price, not the full sell (${jet && jet.price}d)`);
+  const e2 = new Economy(fakeGame(0, {}));
+  (e2.dropInList(annie).length === 0 ? ok : bad)('dropInList omits goods the player does not hold');
+}
+
+// --- SP2 Task 9: ship-panel helpers (held tradeables + dearest market) ---
+{
+  const g = fakeGame(0, { [I.COAL_LUMP]: 20, [I.PARCEL]: 1 }); // parcel is non-tradeable
+  const e = new Economy(g);
+  const held = e.tradeableHeld();
+  (held.some(h => h.id === I.COAL_LUMP && h.n === 20) ? ok : bad)('tradeableHeld lists held priced goods with counts');
+  (held.every(h => h.id !== I.PARCEL) ? ok : bad)('tradeableHeld omits non-tradeable goods');
+}
+{
+  const dests = ['Rosedale Abbey', 'Whitby', 'Pickering'];
+  const best = bestMarket(I.COAL_LUMP, 'Rosedale Abbey', dests, 0);
+  (best && best.village === 'Whitby' && best.perUnit === priceOf(I.COAL_LUMP, 'Whitby', 'sell', 0) ? ok : bad)(`bestMarket picks the dearest market, excluding origin (${best && best.village} @ ${best && best.perUnit}d)`);
+  (bestMarket(I.PARCEL, 'Whitby', dests, 0) === null ? ok : bad)('bestMarket is null for a non-tradeable good');
 }
 
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));
