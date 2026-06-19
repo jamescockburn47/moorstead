@@ -170,5 +170,25 @@ function fakeGame(brass = STARTING_BRASS, held = {}) {
   (g.player.vendorPurses['annie'] > 0 ? ok : bad)(`a drained purse refills over time (now ${g.player.vendorPurses['annie']}d)`);
 }
 
+// --- SP2 Task 4: booking and delivering shipments ---
+{
+  const g = fakeGame(0, { [I.COAL_LUMP]: 20 });
+  const e = new Economy(g);
+  const r = e.bookShipment([[I.COAL_LUMP, 10]], 'Whitby', 'Rosedale Abbey', 0);
+  (r.ok && r.brass === shipmentValue([[I.COAL_LUMP, 10]], 'Whitby', 0) ? ok : bad)(`bookShipment locks the destination value (${r.brass}d)`);
+  (g.player.countItem(I.COAL_LUMP) === 10 ? ok : bad)('the shipped coal left the pack');
+  (g.player.shipments.length === 1 ? ok : bad)('the shipment is recorded in transit');
+  (e.tickShipments(0.1).length === 0 && g.player.brass === 0 ? ok : bad)('a shipment in transit pays nothing yet');
+  const delivered = e.tickShipments(0 + DELIVERY_DELAY);
+  (delivered.length === 1 && g.player.brass === r.brass && g.player.shipments.length === 0 ? ok : bad)(`on arrival the brass lands and the shipment clears (purse ${g.player.brass}d)`);
+}
+{
+  const g = fakeGame(0, { [I.COAL_LUMP]: 5 });
+  const e = new Economy(g);
+  (e.bookShipment([[I.COAL_LUMP, 5]], 'Rosedale Abbey', 'Rosedale Abbey', 0).ok === false ? ok : bad)('cannot ship to where you stand');
+  (e.bookShipment([[I.COAL_LUMP, 999]], 'Whitby', 'Rosedale Abbey', 0).ok === false ? ok : bad)('over the freight allowance is refused');
+  (e.bookShipment([[I.COAL_LUMP, 5]], 'Whitby', 'Rosedale Abbey', 0).ok === true ? ok : bad)('a valid shipment within allowance books');
+}
+
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));
 process.exit(failed ? 1 : 0);

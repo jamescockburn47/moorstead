@@ -207,4 +207,28 @@ export class Economy {
     this.game.audio.pickup();
     return true;
   }
+
+  // --- SP2: book a forward shipment to a distant market; it pays on arrival ---
+  bookShipment(goods, destVillage, originVillage, now) {
+    if (!destVillage || destVillage === originVillage) return { ok: false, why: 'same place' };
+    const units = goods.reduce((a, g) => a + g[1], 0);
+    if (units > FREIGHT_ALLOWANCE) return { ok: false, why: 'over freight allowance' };
+    for (const [id, n] of goods) if (this.game.player.countItem(id) < n) return { ok: false, why: 'goods not held' };
+    const brass = shipmentValue(goods, destVillage, this.standing());
+    if (brass == null) return { ok: false, why: 'not tradeable' };
+    for (const [id, n] of goods) this.game.player.removeItem(id, n);
+    const shipment = { goods, dest: destVillage, brass, arrivesAt: now + DELIVERY_DELAY };
+    this.game.player.shipments.push(shipment);
+    return { ok: true, brass, arrivesAt: shipment.arrivesAt };
+  }
+  tickShipments(now) {
+    const all = this.game.player.shipments;
+    const due = all.filter(s => now >= s.arrivesAt);
+    for (const s of due) {
+      this.earn(s.brass);
+      this.game.ui.toast(`Thi shipment reached ${s.dest}: sold for ${formatBrass(s.brass)}.`);
+    }
+    if (due.length) this.game.player.shipments = all.filter(s => now < s.arrivesAt);
+    return due;
+  }
 }
