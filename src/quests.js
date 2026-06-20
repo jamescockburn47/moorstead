@@ -958,8 +958,12 @@ export class Quests {
       (this.shame > 0 ? ' You have also heard they have caused damage or trouble around the village lately; you are noticeably cooler with them until they make amends, and you may mention what you heard.' : ''));
 
     // a nosey glance at what the visitor's been up to (inventory, stock, progress)
-    const activity = buildActivityDigest(this.game);
-    if (activity) parts.push(activity);
+    // — only on a fresh approach, so they notice it as a greeting, not on every turn
+    const fresh = !villager.chatLog || villager.chatLog.filter(m => m.who !== 'sys').length <= 1;
+    if (fresh) {
+      const activity = buildActivityDigest(this.game);
+      if (activity) parts.push(activity);
+    }
 
     // matters o' record: arc progress everyone in t' village knows
     if (this.completed.includes('arc5')) {

@@ -68,8 +68,13 @@ export function buildActivityDigest(game) {
     if (!p) return '';
     const bits = [...holdings(p), ...stock(p), ...milestones(p), ...standing(game)];
     if (!bits.length) return '';
-    return 'What you can tell this visitor has been up to (work it in naturally only if it fits, never list it): '
-      + bits.slice(0, 4).join('; ') + '.';
+    // Directive framing: villagers reliably weave in ONE remark this way, in their
+    // own voice. chatContext only injects this on a fresh approach, so it lands as
+    // a nosey greeting, not a nag on every turn.
+    return 'IMPORTANT — things you can see about this visitor right now: '
+      + bits.slice(0, 4).join('; ')
+      + '. In your reply, naturally notice and remark on or ask about ONE of these, '
+      + 'the way a nosey, friendly villager would. Stay in character and do not list them all.';
   } catch {
     return '';
   }
