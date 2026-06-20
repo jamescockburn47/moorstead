@@ -296,6 +296,7 @@ class Game {
       this.entities.restorePets(this.player.pets, this.player); // thi kept beasts come back to heel
       this.sky.deserialize(meta.sky);
       this.quests.deserialize(meta.quests);
+      this.world.editLedger = new Map(meta.editLedger || []); // regrowth picks up where it left off
     } else if (this.auth && this.auth.name) {
       this.player.name = this.auth.name; // t' villagers already know thi name
     } else {
@@ -363,6 +364,7 @@ class Game {
       player: this.player.serialize(),
       sky: this.sky.serialize(),
       quests: this.quests.serialize(),
+      editLedger: [...this.world.editLedger], // harvest edits awaiting regrowth — so the moor heals across reloads
       savedAt: Date.now(),
     };
     await saveGame(meta, this.world.collectModified());
