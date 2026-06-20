@@ -8,7 +8,9 @@
 
 **Tech Stack:** Vanilla ES modules. Headless tests are plain Node (`scripts/verify-*.mjs`). Persistence is IndexedDB via `src/save.js`. Build is Vite.
 
-**Scope (Slice 1 of 5):** Only **harvest** edits regrow (plants, trees, ore, peat). `dig` (terrain backfill) and `build` (claim-gated decay) are *recorded-aware* but do **not** expire yet — they land in Slices 3–4 with the claims/mining context. No mining restrictions, no claims, no relay here; this is single-player "the moor heals". Deploy stays held (the whole Living Moor ships together; shared-moor healing needs Slice 5's relay pass).
+**Scope (Slice 1 of 5):** **harvest** edits regrow — plants, ore and peat via the simple forget-the-edit revert (Tasks 1–4). `dig` (terrain backfill) and `build` (claim-gated decay) are *recorded-aware* but do **not** expire yet — Slices 3–4. No mining restrictions, no claims, no relay here; single-player "the moor heals". Deploy stays held (the whole Living Moor ships together; shared-moor healing needs Slice 5's relay pass).
+
+**Trees are special (added at build):** chopping fells the whole tree (no floating canopy) and a felled tree regrows **gradually from a sapling**, not via the instant revert (spec §4, §14o). That needs a whole-tree fell flood-fill, a **new sapling block**, and a slow growth tick — so trees are **excluded from the simple-revert HARVEST set** here and handled by their own tasks, detailed when the build starts (tree-gen is `worldgen.treeAt` + `LOG`/`LEAVES` columns; no sapling block exists today). The Task 1 `TREES` set + `LIFESPAN.tree` below stand in as the placeholder lifespan but the *mechanism* for trees is the sapling path, not `setBlock(was)`.
 
 ---
 
