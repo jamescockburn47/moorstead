@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "verify": "node scripts/verify-rail.mjs && node scripts/verify-rail-clearance.mjs && node scripts/verify-train-view.mjs && node scripts/verify-resources.mjs && node scripts/verify-landmarks.mjs && node scripts/verify-season.mjs && node scripts/verify-weather.mjs && node scripts/verify-pets.mjs && node scripts/verify-villagers.mjs && node scripts/verify-economy.mjs && node scripts/verify-herding.mjs && node scripts/verify-facts.mjs && node scripts/verify-activity.mjs && node scripts/verify-farm.mjs && node scripts/verify-regen.mjs && node scripts/verify-deeds.mjs && node scripts/verify-menagerie.mjs",
+    "verify": "node scripts/verify-rail.mjs && node scripts/verify-rail-clearance.mjs && node scripts/verify-train-view.mjs && node scripts/verify-resources.mjs && node scripts/verify-landmarks.mjs && node scripts/verify-season.mjs && node scripts/verify-weather.mjs && node scripts/verify-pets.mjs && node scripts/verify-villagers.mjs && node scripts/verify-economy.mjs && node scripts/verify-herding.mjs && node scripts/verify-facts.mjs && node scripts/verify-activity.mjs && node scripts/verify-farm.mjs && node scripts/verify-regen.mjs && node scripts/verify-deeds.mjs && node scripts/verify-menagerie.mjs && node scripts/verify-mining.mjs",
     "verify:rail": "node scripts/verify-rail.mjs",
     "verify:clearance": "node scripts/verify-rail-clearance.mjs",
     "verify:train": "node scripts/verify-train-view.mjs",
@@ -25,7 +25,8 @@
     "verify:farm": "node scripts/verify-farm.mjs",
     "verify:regen": "node scripts/verify-regen.mjs",
     "verify:deeds": "node scripts/verify-deeds.mjs",
-    "verify:menagerie": "node scripts/verify-menagerie.mjs"
+    "verify:menagerie": "node scripts/verify-menagerie.mjs",
+    "verify:mining": "node scripts/verify-mining.mjs"
   },
   "dependencies": {
     "three": "^0.166.0"

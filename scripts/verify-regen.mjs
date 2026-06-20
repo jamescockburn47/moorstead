@@ -34,7 +34,8 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
   (isExpired(heather, 10 + LIFESPAN.plant - 0.01) === false ? ok : bad)('not expired before its lifespan');
   (isExpired(heather, 10 + LIFESPAN.plant) === true ? ok : bad)('expired at its lifespan');
   const wall = { cat: 'build', day: 10, was: B.PLANKS };
-  (isExpired(wall, 9999) === false ? ok : bad)('a build never expires in Slice 1');
+  const activeClaim = [{ kind: 'claim', cx: 0, cz: 0, radius: 5, lapsedDay: null }];
+  (isExpired(wall, 9999, activeClaim, 1, 0, 40, 0, null) === false ? ok : bad)('a build inside an active claim never expires');
 }
 
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));

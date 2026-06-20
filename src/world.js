@@ -17,7 +17,11 @@ export class World {
     this.editLedger = new Map(); // "x,y,z" -> { cat, day, by, was } — harvest edits awaiting regrowth
     this.treeRegrowth = new Map(); // "x,y,z" (stump) -> felledDay — a sapling sprouts here in time
     this.saplings = new Map(); // "x,y,z" -> sproutedDay — a young tree growing toward full
-    this.deeds = []; // { id, kind, by, cx, cz, radius, depth, paidUntilDay, lapsedDay } — land claims + mine licences
+    this.deeds = [
+      { id: 'quarry_moorstead', kind: 'quarry', by: 'parish', cx: 40, cz: 60, radius: 10, paidUntilDay: Infinity, lapsedDay: null },
+      { id: 'quarry_goathland', kind: 'quarry', by: 'parish', cx: 280, cz: -80, radius: 10, paidUntilDay: Infinity, lapsedDay: null },
+      { id: 'quarry_pickering', kind: 'quarry', by: 'parish', cx: 480, cz: 820, radius: 12, paidUntilDay: Infinity, lapsedDay: null }
+    ]; // { id, kind, by, cx, cz, radius, depth, paidUntilDay, lapsedDay } — land claims + mine licences
     this.lanterns = new Set(); // "x,y,z"
     this.renderDist = 6;
     this.genQueue = [];
@@ -108,25 +112,37 @@ export class World {
     if (c) c.dirty = true;
   }
 
-  // Record a block change so a harvested resource can grow back later. Only HARVEST edits are
-  // tracked in Slice 1; a place/dig over a cell supersedes any pending regrowth there.
+  // Record a block change so it can revert or decay later. Tracks all edits.
   recordEdit(x, y, z, was, newId, day, by) {
     const k = `${x},${y},${z}`;
-    if (categoryOf(was, newId) === 'harvest') this.editLedger.set(k, { cat: 'harvest', day, by, was });
-    else this.editLedger.delete(k);
+    const existing = this.editLedger.get(k);
+    const base = existing ? existing.was : was; // the original seed block
+    
+    if (newId === base) {
+      // Returned to base state: remove edit from ledger
+      this.editLedger.delete(k);
+    } else {
+      // Modified state: update/set the edit
+      const cat = categoryOf(base, newId);
+      this.editLedger.set(k, { cat, day, by, was: base });
+    }
   }
 
-  // Lazy regrowth: revert every expired harvest edit by putting back what was there (`was`) — the
-  // same trick as the beach heal, on game-days. Only touches loaded chunks; skips a cell that has
-  // since changed (someone built there). Returns how many regrew.
-  expireEdits(nowDay) {
+  // Revert expired edits: backfill holes, regrow plants/ores, and crumble unclaimed/lapsed builds.
+  expireEdits(nowDay, decayScale = 1) {
     let n = 0;
+    const heightFunc = (x, z) => this.gen.height(x, z);
     for (const [k, e] of this.editLedger) {
-      if (!isExpired(e, nowDay)) continue;
       const [x, y, z] = k.split(',').map(Number);
+      if (!isExpired(e, nowDay, this.deeds, decayScale, x, y, z, heightFunc)) continue;
       if (!this.isLoaded(x, z)) continue;          // grows back next time its chunk is loaded
-      if (this.getBlock(x, y, z) !== B.AIR) { this.editLedger.delete(k); continue; } // summat's there now
-      this.setBlock(x, y, z, e.was);               // the resource is back
+      
+      const cur = this.getBlock(x, y, z);
+      if (e.cat === 'harvest' || e.cat === 'dig') {
+        if (cur !== B.AIR) { this.editLedger.delete(k); continue; } // summat's built there now
+      }
+      
+      this.setBlock(x, y, z, e.was);               // revert to base block
       this.editLedger.delete(k);
       if (this.netEdits) this.netEdits.delete(k);
       n++;

@@ -335,6 +335,7 @@ export class Player {
       bairnFresh: this.bairnFresh,
       pets: this.pets || [],
       farmStatus: this.farmStatus,
+      miningSkill: this.miningSkill || 0,
     };
   }
 
@@ -358,5 +359,6 @@ export class Player {
     this.bairnFresh = !!d.bairnFresh;
     this.pets = d.pets || [];
     this.farmStatus = d.farmStatus || { registered: false };
+    this.miningSkill = d.miningSkill || 0;
   }
 }

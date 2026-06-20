@@ -23,10 +23,19 @@ export function weeklyUpkeep(kind, radius = 0, depth = 0) {
   return Math.max(1, radius * DEED.claimUpkeepPerR);
 }
 
+export function findActiveDeed(deeds, x, z, kind = null) {
+  return (deeds || []).find(d => d && !d.lapsedDay && (!kind || d.kind === kind) &&
+    (x - d.cx) ** 2 + (z - d.cz) ** 2 <= d.radius * d.radius);
+}
+
+export function findLapsedDeed(deeds, x, z, kind = null) {
+  return (deeds || []).find(d => d && d.lapsedDay && (!kind || d.kind === kind) &&
+    (x - d.cx) ** 2 + (z - d.cz) ** 2 <= d.radius * d.radius);
+}
+
 // Is (x,z) inside an ACTIVE (un-lapsed) deed — optionally of a given kind? Cylinder test.
 export function inDeed(deeds, x, z, kind = null) {
-  return (deeds || []).some(d => d && !d.lapsedDay && (!kind || d.kind === kind) &&
-    (x - d.cx) ** 2 + (z - d.cz) ** 2 <= d.radius * d.radius);
+  return !!findActiveDeed(deeds, x, z, kind);
 }
 
 // Has a deed lapsed? Past its paid-up day plus the grace window.

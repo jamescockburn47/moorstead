@@ -24,6 +24,7 @@ export const PRICES = {
   [I.COAL_LUMP]: 3, [I.RAW_IRON]: 5, [I.IRON_INGOT]: 14, [I.JET_GEM]: 40,
   [B.WOOL]: 6, [B.HEATHER]: 1, [B.BRACKEN]: 1, [B.PEAT]: 1,
   [I.BILBERRIES]: 1,
+  [B.ALUM_SHALE]: 8, [B.ROCK_SALT]: 10, [B.POLYHALITE]: 60,
   [I.RAW_MUTTON]: 4, [I.COOKED_MUTTON]: 9,
   [I.RAW_GROUSE]: 3, [I.COOKED_GROUSE]: 8,
   [I.RAW_BEEF]: 4, [I.COOKED_BEEF]: 9,
@@ -44,6 +45,9 @@ const SPREAD = {
   [I.COOKED_FISH]: { whitby: 0.6, staithes: 0.6, moorstead: 1.6, rosedale: 1.7 },
   [B.WOOL]:      { moorstead: 0.6, goathland: 0.7, whitby: 1.6, pickering: 1.6 },
   [I.IRON_INGOT]:{ rosedale: 0.8, grosmont: 0.9, whitby: 1.5, staithes: 1.5 },
+  [B.ALUM_SHALE]:{ whitby: 0.6, staithes: 0.6, rosedale: 1.5, pickering: 1.5 },
+  [B.ROCK_SALT]: { staithes: 0.6, rosedale: 1.6, pickering: 1.6 },
+  [B.POLYHALITE]:{ staithes: 0.6, rosedale: 1.6, pickering: 1.6, moorstead: 1.6 },
 };
 export function regionMult(village, itemId) {
   const v = (village || '').toLowerCase();

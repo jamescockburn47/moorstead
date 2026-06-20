@@ -2158,3 +2158,20 @@ export class Entities {
     this.mobs = []; this.drops = []; this.particles = []; this.steam = []; this.prints = [];
   }
 }
+
+export {
+  makeSheep,
+  makeBarghest,
+  makeCow,
+  makeBull,
+  makeLlama,
+  makePony,
+  makeDog,
+  makeCat,
+  makePig,
+  makeRat,
+  makeCoble,
+  makeVillager,
+  villagerLook,
+  makeWizardExtras
+};

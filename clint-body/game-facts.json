@@ -33,7 +33,7 @@
       "spread",
       "worth"
     ],
-    "text": "You buy and sell with villagers — press T to talk, then use the Buy and Sell buttons. Different folk deal in different goods, and prices change from place to place: a thing is cheap where it is made and dear where it is wanted."
+    "text": "You buy and sell with villagers: press T to talk, then use the Buy and Sell buttons. Different folk deal in different goods, and prices change from place to place: a thing is cheap where it is made and dear where it is wanted."
   },
   {
     "topic": "trade",
@@ -47,6 +47,21 @@
       "low"
     ],
     "text": "Selling on the spot to a villager pays a poor drop-in price, well under the going rate, and each villager only carries so much brass at a time. For real money, ship by rail."
+  },
+  {
+    "topic": "trade",
+    "keywords": [
+      "reputation",
+      "standing",
+      "respect",
+      "respected",
+      "treasure",
+      "treasured",
+      "trust",
+      "spot",
+      "sale"
+    ],
+    "text": "Respected or Treasured players can use the Trust option at vendors to spot-sell Jet gems, Ammonites, Gryphaeas, and Iron Ingots at full value, bypassing the standard drop-in penalty and vendor purse limits."
   },
   {
     "topic": "trade",
@@ -172,7 +187,109 @@
       "farm",
       "graze"
     ],
-    "text": "Drive a flock through the field gate and every sheep that steps inside becomes your kept stock — it takes a name, grazes at home and is there whenever you come back. You can also keep a tamed beast by fencing it in where it stands."
+    "text": "Drive a flock through the field gate and every sheep that steps inside becomes your kept stock: it takes a name, grazes at home and is there whenever you come back. You can also keep a tamed beast by fencing it in where it stands."
+  },
+  {
+    "topic": "farming",
+    "keywords": [
+      "register",
+      "farm",
+      "charter",
+      "fee",
+      "registering",
+      "head",
+      "penned",
+      "penned stock"
+    ],
+    "text": "Once you pen 5 head of droveable stock in a fold, register your farm for a 240d charter fee at the Moorstead notice board to unlock droving."
+  },
+  {
+    "topic": "farming",
+    "keywords": [
+      "droving",
+      "drove",
+      "market",
+      "sell",
+      "value",
+      "price",
+      "livestock",
+      "cattle",
+      "cow",
+      "pony",
+      "llama"
+    ],
+    "text": "Drive a flock to the Moorstead notice board to sell them. Sheep sell for 120d, Dale Cows for 340d, Moorland Ponies for 540d, and Pack Llamas for 110d."
+  },
+  {
+    "topic": "farming",
+    "keywords": [
+      "pig",
+      "saddleback",
+      "pigs",
+      "pork",
+      "sell",
+      "companion"
+    ],
+    "text": "Saddleback Pigs cannot be herded, but they can be sold individually at the notice board for 150d. Wild pigs drop raw pork which can be roasted for food."
+  },
+  {
+    "topic": "farming",
+    "keywords": [
+      "bull",
+      "aggression",
+      "danger",
+      "hazard"
+    ],
+    "text": "Dale Bulls are aggressive and cannot be herded or tamed. Watch out for them on the open moor."
+  },
+  {
+    "topic": "farming",
+    "keywords": [
+      "llama",
+      "tame",
+      "tameable",
+      "bilberry",
+      "bilberries"
+    ],
+    "text": "Pack Llamas can be tamed by feeding them bilberries, and they are droveable once kept in a fold."
+  },
+  {
+    "topic": "deeds",
+    "keywords": [
+      "deed",
+      "claim",
+      "stake",
+      "upkeep",
+      "weekly",
+      "protect",
+      "decay"
+    ],
+    "text": "Stake a claim to hold a plot for a fee and weekly upkeep. Active claims protect your builds from decay. Unclaimed builds decay after 30 days."
+  },
+  {
+    "topic": "deeds",
+    "keywords": [
+      "decay",
+      "lapse",
+      "lapsed",
+      "crumble",
+      "reclaim",
+      "bairn",
+      "bairns"
+    ],
+    "text": "If a claim lapses, its builds crumble gradually over time. In the bairns world, claims and builds decay twice as slow."
+  },
+  {
+    "topic": "deeds",
+    "keywords": [
+      "breeding",
+      "baby",
+      "breed",
+      "stock",
+      "birth",
+      "born"
+    ],
+    "text": "If you keep 2 or more of the same animal species in an active claim, they may breed a tamed baby offspring over time."
   },
   {
     "topic": "night",
@@ -200,7 +317,7 @@
       "morning",
       "heal"
     ],
-    "text": "Sleep the night away by finding a roof and a light — a house, the pub, a moor shelter or your own cottage with a torch in it — and pressing N. You wake at morning with full health. On the shared moor, night only passes when everyone sleeps."
+    "text": "Sleep the night away by finding a roof and a light: a house, the pub, a moor shelter or your own cottage with a torch in it: and pressing N. You wake at morning with full health. On the shared moor, night only passes when everyone sleeps."
   },
   {
     "topic": "fog",
@@ -227,7 +344,7 @@
       "hungry",
       "mutton"
     ],
-    "text": "Hunger drains as you work; eat with right-click (roast mutton is the best filler). Health mends on its own when you are well fed, or fully after a night’s sleep. Dying loses you nothing — you wake on the green with your pockets intact."
+    "text": "Hunger drains as you work; eat with right-click (roast mutton is the best filler). Health mends on its own when you are well fed, or fully after a night’s sleep. Dying loses you nothing: you wake on the green with your pockets intact."
   },
   {
     "topic": "pony",
@@ -239,7 +356,7 @@
       "travel",
       "mount"
     ],
-    "text": "Half-wild moor ponies graze the open heather. Walk up and right-click to climb on, ride with WASD (she leaps low walls herself), and press F to get down — she waits where you leave her."
+    "text": "Half-wild moor ponies graze the open heather. Walk up and right-click to climb on, ride with WASD (she leaps low walls herself), and press F to get down: she waits where you leave her."
   },
   {
     "topic": "coast",
@@ -265,7 +382,7 @@
       "line",
       "rod"
     ],
-    "text": "Fish from a harbour or, for fuller hauls, from a boat out in the deep sea. Now and then something snags from the sea bed — sea-washed jet, a snakestone, or sea-coal."
+    "text": "Fish from a harbour or, for fuller hauls, from a boat out in the deep sea. Now and then something snags from the sea bed: sea-washed jet, a snakestone, or sea-coal."
   },
   {
     "topic": "mining",
@@ -283,6 +400,82 @@
       "cave"
     ],
     "text": "Dig ore with a pick: coal is shallow, ironstone is deeper (smelt it to ingots), and Whitby jet is the deepest and most precious. Iron and jet are richest near the Rosedale ironstone kilns."
+  },
+  {
+    "topic": "mining",
+    "keywords": [
+      "licence",
+      "license",
+      "mine",
+      "entrance",
+      "stake",
+      "upgrade",
+      "depth"
+    ],
+    "text": "Place a Mine Entrance and buy a Mining Licence for 200d to open a 10m deep shaft. Upgrade depth on the notice board up to 40m for a fee."
+  },
+  {
+    "topic": "mining",
+    "keywords": [
+      "quarry",
+      "quarries",
+      "stone",
+      "free",
+      "regenerate",
+      "public"
+    ],
+    "text": "Designated public quarries at Moorstead, Goathland, and Pickering allow free deep digging, and the building stone there regenerates over time."
+  },
+  {
+    "topic": "mining",
+    "keywords": [
+      "dig",
+      "limit",
+      "skim",
+      "deep",
+      "rule"
+    ],
+    "text": "You cannot dig deeper than 1 block below the original terrain grade unless you are inside a public quarry or a licensed mine."
+  },
+  {
+    "topic": "mining",
+    "keywords": [
+      "fixture",
+      "props",
+      "lamp",
+      "winch",
+      "support",
+      "pick",
+      "gritstone",
+      "iron"
+    ],
+    "text": "Deeper mine bands need better picks and safety gear. Band 2 (11-20m) needs a Gritstone Pick and Pit Props; Band 3 (21-30m) needs an Iron Pick and a Safety Lamp; Band 4 (31-40m) needs a Winch."
+  },
+  {
+    "topic": "mining",
+    "keywords": [
+      "alum",
+      "shale",
+      "potash",
+      "polyhalite",
+      "salt",
+      "ore",
+      "price",
+      "staithes"
+    ],
+    "text": "New ores include Alum Shale (coast cliffs), Rock Salt (deep northeast), and Polyhalite (deep northeast). They are cheap at Staithes and dear inland."
+  },
+  {
+    "topic": "mining",
+    "keywords": [
+      "prospecting",
+      "skill",
+      "xp",
+      "level",
+      "gate",
+      "jet"
+    ],
+    "text": "Mining precious ores requires prospecting skill. Mining Jet requires Level 3, and Polyhalite requires Level 6. Novices receive only bare stone."
   },
   {
     "topic": "range",
@@ -326,7 +519,7 @@
       "tier",
       "dig"
     ],
-    "text": "Tools come in tiers — wood, then gritstone, then iron — each digging faster and lasting longer. Stone and ore need a pick, trees an axe, soil a spade, and beasts respect a sword."
+    "text": "Tools come in tiers: wood, then gritstone, then iron: each digging faster and lasting longer. Stone and ore need a pick, trees an axe, soil a spade, and beasts respect a sword."
   },
   {
     "topic": "building",
@@ -340,7 +533,7 @@
       "roof",
       "thatch"
     ],
-    "text": "The old croft at the south-east of the green is yours. Raise walls, a thatch roof, a window and a light, and the village watches your progress — your standing rises with every stage you finish."
+    "text": "The old croft at the south-east of the green is yours. Raise walls, a thatch roof, a window and a light, and the village watches your progress: your standing rises with every stage you finish."
   },
   {
     "topic": "village",
@@ -355,7 +548,7 @@
       "friendship",
       "people"
     ],
-    "text": "Right-click a villager to talk — they remember you between visits. Chatting and good gifts grow friendship from Stranger up to Close friend, and your standing across the parish opens better swaps and bigger ventures."
+    "text": "Right-click a villager to talk: they remember you between visits. Chatting and good gifts grow friendship from Stranger up to Close friend, and your standing across the parish opens better swaps and bigger ventures."
   },
   {
     "topic": "ventures",
@@ -385,7 +578,7 @@
       "sheep",
       "stoker"
     ],
-    "text": "Two storylines run across the real landmarks: the Hound of the Mires (something is taking sheep at night — start with Farmer James) and Count Dracula (start at the Whitby Dracula Museum; a holy-water stake fells him)."
+    "text": "Two storylines run across the real landmarks: the Hound of the Mires (something is taking sheep at night: start with Farmer James) and Count Dracula (start at the Whitby Dracula Museum; a holy-water stake fells him)."
   },
   {
     "topic": "geography",
@@ -399,7 +592,7 @@
       "dale",
       "town"
     ],
-    "text": "The settlements are Moorstead, Goathland, Rosedale Abbey, Staithes, Pickering, Grosmont and Whitby on the coast — all on or near the railway. The minimap names where you stand, north up."
+    "text": "The settlements are Moorstead, Goathland, Rosedale Abbey, Staithes, Pickering, Grosmont and Whitby on the coast: all on or near the railway. The minimap names where you stand, north up."
   },
   {
     "topic": "landmarks",
@@ -441,6 +634,6 @@
       "magic",
       "spell"
     ],
-    "text": "Merlin is the wizard of the moor. Say his name in chat (press T) from anywhere and he comes to you — he leads you to places, points the way, and works spells if you bring him the right token."
+    "text": "Merlin is the wizard of the moor. Say his name in chat (press T) from anywhere and he comes to you: he leads you to places, points the way, and works spells if you bring him the right token."
   }
 ]

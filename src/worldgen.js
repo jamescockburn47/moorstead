@@ -152,10 +152,27 @@ export class Gen {
     // richer t' field, t' better t' ore. Rosedale's grand for ironstone an' jet.
     const v = noise3(x * 0.17, y * 0.17, z * 0.17, this.seed ^ 0x04e); // one noise call; most blocks cheap-out below
     if (v <= 0.50) return B.STONE;
+    
+    const geo = this.geo;
+    const cx = geo.coastX(z);
+    
+    // Cleveland ironstone / Jet thinning near old workings (Rosedale kilns)
     const nearKilns = Math.hypot(x - KILNS.x, z - KILNS.z) < 70;
-    if (y < 20 && v > (nearKilns ? 0.72 : 0.86)) return B.JET_ORE;    // t' deep prize — rich in Rosedale
-    if (y < 34 && v > (nearKilns ? 0.60 : 0.68)) return B.IRON_ORE;   // ironstone
-    if (y < 48 && v > 0.61) return B.COAL_ORE;                        // common shallow coal
+    
+    // NE/Boulby coast deep evaporites (polyhalite & rock salt)
+    const isNECoast = z > 0 && x > cx - 180;
+    if (isNECoast && y < 12 && v > 0.85) return B.POLYHALITE;
+    if (isNECoast && y < 16 && v > 0.65) return B.ROCK_SALT;
+    
+    // Coastal cliff shallow alum shale
+    const isCoastCliff = x > cx - 100 && x < cx - 10;
+    if (isCoastCliff && y >= 15 && y < 45 && v > 0.65) return B.ALUM_SHALE;
+    
+    // Existing ores, with Rosedale kilns thinning (historically exhausted)
+    if (y < 20 && v > (nearKilns ? 0.94 : 0.86)) return B.JET_ORE;    // jet
+    if (y < 34 && v > (nearKilns ? 0.82 : 0.68)) return B.IRON_ORE;   // ironstone
+    if (y < 48 && v > (nearKilns ? 0.78 : 0.61)) return B.COAL_ORE;   // coal
+    
     return B.STONE;
   }
 
