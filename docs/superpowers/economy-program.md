@@ -69,6 +69,14 @@ A per-question fact-retrieval layer so Merlin **and** the villagers answer "how 
 - **Deployed + smoke-tested live 2026-06-19:** corpus in the Vercel bundle; clint-body restarted on the EVO ("Loaded 30 game facts"); Merlin and Farmer Harry each answered a trade/farming question accurately and in-voice.
 - **To extend the corpus:** edit `src/game-facts.js` → `node scripts/sync-facts.mjs` → `npm run verify` → redeploy (Vercel **and** scp `clint-body/{clint_body.py,npc_facts.py,game-facts.json}` to the EVO + `sudo systemctl restart clint-body clint-body-bairns`).
 
+## NPC memory & nosiness (shipped 2026-06-20)
+
+Deepens the village brain so NPCs feel alive (feeds SP4 NPC agency). Details + EVO file locations are in the `moorstead-npc-memory` memory; in brief:
+- **Per-player recall** already existed (rolling window + LLM summary + trust per player/NPC). Made it **eager** (summarises short chats too) and widened the window.
+- **Trade memory:** a completed buy/sell tells the brain (`/api/trade`), which records the deal (accumulating) so the vendor brings it up — proven live ("Aye, you sold me ten coal").
+- **Nosey activity:** `src/activity.js` injects a deterministic digest of what the player's been up to (holdings, kept stock, milestones, standing) into the NPC context on a fresh approach — **zero added latency** — so they remark on it in their own voice ("is that Whitby jet you're carryin'?").
+- **Durable transcripts + dashboard:** every turn is appended to a permanent `.log.jsonl` (the prompt window scrolls; this never drops), surfaced in the LAN-only dashboard (`:8095`) with a full-transcript viewer, a **kids-only filter** and bairns badges — so the children's chats can be reviewed.
+
 ## Farming vertical — status (2026-06-19)
 
 - **Slice 1 (herding core): BUILT + live.** Sheepdog arrow-whistles, hurdle/one-way-gate fold, drive a flock in, penning = kept stock. The in-game "Sheepdog & Flock" help tab and the public `about.html` describe exactly this and no more.
