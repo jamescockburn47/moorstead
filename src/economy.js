@@ -77,6 +77,25 @@ export const DELIVERY_DELAY = 0.5;    // game-days a shipment takes to arrive (h
 export const PURSE_MAX = 120;         // a village vendor's drop-in purse cap, in pence
 export const PURSE_REFILL = 120;      // pence a purse recovers per game-day, toward PURSE_MAX (≈ one day to refill)
 
+// --- Slice 2: registered farm status (the gate to droving) ---
+export const FARM_THRESHOLD = 5;   // head of penned stock to qualify as a farm
+export const CHARTER_FEE = 240;    // £1, the one-time registration charter (Moorstead board)
+
+// Pure gate: may the player register their farm right now? Returns { ok, reason, ... }.
+// reason drives both the board copy and the refusal toast:
+//   'already' — already a registered farmer
+//   'short'   — under the head threshold (carries need, have)
+//   'away'    — not stood at the market town (Moorstead)
+//   'poor'    — can't afford the charter (carries fee)
+// Threshold is checked before location so the player always sees stock progress first.
+export function farmRegisterCheck({ head = 0, registered = false, brass = 0, atMarket = false }) {
+  if (registered) return { ok: false, reason: 'already' };
+  if (head < FARM_THRESHOLD) return { ok: false, reason: 'short', need: FARM_THRESHOLD, have: head };
+  if (!atMarket) return { ok: false, reason: 'away' };
+  if (brass < CHARTER_FEE) return { ok: false, reason: 'poor', fee: CHARTER_FEE };
+  return { ok: true };
+}
+
 // What a vendor pays for one unit sold on the spot: the local sell price, penalised.
 export function dropInPrice(itemId, village, standingIdx = 0) {
   const p = priceOf(itemId, village, 'sell', standingIdx);
