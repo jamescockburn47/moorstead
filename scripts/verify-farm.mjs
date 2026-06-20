@@ -1,5 +1,6 @@
 // Registered-farm gate check — run wi': node scripts/verify-farm.mjs
-import { FARM_THRESHOLD, CHARTER_FEE, farmRegisterCheck } from '../src/economy.js';
+import { FARM_THRESHOLD, CHARTER_FEE, farmRegisterCheck, LIVESTOCK_PRICE, livestockPrice, droveValue, priceOf } from '../src/economy.js';
+import { I } from '../src/defs.js';
 
 let failed = false;
 const ok = m => console.log('  ok    ' + m);
@@ -41,6 +42,18 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
 {
   const r = farmRegisterCheck({ head: 9, registered: true, brass: 999, atMarket: true });
   (r.ok === false && r.reason === 'already' ? ok : bad)('already registered: no re-register');
+}
+
+// --- Slice 3: livestock pricing + the income gradient ---
+{
+  (LIVESTOCK_PRICE === 120 ? ok : bad)('livestock price is a flat 120d (10s) per head');
+  (livestockPrice(0) === 120 ? ok : bad)('per-head at standing 0 is 120d');
+  (livestockPrice(5) > livestockPrice(0) ? ok : bad)('standing lifts the per-head price');
+  (droveValue(5, 0) === 600 ? ok : bad)('a 5-head drove = £2 10s (600d)');
+  (droveValue(8, 0) === 960 ? ok : bad)('an 8-head drove = £4 (960d)');
+  (droveValue(0, 0) === 0 ? ok : bad)('no head delivered = no pay');
+  const coalHaul = 96 * priceOf(I.COAL_LUMP, 'whitby', 'sell', 0);
+  (droveValue(5, 0) > coalHaul ? ok : bad)(`5-head drove (${droveValue(5,0)}) tops a 96-coal rail haul (${coalHaul})`);
 }
 
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));

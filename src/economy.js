@@ -96,6 +96,19 @@ export function farmRegisterCheck({ head = 0, registered = false, brass = 0, atM
   return { ok: true };
 }
 
+// --- Slice 3: the drove — live-animal market value (signed off 2026-06-20) ---
+export const LIVESTOCK_PRICE = 120; // flat 10s per head at the Moorstead mart; NOT wool-spread-derived
+
+// Per-head live price, lifted only by farm standing (reuses the ±2%/idx loyalty curve).
+export function livestockPrice(standingIdx = 0) {
+  return Math.max(1, Math.round(LIVESTOCK_PRICE * (1 + 0.02 * standingIdx)));
+}
+
+// Total brass for a droved flock delivered to the mart: pays per head that ARRIVES.
+export function droveValue(head, standingIdx = 0) {
+  return Math.max(0, Math.floor(head)) * livestockPrice(standingIdx);
+}
+
 // What a vendor pays for one unit sold on the spot: the local sell price, penalised.
 export function dropInPrice(itemId, village, standingIdx = 0) {
   const p = priceOf(itemId, village, 'sell', standingIdx);
