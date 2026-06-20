@@ -1,5 +1,17 @@
 # Serving Moorstead from the EVO X2
 
+> **Current flow (2026-06) — read this first.** The original one-box walkthrough below is historical; ports and the model have since moved. Today:
+> - **Public client is on Vercel** — `npx vercel deploy --prod --yes` from the repo root, after `npm run verify` (13 checks) + `npm run build`. The EVO's `~/moorstead/game` static mirror is **dormant**; Vercel is canonical.
+> - **The EVO runs the backend services**, reached via the `sovren-cloudflared` tunnel + Caddy on **:8090**:
+>   - `/brain/*` → villager **brain** `moorstead-brain` (FastAPI **:8010**) → llama.cpp **:8086** (gemma MoE, not Ollama).
+>   - `/ws` → multiplayer **relay** `moorstead-world` (**:8096**).
+>   - `/dash/*` → **dashboard** `moorstead-dash` (**:8095**, LAN/Tailscale-only; only `/ping` + `/auth/claim` are tunnelled).
+>   - **Merlin** = `clint-body` + `clint-body-bairns` services.
+> - **Editing the off-repo services** (brain, relay, dash): keep local working copies under `C:\Users\James\moorstead-evo-work\`, edit + test there, `cp x x.bak-YYYYMMDD-tag` on the EVO, `scp` back, `sudo systemctl restart <service>`, smoke-test. `ssh evo-tailscale`, passwordless sudo.
+> - **Debug:** client loads but login/chat fails ⇒ check `systemctl is-active sovren-cloudflared` FIRST (login `/dash` + relay `/ws` both ride the tunnel).
+>
+> Day-to-day deploy table: repo `README.md`. Canonical host/port/model detail: the `moorcraft-evo-stack` memory. The walkthrough below is the original from-scratch install (Ollama, Caddy :8080) — keep it for a rebuild, not daily deploys.
+
 The whole stack runs on the one box:
 
 ```

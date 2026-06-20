@@ -12,13 +12,30 @@ npm run dev
 Then open the printed local URL (usually `http://localhost:5173`).
 
 To build for production: `npm run build` (output in `dist/`).
-Route sanity-check (railway + village siting, 4 seeds): `node scripts/verify-rail.mjs`.
+Headless test suite — `npm run verify` (13 checks: railway, rail clearance, train view, resources, landmarks, season, weather, pets, villagers, economy, herding, game-facts, NPC activity). Run it before every deploy.
 
 ## Deploying
 
-- **Public site** ([www.moorstead.app](https://www.moorstead.app) — apex an' owd moorcraft.app redirect there): `npx vercel deploy --prod --yes`
-- **EVO X2** (Caddy serves `~/moorstead/game` on :8090 behind the Cloudflare tunnel):
-  `scp -r dist evo:moorstead/game.new` then swap `game.new` → `game` (keep `game.old` for rollback)
+The public client and the backend services deploy **separately**.
+
+**Public client → Vercel** — what players load at [www.moorstead.app](https://www.moorstead.app) (apex + owd moorcraft.app redirect there). From the repo root, once `npm run verify` and `npm run build` are green:
+
+```bash
+npx vercel deploy --prod --yes
+```
+
+Vercel rebuilds from local source — a `git push` does **not** deploy. Verify live: fetch the homepage, read the `assets/index-*.js` hash, grep that bundle for a string unique to your change. Browsers cache hard — Ctrl+Shift+R to see it. (The EVO also keeps a static mirror at `~/moorstead/game`, but it is dormant; Vercel is canonical.)
+
+**Backend services → the EVO box** (`ssh evo-tailscale`, passwordless sudo). Only `clint-body/` is in this repo; the others live on the EVO under `~/moorstead/`. Always `cp x x.bak-YYYYMMDD-tag` before overwriting, and smoke-test after restart.
+
+| Service | Source | Deploy |
+| --- | --- | --- |
+| Merlin (in-world wizard) | `clint-body/` (in repo) | `scp clint-body/{clint_body.py,npc_facts.py,game-facts.json}` → `~/moorstead/clint-body/`, then `sudo systemctl restart clint-body clint-body-bairns` |
+| Villager brain (FastAPI :8010) | `~/moorstead/yorkshire_bot/brain/` (**not** in repo) | edit working copies under `C:\Users\James\moorstead-evo-work\brain\`, `scp` back, `sudo systemctl restart moorstead-brain` |
+| Relay (worldsvc :8096) | `~/moorstead/worldsvc/` (not in repo) | `scp` + `sudo systemctl restart moorstead-world` |
+| Dashboard (parish ledger, LAN-only :8095) | `~/moorstead/dash/` (not in repo) | edit `moorstead-evo-work/dash/`, `scp` back, `sudo systemctl restart moorstead-dash` |
+
+`deploy/ship.ps1` does the client build + EVO mirror + Vercel in one go (it hangs off home LAN — see the `moorcraft-evo-stack` memory for the manual Tailscale path). Full host/port/tunnel detail is in `deploy/README.md`.
 
 ## Talking villagers
 

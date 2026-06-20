@@ -1,5 +1,9 @@
 # clint-body — Phase 5a in-world presence
 
+> **Out of date (2026-06-20).** This README describes the original Phase-5a scripted greeter. Since then `clint_body.py` became **Merlin**, an LLM-backed in-world wizard: summoned by name, holds world-aware conversations through the brain at `:8010` (with the game-facts mini-RAG in `npc_facts.py` + `game-facts.json`), leads players to places, and casts spells. Current behaviour + architecture: the `clint-moorstead-warden` and `moorstead-npc-memory` memories.
+>
+> **Deploy:** `scp clint-body/{clint_body.py,npc_facts.py,game-facts.json}` → `~/moorstead/clint-body/` on the EVO (`evo-tailscale`), then `sudo systemctl restart clint-body clint-body-bairns`. Back up first (`cp x x.bak-YYYYMMDD-tag`) and smoke-test. The historical walkthrough follows.
+
 A lightweight Python process that connects to the Moorstead relay as the
 character **Clint** (`pid=clint-body`, `name=Clint`).  It maintains a visible
 avatar near spawn, sends position keep-alives every ~2 seconds, and greets
