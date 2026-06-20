@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { B, BLOCKS, CHUNK, HEIGHT, isOpaque, isLiquid, isCutout } from './defs.js';
 import { tileUV, buildAtlas } from './textures.js';
+import { hash2i } from './noise.js';
 
 let materials = null;
 
@@ -123,16 +124,34 @@ export function buildChunkMeshes(world, chunk) {
         const def = BLOCKS[id];
 
         if (isCutout(id)) {
-          // cross quads
           const uvr = tileUV(def.tex.t);
           const [u0, v0, u1, v1] = uvr;
-          const j = 0.5; // centre
-          for (const [ax, az, bx, bz] of [[0.15, 0.15, 0.85, 0.85], [0.85, 0.15, 0.15, 0.85]]) {
-            cutout.quad(
-              [[lx + ax, y, lz + az, 0, 0], [lx + bx, y, lz + bz, 1, 0],
-               [lx + ax, y + 1, lz + az, 0, 1], [lx + bx, y + 1, lz + bz, 1, 1]],
-              [0, 1, 0], [u0, v0, u1, v1], [3, 3, 3, 3], 0.95
-            );
+          if (id === B.TORCH || id === B.SIGNPOST) {
+            // structural cutouts stay centred + upright (a torch/signpost shouldn't lean)
+            for (const [ax, az, bx, bz] of [[0.15, 0.15, 0.85, 0.85], [0.85, 0.15, 0.15, 0.85]]) {
+              cutout.quad(
+                [[lx + ax, y, lz + az, 0, 0], [lx + bx, y, lz + bz, 1, 0],
+                 [lx + ax, y + 1, lz + az, 0, 1], [lx + bx, y + 1, lz + bz, 1, 1]],
+                [0, 1, 0], [u0, v0, u1, v1], [3, 3, 3, 3], 0.95
+              );
+            }
+          } else {
+            // plant flora: deterministic per-block yaw + jitter + scale so heather, gorse,
+            // ferns etc. read natural rather than a regular grid of identical crosses
+            const wx = x0 + lx, wz = z0 + lz;
+            const a = hash2i(wx, wz, 1) * Math.PI * 2;
+            const cxj = 0.5 + (hash2i(wx, wz, 2) - 0.5) * 0.2;
+            const czj = 0.5 + (hash2i(wx, wz, 3) - 0.5) * 0.2;
+            const rad = 0.34 + hash2i(wx, wz, 4) * 0.14;   // 0.34..0.48 half-width
+            const ht = 0.85 + hash2i(wx, wz, 5) * 0.35;    // 0.85..1.20 height
+            const cA = Math.cos(a) * rad, sA = Math.sin(a) * rad;
+            for (const [dx, dz] of [[cA, sA], [-sA, cA]]) {
+              cutout.quad(
+                [[lx + cxj - dx, y, lz + czj - dz, 0, 0], [lx + cxj + dx, y, lz + czj + dz, 1, 0],
+                 [lx + cxj - dx, y + ht, lz + czj - dz, 0, 1], [lx + cxj + dx, y + ht, lz + czj + dz, 1, 1]],
+                [0, 1, 0], [u0, v0, u1, v1], [3, 3, 3, 3], 0.95
+              );
+            }
           }
           continue;
         }
