@@ -317,6 +317,26 @@ def _npcs_at_village(village_name: str, npcs: list[dict]) -> list[str]:
     return [n["name"] for n in npcs if n.get("village", "").lower() == vn]
 
 
+def _stock_summary(pets) -> str:
+    """A short note on the player's kept beasts, so Merlin can be nosey about the
+    flock the same way the villagers are. '' when they keep nowt."""
+    if not isinstance(pets, list) or not pets:
+        return ""
+
+    def kind(p):
+        return (p.get("petKind") or p.get("type") or p.get("kind") or "") if isinstance(p, dict) else ""
+
+    bits = []
+    if any(kind(p) == "dog" for p in pets):
+        bits.append("a sheepdog at heel")
+    flock = sum(1 for p in pets if kind(p) == "sheep")
+    if flock >= 2:
+        bits.append(f"a flock of {flock}")
+    elif pets and not bits:
+        bits.append("a tamed beast or two")
+    return ", ".join(bits)
+
+
 def build_context(
     pid: str,
     px: float,
@@ -369,6 +389,9 @@ def build_context(
         progress = _progression(player_data.get("milestonesDone", []))
         health = player_data.get("health")
         save_parts = [f"carrying: {inv_summary}", f"progress: {progress}"]
+        stock = _stock_summary(player_data.get("pets", []))
+        if stock:
+            save_parts.append(f"keeps {stock}")
         if health is not None:
             save_parts.append(f"health {health}/20")
         parts.append("; ".join(save_parts))
