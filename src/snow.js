@@ -35,3 +35,20 @@ export function snowLineFor(amount) {
   const a = amount < 0 ? 0 : amount > 1 ? 1 : amount;
   return 64 - a * 40;                                     // 64 (tops) down to 24 (valley)
 }
+
+// Split precipitation into snow (winter) vs rain (otherwise). `livePrecip` is the
+// live-feed amount [0,1] or null when offline; `fallback` is the deterministic
+// snow-clock value used only when offline. Returns { snow, rain }.
+export function winterPrecip(season, livePrecip, fallback = 0) {
+  const wintry = season && season.warmth < 0;
+  const precip = (livePrecip != null) ? livePrecip : (wintry ? fallback : 0);
+  if (wintry) return { snow: precip, rain: 0 };
+  return { snow: 0, rain: (livePrecip != null ? livePrecip : 0) };
+}
+
+// Sky greyness [0,1]: overcast while it actively snows or rains, else the
+// weather-state base (so a clear winter forecast reads sunny).
+export function overcastGrey(weather, snow, rain) {
+  const base = { clear: 0, misty: 0.13, rain: 0.52, fog: 0.68 }[weather] || 0;
+  return Math.max(base, snow * 0.6, rain * 0.5);
+}

@@ -1,7 +1,7 @@
 // Day/night cycle, moorland weather (clear / misty / fog / rain), rain particles.
 import * as THREE from 'three';
 import { currentWeather } from './weather-live.js';
-import { snowfallIntensity } from './snow.js';
+import { winterPrecip, overcastGrey, snowfallIntensity } from './snow.js';
 
 const DAY_LENGTH = 1800; // seconds per full day — a proper half-hour, not a rush
 // (t' shared-moor relay must agree: worldsvc/server.py DAY_LENGTH)
@@ -252,8 +252,12 @@ export class Sky {
     else if (sunY > 0) col = lerpC(sunX > 0 ? SKY.dawn : SKY.dusk, SKY.day, sunY / 0.25);
     else if (sunY > -0.2) col = lerpC(sunX > 0 ? SKY.dawn : SKY.dusk, SKY.night, -sunY / 0.2);
     else col = SKY.night;
+    // precipitation: split into snow (wintry) vs rain, using live feed or deterministic clock
+    const { snow: snowFall, rain: rainTarget } = winterPrecip(season, this.liveRain != null ? this.liveRain : null, season ? snowfallIntensity(Date.now(), season) : 0);
+    const targetRain = rainTarget;
+
     // weather greys t' sky
-    const grey = { clear: 0, misty: 0.13, rain: 0.52, fog: 0.68 }[this.weather];
+    const grey = overcastGrey(this.weather, snowFall, this.rainAmount);
     let sky = col.clone().lerp(new THREE.Color(0x8a949c).multiplyScalar(0.2 + dayness * 0.8), grey);
     // Count Dracula's presence: sky bruises, fog thickens — dread afore horror
     this.dread += (this.dreadTarget - this.dread) * Math.min(1, dt * 1.8);
@@ -321,10 +325,7 @@ export class Sky {
     cu.uClouds.value += (grey - cu.uClouds.value) * Math.min(1, dt * 0.5);
     cu.cloudCol.value.setRGB(0.16, 0.18, 0.22).lerp(new THREE.Color(0.91, 0.93, 0.95), dayness);
 
-    const snowFall = season ? snowfallIntensity(Date.now(), season) : 0;
-
     // rain
-    const targetRain = snowFall > 0.02 ? 0 : ((this.liveRain != null) ? this.liveRain : (this.weather === 'rain' ? 1 : 0));
     this.rainAmount += (targetRain - this.rainAmount) * Math.min(1, dt * 0.8);
     this.rain.material.opacity = covered ? 0 : this.rainAmount * 0.5; // no rain through a roof
     if (!covered && this.rainAmount > 0.02) {
