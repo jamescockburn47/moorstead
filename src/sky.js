@@ -1,6 +1,7 @@
 // Day/night cycle, moorland weather (clear / misty / fog / rain), rain particles.
 import * as THREE from 'three';
 import { currentWeather } from './weather-live.js';
+import { snowfallIntensity } from './snow.js';
 
 const DAY_LENGTH = 1800; // seconds per full day — a proper half-hour, not a rush
 // (t' shared-moor relay must agree: worldsvc/server.py DAY_LENGTH)
@@ -146,6 +147,29 @@ export class Sky {
     }));
     this.rain.frustumCulled = false;
     scene.add(this.rain);
+
+    // snow (winter) — softer, slower, drifting; mirrors the rain rig
+    this.snowCount = 1100;
+    this.snowAmount = 0;
+    const sg = new THREE.BufferGeometry();
+    const sp = new Float32Array(this.snowCount * 3);
+    for (let i = 0; i < this.snowCount; i++) {
+      sp[i * 3] = (Math.random() - 0.5) * 40;
+      sp[i * 3 + 1] = Math.random() * 24;
+      sp[i * 3 + 2] = (Math.random() - 0.5) * 40;
+    }
+    sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+    const snowC = document.createElement('canvas'); snowC.width = snowC.height = 8;
+    const scx = snowC.getContext('2d');
+    const sgr = scx.createRadialGradient(4, 4, 0, 4, 4, 4);
+    sgr.addColorStop(0, 'rgba(255,255,255,0.95)'); sgr.addColorStop(1, 'rgba(255,255,255,0)');
+    scx.fillStyle = sgr; scx.fillRect(0, 0, 8, 8);
+    this.snow = new THREE.Points(sg, new THREE.PointsMaterial({
+      map: new THREE.CanvasTexture(snowC), size: 0.5, transparent: true,
+      opacity: 0, depthWrite: false, sizeAttenuation: true,
+    }));
+    this.snow.frustumCulled = false;
+    scene.add(this.snow);
   }
 
   isNight() { return this.time < 0.18 || this.time > 0.82; }
@@ -297,8 +321,10 @@ export class Sky {
     cu.uClouds.value += (grey - cu.uClouds.value) * Math.min(1, dt * 0.5);
     cu.cloudCol.value.setRGB(0.16, 0.18, 0.22).lerp(new THREE.Color(0.91, 0.93, 0.95), dayness);
 
+    const snowFall = season ? snowfallIntensity(Date.now(), season) : 0;
+
     // rain
-    const targetRain = (this.liveRain != null) ? this.liveRain : (this.weather === 'rain' ? 1 : 0);
+    const targetRain = snowFall > 0.02 ? 0 : ((this.liveRain != null) ? this.liveRain : (this.weather === 'rain' ? 1 : 0));
     this.rainAmount += (targetRain - this.rainAmount) * Math.min(1, dt * 0.8);
     this.rain.material.opacity = covered ? 0 : this.rainAmount * 0.5; // no rain through a roof
     if (!covered && this.rainAmount > 0.02) {
@@ -314,6 +340,21 @@ export class Sky {
       }
       p.needsUpdate = true;
       this.rain.position.set(playerPos.x, playerPos.y - 8, playerPos.z);
+    }
+
+    // winter snow: falls slow, drifts on the wind, no rain alongside
+    this.snowAmount += ((covered ? 0 : snowFall) - this.snowAmount) * Math.min(1, dt * 0.5);
+    this.snow.material.opacity = this.snowAmount * 0.85;
+    if (this.snowAmount > 0.02) {
+      const p = this.snow.geometry.attributes.position;
+      for (let i = 0; i < this.snowCount; i++) {
+        let y = p.array[i * 3 + 1] - dt * 6.5;
+        p.array[i * 3] += Math.sin((this.cloudT + i) * 0.7) * dt * 0.6;
+        if (y < 0) { y = 18 + Math.random() * 6; p.array[i * 3] = (Math.random() - 0.5) * 40; p.array[i * 3 + 2] = (Math.random() - 0.5) * 40; }
+        p.array[i * 3 + 1] = y;
+      }
+      p.needsUpdate = true;
+      this.snow.position.set(playerPos.x, playerPos.y - 8, playerPos.z);
     }
 
     return msg;
