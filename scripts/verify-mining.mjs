@@ -1,6 +1,8 @@
 // Mining and land decay verification tests — run with: node scripts/verify-mining.mjs
 import { B } from '../src/defs.js';
 import { mayDigDeep, depthBandFor, isExpired } from '../src/editledger.js';
+import { strSeed } from '../src/noise.js';
+import { Gen } from '../src/worldgen.js';
 
 let failed = false;
 const ok = m => console.log('  ok    ' + m);
@@ -56,7 +58,53 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
   (rBand4_ok.allowed === true ? ok : bad)('Band 4 allows iron pick and Winch');
 }
 
-// --- 2. Prospecting Level Math ---
+// --- 2. Natural cave drifts (free old workings) ---
+{
+  const gen = new Gen(42);
+  let caveCell = null;
+  outer: for (let x = -200; x <= 200 && !caveCell; x += 3) {
+    for (let z = -200; z <= 200 && !caveCell; z += 3) {
+      const h = gen.height(x, z);
+      for (let y = 5; y < h - 4; y++) {
+        if (gen.caveAt(x, y, z, h)) { caveCell = { x, y, z, h }; break outer; }
+      }
+    }
+  }
+  if (!caveCell) bad('could not find a natural cave cell in test seed');
+  else {
+    const { x, y, z, h } = caveCell;
+    (gen.inNaturalCaveVolume(x, y, z) === true ? ok : bad)('inside natural cave air is wild-mining volume');
+    // A solid block bordering cave air (typical dig face) counts too
+    let wall = null;
+    for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+      const wx = x + dx, wy = y + dy, wz = z + dz;
+      if (!gen.caveAt(wx, wy, wz, gen.height(wx, wz)) && wy < h - 1) { wall = { x: wx, y: wy, z: wz }; break; }
+    }
+    (wall && gen.inNaturalCaveVolume(wall.x, wall.y, wall.z) === true ? ok : bad)('cave wall bordering drift air is wild-mining volume');
+    // Solid rock below grade with no cave neighbour stays gated
+    let solid = null;
+    for (let sx = -200; sx <= 200 && !solid; sx += 5) {
+      for (let sz = -200; sz <= 200 && !solid; sz += 5) {
+        const sh = gen.height(sx, sz);
+        const sy = sh - 5;
+        if (sy >= 4 && !gen.inNaturalCaveVolume(sx, sy, sz)) solid = true;
+      }
+    }
+    (solid ? ok : bad)('deep solid rock away from drifts is not wild-mining volume');
+  }
+}
+
+// --- 3. Scattered moor quarries (stampQuarry old workings) ---
+{
+  const gen = new Gen(strSeed('t-shared-moor'));
+  const qx = -312, qz = 519, qy = 28;
+  (gen.wildQuarryAt(qx, qz) !== null ? ok : bad)('shared-moor wild quarry exists near moor fringe test coords');
+  (gen.inWildQuarryVolume(qx, qy, qz) === true ? ok : bad)('pit floor below grade inside wild quarry is free to dig');
+  (gen.inOldWorkingsVolume(qx, qy, qz) === true ? ok : bad)('wild quarry counts as old workings');
+  (gen.inWildQuarryVolume(-313, 514, 28) === false ? ok : bad)('solid moor outside quarry footprint stays gated');
+}
+
+// --- 4. Prospecting Level Math ---
 {
   const calcLvl = xp => Math.floor(Math.sqrt(xp / 10));
   (calcLvl(0) === 0 ? ok : bad)('XP 0 is level 0');
@@ -66,7 +114,7 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
   (calcLvl(360) === 6 ? ok : bad)('XP 360 is level 6 (required for Polyhalite)');
 }
 
-// --- 3. Build & Dig Decay ---
+// --- 5. Build & Dig Decay ---
 {
   // A build edit inside active claim never expires
   const activeClaim = { kind: 'claim', cx: 10, cz: 10, radius: 8, lapsedDay: null };

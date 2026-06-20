@@ -464,7 +464,8 @@ export class UI {
       'Mining': `
 <h3>Mining rights and techniques</h3>
 <ul>
-<li><b>The Dig Limit:</b> Digging in open ground is restricted to a depth of 1 block below the surface level. Deep excavation requires a registered mine or a public quarry.</li>
+<li><b>The Dig Limit:</b> Digging in open ground is restricted to a depth of 1 block below the surface level. Deep excavation requires a public quarry, an old working, or a registered mine.</li>
+<li><b>Old Workings:</b> Natural cave drifts and the log-framed quarry pits scattered on the moor are free to mine — no licence — but ore there is sparse (worked out). Dig the pit floor or cave walls with a pick to explore or climb out.</li>
 <li><b>Public Quarries:</b> Designated public quarries (in Moorstead, Goathland, and Pickering) allow deep digging for all players. Dug stone in public quarries regenerates over time.</li>
 <li><b>Start Your Own Mine:</b> Place a crafted <b>Mine Entrance</b> (6 planks + 4 dressed stone) anywhere away from town boundaries to define your shaft.</li>
 <li><b>Licensing:</b> Purchase a mining license deed at the Moorstead notice board. The initial fee is 120d plus 8d per block of licensed depth. Weekly upkeep is 1d per block of depth. Unpaid upkeep causes the mine to lapse.</li>

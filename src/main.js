@@ -2507,12 +2507,13 @@ class Game {
     const ledgerEdit = this.world.editLedger.get(editKey);
     const isPlayerBuild = ledgerEdit && ledgerEdit.cat === 'build';
 
-    if (!this.isAdmin() && NATURAL_BLOCKS.has(hit.id) && !isPlayerBuild) {
+    if (!this.isAdmin() && !this.player.creative && NATURAL_BLOCKS.has(hit.id) && !isPlayerBuild) {
       const grade = this.world.gen.height(hit.x, hit.z);
       if (hit.y < grade - 1) {
-        // Deep digging! Allowed inside designated quarries or active mines
+        // Deep digging: parish quarries, old workings (caves + scattered pits), or licensed mines
         const inQuarry = inDeed(this.world.deeds, hit.x, hit.z, 'quarry');
-        if (!inQuarry) {
+        const inOldWorkings = !inQuarry && this.world.gen.inOldWorkingsVolume(hit.x, hit.y, hit.z);
+        if (!inQuarry && !inOldWorkings) {
           const mine = findActiveDeed(this.world.deeds, hit.x, hit.z, 'mine');
           const allowedFixtures = [];
           if (mine) {
@@ -2544,7 +2545,7 @@ class Game {
             if (!this._lmToast || now - this._lmToast > 4) {
               this._lmToast = now;
               if (check.reason === 'nomine') {
-                this.ui.toast("Tha can only dig deep inside a licensed mine — set a mine entrance an' buy a licence.", 4000);
+                this.ui.toast("Tha can only dig deep in a quarry, an old working (cave or moor pit), or a licensed mine — not open moor.", 4000);
               } else if (check.reason === 'depthlimit') {
                 this.ui.toast("Tha's reached t' depth limit o' this mine's license (" + check.limit + " blocks) — visit t' board to upgrade it.", 4000);
               } else if (check.reason === 'pick' || check.reason === 'fixture') {

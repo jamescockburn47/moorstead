@@ -144,6 +144,51 @@ export class Gen {
     return n > 0.58;
   }
 
+  // Seed cave drifts (old workings): free deep mining on faces bordering natural
+  // cave air. Solid rock below grade still needs a quarry or licensed mine.
+  inNaturalCaveVolume(x, y, z) {
+    const h = this.height(x, z);
+    if (y >= h - 1 || y < 4) return false;
+    if (this.caveAt(x, y, z, h)) return true;
+    for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+      const nh = this.height(x + dx, z + dz);
+      if (this.caveAt(x + dx, y + dy, z + dz, nh)) return true;
+    }
+    return false;
+  }
+
+  // Scattered worldgen quarries (stampQuarry): log-framed pits on t' open moor.
+  wildQuarryAt(x, z) {
+    const geo = this.geo;
+    const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
+    const x0 = cx * CHUNK, z0 = cz * CHUNK;
+    const midH = geo.height(x0 + 8, z0 + 8);
+    if (midH <= WATER_LEVEL + 1 || geo.bogginess(x0 + 8, z0 + 8) > 0.4) return null;
+    if (geo.inVillage(x0 + 8, z0 + 8, 24)) return null;
+    if (geo.coastT(x0 + 8, z0 + 8) > 0) return null;
+    const r = hash2i(cx, cz, this.seed ^ 0x57c);
+    if (r < 0.008) return null;
+    if (r < 0.016 && midH >= 33) return null;
+    if (r >= 0.026) return null;
+    const fx = 5, fz = 5, size = 6;
+    const qx0 = x0 + fx, qz0 = z0 + fz;
+    if (x < qx0 || x >= qx0 + size || z < qz0 || z >= qz0 + size) return null;
+    const top = geo.height(x0 + fx + 3, z0 + fz + 3);
+    if (top <= WATER_LEVEL + 2) return null;
+    return { top, qx0, qz0, size };
+  }
+
+  inWildQuarryVolume(x, y, z) {
+    if (!this.wildQuarryAt(x, z)) return false;
+    const grade = this.height(x, z);
+    if (y >= grade - 1 || y < 3) return false;
+    return true;
+  }
+
+  inOldWorkingsVolume(x, y, z) {
+    return this.inNaturalCaveVolume(x, y, z) || this.inWildQuarryVolume(x, y, z);
+  }
+
   oreAt(x, y, z) {
     // Ore comes in VEINS, not lone specks: one low-frequency 3D field, thresholded
     // by depth, so finding one lump means there's more about — tha can follow a
