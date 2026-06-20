@@ -22,7 +22,7 @@ export function formatBrass(pence) {
 // Base worth of a good, in pence, "at par" (before regional spread and the vendor's cut).
 export const PRICES = {
   [I.COAL_LUMP]: 3, [I.RAW_IRON]: 5, [I.IRON_INGOT]: 14, [I.JET_GEM]: 40,
-  [B.WOOL]: 6, [B.HEATHER]: 1, [B.BRACKEN]: 1,
+  [B.WOOL]: 6, [B.HEATHER]: 1, [B.BRACKEN]: 1, [B.PEAT]: 1,
   [I.BILBERRIES]: 1,
   [I.RAW_MUTTON]: 4, [I.COOKED_MUTTON]: 9,
   [I.RAW_GROUSE]: 3, [I.COOKED_GROUSE]: 8,
