@@ -1,0 +1,33 @@
+# llama.cpp server for Moorstead villager chat (EVO).
+# Install: sudo cp deploy/llama-server-moorstead.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl restart llama-server-moorstead moorstead-brain
+#
+# Model: Gemma 4 E4B dense (7.7 GB Q8_0) — fast enough for many concurrent
+# villager chats on the Strix Halo. The older A4B MoE (26B/4B active) and dense
+# 31B quants remain on disk at /mnt/storage/models/gemma4/ if you need to swap back.
+[Unit]
+Description=llama.cpp Moorstead villager brain (Gemma 4 E4B Q8_0)
+After=network-online.target
+
+[Service]
+Type=simple
+User=james
+ExecStart=/home/james/llama.cpp/build/bin/llama-server \
+  -m /mnt/storage/models/gemma4/gemma-4-E4B-it-Q8_0.gguf \
+  --alias gemma-4-e4b-it \
+  --host 127.0.0.1 --port 8086 \
+  -ngl 999 \
+  -c 49152 \
+  --parallel 48 \
+  --reasoning off \
+  --flash-attn on \
+  --cont-batching \
+  --batch-size 512 \
+  --ubatch-size 256 \
+  --cache-type-k q8_0 \
+  --cache-type-v q8_0
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

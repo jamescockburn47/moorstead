@@ -3,7 +3,7 @@
 > **Current flow (2026-06) — read this first.** The original one-box walkthrough below is historical; ports and the model have since moved. Today:
 > - **Public client is on Vercel** — `npx vercel deploy --prod --yes` from the repo root, after `npm run verify` (13 checks) + `npm run build`. The EVO's `~/moorstead/game` static mirror is **dormant**; Vercel is canonical.
 > - **The EVO runs the backend services**, reached via the `sovren-cloudflared` tunnel + Caddy on **:8090**:
->   - `/brain/*` → villager **brain** `moorstead-brain` (FastAPI **:8010**) → llama.cpp **:8086** (gemma MoE, not Ollama).
+>   - `/brain/*` → villager **brain** `moorstead-brain` (FastAPI **:8010**) → llama.cpp **:8086** (Gemma 4 E4B dense, not Ollama).
 >   - `/ws` → multiplayer **relay** `moorstead-world` (**:8096**).
 >   - `/dash/*` → **dashboard** `moorstead-dash` (**:8095**, LAN/Tailscale-only; only `/ping`, `/auth/claim`, `/visit`, and `/request-invite` are tunnelled).
 >   - **Merlin** = `clint-body` + `clint-body-bairns` services.
@@ -122,6 +122,27 @@ front of the hostname — email one-time-PIN login, nothing else changes.
   is bursty, that comfortably supports a village of 15–25 active players.
 - Knobs: smaller `BRAIN_MODEL` = more concurrent chatters; raise
   `OLLAMA_NUM_PARALLEL` to 6–8 if you see queueing with memory to spare.
+
+## Villager LLM (llama.cpp on :8086)
+
+Live config (2026-06-20): **Gemma 4 E4B** dense (`gemma-4-E4B-it-Q8_0.gguf`, alias
+`gemma-4-e4b-it`), 48 parallel slots. `BRAIN_MODEL` in `/etc/moorstead/brain.env`
+must match the `--alias` on `llama-server-moorstead`.
+
+Other quants on disk at `/mnt/storage/models/gemma4/` if you need to swap back:
+
+| File | Role |
+|------|------|
+| `gemma-4-E4B-it-Q8_0.gguf` | **current** — dense 4B, fast, ~21 GB VRAM at 48 slots |
+| `gemma-4-26B-A4B-it-UD-Q4_K_M.gguf` | MoE (4B active / 26B total), higher tok/s, ~33 GB VRAM |
+| `gemma-4-31B-it-Q4_K_M.gguf` | dense 31B — quality ceiling, heaviest |
+
+```bash
+sudo cp deploy/llama-server-moorstead.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl restart llama-server-moorstead moorstead-brain
+bash deploy/bench_llamacpp.sh 8086   # smoke-test reply latency
+```
 
 ## Operations
 
