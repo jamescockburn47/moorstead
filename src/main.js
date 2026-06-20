@@ -3079,13 +3079,18 @@ class Game {
       } else if (this.state === 'driving') {
         this.driveCam();
       }
+      // season needed by player (ice) before the main sky block later in frame
+      const _season = (this.seasonOverride != null)
+        ? seasonStateAtPhase(this.seasonOverride)
+        : seasonState();
+      this.season = _season;
       // player
       if (playing && !this.player.dead) {
         if (this.boat) this.updateBoat(dt);
-        else this.player.update(dt, this.input, this.audio);
+        else this.player.update(dt, this.input, this.audio, _season);
       } else if (!playing && this.state !== 'riding') {
         // UI open: physics still ticks but wi' no input
-        this.player.update(dt, { keys: {}, jumpTapped: false }, this.audio);
+        this.player.update(dt, { keys: {}, jumpTapped: false }, this.audio, _season);
       }
       if (this.mount) this.updateMount(); // carry the pony along under the rider
 
@@ -3176,11 +3181,8 @@ class Game {
         this.deedTick();
       }
 
-      // sky & weather
-      const season = (this.seasonOverride != null)
-        ? seasonStateAtPhase(this.seasonOverride)
-        : seasonState();
-      this.season = season; // cached for other systems + the debug API
+      // sky & weather (season already computed + cached above for player ice physics)
+      const season = this.season;
       if (this.floraLayer) this.floraLayer.update(dt, this.player.pos, season);
       if (this.footprints && this.snowAccum > 0.1) {
         const fpNow = performance.now() / 1000;

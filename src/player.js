@@ -2,6 +2,7 @@
 import { B, BLOCKS, FOODS, TOOLS, maxStack, isLiquid } from './defs.js';
 import { STARTING_BRASS } from './economy.js';
 import { moveEntity, boxCollides, unstick } from './physics.js';
+import { freezableWater, isFrozen } from './snow.js';
 
 const GRAVITY = 26;
 const JUMP_VEL = 8.6;
@@ -54,9 +55,17 @@ export class Player {
     return this.world.getBlock(Math.floor(this.pos.x), Math.floor(this.pos.y + 0.3), Math.floor(this.pos.z));
   }
 
+  onFrozenSurface(season) {
+    if (!isFrozen(season)) return false;
+    const x = Math.floor(this.pos.x), z = Math.floor(this.pos.z), y = Math.floor(this.pos.y - 0.05);
+    const b = this.world.getBlock(x, y, z);
+    if (b !== B.WATER && b !== B.BOG) return false;
+    return freezableWater(b, this.world.gen.geo.coastT(x, z), B);
+  }
+
   heldItem() { return this.slots[this.hotbar]; }
 
-  update(dt, input, audio) {
+  update(dt, input, audio, season) {
     if (this.dead) return;
     // Hold physics until t' ground under us actually exists — ungenerated
     // chunks read as solid stone and used to wedge t' player fast.
@@ -66,6 +75,7 @@ export class Player {
     const inWater = this.feetBlock() === B.WATER || this.headBlock() === B.WATER;
     const inBog = this.feetBlock() === B.BOG || this.headBlock() === B.BOG;
     const inLiquid = inWater || inBog;
+    const onFrozen = this.onFrozenSurface(season);
     // treading deep water tires thee — tha can't keep thi head up forever, so the open
     // sea is a real danger to swim (make for shore, the shallows, or a coble). Standing
     // on a shallow bottom (onGround) is wading, not treading, so it doesn't tire thee.
@@ -87,14 +97,14 @@ export class Player {
     const sneaking = input.keys['ShiftLeft'] && !this.flying;
     let sprinting = input.keys['KeyZ'] && fwd > 0 && this.hunger > 6 && !sneaking;
     let speed = this.flying ? (sprinting ? FLY_FAST : FLY) : this.mounted ? MOUNT_WALK : sprinting ? SPRINT : sneaking ? SNEAK : WALK;
-    if (inBog) speed *= 0.3;
-    else if (inWater) speed *= 0.55;
+    if (inBog && !onFrozen) speed *= 0.3;
+    else if (inWater && !onFrozen) speed *= 0.55;
     this.sprinting = sprinting;
 
     const wishX = (-sin * fwd + cos * strafe) * speed;
     const wishZ = (-cos * fwd - sin * strafe) * speed;
 
-    const accel = this.onGround || this.flying ? 18 : 5;
+    const accel = onFrozen ? 3 : (this.onGround || this.flying ? 18 : 5);
     this.vel.x += (wishX - this.vel.x) * Math.min(1, accel * dt);
     this.vel.z += (wishZ - this.vel.z) * Math.min(1, accel * dt);
 
@@ -141,6 +151,12 @@ export class Player {
 
     const wasGround = this.onGround;
     moveEntity(this.world, this, dt);
+
+    // frozen beck/bog: stand on top rather than sink in
+    if (onFrozen) {
+      const top = Math.floor(this.pos.y - 0.05) + 1;
+      if (this.pos.y < top) { this.pos.y = top; if (this.vel.y < 0) this.vel.y = 0; this.onGround = true; }
+    }
 
     // climbing out o' water: swimming hard at t' bank gives thee a vault ower
     // t' lip (otherwise a one-block shore is unclimbable). Bogs grudge it —
