@@ -11,7 +11,7 @@ import { World } from './world.js';
 import { Player } from './player.js';
 import * as npc from './npc.js';
 import { Quests } from './quests.js';
-import { Economy, bestMarket, FREIGHT_ALLOWANCE, farmRegisterCheck, CHARTER_FEE } from './economy.js';
+import { Economy, bestMarket, FREIGHT_ALLOWANCE, farmRegisterCheck, CHARTER_FEE, livestockPrice, droveValue } from './economy.js';
 import { commandFromKey } from './herding.js';
 import { Milestones } from './milestones.js';
 import { Net } from './multiplayer.js';
@@ -462,6 +462,7 @@ class Game {
         }
         if (e.code === 'KeyN') this.trySleep();
         if (e.code === 'KeyM') { this.audio.setMuted(!this.audio.muted); this.ui.toast(this.audio.muted ? 'Sound off.' : 'Sound on.'); }
+        if (e.code === 'KeyG') { this.musterFlock(); return; }
         // sheepdog whistles (arrow keys) — work a flock wi' thi dog; H brings her to heel
         const whistle = commandFromKey(e.code);
         if (whistle || e.code === 'KeyH') {
@@ -1631,6 +1632,28 @@ class Game {
     if (this.milestones) this.milestones.fire('farm_registered');
     if (this.saveNow) this.saveNow(false);
     return true;
+  }
+
+  // ---- Slice 3: the drove ----
+  // Muster the penned stock near thee into a mobile, driveable herd (KeyG). Registered farmers only;
+  // needs a working dog to actually drive them. Flips only the LIVE mobs — the saved pets records keep
+  // stay+home, so a reload reverts an in-progress drove to penned (safest).
+  musterFlock() {
+    if (!this.player.farmStatus.registered) {
+      this.ui.toast('Tha registers a farm at <b>Moorstead</b> first, then tha can drove thi flock.', 5000);
+      return;
+    }
+    const dog = this.entities.mobs.find(m => m && !m.dead && m.owner && m.type === 'dog');
+    if (!dog) { this.ui.toast('Tha needs a <b>working dog</b> to drove a flock.', 4000); return; }
+    const p = this.player.pos;
+    let n = 0;
+    for (const m of this.entities.mobs) {
+      if (!m || m.dead || !m.owner || m.type !== 'sheep' || !m.stay) continue;
+      if (Math.hypot(m.pos.x - p.x, m.pos.z - p.z) > 20) continue;
+      m.stay = false; m.droving = true; m.herding = false; n++;
+    }
+    if (!n) { this.ui.toast('No penned stock close by to muster. Stand by thi fold.', 4000); return; }
+    this.ui.toast(`🐑 <b>Mustered ${n} head.</b> Drove ’em to <b>Moorstead’s mart</b> wi’ thi dog — keep ’em bunched.`, 6000);
   }
 
   // ---- moorland ponies: a rideable mount 'twixt shanks's pony an' t' railway ----
