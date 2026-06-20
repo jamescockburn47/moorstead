@@ -28,6 +28,7 @@ Seasons read as "always the same". Two gaps:
 - Flora **patchier and less dense**; flowers **off-grid** — jittered position, random rotation, several variants per species, naturally clumped.
 - **Sophisticated snow:** lies on everything (leaves, flora, roofs) and down to the valley floor in deep winter; gradual onset and thaw; **real falling snow**; footprints; drifts.
 - **Reliable, deterministic winter snow** — Victorian-era reliable winters, driven by the season clock, **not** the live weather feed.
+- **Lusher railway corridor** — significantly thicker flora and foliage (denser verges, hedgerow, brambles, trackside copses) along the moors line, without fouling the train's clearance or window sightlines.
 
 ## Non-goals
 
@@ -35,6 +36,7 @@ Seasons read as "always the same". Two gaps:
 - No relay/multiplayer sync for flora or snow, no persistence.
 - No change to the title-screen flyover's fixed seasonal look.
 - Live weather (Open-Meteo) stays as-is for non-winter rain/fog/mist; only winter precipitation is decoupled.
+- **Fruit-tree foraging is out of scope here** — apples/plums/blackberries, picking, edible items, trading and fruit regrowth are a separate sibling spec (see Related work). This spec only provides the season scalars and flora/tree placement it builds on.
 
 ## Backbone principle
 
@@ -87,6 +89,15 @@ Non-destructive, layered, all client-side:
 
 Evergreen contrast (monkey puzzle, holly + red berries), rosehips/haws on hedgerow flora, frosted seedheads (overlay), low warm winter light, chimney wood-smoke, and the already season-gated winter birds (`src/entities.js`). Winter reads crisp and alive, not dead.
 
+### 6. Lineside corridor — `src/worldgen.js` (extend)
+
+The railway already plants a narrow verge (`geo.railInfo(x,z).d`, flora on `d 2.4–5`). Thicken it significantly so the line runs through lush green corridors:
+
+- Widen the planted band and raise density — hedgerow, brambles, ferns and flowers on the verges and cutting tops, denser than the open moor.
+- Add trackside copses and hedgerow trees (regular species; fruit trees arrive with the forage sibling spec), placed by the same clumped, patchy distribution as the rest of the moor.
+- **Clearance constraint:** nothing is placed inside the loading-gauge envelope or where it would block the train's window sightlines. The cleared four-foot (`d < 4`) stays clear, new planting sits beyond the gauge, and `verify-rail-clearance` + `verify-train-view` must still pass.
+- Seasonal colour and flowers on the corridor come free from Layers 1–3; this is purely a density/placement change to worldgen.
+
 ## Determinism, multiplayer, performance
 
 - All visuals are pure functions of (seed, position, season-time); no relay, no persistence; clients agree implicitly.
@@ -105,10 +116,14 @@ Evergreen contrast (monkey puzzle, holly + red berries), rosehips/haws on hedger
 
 - **M1 — Season signal:** add bloom/frost scalars + extend `verify-season`.
 - **M2 — Foliage colour:** leaves turn, stronger heather/bracken/grass tints, monkey puzzle evergreen.
-- **M3 — Flower overlay:** `floraLayer.js` — deterministic clumped, off-grid, jittered, multi-variant, window-gated flowers (snowdrop→daffodil→summer/foxglove→seedhead); thin persistent block flora; `verify-flora`.
+- **M3 — Flower overlay + lineside thickening:** `floraLayer.js` — deterministic clumped, off-grid, jittered, multi-variant, window-gated flowers (snowdrop→daffodil→summer/foxglove→seedhead); thin/cluster persistent block flora; thicken the railway corridor (denser verges, hedgerow, brambles, trackside copses) within clearance; `verify-flora` (+ re-run `verify-rail-clearance`/`verify-train-view`).
 - **M4 — Snow coverage:** shader on leaves/flora/roofs + valley blanket; accumulation onset/melt; `verify-snow`.
 - **M5 — Snowfall + footprints:** deterministic seasonal snowfall decoupled from live weather; snow particles; trample-buffer footprints.
 - **M6 — Drifts + atmosphere:** shader drift depth; holly/berries/rosehips/wood-smoke/winter-bird polish.
+
+## Related work (sibling spec)
+
+**Forageable fruit & orchards** — to be brainstormed next. Apple/plum trees, bramble/blackberry, with blossom in spring and fruit ripening in late summer/autumn driven by *this* spec's season scalars, picked into edible items via the existing bilberry-forage + edit-ledger regrowth pattern, sold to villagers. It depends on this spec (season signal, tree/flora placement, lineside corridor) but mutates world state and adds items/trading, so it's specced and built separately.
 
 ## Risks / open questions
 
