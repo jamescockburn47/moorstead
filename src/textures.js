@@ -504,7 +504,7 @@ function desatPx(d, i, amt) {
 export function seasonShiftPx(tile, d, i, s) {
   const winter = s.warmth < 0 ? -s.warmth : 0;
   if (tile === TILE.HEATHER) {
-    blendPx(d, i, 150, 74, 168, s.heatherBloom * 0.82);  // late-summer bloom: the whole plant purples
+    blendPx(d, i, 150, 74, 168, s.heatherBloom * 0.82);  // late-summer bloom: t' whole plant purples
     blendPx(d, i, 92, 74, 56, winter * 0.45);            // winter: browned off
   } else if (tile === TILE.BRACKEN || tile === TILE.FERN) {
     blendPx(d, i, 156, 86, 38, s.autumn * 0.72);         // autumn rust

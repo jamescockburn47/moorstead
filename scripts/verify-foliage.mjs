@@ -32,10 +32,12 @@ const GRASS = [90, 120, 55];    // a grass base
   (winter[1] - winter[2] < summer[1] - summer[2] ? ok : bad)('winter leaves are browner/less green than summer');
 }
 
-// monkey puzzle is evergreen: it does NOT turn gold in autumn
+// monkey puzzle is evergreen: in autumn it must NOT turn gold the way deciduous leaves do
 {
   const mpAutumn = shift(TILE.MONKEY_LEAVES, LEAF, 0.625);
-  (mpAutumn[1] >= mpAutumn[0] ? ok : bad)('monkey puzzle stays green in autumn (no gold turn)');
+  const leafAutumn = shift(TILE.LEAVES, LEAF, 0.625);
+  (mpAutumn[1] >= mpAutumn[0] ? ok : bad)('monkey puzzle stays green in autumn (green still dominant)');
+  (mpAutumn[0] < leafAutumn[0] ? ok : bad)('monkey puzzle is far less red than deciduous leaves in autumn');
 }
 
 // stronger moor tints (these thresholds fail at the OLD blend amounts, pass at the new)
