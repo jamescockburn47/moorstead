@@ -1,7 +1,7 @@
 # Moorstead Economy — Farming & Droving (the hill-farmer vertical)
 
 **Date:** 2026-06-19
-**Status:** Draft for review
+**Status:** Slice 1 built & live. Slices 2–3 tuning signed off by James 2026-06-20 — market town = **Moorstead**, charter fee = **£1 (240d)**, live price = **120d/head** (flat, standing-lifted), arrival = **sell-on-delivery yard**.
 **Part of:** the living-economy program. A cross-cutting vertical that spans SP2 (trade — this is the rich evolution of the deferred "farm-gate"), SP4 (animal behaviour), and SP5 (progression). It builds on the SP1+SP2 economy and the existing taming/companion/pen systems, not from scratch.
 
 ## 1. Purpose & success criteria
@@ -12,17 +12,18 @@ Success: a player can (1) work a sheepdog to gather a scattered flock and pen it
 
 **The financial upside is the make-or-break lever.** Droving is the most effort in the game (taming a flock, building a fold, registering, then a risky overland drive). If it doesn't pay clearly more than the easy paths, no one will do it and the whole vertical is dead weight. So the reward must sit at the very top of the income gradient — see §5.
 
-## 2. Scope — three slices
+## 2. Scope — four slices
 
 Built in order, each its own plan → implementation → deploy:
 
 - **Slice 1 — Herding core** (the heart, implementable now): herdable flock behaviour + a working sheepdog you command + the gather→pen loop. Proven in a field before any economics.
 - **Slice 2 — Farm status** (the gate): the registered-farm threshold and the in-game path to it; unlocks droving.
 - **Slice 3 — The drove + market sale**: drive the live flock to the market town and sell it; risk en route; ties into the existing economy.
+- **Slice 4 — The wider menagerie** (§6): generalise the vertical to cows (the cattle drove), horses/ponies (a horse fair; mounts stay rideable), pigs (sty stock, sold individually), and llamas (made keepable). As data — a `droveable` flag + per-species price — not new code. Built after the sheep slices prove the loop.
 
-**Cross-cutting (all slices): in-game legibility** (§7) — no mechanic ships without its instruction.
+**Cross-cutting (all slices): in-game legibility** (§8) — no mechanic ships without its instruction.
 
-**Out (later / other sub-projects):** cattle droving (sheep first; cattle work differently and come later), the full emergent flocking model (§3 keeps it scripted), the monthly fair, dynamic stock/price-crash (SP3), NPC farmers (SP4).
+**Out (later / other sub-projects):** the full emergent flocking model (§3 keeps it scripted), the monthly fair, dynamic stock/price-crash (SP3), NPC farmers (SP4).
 
 ## 3. Slice 1 — the herding core
 
@@ -73,26 +74,43 @@ Implementation (Plan 2): add the block ids + atlas tiles + `BLOCKS` defs + bench
 
 ## 4. Slice 2 — farm status (the registered farm)
 
-The gate to droving. **Threshold: keep 5 head of tamed stock penned in a fenced fold, then register at the market town's notice board.** Registration is a deliberate step (not automatic) and costs a small brass fee (a charter), so becoming a registered farmer is a choice the player makes, with agency.
+The gate to droving. **Threshold: keep 5 head of tamed stock penned in a fenced fold, then register at the Moorstead market notice board.** Registration is a deliberate step (not automatic) and costs a **£1 (240d) charter fee**, so becoming a registered farmer is a choice the player makes, with agency.
 
-- Reaching it: tame and pen 5 head (via Slice 1's loop), then visit the **market town** — a single designated livestock-market settlement (which one is fixed in Slice 2/3; it's the same place you later drove the flock to) — and register at its notice board, paying the charter.
+- Reaching it: tame and pen 5 head (via Slice 1's loop), then visit **Moorstead** — the designated livestock-market settlement (the central village hub; the same place you later drove the flock to) — and register at its notice board, paying the £1 charter.
 - Unlocks: **droving to market** (Slice 3).
-- Stated in-game (see §7): a "Become a farmer" board entry spelling out the path and the threshold, plus a live progress hint as you build up — *"3/5 head penned — pen 2 more, then register at t' market board."*
+- Stated in-game (see §8): a "Become a farmer" board entry spelling out the path and the threshold, plus a live progress hint as you build up — *"3/5 head penned — pen 2 more, then register at t' market board."*
 - Persisted on the player (`farmStatus` / `farmRegistered`).
 
-(Fee amount and whether standing affects it are tuning values, set at implementation.)
+(Charter fee fixed at £1 / 240d, signed off 2026-06-20. Whether standing affects it is a minor tuning value, set at implementation.)
 
 ## 5. Slice 3 — the drove + market sale
 
 The farmer's "needn't be near the line" path — the physical alternative to the rail ship-panel.
 
-- A registered farmer can take a penned flock **off the fold as a mobile herd** and drove it (horse + dog, Slice 1 mechanics) overland to the **market town**.
-- At the market, sell the live herd / **book a price** → brass, integrating with the existing economy (live-animal value via `priceOf`/a livestock price; reuse the SP2 sale/booking primitives where they fit).
-- **The payout — top of the gradient (the make-or-break).** Droving is the highest-effort, highest-risk sale, so it must pay the most. A live, healthy beast at the livestock market is worth more than her wool and a joint of mutton sold piecemeal: define a `livestockPrice` that carries a **drover's premium** over the sum of the animal's products. Reward scales with head delivered, and farm reputation/standing lifts it (SP5). The full income gradient is therefore: drop-in (worst) < rail shipment < **a droved flock at market (best)**. **Tuning target:** a successful drove of a full flock clearly out-earns the same time spent on any other path (e.g. mining + rail-shipping coal) — a memorable payday that funds the next aspiration (more stock, a better fold, a coble, a shop). Losing head en route is the counterweight that keeps it honest, not a way to make it stingy.
+- A registered farmer can take a penned flock **off the fold as a mobile herd** and drove it (horse + dog, Slice 1 mechanics) overland to **Moorstead** — the drove runs from an outlying moor fold down into the central village. The penned stock are un-anchored from `home`/`stay` into a driven herd for the journey.
+- **Arrival — a sell-on-delivery yard** (James's call, 2026-06-20): a marked market yard beside Moorstead's Goods Market boards. Drove the herd into the yard; a **"sell flock" action sells every head inside the yard instantly** and the mart's drovers lead them off (they despawn). The sale is instantaneous, so there is no window for the flock to wander — no market-pen containment logic is needed. Pays per head via `economy.earn`.
+- **The payout — top of the gradient (the make-or-break).** Droving is the highest-effort, highest-risk sale, so it must pay the most. A live, healthy beast at the livestock market is worth more than her wool and a joint of mutton sold piecemeal: define a `livestockPrice` that carries a **drover's premium** over the sum of the animal's products. **Signed off 2026-06-20: a flat 120d (10s) per head** — standalone, NOT derived from the wool spread (Moorstead's wool multiplier is only 0.6, which would underpay the agreed number), lifted only by standing. A Swaledale's piecemeal products (`drops` = 1–2 wool + 1–2 mutton) are worth ~20d sold at full price, so 120d is roughly a 6× drover's premium. Reward scales linearly with head delivered, and farm reputation/standing lifts it (SP5). The full income gradient is therefore: drop-in (worst) < rail shipment < **a droved flock at market (best)**. **Tuning target (met):** the best reliable rail haul today is ~96 coal at 5d = **480d (£2)**; a drove pays **5 head = £2 10s (600d), 8 head = £4 (960d)** — clearly on top even at the 5-head minimum and even after losing a head or two. By contrast, slaughtering an 8-head flock and rail-shipping its wool+mutton nets only ~160d *and destroys the flock*. A memorable payday that funds the next aspiration (more stock, a better fold, a coble, a shop). Losing head en route is the counterweight that keeps it honest, not a way to make it stingy.
 - **Risk en route** (what makes it a journey, not a menu): sheep stray if you lose control, the **barghest** and other night-things prey on a strung-out flock, bogs and the high moor are hazards. Losing head means losing value. Good droving — keeping them bunched, moving by day — pays.
-- Relation to the rail ship-panel: both are "get goods to market." Rail suits anyone near a station; droving suits the off-line farmer and is the atmospheric, hands-on route. Neither is forced.
+- Relation to the rail ship-panel: both are "get goods to market," but **live animals cannot be freighted by rail — only their slaughtered products can.** Droving is therefore the *only* way to realise the live-beast premium; rail suits goods, droving suits live stock and the off-line farmer. Neither is forced.
 
-## 6. Architecture & components
+## 6. Slice 4 — the wider menagerie (cows, horses, pigs, llamas)
+
+Generalise the sheep vertical to the rest of the livestock **as data, not new code paths** (James's call, 2026-06-20), built after Slices 2-3 prove the loop. The engine change is small: the herding/penning loop currently hard-codes `m.type === 'sheep'`; replace that with a **`droveable` flag** on the mob def and give each species a **`livestockPrice`** plus a herd/utility profile. The registered-farm threshold, the fold, the drove, and the sell-on-delivery yard are all reused unchanged — penned head of any kept species counts toward farm status, and a drove may be single-species or mixed.
+
+**Per-species process (each a profile, the same loop):**
+
+- **Cattle — Dale Cow** (already a tameable pasture herd, slow at 1.2): the classic cattle drove. Herds and pens exactly like sheep, slower to move, far dearer per head — the big-value drove. *~340d/head (≈3× sheep).* The **Dale Bull is excluded** as stock: it gores (aggro, dmg 4), so it stays a hazard, not a droveable beast.
+- **Horses — Moorland Pony** (already the mount, tameable): gather half-wild ponies and drove them to a **horse fair** at the Moorstead mart to sell — **ponies stay rideable**, so you are selling your spares and the mount role is untouched. Top of the ladder. *~540d/head (≈4–5× sheep).*
+- **Pigs — Saddleback** (barely flock, group [1-3]; has the truffle-snuffle ability): **sty stock, not a herd drove.** Kept and fattened in the fold, the snuffle ability retained, **sold per head at the mart** rather than droved as a flock (a forced pig flock would read oddly in play). *~150d/head.*
+- **Llamas — Pack Llama** (wool, herds [2-3]): **needs `tameable: true` added** (it isn't today); then it is keepable wool stock, droveable and sellable like sheep. *~110d/head (wool only, no meat).* A pack/cargo role (tie to trade logistics) is a later option, not this slice.
+
+**Value ladder (tuning, confirm at build, same as the sheep payout): llama ≈110 ≤ sheep 120 < pig ≈150 < cow ≈340 < horse ≈540.** Bigger or more-useful beasts pay more, so cattle and horse droves are the aspirational big paydays above the sheep entry, and every drove still tops the income gradient (§5) with headroom.
+
+**Fixes this slice carries:** the llama gains `tameable: true`; the pig's `RAW_BEEF` drop is a stand-in for pork (add a pork item or leave it — decide at build). Legibility (§8) applies as ever: each newly keepable species needs its taming hint, its mart price shown, and a handbook/ladder line.
+
+**Still out (later):** the emergent per-sheep flocking model (§3), the monthly fair, dynamic stock/price-crash (SP3), NPC farmers (SP4).
+
+## 7. Architecture & components
 
 - **`src/herding.js`** (NEW, headless-testable, no THREE/DOM) — the pure scripted flock model behind the `pressure → target` interface, plus pure helpers: the pressure→target nudge, the "all N inside the fold zone?" check, and the dog-command→intent mapping. This is the isolated, swappable unit; the rest of the game talks to it through that interface.
 - **`src/entities.js`** — the flock/dog AI hooks: sheep consume the herding model's target in their move-intent; the dog's commanded-intent → movement; reuse of the companion/`stay`/`home` systems for penning.
@@ -103,7 +121,7 @@ The farmer's "needn't be near the line" path — the physical alternative to the
 
 Isolation principle: the herding *model* is a pure module with one job, swappable without disturbing input, penning, or economics.
 
-## 7. In-game legibility (cross-cutting mandate)
+## 8. In-game legibility (cross-cutting mandate)
 
 The taming bug (a working mechanic that read as "broken" purely because nothing told the player how) is the rule's origin: **no player-facing mechanic or threshold ships without its in-game instruction, and existing instructions are audited for staleness as we go.** Surfaces:
 
@@ -115,14 +133,14 @@ The taming bug (a working mechanic that read as "broken" purely because nothing 
 
 Every threshold the design introduces must be visible to the player at the moment it's relevant.
 
-## 8. Data flow
+## 9. Data flow
 
 - **Gather:** dog command (arrow) → `herding` maps to intent → dog applies pressure → `herding.pressureToTarget` moves the flock target → sheep path to target → flock moves as a body.
 - **Pen:** flock inside fold zone → `herding.allPenned` true → sheep set `owner`+`stay`+`home` → farm head count updates → progress hint.
 - **Register:** at the market board, head ≥ 5 → pay charter → `player.farmStatus.registered = true` → droving unlocked → toast + board entry update.
-- **Drove/sell:** lead the flock to the market → sell live herd → `economy.earn` → flock consumed → toast.
+- **Drove/sell:** un-anchor penned stock into a mobile herd → drove to Moorstead → herd enters the **sell-on-delivery yard** → "sell flock" action → `livestockPrice` (120d) × head in the yard → `economy.earn` → herd led off (despawn) → toast.
 
-## 9. Error handling & edge cases
+## 10. Error handling & edge cases
 
 - No dog at heel: commands do nothing; a hint explains you need a working dog.
 - Fold not closed / sheep outside: penning simply isn't complete; the progress hint shows how many are in.
@@ -131,18 +149,21 @@ Every threshold the design introduces must be visible to the player at the momen
 - Losing head en route (predation/straying): the herd shrinks; the sale pays for what arrives. Never a hard fail.
 - Save/load mid-everything: penned stock already persist; `farmStatus` persists; an in-progress drove is the one new transient — on reload the flock reverts to penned (safest), or persists if cheap (decided at implementation).
 
-## 10. Testing
+## 11. Testing
 
 - **Headless (`scripts/verify-herding.mjs`, new):** the pure model — pressure→target nudges away from the source; cohesion pulls a scattered set toward the centroid; `allPenned` is true only when all N are inside the zone; the dog-command→intent mapping is correct; the farm-status threshold logic (count, ≥5, registered gate) is correct.
 - **Live (preview):** scatter a flock, work the dog through all four commands, drive them through the gate, confirm all penned + settled as stock; build to 5 head and register at the board; drove a flock to market and confirm the sale + the risk (a strung-out flock loses head).
 
-## 11. Open decisions (defaults chosen; change at review)
+## 12. Open decisions (defaults chosen; change at review)
 
 a. **Flock model scripted for v1**, behind a swappable pressure→target interface (confirmed).
 b. **Dog commands on arrow keys** as whistles; heel on H (default; radial deferred).
-c. **Farm threshold = 5 head penned + register at the market board for a small fee** (confirmed; fee amount is tuning).
-d. **Sheep only** for Slice 1–3; cattle later.
+c. **Farm threshold = 5 head penned + register at the Moorstead market board, £1 (240d) charter** (confirmed 2026-06-20; fee fixed).
+d. **Sheep only** for Slices 1–3; the wider menagerie (cattle, horses, pigs, llamas) is **Slice 4** — see (k) and §6.
 e. **Drove risk** (predation/stray/bog) is real but never a hard fail — you're paid for what arrives.
 f. **Fold** = player-built fenced enclosure, zone-detected; not true geometric containment.
-g. **Financial upside tops the gradient (James's requirement):** a droved flock is the single most lucrative sale in the game, sized so the whole effort is plainly worth it. The exact `livestockPrice` + drover's premium are Slice-3 tuning, measured against the §5 target (must clearly out-earn any other income path).
+g. **Financial upside tops the gradient (James's requirement):** a droved flock is the single most lucrative sale in the game. **`livestockPrice` fixed 2026-06-20 at a flat 120d/head** (standing-lifted, not wool-spread-derived), giving 5 head = £2 10s, 8 head = £4 against the £2 best coal run — clearly out-earns every other income path per the §5 target.
 h. **Fence + one-way gate blocks (James's call):** a new `barrier`-flag fence (thin, but collides) and a one-way auto-gate (opens for an animal from outside, shut from inside, always open to the player, counts as a fold boundary). The gate resolves the sealed-pen paradox — animals get in but can't get out. v1 uses the `barrier` flag + a swinging-gate visual; bespoke fence geometry is later polish.
+i. **Market town = Moorstead** (James's call, 2026-06-20), not Pickering: the central village hub is the auction market and the drove runs moor-fold → village. `livestockPrice` is flat (standing-lifted only) so Moorstead's low wool spread (0.6) doesn't underpay the agreed 120d/head.
+j. **Arrival = a sell-on-delivery yard** beside Moorstead's Goods Market boards (James's call, 2026-06-20): the "sell flock" action sells all head in the yard instantly and they're led off — instantaneous, so no market-pen containment is needed and the flock can't wander. Live animals can't be rail-freighted, so droving is the only route for live stock.
+k. **The wider menagerie is Slice 4** (James, 2026-06-20): cows/horses/pigs/llamas generalised as data (a `droveable` flag + per-species `livestockPrice`), built after the sheep slices. Horses sell at a fair but keep the mount role; pigs are sty stock sold individually (they don't flock); the bull is excluded as a hazard; the llama must be made `tameable`. Value ladder llama ≤ sheep < pig < cow < horse, tuned at build. Detail in §6.
