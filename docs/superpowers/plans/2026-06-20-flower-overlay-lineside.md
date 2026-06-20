@@ -265,7 +265,7 @@ export function cellInstances(seed, cx, cz, mode, tile) {
 }
 ```
 
-> Note: confirm `hash2i(x, z, seed)` returns `[0,1)` and `noise2(x, z, seed)` returns `[-1,1]` (per `src/noise.js`). If `hash2i`'s signature differs, adapt the calls — the contract needed here is "deterministic [0,1) from integer coords + seed".
+> Confirmed against `src/noise.js`: `hash2i(x, z, seed)` returns `[0,1)` and `noise2(x, z, seed)` returns `[-1,1]`.
 
 - [ ] **Step 4: Run, expect PASS** — `node scripts/verify-flora.mjs` → `RESULT: PASS`.
 
@@ -364,7 +364,7 @@ export class FloraLayer {
       const placements = [];
       for (let x = cx - RADIUS; x <= cx + RADIUS; x++) {
         for (let z = cz - RADIUS; z <= cz + RADIUS; z++) {
-          const ri = this.gen.railInfo ? this.gen.railInfo(x, z) : null;
+          const ri = this.gen.geo.railInfo(x, z);
           const onLineside = ri && ri.d >= 4 && ri.d < 7;     // beyond the cleared four-foot
           if (sp.linesideOnly && !onLineside) continue;
           if (ri && ri.d < 4) continue;                        // keep the four-foot clear
@@ -401,7 +401,7 @@ export class FloraLayer {
 }
 ```
 
-> Confirm `world.gen` exposes `seed`, `height(x,z)`, and `railInfo(x,z)` (railInfo is on `gen.geo` per worldgen — if so, call `this.gen.geo.railInfo`). Adapt the property path in the constructor/build to wherever `height`/`railInfo`/`seed` actually live on the gen object (check `src/worldgen.js`).
+> Confirmed against `src/worldgen.js`: the `Gen` object has `gen.seed` (int) and `gen.height(x,z)`; `railInfo(x,z)` lives on `gen.geo` (returns `{d, along, deck, …}` or `null` beyond ~6m, so open-moor cells get `null` → moor mode). The code above uses `this.gen.geo.railInfo`, `this.gen.height`, `this.gen.seed` accordingly.
 
 - [ ] **Step 2: Manual verification** — deferred to Task 7 (needs wiring to render).
 
