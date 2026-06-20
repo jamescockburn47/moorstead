@@ -30,6 +30,11 @@ function build(yearPhase) {
     greenness: 0.5 + 0.5 * Math.cos((yearPhase - 0.18) * Math.PI * 2),
     warmth: Math.cos((yearPhase - 0.375) * Math.PI * 2), // -1 winter .. +1 summer
     autumn: bump(yearPhase, 0.625, 0.10),                // peak mid-autumn (leaf-turn / bracken rust)
+    snowdrop: bump(yearPhase, 0.97, 0.04),     // late winter, just before spring
+    daffodil: bump(yearPhase, 0.12, 0.05),     // early spring
+    summerBloom: bump(yearPhase, 0.37, 0.10),  // foxgloves + summer wildflowers
+    seedhead: bump(yearPhase, 0.66, 0.08),     // late-autumn seedheads / rosehips
+    frost: Math.max(0, -Math.cos((yearPhase - 0.375) * Math.PI * 2)), // = max(0, -warmth)
   };
 }
 

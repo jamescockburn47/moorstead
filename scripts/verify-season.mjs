@@ -64,6 +64,11 @@ const DAY = 86400 * 1000;
     if (s.greenness < 0 || s.greenness > 1) inRange = false;
     if (s.warmth < -1.0001 || s.warmth > 1.0001) inRange = false;
     if (s.autumn < 0 || s.autumn > 1) inRange = false;
+    if (s.snowdrop < 0 || s.snowdrop > 1) inRange = false;
+    if (s.daffodil < 0 || s.daffodil > 1) inRange = false;
+    if (s.summerBloom < 0 || s.summerBloom > 1) inRange = false;
+    if (s.seedhead < 0 || s.seedhead > 1) inRange = false;
+    if (s.frost < 0 || s.frost > 1) inRange = false;
   }
   (inRange ? ok : bad)('all seasonal scalars stay within range across the year');
 }
@@ -80,6 +85,20 @@ const DAY = 86400 * 1000;
   const nowAtPhase = p => (ANCHOR_SEC + (p - ANCHOR_PHASE) * YEAR) * 1000 + 1;
   (bilberryInSeason(nowAtPhase(0.45)) ? ok : bad)('bilberries are in season at late-summer peak');
   (!bilberryInSeason(nowAtPhase(0.85)) ? ok : bad)('bilberries are bare in winter');
+}
+
+// new flower/frost windows peak in the right season and are quiet out of season
+{
+  (seasonStateAtPhase(0.97).snowdrop > 0.9 ? ok : bad)('snowdrops peak in late winter');
+  (seasonStateAtPhase(0.45).snowdrop < 0.1 ? ok : bad)('no snowdrops in late summer');
+  (seasonStateAtPhase(0.12).daffodil > 0.9 ? ok : bad)('daffodils peak in early spring');
+  (seasonStateAtPhase(0.70).daffodil < 0.1 ? ok : bad)('no daffodils in autumn');
+  (seasonStateAtPhase(0.37).summerBloom > 0.9 ? ok : bad)('summer blooms (foxgloves) peak in summer');
+  (seasonStateAtPhase(0.875).summerBloom < 0.1 ? ok : bad)('no summer blooms in deep winter');
+  (seasonStateAtPhase(0.66).seedhead > 0.85 ? ok : bad)('seedheads peak in autumn');
+  (seasonStateAtPhase(0.12).seedhead < 0.1 ? ok : bad)('no seedheads in spring');
+  (seasonStateAtPhase(0.875).frost > 0.9 ? ok : bad)('frost peaks in deep winter');
+  (seasonStateAtPhase(0.375).frost < 0.05 ? ok : bad)('no frost at high summer');
 }
 
 console.log('\nRESULT: ' + (failed ? 'FAIL' : 'PASS'));
