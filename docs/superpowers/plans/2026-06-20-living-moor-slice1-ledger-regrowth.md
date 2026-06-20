@@ -102,8 +102,10 @@ const ORES   = new Set([B.COAL_ORE, B.IRON_ORE, B.JET_ORE]);
 const HARVEST = new Set([...PLANTS, ...TREES, ...ORES, B.PEAT]); // natural resources that regrow
 const TERRAIN = new Set([B.STONE, B.DIRT, B.GRASS, B.GRAVEL, B.COBBLE, B.SAND]); // natural ground
 
-// game-days a harvested resource takes to grow back (Slice 1 defaults; tune live with James)
-export const LIFESPAN = { plant: 4, tree: 12, ore: 8, peat: 7 };
+// game-days a harvested resource takes to grow back. A day = 30 real min (DAY_LENGTH=1800), so these
+// are deliberately SLOW — healing must never be perceptible within a session (James's call). Start slow,
+// tune live by observation. These four are the regrowth tuning knobs.
+export const LIFESPAN = { plant: 6, tree: 24, ore: 24, peat: 12 };
 
 export function categoryOf(was, newId) {
   if (newId !== B.AIR) return 'build';      // a placement
@@ -325,13 +327,13 @@ Run: `npm run verify` (all PASS, now incl. `verify-regen`) and `npm run build` (
 - [ ] **Step 2: Drive the live preview — regrowth.** Start `npm run dev`; in the browser console reproduce the standard entry (loginGuest → newWorld → pump ~550 frames in two batches until `state==='playing'`), then:
 
 ```js
-const g = window.game;
-// cut a patch: break a few blocks via the world directly + record harvest edits as the break path would
-const p = g.player.pos, X = Math.floor(p.x)+2, Z = Math.floor(p.z), Y = g.world.gen.height(X, Z);
-const was = g.world.getBlock(X, Y, Z);
-g.world.setBlock(X, Y, Z, 0);                                   // "cut" it
-g.world.recordEdit(X, Y, Z, was, 0, g.sky.day, 'me');          // as the break hook does
-({ cut: was, nowAir: g.world.getBlock(X,Y,Z) === 0, ledger: g.world.editLedger.size });
+const g = window.game, HEATHER = 11; // B.HEATHER — a harvest block (grass would be 'dig', which doesn't regrow in Slice 1)
+const p = g.player.pos, X = Math.floor(p.x)+2, Z = Math.floor(p.z), Y = g.world.gen.height(X, Z) + 1;
+g.world.setBlock(X, Y, Z, HEATHER);                            // plant a heather to cut
+g.world.setBlock(X, Y, Z, 0);                                  // "cut" it (break -> air)
+g.world.recordEdit(X, Y, Z, HEATHER, 0, g.sky.day, 'me');      // as the break hook does (a harvest edit)
+window._regenCell = { X, Y, Z };
+({ nowAir: g.world.getBlock(X,Y,Z) === 0, ledger: g.world.editLedger.size }); // expect air + ledger >= 1
 ```
 
 Confirm the cell is air and the ledger has the entry.
@@ -339,11 +341,11 @@ Confirm the cell is air and the ledger has the entry.
 - [ ] **Step 3: Advance game-days and watch it heal.**
 
 ```js
-const g = window.game;
-g.sky.day += 13;                                  // past every harvest lifespan
+const g = window.game, c = window._regenCell, HEATHER = 11;
+g.sky.day += 7;                                   // past the plant lifespan (LIFESPAN.plant = 6)
 const regrew = g.world.expireEdits(g.sky.day);
-const X = [...g.world.editLedger.keys()];          // should be empty now
-({ regrew, ledgerEmpty: g.world.editLedger.size === 0 });      // expect regrew >= 1, ledgerEmpty true
+({ regrew, healed: g.world.getBlock(c.X, c.Y, c.Z) === HEATHER, ledger: g.world.editLedger.size });
+// expect regrew >= 1, healed true (the heather is back), ledger smaller
 ```
 
 Confirm `regrew >= 1` and the cut cell is no longer air (the resource is back — `g.world.getBlock(X,Y,Z)` from Step 2 equals `was`).

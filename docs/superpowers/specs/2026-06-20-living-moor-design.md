@@ -79,7 +79,7 @@ A **deed** is a small owned holding: `{ id, kind, by, centre, radius, depth?, pa
 
 **Presence-based upkeep (James's call):** a claim owes **upkeep** (brass per game-week, size-scaled). It is **not** auto-deducted; you pay it by **visiting the claim and settling up** at its deed-post / the parish board, which advances `paidUntilDay`. Land you never visit and never pay falls behind — fair on a shared moor, and it teaches the child that keeping a place costs.
 
-**Lapse:** when `now > paidUntilDay + grace`, the claim **lapses** (`lapsedDay` set). Its protection drops, and its build edits enter **gradual reclamation**: from `lapsedDay`, the build edits within it expire a few at a time over several days (a visible ruining — moss, gaps, then moor), not a sudden vanish. **Reclaimable:** return and pay before reclamation completes and the claim is restored (surviving builds stay; fully-reverted blocks are gone). A fully-reclaimed claim is removed and the land is open to claim again.
+**Lapse:** when `now > paidUntilDay + grace`, the claim **lapses** (`lapsedDay` set). Its protection drops, and its build edits enter **gradual reclamation**: from `lapsedDay`, the build edits within it expire a few at a time **slowly, over many days** (a visible ruining — moss, gaps, then moor), never a sudden vanish; the lapse grace and this reclamation are deliberately **generous** (§14b), so a week away never costs a tended home. **Reclaimable:** return and pay before reclamation completes and the claim is restored (surviving builds stay; fully-reverted blocks are gone). A fully-reclaimed claim is removed and the land is open to claim again.
 
 ## 8. Kept-stock breeding (included)
 
@@ -147,7 +147,7 @@ Each its own plan → implementation → deploy, in order:
 ## 14. Open decisions (defaults chosen; change at review)
 
 a. **Reversion = forget the edit; the deterministic base regenerates** (confirmed — no "before" state stored).
-b. **Time in game-days** (`sky.day`), never wall-clock; lifespans TBD-at-tuning: plants ~3–5 days, trees ~10–14, ore/dug ground ~7–10, unclaimed builds ~14–21 (generous for kids; tune live with James, like the farming payout).
+b. **Time in game-days** (`sky.day`; **a day = 30 real minutes**, `DAY_LENGTH=1800`), never wall-clock. **Rates bias SLOW (James's call, 2026-06-20): decay and healing must never be perceptible within a play session — they are a slow, seasonal background, felt across sessions, never watched.** Default lifespans (start slow, tune live by observation, only quicken if the world feels static): plants ~6 days, peat ~12, ore ~24, trees ~24, dug ground ~24; **decay is gentler still** — an unclaimed build only begins to reclaim after ~30+ days and crumbles gradually over many more, and a claimed build whose upkeep has lapsed gets a generous grace, so a child away for a week never loses a tended home. All rates are isolated constants (one-knob live-tuning).
 c. **Claims = centre + radius cylinder**, fee + weekly upkeep scaled by radius (amounts tuned at build). Box footprints later.
 d. **Maintenance = presence-based "visit & settle up"** (James's call), lapse → gradual reclamation, reclaimable.
 e. **Kept-stock breeding included** (James's call): maintained claim + ≥2 same-species head + room → occasional lamb/calf, capped.
