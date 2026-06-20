@@ -1275,7 +1275,7 @@ export class Entities {
       for (const m of this.mobs) if (m && m.herding) { m.herding = false; if (m.state === 'herd') m.state = 'idle'; }
       return;
     }
-    const flock = this.mobs.filter(m => m && !m.dead && !m.owner && m.type === 'sheep' &&
+    const flock = this.mobs.filter(m => m && !m.dead && (!m.owner || m.droving) && m.type === 'sheep' &&
       Math.hypot(m.pos.x - dog.pos.x, m.pos.z - dog.pos.z) < HERD_RADIUS);
     for (const m of this.mobs) if (m && m.herding && !flock.includes(m)) { m.herding = false; if (m.state === 'herd') m.state = 'idle'; }
     if (!flock.length) { dog.herdGoal = null; return; }
@@ -1311,6 +1311,13 @@ export class Entities {
     if (this.foldCells && this.foldCells.size) {
       for (const m of flock) {
         if (!this.foldCells.has(Math.floor(m.pos.x) + ',' + Math.floor(m.pos.z))) continue;
+        if (m.owner) {
+          // a droved-back beast settling home again — re-anchor, don't re-register
+          m.stay = true; m.droving = false; m.home = { x: m.pos.x, y: m.pos.y, z: m.pos.z }; m.herding = false;
+          const rec = (player.pets || []).find(p => p.name === m.petName);
+          if (rec) { rec.stay = true; rec.home = { ...m.home }; }
+          continue;
+        }
         const name = chooseName(Math.random, (player.pets || []).map(p => p.name));
         this.makeCompanion(m, name);
         m.stay = true; m.home = { x: m.pos.x, y: m.pos.y, z: m.pos.z }; m.herding = false;
@@ -1438,7 +1445,7 @@ export class Entities {
         const gx = mob.herdGoal.x - mob.pos.x, gz = mob.herdGoal.z - mob.pos.z, gd = Math.hypot(gx, gz);
         if (gd > 0.5) { wishX = gx / gd; wishZ = gz / gd; speed = t.speed * 1.5; }
         mob.state = 'follow'; // reuse 'follow' so the state machine keeps this wish
-      } else if ((mob.owner || t.follower) && distP < (mob.owner ? FOLLOW_RANGE : 26) && !player.dead) {
+      } else if (((mob.owner && !mob.droving) || t.follower) && distP < (mob.owner ? FOLLOW_RANGE : 26) && !player.dead) {
         // a kept beast (or a found lamb) trots after thee, keeping close
         if (distP > 2.4) {
           const inv = distP || 1;
