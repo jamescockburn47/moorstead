@@ -69,6 +69,7 @@ export const I = {
   // beef frae t' cows in t' dale pastures
   RAW_BEEF: 104, COOKED_BEEF: 105,
   RAW_PORK: 106, COOKED_PORK: 107,
+  WOOL_COAT: 108,
 };
 
 // Parish wardens: SHA-256 o' t' dash account id, never t' id itsen —

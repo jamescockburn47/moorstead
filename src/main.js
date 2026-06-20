@@ -28,6 +28,7 @@ import { FloraLayer } from './floraLayer.js';
 import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase, bilberryInSeason } from './season.js';
 import { startLiveWeather } from './weather-live.js';
+import { temperatureTarget, stepTemperature } from './temperature.js';
 import { boardingFolk } from './trainfolk.js';
 
 const RAIL_VMAX = 11;  // blocks a second flat out — t' pace of a heritage steamer
@@ -3224,6 +3225,15 @@ class Game {
         if (pl.wetness > 0.7 && !pl._soaked) { pl._soaked = true; this.ui.toast('Tha&rsquo;s wringin&rsquo; wet through &mdash; get under cover or by a fire afore tha catches thi deeath.', 4500); }
         else if (pl.wetness < 0.25 && pl._soaked) { pl._soaked = false; this.ui.toast('Tha&rsquo;s dried off. Grand.', 2500); }
       } else { this.player.wetness = 0; }
+      // temperature: drives cold stat from season + environment each frame
+      {
+        const pl = this.player, pp = pl.pos;
+        const altitude01 = Math.max(0, Math.min(1, (pp.y - 26) / 34));
+        const nearFire = this.world.nearLight(pp.x, pp.z, 4);
+        const coat = pl.slots.some(s => s && s.id === I.WOOL_COAT);
+        const target = temperatureTarget(this.season, { covered, nearFire, night: this.sky.isNight(), altitude01, wetness: pl.wetness, coat });
+        pl.temperature = stepTemperature(pl.temperature, target, dt);
+      }
       if (msg) {
         if (msg.type === 'night') {
           const dracHunt = this.quests.draculaHuntActive() && !this.quests.draculaDone();

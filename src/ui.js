@@ -47,6 +47,9 @@ export class UI {
     this.heartEmpty = pixURL(PIX.heart, '#3a3530');
     this.foodFull = pixURL(PIX.food, '#c87838');
     this.foodEmpty = pixURL(PIX.food, '#3a3530', true);
+    this.tempFull = pixURL(PIX.heart, '#e0962a');
+    this.tempHalf = pixURL(PIX.heart, '#7a6030');
+    this.tempEmpty = pixURL(PIX.heart, '#5a86b0');
   }
 
   el(tag, cls, parent, html) {
@@ -79,6 +82,11 @@ export class UI {
     for (let i = 0; i < 10; i++) {
       const h = this.el('img', 'pip', this.heartsEl); h.src = this.heartFull; this.heartImgs.push(h);
       const f = this.el('img', 'pip', this.hungerEl); f.src = this.foodFull; this.foodImgs.push(f);
+    }
+    this.tempEl = this.el('div', '', stats); this.tempEl.id = 'temperature';
+    this.tempImgs = [];
+    for (let i = 0; i < 10; i++) {
+      const t = this.el('img', 'pip', this.tempEl); t.src = this.tempFull; this.tempImgs.push(t);
     }
 
     this.airRow = this.el('div', '', this.hud); this.airRow.id = 'air-row';
@@ -1068,6 +1076,14 @@ export class UI {
     this.heartsEl.style.visibility = survival ? 'visible' : 'hidden';
     this.hungerEl.style.visibility = survival ? 'visible' : 'hidden';
     if (this.brassEl && this.game.economy) this.brassEl.textContent = '¤ ' + this.game.economy.format(player.brass);
+
+    // temperature pips
+    for (let i = 0; i < 10; i++) {
+      const tv = player.temperature - i * 2;
+      this.tempImgs[i].src = tv >= 2 ? this.tempFull : tv >= 1 ? this.tempHalf : this.tempEmpty;
+    }
+    const wintry = this.game && this.game.season && this.game.season.warmth < 0;
+    this.tempEl.style.visibility = (!player.creative && (player.temperature < 20 || wintry)) ? 'visible' : 'hidden';
 
     // air bubbles
     const showAir = survival && player.air < 10;

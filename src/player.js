@@ -18,7 +18,7 @@ export class Player {
     this.yaw = 0; this.pitch = 0;
     this.hw = 0.3; this.h = 1.8; this.eye = 1.62;
     this.onGround = false;
-    this.health = 20; this.hunger = 20;
+    this.health = 20; this.hunger = 20; this.temperature = 20;
     this.air = 10;
     this.creative = false;
     this.passGate = true; // a field gate stands open to the farmer, both ways
@@ -342,7 +342,7 @@ export class Player {
   serialize() {
     return {
       pos: this.pos, yaw: this.yaw, pitch: this.pitch,
-      health: this.health, hunger: this.hunger,
+      health: this.health, hunger: this.hunger, temperature: this.temperature,
       creative: this.creative, flying: this.flying,
       slots: this.slots, hotbar: this.hotbar, fuelBank: this.fuelBank, brass: this.brass,
       shipments: this.shipments, vendorPurses: this.vendorPurses, pursesAt: this.pursesAt,
@@ -359,7 +359,7 @@ export class Player {
     if (!d) return;
     Object.assign(this.pos, d.pos);
     this.yaw = d.yaw; this.pitch = d.pitch;
-    this.health = d.health; this.hunger = d.hunger;
+    this.health = d.health; this.hunger = d.hunger; this.temperature = d.temperature ?? 20;
     this.creative = !!d.creative; this.flying = !!d.flying;
     this.slots = d.slots || this.slots;
     this.hotbar = d.hotbar || 0;
