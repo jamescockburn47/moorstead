@@ -905,16 +905,18 @@ export class Entities {
     // t' season shapes t' moor: birds throng in spring, but in deep winter
     // little new ventures out.
     const season = this.game && this.game.season;
-    if (season && season.warmth < 0 && Math.random() < (-season.warmth) * 0.3) return;
+    if (season && season.warmth < 0 && Math.random() < (-season.warmth) * 0.55) return;
     let type;
     if (season) {
       const spring = Math.max(0, Math.min(1, season.greenness));
+      // in deep winter, grazers an' game birds are scarce — food's hard to come by
+      const winterF = season.warmth < 0 ? Math.max(0.2, 1 + season.warmth) : 1;
       const wts = types.map(k =>
-        k === 'sheep' ? 3.5                            // t' moor should be thick wi' Swaledales
+        k === 'sheep' ? 3.5 * winterF                  // t' moor should be thick wi' Swaledales
           : k === 'pony' ? 2.0                         // an' enough ponies that tha can find one
-          : k === 'cow' ? 1.6
-          : k === 'curlew' ? 0.5 + spring * 2.5        // curlews come back to nest in spring
-          : (k === 'grouse' || k === 'pheasant') ? 0.7 + spring * 1.2
+          : k === 'cow' ? 1.6 * winterF
+          : k === 'curlew' ? (0.5 + spring * 2.5) * winterF  // curlews come back to nest in spring
+          : (k === 'grouse' || k === 'pheasant') ? (0.7 + spring * 1.2) * winterF
           : k === 'crow' ? 1 + (1 - spring) * 0.8      // crows commoner in t' lean months
           : 1);
       let r = Math.random() * wts.reduce((a, b) => a + b, 0);

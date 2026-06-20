@@ -2916,6 +2916,10 @@ class Game {
       else this.endFishing('Tha reeled in early — nowt bit.');
       return;
     }
+    if (this.season && this.season.warmth < -0.4) {
+      this.ui.toast('T’ beck’s froze over — nowt’s biting while it’s this cold.', 2500);
+      return;
+    }
     const eye = this.player.eyePos();
     const d = this.lookDir();
     const w = raycast(this.world, eye.x, eye.y, eye.z, d.x, d.y, d.z, REACH + 2, id => id === B.WATER);
