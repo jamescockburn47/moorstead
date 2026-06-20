@@ -667,7 +667,7 @@ async function refresh(){
   if(s.diskUsedGB!==undefined) h+='<div class="card"><div class="v">'+s.diskUsedGB+' / '+s.diskTotalGB+' GB</div><div class="k">disk</div>'+bar(s.diskUsedGB,s.diskTotalGB)+'</div>';
   h+='</div>';
   h+='<h2>LLM load (villager brain)</h2><div class="cards">';
-  h+='<div class="card"><div class="v '+(d.llm.status==='ok'?'ok':'bad')+'">'+(d.llm.status==='ok'?'UP':'DOWN')+'</div><div class="k">gemma-4-e4b &middot; 48 slots</div></div>';
+  h+='<div class="card"><div class="v '+(d.llm.status==='ok'?'ok':'bad')+'">'+(d.llm.status==='ok'?'UP':'DOWN')+'</div><div class="k">gemma-4-e4b &middot; 32 slots</div></div>';
   h+='<div class="card"><div class="v">'+(t.talksLast5Min??0)+'</div><div class="k">chats last 5 min</div></div>';
   h+='<div class="card"><div class="v">'+(t.talksLastHour??0)+'</div><div class="k">chats last hour</div></div>';
   if(t.p50) h+='<div class="card"><div class="v">'+t.p50+'s</div><div class="k">median reply</div></div>';

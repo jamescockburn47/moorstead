@@ -133,7 +133,7 @@ Other quants on disk at `/mnt/storage/models/gemma4/` if you need to swap back:
 
 | File | Role |
 |------|------|
-| `gemma-4-E4B-it-Q8_0.gguf` | **current** — dense 4B, fast, ~21 GB VRAM at 48 slots |
+| `gemma-4-E4B-it-Q8_0.gguf` | **current** — dense 4B, fast; use **32 parallel / 65536 ctx** (2048 tokens/slot — villager prompts need ~1100) |
 | `gemma-4-26B-A4B-it-UD-Q4_K_M.gguf` | MoE (4B active / 26B total), higher tok/s, ~33 GB VRAM |
 | `gemma-4-31B-it-Q4_K_M.gguf` | dense 31B — quality ceiling, heaviest |
 

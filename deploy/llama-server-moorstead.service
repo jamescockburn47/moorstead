@@ -17,8 +17,8 @@ ExecStart=/home/james/llama.cpp/build/bin/llama-server \
   --alias gemma-4-e4b-it \
   --host 127.0.0.1 --port 8086 \
   -ngl 999 \
-  -c 49152 \
-  --parallel 48 \
+  -c 65536 \
+  --parallel 32 \
   --reasoning off \
   --flash-attn on \
   --cont-batching \
