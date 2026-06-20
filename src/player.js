@@ -1,5 +1,6 @@
 // Player: movement, survival stats, inventory.
 import { B, BLOCKS, FOODS, TOOLS, maxStack, isLiquid } from './defs.js';
+import { HOT_FOODS } from './temperature.js';
 import { STARTING_BRASS } from './economy.js';
 import { moveEntity, boxCollides, unstick } from './physics.js';
 import { freezableWater, isFrozen } from './snow.js';
@@ -270,6 +271,7 @@ export class Player {
     const s = this.slots[slotIdx];
     if (!s || !FOODS[s.id] || this.hunger >= 20) return false;
     this.hunger = Math.min(20, this.hunger + FOODS[s.id]);
+    if (HOT_FOODS.has(s.id)) this.temperature = Math.min(20, this.temperature + 6);
     s.n--;
     if (s.n <= 0) this.slots[slotIdx] = null;
     if (audio) audio.eat();

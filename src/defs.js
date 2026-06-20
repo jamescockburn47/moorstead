@@ -186,6 +186,7 @@ export const ITEM_NAMES = {
   [I.WOODEN_STAKE]: 'Wooden Stake',
   [I.HOLY_STAKE]: 'Holy Water Stake',
   [I.DRACULA_JOURNAL]: 'Captain\u2019s Log (Dracula)',
+  [I.WOOL_COAT]: 'Wool Coat',
 };
 
 export function itemName(id) {
@@ -264,6 +265,7 @@ export const RECIPES = [
   { out: B.PIT_PROPS, n: 1, needs: [[B.LOG, 2], [I.STICK, 2]] },
   { out: B.SAFETY_LAMP, n: 1, needs: [[I.IRON_INGOT, 2], [B.TORCH, 1]], bench: true },
   { out: B.WINCH, n: 1, needs: [[B.PLANKS, 3], [I.STICK, 2], [I.IRON_INGOT, 1]], bench: true },
+  { out: I.WOOL_COAT, n: 1, needs: [[B.WOOL, 3]], bench: true },
 ];
 
 // ---- Smelting (at t' range). Fuel: coal = 4 ops, peat = 1 op ----

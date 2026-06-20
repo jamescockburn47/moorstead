@@ -917,6 +917,24 @@ const ITEM_ICON_PAINTERS = {
     for (let y = 12; y < 24; y += 3) ctx.fillRect(10, y, 12, 1);
     ctx.fillStyle = '#c82828'; ctx.fillRect(20, 7, 3, 2);
   },
+  [I.WOOL_COAT](ctx) {
+    // cream/grey wool coat: torso body + two sleeves
+    const body = '#d8d2c4', shadow = '#b8b0a0', dark = '#9a9288';
+    // torso
+    ctx.fillStyle = body; ctx.fillRect(9, 10, 14, 16);
+    // collar notch — slightly darker at top
+    ctx.fillStyle = shadow; ctx.fillRect(9, 10, 14, 2);
+    // centre-front opening line
+    ctx.fillStyle = dark; ctx.fillRect(15, 10, 2, 16);
+    // left sleeve
+    ctx.fillStyle = body; ctx.fillRect(3, 10, 6, 11);
+    ctx.fillStyle = shadow; ctx.fillRect(3, 10, 6, 2); ctx.fillRect(3, 19, 6, 2);
+    // right sleeve
+    ctx.fillStyle = body; ctx.fillRect(23, 10, 6, 11);
+    ctx.fillStyle = shadow; ctx.fillRect(23, 10, 6, 2); ctx.fillRect(23, 19, 6, 2);
+    // two buttons
+    ctx.fillStyle = dark; ctx.fillRect(13, 14, 2, 2); ctx.fillRect(13, 19, 2, 2);
+  },
 };
 
 function drawAmuletHalf(ctx, left) {
