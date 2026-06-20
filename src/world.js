@@ -1,5 +1,6 @@
 // Chunk storage, streaming, and block access.
 import { B, BLOCKS, CHUNK, HEIGHT, isLiquid, isSolid } from './defs.js';
+import { categoryOf, isExpired } from './editledger.js';
 import { Gen } from './worldgen.js';
 import { buildChunkMeshes, disposeChunkMeshes } from './mesher.js';
 import { tileColor } from './textures.js';
@@ -13,6 +14,7 @@ export class World {
     this.gen = new Gen(seed);
     this.chunks = new Map();
     this.savedChunks = savedChunks || new Map(); // "cx,cz" -> Uint8Array
+    this.editLedger = new Map(); // "x,y,z" -> { cat, day, by, was } — harvest edits awaiting regrowth
     this.lanterns = new Set(); // "x,y,z"
     this.renderDist = 6;
     this.genQueue = [];
@@ -101,6 +103,32 @@ export class World {
   markDirty(cx, cz) {
     const c = this.chunks.get(key(cx, cz));
     if (c) c.dirty = true;
+  }
+
+  // Record a block change so a harvested resource can grow back later. Only HARVEST edits are
+  // tracked in Slice 1; a place/dig over a cell supersedes any pending regrowth there.
+  recordEdit(x, y, z, was, newId, day, by) {
+    const k = `${x},${y},${z}`;
+    if (categoryOf(was, newId) === 'harvest') this.editLedger.set(k, { cat: 'harvest', day, by, was });
+    else this.editLedger.delete(k);
+  }
+
+  // Lazy regrowth: revert every expired harvest edit by putting back what was there (`was`) — the
+  // same trick as the beach heal, on game-days. Only touches loaded chunks; skips a cell that has
+  // since changed (someone built there). Returns how many regrew.
+  expireEdits(nowDay) {
+    let n = 0;
+    for (const [k, e] of this.editLedger) {
+      if (!isExpired(e, nowDay)) continue;
+      const [x, y, z] = k.split(',').map(Number);
+      if (!this.isLoaded(x, z)) continue;          // grows back next time its chunk is loaded
+      if (this.getBlock(x, y, z) !== B.AIR) { this.editLedger.delete(k); continue; } // summat's there now
+      this.setBlock(x, y, z, e.was);               // the resource is back
+      this.editLedger.delete(k);
+      if (this.netEdits) this.netEdits.delete(k);
+      n++;
+    }
+    return n;
   }
 
   // Stream chunks around t' player. Budgeted per frame.
