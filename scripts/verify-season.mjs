@@ -69,6 +69,8 @@ const DAY = 86400 * 1000;
     if (s.summerBloom < 0 || s.summerBloom > 1) inRange = false;
     if (s.seedhead < 0 || s.seedhead > 1) inRange = false;
     if (s.frost < 0 || s.frost > 1) inRange = false;
+    if (s.brambleFlower < 0 || s.brambleFlower > 1) inRange = false;
+    if (s.blackberry < 0 || s.blackberry > 1) inRange = false;
   }
   (inRange ? ok : bad)('all seasonal scalars stay within range across the year');
 }
@@ -99,6 +101,14 @@ const DAY = 86400 * 1000;
   (seasonStateAtPhase(0.12).seedhead < 0.1 ? ok : bad)('no seedheads in spring');
   (seasonStateAtPhase(0.875).frost > 0.9 ? ok : bad)('frost peaks in deep winter');
   (seasonStateAtPhase(0.375).frost < 0.05 ? ok : bad)('no frost at high summer');
+}
+
+// bramble: white flowers late spring/early summer, blackberries late summer -> autumn
+{
+  (seasonStateAtPhase(0.24).brambleFlower > 0.9 ? ok : bad)('bramble flowers in late spring/early summer');
+  (seasonStateAtPhase(0.875).brambleFlower < 0.1 ? ok : bad)('no bramble flowers in deep winter');
+  (seasonStateAtPhase(0.58).blackberry > 0.8 ? ok : bad)('blackberries ripe in late summer/autumn');
+  (seasonStateAtPhase(0.12).blackberry < 0.1 ? ok : bad)('no blackberries in early spring');
 }
 
 console.log('\nRESULT: ' + (failed ? 'FAIL' : 'PASS'));

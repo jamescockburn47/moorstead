@@ -35,6 +35,8 @@ function build(yearPhase) {
     summerBloom: bump(yearPhase, 0.37, 0.10),  // foxgloves + summer wildflowers
     seedhead: bump(yearPhase, 0.66, 0.08),     // late-autumn seedheads / rosehips
     frost: Math.max(0, -Math.cos((yearPhase - 0.375) * Math.PI * 2)), // = max(0, -warmth)
+    brambleFlower: bump(yearPhase, 0.24, 0.05),  // bramble blossom: late spring / early summer
+    blackberry: bump(yearPhase, 0.58, 0.10),     // ripe brambles: late summer into autumn
   };
 }
 
