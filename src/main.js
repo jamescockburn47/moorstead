@@ -6,6 +6,7 @@ import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, H
 import { strSeed } from './noise.js';
 import { protectedAt } from './landmarks.js';
 import { initMaterials, setSnowLevel } from './mesher.js';
+import { stepAccumulation } from './snow.js';
 import { getIconURL, retintAtlasForSeason } from './textures.js';
 import { World } from './world.js';
 import { Player } from './player.js';
@@ -86,6 +87,7 @@ class Game {
     this.heldIconId = -1;
     this.seasonOverride = null; // dev: set 0..1 to force a year phase (moorstead.debug.setSeason)
     this.season = null;         // cached per-frame season, read by sky/audio/foraging
+    this.snowAccum = 0;         // lagged snow accumulation [0,1]; eases in/out with season
     this._seasonBucket = -1;    // throttles the atlas re-tint to ~40 steps a year
     this.trainFolk = [];        // local folk ridin' t' carriage right now
     this.lastDwellStation = -1; // which platform she's stood at (for boarding)
@@ -3174,7 +3176,8 @@ class Game {
         : seasonState();
       this.season = season; // cached for other systems + the debug API
       if (this.floraLayer) this.floraLayer.update(dt, this.player.pos, season);
-      setSnowLevel(season.snowiness); // height-gated snow on the tops (cheap uniform)
+      this.snowAccum = stepAccumulation(this.snowAccum, season, dt);
+      setSnowLevel(this.snowAccum); // height-gated snow on the tops (cheap uniform)
       const sbk = Math.floor(season.yearPhase * 40);
       if (sbk !== this._seasonBucket) { this._seasonBucket = sbk; retintAtlasForSeason(season); } // heather purple, bracken rust…
       // is there a roof overhead? (stops rain fallin' through ceilings + drives wetness)

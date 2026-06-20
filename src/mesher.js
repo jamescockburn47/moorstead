@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { B, BLOCKS, CHUNK, HEIGHT, isOpaque, isLiquid, isCutout } from './defs.js';
 import { tileUV, buildAtlas } from './textures.js';
 import { hash2i } from './noise.js';
+import { snowLineFor } from './snow.js';
 
 let materials = null;
 
@@ -13,9 +14,9 @@ const snowUniforms = { uSnowLine: { value: 64 }, uSnowAmt: { value: 0 } };
 export function setSnowLevel(snowiness) {
   const s = snowiness < 0 ? 0 : snowiness > 1 ? 1 : snowiness;
   snowUniforms.uSnowAmt.value = s;
-  snowUniforms.uSnowLine.value = 64 - s * 34; // t' snow-line creeps down as winter deepens
+  snowUniforms.uSnowLine.value = snowLineFor(s); // t' snow-line creeps down as winter deepens
 }
-function addSnow(mat) {
+function addSnow(mat, key = 'terrain-snow') {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uSnowLine = snowUniforms.uSnowLine;
     shader.uniforms.uSnowAmt = snowUniforms.uSnowAmt;
@@ -26,15 +27,15 @@ function addSnow(mat) {
       .replace('#include <color_fragment>',
         '#include <color_fragment>\n  float snow = uSnowAmt * smoothstep(uSnowLine, uSnowLine + 10.0, vSnowY) * smoothstep(0.2, 0.75, vSnowUp);\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.96, 1.0), snow);');
   };
-  mat.customProgramCacheKey = () => 'terrain-snow';
+  mat.customProgramCacheKey = () => key;
   return mat;
 }
 
 export function initMaterials() {
   const atlas = buildAtlas();
   materials = {
-    opaque: addSnow(new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true })),
-    cutout: new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }),
+    opaque: addSnow(new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true }), 'snow-opaque'),
+    cutout: addSnow(new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }), 'snow-cutout'),
     liquid: new THREE.MeshLambertMaterial({
       map: atlas, vertexColors: true, transparent: true, opacity: 0.78,
       depthWrite: false, side: THREE.DoubleSide,
