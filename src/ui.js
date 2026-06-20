@@ -116,6 +116,7 @@ export class UI {
     this.netChatInput.placeholder = 'Say summat to t\u2019 moor... (Enter sends, Esc shuts up)';
     this.netChatInput.maxLength = 200;
     this.vignette = this.el('div', '', body); this.vignette.id = 'hurt-vignette';
+    this.coldVignette = this.el('div', '', body); this.coldVignette.id = 'cold-vignette';
 
     this.tooltip = this.el('div', 'hidden', body); this.tooltip.id = 'tooltip';
     document.addEventListener('mousemove', e => {
@@ -1093,6 +1094,13 @@ export class UI {
     }
 
     this.vignette.style.opacity = Math.min(1, Math.max(0, player.hurtFlash * 2));
+    const coldV = player.temperature < 6 ? (6 - player.temperature) / 6 : 0;
+    if (coldV > 0) {
+      this.coldVignette.style.background = `radial-gradient(ellipse at center, transparent 45%, rgba(200,225,255,${(coldV * 0.45).toFixed(3)}) 100%)`;
+      this.coldVignette.style.opacity = '1';
+    } else {
+      this.coldVignette.style.opacity = '0';
+    }
 
     if (this.invDirty) { this.renderHotbar(player); this.invDirty = false; }
 

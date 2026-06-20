@@ -99,6 +99,7 @@ export class Player {
     let speed = this.flying ? (sprinting ? FLY_FAST : FLY) : this.mounted ? MOUNT_WALK : sprinting ? SPRINT : sneaking ? SNEAK : WALK;
     if (inBog && !onFrozen) speed *= 0.3;
     else if (inWater && !onFrozen) speed *= 0.55;
+    if (this.temperature < 6) speed *= 0.75; // cold stiffens t' limbs
     this.sprinting = sprinting;
 
     const wishX = (-sin * fwd + cos * strafe) * speed;
@@ -216,8 +217,9 @@ export class Player {
         this.drownTick = 0;
       }
 
-      // hunger
-      this.exhaustion += dt * (sprinting ? 0.10 : 0.012);
+      // hunger — cold makes thee burn more to keep warm
+      const coldHungerMul = this.temperature < 12 ? 1.6 : 1;
+      this.exhaustion += dt * (sprinting ? 0.10 : 0.012) * coldHungerMul;
       if (this.exhaustion > 4) {
         this.exhaustion = 0;
         this.hunger = Math.max(0, this.hunger - 1);
@@ -229,8 +231,13 @@ export class Player {
           if (this.health > 1) this.damage(1, 'Tha clammed to deeath');
         }
       }
-      // regen when well fed — but not while tha's soaked through an' shiverin'
-      if (this.hunger >= 16 && this.health < 20 && this.wetness < 0.6) {
+      // freezing: t' cold itself starts to do for thee
+      if (this.temperature <= 0) {
+        this._freezeT = (this._freezeT || 0) + dt;
+        if (this._freezeT >= 4) { this._freezeT = 0; this.damage(1, "Froze to death on t’ moor"); }
+      } else this._freezeT = 0;
+      // regen when well fed — but not while tha's soaked through an' shiverin', nor chilled below 12
+      if (this.hunger >= 16 && this.health < 20 && this.wetness < 0.6 && this.temperature >= 12) {
         this.regenTick += dt;
         if (this.regenTick > 3) {
           this.regenTick = 0;

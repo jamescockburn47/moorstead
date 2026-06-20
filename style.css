@@ -295,6 +295,10 @@ input.seed {
   background: radial-gradient(ellipse at center, transparent 45%, rgba(200, 20, 10, 0.55) 100%);
   opacity: 0; transition: opacity 0.1s;
 }
+#cold-vignette {
+  position: fixed; inset: 0; pointer-events: none; z-index: 14;
+  opacity: 0; transition: opacity 0.3s;
+}
 
 #tooltip {
   position: fixed; pointer-events: none; z-index: 60;
