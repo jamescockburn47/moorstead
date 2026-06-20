@@ -293,6 +293,7 @@ class Game {
     this.milestones = new Milestones(this);
     if (this.rails) this.rails.dispose();
     this.rails = new Rails(this.scene, this.world.gen.geo); // t' permanent way, drawn proper
+    if (this.floraLayer) this.floraLayer.clear();
     this.floraLayer = new FloraLayer(this.scene, this.world);
     this.entities.game = this;
     this.entities.onKill = mob => { this.quests.onMobKilled(mob); this.milestones.onKill(mob.type); };
@@ -326,6 +327,7 @@ class Game {
 
   teardownWorld() {
     if (this.rails) { this.rails.dispose(); this.rails = null; }
+    if (this.floraLayer) { this.floraLayer.clear(); this.floraLayer = null; }
     this.entities.clear();
     for (const c of this.world.chunks.values()) {
       if (c.meshes) for (const m of c.meshes) { this.scene.remove(m); m.geometry.dispose(); }
