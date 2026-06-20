@@ -10,9 +10,10 @@ export function cellInstances(seed, cx, cz, mode, tile) {
   if (mode === 'lineside') {
     count = 3 + Math.floor(r(S_COUNT) * 4);                 // 3..6
   } else {
-    const clump = noise2(cx * 0.12, cz * 0.12, seed ^ S_CLUMP ^ (tile << 4)); // [-1,1]
-    if (clump < 0.15) return [];
-    count = 1 + Math.floor(r(S_COUNT) * 2);                 // 1..2
+    const clump = noise2(cx * 0.10, cz * 0.10, seed ^ S_CLUMP ^ (tile << 4)); // [-1,1]
+    if (clump < 0.5) return [];                             // tighter, well-separated patches
+    if (r(S_COUNT) < 0.55) return [];                       // sparse even within a patch
+    count = 1;                                              // one bloom per populated cell
   }
   const out = [];
   for (let i = 0; i < count; i++) {

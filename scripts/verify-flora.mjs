@@ -31,22 +31,18 @@ const adornAt = p => activeAdornments(seasonStateAtPhase(p));
 }
 
 {
-  const a = cellInstances(12345, 10, 20, 'moor', TILE.WILDFLOWER);
-  const b = cellInstances(12345, 10, 20, 'moor', TILE.WILDFLOWER);
-  (JSON.stringify(a) === JSON.stringify(b) ? ok : bad)('placement is deterministic for same seed+cell');
-  (JSON.stringify(a) !== JSON.stringify(cellInstances(999, 10, 20, 'moor', TILE.WILDFLOWER)) ? ok : bad)('different seed gives different placement');
-  for (const inst of a) {
-    if (!(inst.dx >= 0 && inst.dx < 1 && inst.dz >= 0 && inst.dz < 1)) bad('instance dx/dz inside cell');
-    if (!(inst.yaw >= 0 && inst.yaw < Math.PI * 2)) bad('instance yaw in range');
-  }
-  ok('moor instances jittered inside the cell with yaw + variant');
-  let moorEmpty = 0, lineMin = 99;
-  for (let cz = 0; cz < 40; cz++) {
-    if (cellInstances(7, 5, cz, 'moor', TILE.WILDFLOWER).length === 0) moorEmpty++;
-    lineMin = Math.min(lineMin, cellInstances(7, 5, cz, 'lineside', TILE.WILDFLOWER).length);
-  }
-  (moorEmpty > 0 ? ok : bad)('moor placement leaves bare cells (patchy clump)');
-  (lineMin >= 3 ? ok : bad)('lineside placement is dense (>=3 per cell, got min ' + lineMin + ')');
+  const sweep = (seed, mode) => { const o = []; for (let z = 0; z < 80; z++) o.push(cellInstances(seed, 5, z, mode, TILE.WILDFLOWER).length); return o; };
+  const s1 = sweep(12345, 'moor');
+  (JSON.stringify(s1) === JSON.stringify(sweep(12345, 'moor')) ? ok : bad)('placement is deterministic for same seed');
+  (JSON.stringify(s1) !== JSON.stringify(sweep(999, 'moor')) ? ok : bad)('different seed gives different placement');
+  const bare = s1.filter(n => n === 0).length, flowered = s1.filter(n => n > 0).length;
+  (bare > 0 && flowered > 0 ? ok : bad)('moor placement is patchy (bare ' + bare + ', flowered ' + flowered + ')');
+  (Math.min(...sweep(7, 'lineside')) >= 3 ? ok : bad)('lineside placement is dense (>=3 per cell)');
+  let pop = null;
+  for (let z = 0; z < 300 && !pop; z++) { const c = cellInstances(12345, 5, z, 'moor', TILE.WILDFLOWER); if (c.length) pop = c; }
+  let bounds = !!pop;
+  if (pop) for (const i of pop) { if (!(i.dx >= 0 && i.dx < 1 && i.dz >= 0 && i.dz < 1 && i.yaw >= 0 && i.yaw < Math.PI * 2)) bounds = false; }
+  (bounds ? ok : bad)('moor instances jittered inside the cell with yaw');
 }
 
 console.log('\nRESULT: ' + (failed ? 'FAIL' : 'PASS'));

@@ -22,6 +22,9 @@ function crossGeom(tile) {
   const uv = [u0, v0, u1, v0, u1, v1, u0, v1, u0, v0, u1, v0, u1, v1, u0, v1];
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  // white per-vertex colour: the shared cutout material has vertexColors:true, so a
+  // geometry with no colour attribute renders BLACK (texture * 0). White = texture as-is.
+  g.setAttribute('color', new THREE.Float32BufferAttribute(new Array(24).fill(1), 3));
   g.setIndex([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]);
   g.computeVertexNormals();
   return g;
@@ -72,6 +75,7 @@ export class FloraLayer {
         if (ri && ri.d < 4) continue;                       // keep the four-foot clear
         const surfY = gen.height(x, z);
         const top = this.world.getBlock(x, surfY + 1, z);
+        const surf = this.world.getBlock(x, surfY, z);
         if (adorn.length && top) {
           for (const a of adorn) if (top === a.bush) {
             if (this.fruitPicked && this.fruitPicked(x, z, a.bush)) continue; // forage suppression
@@ -79,7 +83,8 @@ export class FloraLayer {
             add(a.tile, x + 0.5, surfY + 1, z + 0.5, yaw, 1);
           }
         }
-        if (scatter.length && top === B.AIR) {
+        // scatter only on open, natural moor grass — never in villages, on paths, sand or roofs
+        if (scatter.length && top === B.AIR && surf === B.GRASS && !gen.geo.inVillage(x, z, 1)) {
           const mode = (ri && ri.d >= 4 && ri.d < 7) ? 'lineside' : 'moor';
           for (const sp of scatter)
             for (const inst of cellInstances(seed, x, z, mode, sp.tile))
