@@ -148,6 +148,25 @@ export class UI {
     this.btnLogin = this.el('button', 'mc', this.loginBox, 'Come On In');
     this.loginErr = this.el('div', 'login-err', this.loginBox, '');
     this.loginGuest = this.el('div', 'muted-note login-guest', this.loginBox, 'no invite? <u>play as a passing rambler</u> (villagers won&rsquo;t remember thee proper)');
+    this.requestToggle = this.el('div', 'muted-note login-request-toggle', this.loginBox,
+      'want a proper invite? <u>request one</u> (adult shared moor only)');
+    this.requestBox = this.el('div', 'request-box hidden', this.loginBox);
+    this.el('div', 'login-title', this.requestBox, 'Ask for an adult invite');
+    this.el('div', 'muted-note', this.requestBox,
+      'Children&rsquo;s worlds aren&rsquo;t requested here. I&rsquo;ll email thee a code if there&rsquo;s a spot.');
+    this.requestEmail = this.el('input', 'seed', this.requestBox);
+    this.requestEmail.type = 'email';
+    this.requestEmail.placeholder = 'Thi email address';
+    this.requestEmail.maxLength = 120;
+    this.requestName = this.el('input', 'seed', this.requestBox);
+    this.requestName.placeholder = 'Thi name (optional)';
+    this.requestName.maxLength = 24;
+    this.requestNote = this.el('input', 'seed', this.requestBox);
+    this.requestNote.placeholder = 'Short note (optional)';
+    this.requestNote.maxLength = 200;
+    this.btnRequest = this.el('button', 'mc', this.requestBox, 'Send Request');
+    this.requestErr = this.el('div', 'login-err', this.requestBox, '');
+    this.requestOk = this.el('div', 'request-ok hidden', this.loginBox, '');
 
     this.whoBox = this.el('div', 'login-who hidden', this.titleScreen, '');
 

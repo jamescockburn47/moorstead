@@ -1,7 +1,7 @@
 """Moorstead parish ledger — players, login codes, and full EVO diagnostics.
 
 :8095 on LAN/Tailscale only. The Cloudflare tunnel routes three public endpoints
-here (POST /ping, POST /auth/claim, POST /visit); the dashboard UI never leaves
+here (POST /ping, POST /auth/claim, POST /visit, POST /request-invite); the dashboard UI never leaves
 the house.
 """
 import hashlib
@@ -26,6 +26,8 @@ VISITS_F = DASH / "visits.json"
 CODES_F = DASH / "codes.json"
 ACCOUNTS_F = DASH / "accounts.json"
 WS_TOKENS_F = DASH / "ws_tokens.json"
+REQUESTS_F = DASH / "token_requests.json"
+REQUEST_RATE_F = DASH / "request_rate.json"
 MEM = ROOT / "brain_memory" / "players"
 CADDY_LOG = Path("/var/log/caddy/moorstead.log")
 BRAIN = "http://127.0.0.1:8010"
@@ -36,6 +38,12 @@ ROOM_CAP = 15
 PID_RE = re.compile(r"^[a-z0-9-]{4,40}$")
 CODE_RE = re.compile(r"^[a-z]+-[a-z]+-\d{2}$")
 ROOM_RE = re.compile(r"^[a-z0-9-]{1,24}$")
+EMAIL_RE = re.compile(r"^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$")
+ADULT_ROOMS = frozenset({"moor", "dale", "crag", "tarn"})
+MINT_W1 = ("heather", "curlew", "gorse", "bracken", "lapwing", "merlin", "foxglove", "tarn", "syke",
+           "moss", "rigg", "howe", "thorn", "ling", "whin", "crag", "fell", "gill", "beck", "wren")
+MINT_W2 = ("yow", "kiln", "fold", "gate", "dale", "scar", "mire", "stile", "cairn", "lees",
+           "slack", "grain", "holt", "wick", "garth", "stead", "shaw", "cleugh", "sike", "pot")
 
 app = FastAPI()
 
@@ -106,6 +114,44 @@ def _player_stats(players, now):
         if len(days) > 1 or p.get("visits", 0) > 1:
             st["returning"] += 1
     return st
+
+
+def _rate_ok(ip, limit=2):
+    day = _utc_day()
+    rates = _load(REQUEST_RATE_F, {})
+    rec = rates.get(ip, {"day": day, "n": 0})
+    if rec.get("day") != day:
+        rec = {"day": day, "n": 0}
+    if rec["n"] >= limit:
+        return False
+    rec["n"] += 1
+    rates[ip] = rec
+    _save(REQUEST_RATE_F, rates)
+    return True
+
+
+def _mint_adult_code(room="moor"):
+    if room not in ADULT_ROOMS:
+        room = "moor"
+    codes = _load(CODES_F, {})
+    for _ in range(80):
+        w1 = secrets.choice(MINT_W1)
+        w2 = secrets.choice(MINT_W2)
+        if w1 == w2:
+            continue
+        n = secrets.randbelow(80) + 10
+        code = f"{w1}-{w2}-{n:02d}"
+        if code in codes or not CODE_RE.match(code):
+            continue
+        codes[code] = {"room": room}
+        _save(CODES_F, codes)
+        return code
+    raise RuntimeError("could not mint a unique adult invite code")
+
+
+def _pending_requests():
+    reqs = _load(REQUESTS_F, [])
+    return [r for r in reqs if r.get("status") == "pending"]
 
 
 def _room_for_code(code, entry, acct):
@@ -290,6 +336,79 @@ async def visit(req: Request):
     return {"ok": True}
 
 
+@app.post("/request-invite")
+async def request_invite(req: Request):
+    """Public: queue an adult-room invite request (operator approves on the ledger)."""
+    ip = _client_ip(req)
+    if not _rate_ok(ip):
+        return {"ok": False, "err": "Easy now — tha can only ask once or twice a day."}
+    try:
+        d = await req.json()
+    except Exception:
+        return {"ok": False, "err": "bad request"}
+    email = str(d.get("email", "")).strip().lower()[:120]
+    name = re.sub(r"[^\w \-']", "", str(d.get("name", "")).strip())[:24]
+    note = re.sub(r"[\r\n\t]", " ", str(d.get("note", "")).strip())[:200]
+    if not EMAIL_RE.match(email):
+        return {"ok": False, "err": "That email doesn't look right."}
+    if re.search(r"\b(bairn|child|children|kid|kids)\b", f"{note} {email}", re.I):
+        return {"ok": False,
+                "err": "Children's invites aren't requested here — contact the operator directly."}
+    reqs = _load(REQUESTS_F, [])
+    for r in reqs:
+        if r.get("email") == email and r.get("status") == "pending":
+            return {"ok": True, "msg": "Already on t' list — I'll be in touch if there's a spot."}
+    pid = str(d.get("pid", ""))[:40].lower()
+    reqs.append({
+        "id": secrets.token_hex(6),
+        "email": email,
+        "name": name,
+        "note": note,
+        "room": "moor",
+        "status": "pending",
+        "ts": time.time(),
+        "ip": ip,
+        "pid": pid if PID_RE.match(pid) else "",
+    })
+    _save(REQUESTS_F, reqs[-500:])
+    return {"ok": True, "msg": "Thanks — I'll be in touch if there's a spot."}
+
+
+@app.post("/api/request-invite/respond")
+async def respond_request(req: Request):
+    """LAN-only: approve (mints code) or reject a queued invite request."""
+    try:
+        d = await req.json()
+    except Exception:
+        return {"ok": False, "err": "bad request"}
+    rid = str(d.get("id", "")).strip()
+    action = str(d.get("action", "")).strip().lower()
+    room = str(d.get("room", "moor")).strip().lower()
+    if room not in ADULT_ROOMS:
+        return {"ok": False, "err": "adult rooms only (moor, dale, crag, tarn)"}
+    reqs = _load(REQUESTS_F, [])
+    target = next((r for r in reqs if r.get("id") == rid), None)
+    if not target or target.get("status") != "pending":
+        return {"ok": False, "err": "no such pending request"}
+    if action == "reject":
+        target["status"] = "rejected"
+        target["closedTs"] = time.time()
+        _save(REQUESTS_F, reqs)
+        return {"ok": True, "status": "rejected"}
+    if action != "approve":
+        return {"ok": False, "err": "action must be approve or reject"}
+    try:
+        code = _mint_adult_code(room)
+    except RuntimeError:
+        return {"ok": False, "err": "could not mint a unique code — try again"}
+    target["status"] = "approved"
+    target["code"] = code
+    target["room"] = room
+    target["approvedTs"] = time.time()
+    _save(REQUESTS_F, reqs)
+    return {"ok": True, "status": "approved", "code": code, "room": room, "email": target["email"]}
+
+
 # ---------------- diagnostics ----------------
 def _sys_stats():
     out = {}
@@ -460,6 +579,11 @@ async def overview():
         "accounts": sorted([{"code": c, "name": a.get("name", "?"),
                              "room": a.get("room", "moor"), "last": a.get("last", 0)}
                             for c, a in accounts.items()], key=lambda x: -x["last"]),
+        "inviteRequests": {
+            "pending": sorted(_pending_requests(), key=lambda r: -r.get("ts", 0)),
+            "recent": sorted([r for r in _load(REQUESTS_F, []) if r.get("status") != "pending"],
+                             key=lambda r: -(r.get("approvedTs") or r.get("closedTs") or r.get("ts", 0)))[:20],
+        },
     }
 
 
@@ -506,6 +630,18 @@ async function setRoom(code, cur){
   alert(d.ok ? code+' -> '+d.room : ('nay: '+(d.err||'failed')));
   location.reload();
 }
+async function respondInvite(id, action){
+  let room='moor';
+  if(action==='approve'){
+    room=(prompt('Adult world room (moor, dale, crag, tarn):','moor')||'').trim().toLowerCase();
+    if(!room) return;
+  }
+  const r=await fetch('/api/request-invite/respond',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,action,room})});
+  const d=await r.json();
+  if(!d.ok){alert('nay: '+(d.err||'failed'));return;}
+  if(action==='approve') alert('Minted '+d.code+' ('+d.room+') for '+d.email+'\\nEmail them thi code.');
+  location.reload();
+}
 const ago=(now,t)=>{const s=now-t;if(s<90)return Math.round(s)+'s ago';if(s<5400)return Math.round(s/60)+'m ago';if(s<90000)return (s/3600).toFixed(1)+'h ago';return Math.round(s/86400)+'d ago';};
 const bar=(v,max,hotAt)=>'<div class="bar"><i'+(v/max>(hotAt||0.85)?' class="hot"':'')+' style="width:'+Math.min(100,100*v/max)+'%"></i></div>';
 async function refresh(){
@@ -540,7 +676,20 @@ async function refresh(){
   h+='<h2>Services</h2><table>';
   for(const [k,v] of Object.entries(d.services)) h+='<tr><td>'+k+'</td><td class="'+(v==='active'?'ok':'bad')+'">'+v+'</td></tr>';
   h+='</table>';
-  h+='<h2>Invites</h2><div class="cards"><div class="card"><div class="v">'+d.codes.claimed+' / '+d.codes.total+'</div><div class="k">codes claimed</div></div></div>';
+  h+='<h2>Invites</h2><div class="cards"><div class="card"><div class="v">'+d.codes.claimed+' / '+d.codes.total+'</div><div class="k">codes claimed</div></div>';
+  h+='<div class="card"><div class="v">'+(d.inviteRequests?.pending?.length||0)+'</div><div class="k">invite requests waiting</div></div></div>';
+  const pending=d.inviteRequests?.pending||[];
+  if(pending.length){
+    h+='<h2>Invite requests (adult rooms)</h2><div class="muted">Approve mints a fresh code — email it to them thysen.</div><table><tr><th>When</th><th>Email</th><th>Name</th><th>Note</th><th>IP</th><th></th></tr>';
+    for(const r of pending) h+='<tr><td>'+ago(d.now,r.ts)+'</td><td>'+r.email+'</td><td>'+(r.name||'')+'</td><td>'+(r.note||'')+'</td><td>'+r.ip+'</td><td><button onclick="respondInvite(&quot;'+r.id+'&quot;,&quot;approve&quot;)">approve</button> <button onclick="respondInvite(&quot;'+r.id+'&quot;,&quot;reject&quot;)">reject</button></td></tr>';
+    h+='</table>';
+  }
+  const recent=d.inviteRequests?.recent||[];
+  if(recent.length){
+    h+='<h2>Recent invite decisions</h2><table><tr><th>When</th><th>Email</th><th>Status</th><th>Code</th><th>Room</th></tr>';
+    for(const r of recent) h+='<tr><td>'+ago(d.now,r.approvedTs||r.closedTs||r.ts)+'</td><td>'+r.email+'</td><td>'+r.status+'</td><td class="pid">'+(r.code||'')+'</td><td>'+(r.room||'')+'</td></tr>';
+    h+='</table>';
+  }
   if(d.accounts&&d.accounts.length){h+='<table><tr><th>Account</th><th>Code</th><th>World (room)</th><th>Last login</th><th></th></tr>';
     for(const a of d.accounts) h+='<tr><td>'+a.name+'</td><td class="pid">'+a.code+'</td><td><b>'+a.room+'</b></td><td>'+ago(d.now,a.last)+'</td><td><button onclick="setRoom(&quot;'+a.code+'&quot;,&quot;'+a.room+'&quot;)">move</button></td></tr>';
     h+='</table>';}

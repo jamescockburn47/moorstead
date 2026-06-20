@@ -408,6 +408,15 @@ class Game {
     ui.loginName.addEventListener('keydown', e => { if (e.code === 'Enter') this.login(); e.stopPropagation(); });
     ui.loginCode.addEventListener('keydown', e => e.stopPropagation());
     ui.loginGuest.addEventListener('click', () => this.loginGuest());
+    ui.requestToggle.addEventListener('click', () => {
+      ui.requestBox.classList.toggle('hidden');
+      ui.requestOk.classList.add('hidden');
+      ui.requestErr.textContent = '';
+    });
+    ui.btnRequest.addEventListener('click', () => this.requestInvite());
+    ui.requestEmail.addEventListener('keydown', e => { if (e.code === 'Enter') this.requestInvite(); e.stopPropagation(); });
+    ui.requestName.addEventListener('keydown', e => { if (e.code === 'Enter') this.requestInvite(); e.stopPropagation(); });
+    ui.requestNote.addEventListener('keydown', e => { if (e.code === 'Enter') this.requestInvite(); e.stopPropagation(); });
     ui.btnNew.addEventListener('click', () => { this.audio.init(); this.newWorld(ui.seedInput.value.trim()); });
     ui.btnShared.addEventListener('click', () => { this.audio.init(); this.joinShared(); });
     ui.netChatInput.addEventListener('keydown', e => {
@@ -1019,6 +1028,36 @@ class Game {
       this.ui.setLoggedIn(this.auth);
     } catch {
       this.ui.loginErr.textContent = 'Can\u2019t reach t\u2019 parish clerk \u2014 try again in a minute, or come in as a rambler.';
+    }
+  }
+
+  async requestInvite() {
+    const email = this.ui.requestEmail.value.trim().toLowerCase();
+    const name = this.ui.requestName.value.trim();
+    const note = this.ui.requestNote.value.trim();
+    if (!email || !email.includes('@')) {
+      this.ui.requestErr.textContent = 'A proper email address, love.';
+      return;
+    }
+    this.ui.requestErr.textContent = 'Sending to t\u2019 parish clerk...';
+    this.ui.requestOk.classList.add('hidden');
+    try {
+      const res = await fetch('/dash/request-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name, note, pid: this.devicePid() }),
+      });
+      const d = await res.json();
+      if (!d.ok) {
+        this.ui.requestErr.textContent = d.err || 'That didn\u2019t work.';
+        return;
+      }
+      this.ui.requestErr.textContent = '';
+      this.ui.requestBox.classList.add('hidden');
+      this.ui.requestOk.classList.remove('hidden');
+      this.ui.requestOk.textContent = d.msg || 'Thanks \u2014 I\u2019ll be in touch if there\u2019s a spot.';
+    } catch {
+      this.ui.requestErr.textContent = 'Can\u2019t reach t\u2019 parish clerk \u2014 try again later.';
     }
   }
 

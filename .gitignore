@@ -9,3 +9,5 @@ moorstead keys.md
 finetune/
 **/handout.txt
 **/ROTATED*.txt
+**/token_requests.json
+**/request_rate.json

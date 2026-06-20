@@ -64,8 +64,11 @@ input.seed {
 .login-title { color: #d8d2c0; font-size: 15px; }
 .login-err { color: #d87a5a; font-size: 13px; min-height: 18px; }
 .login-guest { cursor: pointer; }
+.login-request-toggle { cursor: pointer; }
+.request-box { display: flex; flex-direction: column; gap: 8px; align-items: center; width: 100%; max-width: 360px; margin-top: 4px; padding-top: 10px; border-top: 1px solid #2c2920; }
+.request-ok { color: #9ec27a; font-size: 14px; text-align: center; max-width: 360px; margin-top: 6px; }
 .login-who { color: #b8b2a0; font-size: 14px; }
-.login-who u, .login-guest u { cursor: pointer; color: #9ec27a; }
+.login-who u, .login-guest u, .login-request-toggle u { cursor: pointer; color: #9ec27a; }
 .who-switch { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; align-items: center; }
 .who-switch .lbl { color: #8a8478; font-size: 13px; margin-right: 2px; }
 .who-chip {
