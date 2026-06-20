@@ -72,11 +72,12 @@ No new state; pure functions of `yearPhase`.
 A client-side **instanced cutout overlay**, decoupled from chunk meshes.
 
 - **Placement is deterministic** from seed+position: a low-frequency *clump mask* noise carves patches with bare ground between (delivers "patchy, less dense"); within a clump, instances are scattered at **sub-block jittered positions** (off-centre), each with **random yaw** and one of **several variants** per species. No grid alignment.
-- **Bloom-window gating:** each species renders only when its season scalar is high — snowdrop → daffodil → summer (foxgloves + wildflowers) → autumn seedheads/rosehips. When the active window changes (a few times per real day), rebuild the instance buffers. No chunk re-mesh, no world-data change.
+- **Bloom-window gating, two kinds.** **Scatter** flowers (snowdrop → daffodil → summer wildflowers) appear/vanish on open grass. **Adornments** — berries/blossom painted onto the actual bush blocks they grow on, in season: **bilberries** on bilberry bushes (late summer), **white flowers then blackberries** on brambles, **red berries** on holly (winter). When the window changes (a few times per real day), rebuild the buffers. No chunk re-mesh, no world-data change.
 - Foxgloves move here as a summer-blooming overlay flower; the dense persistent `B.FOXGLOVE` block scatter in worldgen is thinned accordingly.
 - **Decorative, not harvestable** (overlay quads, not blocks). The persistent block flora (heather, gorse, fern, etc.) stay real, harvestable blocks — but their worldgen density is reduced and clumped to match the patchier look.
 - Renders around the player within view distance; recycles instances as the player moves (same pattern as `src/rails.js`).
-- **Density modes:** the open moor uses the patchy clump mask (sparse, bare ground between); the **lineside uses a dense mode** — its own premise, not the moor's — that may place **several instances per block cell** for a lush, riotous band. Bramble is an overlay species: small **white flowers** in late spring/early summer, then **blackberries** in late summer/autumn (the picking is added by the forage sibling spec, hooking onto these brambles).
+- **Density modes:** the open moor uses the patchy clump mask (sparse, bare ground between); the **lineside uses a dense mode** — its own premise, not the moor's — that may place **several instances per block cell** for a lush band.
+- **Foraging leaves the plant standing:** because berries are an overlay adornment, picking yields the fruit and removes **only the fruit visual** — the bush stays — and the fruit regrows next season. This is the forage sibling spec's job for both bilberries and blackberries; it **re-homes today's bilberry picking** (which currently removes the whole bush) to this rule. The overlay exposes a per-bush "picked" suppression hook the forage spec wires.
 
 ### 4. Snow — `src/mesher.js` (extend) + `src/snow.js` (new) + `src/sky.js` (extend)
 
@@ -96,8 +97,10 @@ Evergreen contrast (monkey puzzle, holly + red berries), rosehips/haws on hedger
 
 The railway already plants a narrow verge (`geo.railInfo(x,z).d`, flora on `d 2.4–5`). Thicken it significantly so the line runs through lush green corridors. Unlike the open moor, the lineside is **deliberately, artificially dense** — it does NOT follow the moor's patchy-clump premise; the flower overlay packs **multiple instances per block cell** on the verge for a riotous band (still fully seasonal).
 
-- Widen the planted band and raise density well beyond the open moor — hedgerow, ferns, flowers and dense bramble running the length of the line.
-- **Thick brambles are the signature lineside plant:** a near-continuous bramble band on the verges, carrying **small white flowers** in late spring/early summer, then **blackberries** in late summer/autumn. These brambles are placed and shown seasonally here; **blackberry foraging (picking → edible item) is the forage sibling spec**, which hooks onto the brambles this plan establishes.
+- Widen the planted band and raise density well beyond the open moor — a **varied, riotous mix** running the length of the line, **not** a monoculture.
+- The lineside species: **thick ferns** (with a clear unfurling fiddlehead curl), **foxgloves** (a distinct tall spike so they read differently from heather), **brambles**, **holly** (evergreen — the winter anchor), and bracken. Mixed, never bramble-dominated.
+- **Brambles** carry small **white flowers** in late spring/early summer, then **blackberries** in late summer/autumn, and **die back over winter and regrow in spring** (a seasonal state on the bramble tile, via the atlas retint). Blackberry **picking** is the forage sibling spec, hooking onto these brambles.
+- **Holly** is the winter anchor: evergreen leaves year-round, **red berries in winter** (an overlay adornment) — central to keeping winter from reading bleak.
 - Add trackside copses and hedgerow trees (regular species; fruit trees arrive with the forage sibling spec).
 - **Clearance constraint:** nothing is placed inside the loading-gauge envelope or where it would block the train's window sightlines. The cleared four-foot (`d < 4`) stays clear, new planting sits beyond the gauge, and `verify-rail-clearance` + `verify-train-view` must still pass.
 - Seasonal colour and foliage on the corridor come free from Layers 1–3; the new worldgen/overlay work is the dense placement, the brambles, and the lineside overlay density.
