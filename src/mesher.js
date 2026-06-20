@@ -20,12 +20,12 @@ function addSnow(mat, key = 'terrain-snow') {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uSnowLine = snowUniforms.uSnowLine;
     shader.uniforms.uSnowAmt = snowUniforms.uSnowAmt;
-    shader.vertexShader = 'varying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\n' + shader.vertexShader
+    shader.vertexShader = 'attribute float aSnowExp;\nvarying float vSnowExp;\nvarying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\n' + shader.vertexShader
       .replace('#include <begin_vertex>',
-        '#include <begin_vertex>\n  vec4 wSnowPos = modelMatrix * vec4(transformed, 1.0);\n  vSnowY = wSnowPos.y;\n  vSnowWX = wSnowPos.x;\n  vSnowWZ = wSnowPos.z;\n  vSnowUp = normalize(mat3(modelMatrix) * objectNormal).y;');
-    shader.fragmentShader = 'uniform float uSnowLine;\nuniform float uSnowAmt;\nvarying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\n' + shader.fragmentShader
+        '#include <begin_vertex>\n  vec4 wSnowPos = modelMatrix * vec4(transformed, 1.0);\n  vSnowY = wSnowPos.y;\n  vSnowWX = wSnowPos.x;\n  vSnowWZ = wSnowPos.z;\n  vSnowUp = normalize(mat3(modelMatrix) * objectNormal).y;\n  vSnowExp = aSnowExp;');
+    shader.fragmentShader = 'uniform float uSnowLine;\nuniform float uSnowAmt;\nvarying float vSnowExp;\nvarying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\n' + shader.fragmentShader
       .replace('#include <color_fragment>',
-        '#include <color_fragment>\n  float drift = 0.6 + 0.4 * sin(vSnowWX * 0.15) * cos(vSnowWZ * 0.15);\n  float snow = uSnowAmt * drift * smoothstep(uSnowLine, uSnowLine + 10.0, vSnowY) * smoothstep(0.2, 0.75, vSnowUp);\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.96, 1.0), snow);');
+        '#include <color_fragment>\n  float drift = 0.6 + 0.4 * sin(vSnowWX * 0.15) * cos(vSnowWZ * 0.15);\n  float snow = uSnowAmt * drift * vSnowExp * smoothstep(uSnowLine, uSnowLine + 10.0, vSnowY) * smoothstep(0.2, 0.75, vSnowUp);\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.96, 1.0), snow);');
   };
   mat.customProgramCacheKey = () => key;
   return mat;
@@ -67,13 +67,14 @@ function faceTile(def, faceIdx, x, z) {
 }
 
 class GeoBuilder {
-  constructor() { this.pos = []; this.norm = []; this.uv = []; this.col = []; this.idx = []; this.n = 0; }
-  quad(corners, normal, uvRect, aos, light) {
+  constructor() { this.pos = []; this.norm = []; this.uv = []; this.col = []; this.exp = []; this.idx = []; this.n = 0; }
+  quad(corners, normal, uvRect, aos, light, exp = 1) {
     const [u0, v0, u1, v1] = uvRect;
     for (const c of corners) {
       this.pos.push(c[0], c[1], c[2]);
       this.norm.push(normal[0], normal[1], normal[2]);
       this.uv.push(u0 + (u1 - u0) * c[3], v0 + (v1 - v0) * c[4]);
+      this.exp.push(exp);
     }
     for (let i = 0; i < 4; i++) {
       const b = AO_LEVELS[aos[i]] * light;
@@ -94,6 +95,7 @@ class GeoBuilder {
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.norm, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
+    g.setAttribute('aSnowExp', new THREE.Float32BufferAttribute(this.exp, 1));
     g.setIndex(this.idx);
     g.computeBoundingSphere();
     return new THREE.Mesh(g, material);
@@ -106,6 +108,15 @@ export function buildChunkMeshes(world, chunk) {
   const solid = new GeoBuilder();
   const cutout = new GeoBuilder();
   const liquid = new GeoBuilder();
+
+  // Per-column sky-exposure: highest opaque block y, used to gate snow to exterior surfaces.
+  const skyTop = new Int16Array(CHUNK * CHUNK).fill(-1);
+  for (let lz = 0; lz < CHUNK; lz++) for (let lx = 0; lx < CHUNK; lx++) {
+    for (let y = HEIGHT - 1; y >= 0; y--) {
+      if (isOpaque(data[lx + lz * CHUNK + y * CHUNK * CHUNK])) { skyTop[lx + lz * CHUNK] = y; break; }
+    }
+  }
+  const exposedAt = (lx, y, lz) => (y >= skyTop[lx + lz * CHUNK] ? 1 : 0);
 
   const get = (x, y, z) => {
     if (y < 0) return B.BEDROCK;
@@ -133,7 +144,7 @@ export function buildChunkMeshes(world, chunk) {
               cutout.quad(
                 [[lx + ax, y, lz + az, 0, 0], [lx + bx, y, lz + bz, 1, 0],
                  [lx + ax, y + 1, lz + az, 0, 1], [lx + bx, y + 1, lz + bz, 1, 1]],
-                [0, 1, 0], [u0, v0, u1, v1], [3, 3, 3, 3], 0.95
+                [0, 1, 0], [u0, v0, u1, v1], [3, 3, 3, 3], 0.95, exposedAt(lx, y, lz)
               );
             }
           } else {
@@ -150,7 +161,7 @@ export function buildChunkMeshes(world, chunk) {
               cutout.quad(
                 [[lx + cxj - dx, y, lz + czj - dz, 0, 0], [lx + cxj + dx, y, lz + czj + dz, 1, 0],
                  [lx + cxj - dx, y + ht, lz + czj - dz, 0, 1], [lx + cxj + dx, y + ht, lz + czj + dz, 1, 1]],
-                [0, 1, 0], [u0, v0, u1, v1], [3, 3, 3, 3], 0.95
+                [0, 1, 0], [u0, v0, u1, v1], [3, 3, 3, 3], 0.95, exposedAt(lx, y, lz)
               );
             }
           }
@@ -197,7 +208,7 @@ export function buildChunkMeshes(world, chunk) {
             const co = occludes(pc[0], pc[1], pc[2]) ? 1 : 0;
             aos.push(s1 && s2 ? 0 : 3 - (s1 + s2 + co));
           }
-          solid.quad(corners.map(c => [lx + c[0], y + c[1], lz + c[2], c[3], c[4]]), dir, uvr, aos, FACE_LIGHT[f]);
+          solid.quad(corners.map(c => [lx + c[0], y + c[1], lz + c[2], c[3], c[4]]), dir, uvr, aos, FACE_LIGHT[f], f === 3 ? exposedAt(lx, y, lz) : 0);
         }
       }
     }
