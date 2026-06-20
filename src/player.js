@@ -100,7 +100,7 @@ export class Player {
     let speed = this.flying ? (sprinting ? FLY_FAST : FLY) : this.mounted ? MOUNT_WALK : sprinting ? SPRINT : sneaking ? SNEAK : WALK;
     if (inBog && !onFrozen) speed *= 0.3;
     else if (inWater && !onFrozen) speed *= 0.55;
-    if (this.temperature < 6) speed *= 0.75; // cold stiffens t' limbs
+    if (!this.creative && !this.god && this.temperature < 6) speed *= 0.75; // cold stiffens t' limbs
     this.sprinting = sprinting;
 
     const wishX = (-sin * fwd + cos * strafe) * speed;
@@ -342,7 +342,7 @@ export class Player {
   respawn(spawn) {
     this.pos = { ...spawn };
     this.vel = { x: 0, y: 0, z: 0 };
-    this.health = 20; this.hunger = 20; this.air = 10;
+    this.health = 20; this.hunger = 20; this.air = 10; this.temperature = 20;
     this.dead = false;
     this.fallStart = null;
     this.hurtFlash = 0;
