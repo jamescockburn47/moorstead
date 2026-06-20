@@ -2334,6 +2334,7 @@ class Game {
     const eph = this.beachEphemeral(hit.x, hit.y, hit.z);
     if (this.net) this.net.sendEdit(hit.x, hit.y, hit.z, 0, eph ? { revert: hit.id } : null);
     if (eph) this.queueBeachRevert(hit.x, hit.y, hit.z, hit.id, 0);
+    this.world.recordEdit(hit.x, hit.y, hit.z, hit.id, 0, this.sky.day, this.player.name || ''); // harvest edits regrow
 
     // fossil hunting: t' bay sands give up their dead, like Whitby an' Bay Town
     if ((hit.id === B.SAND || hit.id === B.GRAVEL) && !this.player.creative) {
@@ -2452,6 +2453,7 @@ class Game {
     const eph = this.beachEphemeral(px, py, pz);
     if (this.net) this.net.sendEdit(px, py, pz, held.id, eph ? { revert: cur } : null);
     if (eph) this.queueBeachRevert(px, py, pz, cur, held.id);
+    this.world.recordEdit(px, py, pz, cur, held.id, this.sky.day, this.player.name || ''); // a build supersedes pending regrowth
   }
 
   // ---------------- taming & companions ----------------
@@ -2771,6 +2773,9 @@ class Game {
       }
       // beach edits heal: t' tide smooths t' sands back ower
       this.processBeachReverts();
+      // the moor heals: revert expired harvest edits once a game-day (cheap, day-scale regrowth)
+      const regenDay = Math.floor(this.sky.day);
+      if (regenDay !== this._lastExpireDay) { this._lastExpireDay = regenDay; this.world.expireEdits(this.sky.day); }
 
       // sky & weather
       const season = (this.seasonOverride != null)
