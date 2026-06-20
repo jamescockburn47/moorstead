@@ -18,6 +18,8 @@ export const TILE = {
   TER_MINT: 44, TER_BLUE: 45, TER_PINK: 46, TER_YELLOW: 47,
   MINE_ENTRANCE: 48, PIT_PROPS: 49, SAFETY_LAMP: 50, WINCH: 51,
   ALUM: 52, POLYHALITE: 53, ROCK_SALT: 54,
+  BRAMBLE: 55, SNOWDROP: 56, DAFFODIL: 57, WILDFLOWER: 58, BRAMBLE_FLOWER: 59,
+  BLACKBERRY: 60, BILBERRY_FRUIT: 61, HOLLY: 62, HOLLY_BERRY: 63,
 };
 
 // ---- Block ids ----
@@ -40,6 +42,7 @@ export const B = {
   ALUM_SHALE: 51,
   POLYHALITE: 52,
   ROCK_SALT: 53,
+  BRAMBLE: 54, HOLLY: 55,
 };
 
 // ---- Item ids (blocks double as items; pure items start at 64) ----
@@ -112,7 +115,9 @@ D[B.TORCH] = { name: 'Torch', kind: 'cutout', tex: { t: TILE.TORCH, s: TILE.TORC
 D[B.SIGNPOST] = { name: 'Waymark Signpost', kind: 'cutout', tex: { t: TILE.SIGNPOST, s: TILE.SIGNPOST, b: TILE.SIGNPOST }, hard: 1.0, tool: 'axe', drop: B.SIGNPOST };
 D[B.SAND] = { name: 'Bay Sand', kind: 'solid', tex: { t: TILE.SAND, s: TILE.SAND, b: TILE.SAND }, hard: 0.5, tool: 'shovel', drop: B.SAND };
 D[B.GORSE] = { name: 'Gorse', kind: 'cutout', tex: { t: TILE.GORSE, s: TILE.GORSE, b: TILE.GORSE }, hard: 0.05, tool: null, drop: B.GORSE };
-D[B.FERN] = { name: 'Fern', kind: 'cutout', tex: { t: TILE.FERN, s: TILE.FERN, b: TILE.FERN }, hard: 0.05, tool: null, drop: B.FERN };
+D[B.BRAMBLE] = { name: 'Bramble', kind: 'cutout', tex: { t: TILE.BRAMBLE, s: TILE.BRAMBLE, b: TILE.BRAMBLE }, hard: 0.1, tool: null, drop: B.BRAMBLE };
+D[B.HOLLY] = { name: 'Holly', kind: 'cutout', tex: { t: TILE.HOLLY, s: TILE.HOLLY, b: TILE.HOLLY }, hard: 0.2, tool: null, drop: B.HOLLY };
+D[B.FERN] ={ name: 'Fern', kind: 'cutout', tex: { t: TILE.FERN, s: TILE.FERN, b: TILE.FERN }, hard: 0.05, tool: null, drop: B.FERN };
 D[B.FOXGLOVE] = { name: 'Foxglove', kind: 'cutout', tex: { t: TILE.FOXGLOVE, s: TILE.FOXGLOVE, b: TILE.FOXGLOVE }, hard: 0.05, tool: null, drop: B.FOXGLOVE };
 D[B.DOG_ROSE] = { name: 'Dog Rose', kind: 'cutout', tex: { t: TILE.DOG_ROSE, s: TILE.DOG_ROSE, b: TILE.DOG_ROSE }, hard: 0.05, tool: null, drop: B.DOG_ROSE };
 D[B.ELDER] = { name: 'Elder Bush', kind: 'cutout', tex: { t: TILE.ELDER, s: TILE.ELDER, b: TILE.ELDER }, hard: 0.1, tool: null, drop: B.ELDER };

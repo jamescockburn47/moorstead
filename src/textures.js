@@ -228,16 +228,12 @@ const TILE_PAINTERS = {
   },
   [TILE.BILBERRY](p) {
     p.clear();
-    // low rounded bush
+    // low rounded bush — berries come seasonally from t' overlay
     for (let y = 6; y < T; y++) for (let x = 2; x < 14; x++) {
       const cx = x - 8, cy = y - 11;
       if (cx * cx / 36 + cy * cy / 25 < 1 && p.rng() < 0.85) {
         p.px(x, y, shade(0x46622e, 0.8 + p.rng() * 0.4));
       }
-    }
-    for (let i = 0; i < 7; i++) {
-      const x = 3 + ((p.rng() * 10) | 0), y = 7 + ((p.rng() * 7) | 0);
-      p.px(x, y, '#2c3460'); p.px(x + 1, y, '#3a4480');
     }
   },
   [TILE.RANGE_FRONT](p) {
@@ -311,7 +307,7 @@ const TILE_PAINTERS = {
   },
   [TILE.FERN](p) {
     p.clear();
-    // lush green shuttlecock fronds — greener an' fuller than t' rusty bracken
+    // lush green shuttlecock fronds wi' fiddlehead curls at t' tip
     for (let i = 0; i < 6; i++) {
       const x = 2 + ((p.rng() * 12) | 0);
       const h = 9 + ((p.rng() * 6) | 0);
@@ -326,23 +322,44 @@ const TILE_PAINTERS = {
           if (p.rng() < 0.7) p.px(sx + dx, yy + (dx > 1 ? 1 : 0), shade(0x4f7e38, 0.8 + p.rng() * 0.35));
         }
       }
+      // fiddlehead curl at t' tip: a tight 4-5 pixel spiral
+      const tipX = Math.round(x + lean * (h - 1));
+      const tipY = T - h;
+      const curl = shade(0x2d5a20, 1);
+      p.px(tipX,     tipY,     curl);
+      p.px(tipX + 1, tipY,     curl);
+      p.px(tipX + 1, tipY + 1, shade(0x3a6e2a, 1));
+      p.px(tipX,     tipY + 1, shade(0x3a6e2a, 1));
+      p.px(tipX,     tipY + 2, shade(0x4f7e38, 0.9));
     }
   },
   [TILE.FOXGLOVE](p) {
     p.clear();
-    // tall stem wi' a one-sided spire o' purple bells
-    for (let i = 0; i < 3; i++) {
-      const x = 3 + ((p.rng() * 10) | 0);
-      const h = 11 + ((p.rng() * 4) | 0);
+    // tall spike wi' a graduated one-sided column o' purple bells — visibly different from heather
+    for (let i = 0; i < 2; i++) {
+      const x = 4 + ((p.rng() * 8) | 0);
+      const h = 13 + ((p.rng() * 2) | 0); // tall: 13-14 px
+      // full-length stem
       for (let y = 0; y < h; y++) p.px(x, T - 1 - y, shade(0x3c5a2a, 0.85 + p.rng() * 0.3));
-      p.px(x - 1, T - 2, shade(0x46682e, 1)); p.px(x + 1, T - 1, shade(0x46682e, 1));
-      const top = T - h;
-      for (let y = top; y < top + Math.floor(h * 0.55); y++) {
-        const side = (y % 2 === 0) ? -1 : 1;
-        p.px(x + side, y, shade(0x9a3f9e, 0.85 + p.rng() * 0.3));
-        if (p.rng() < 0.6) p.px(x + side * 2, y, shade(0xb060b8, 1));
+      // basal rosette leaves
+      p.px(x - 2, T - 2, shade(0x46682e, 1)); p.px(x + 2, T - 1, shade(0x46682e, 1));
+      p.px(x - 1, T - 3, shade(0x3c5a2a, 0.9)); p.px(x + 1, T - 2, shade(0x3c5a2a, 0.9));
+      // bells: graduated size — larger at base o' spike, smaller toward tip, always on same side
+      const bellStart = T - h;
+      const bellLen = Math.floor(h * 0.65);
+      for (let b = 0; b < bellLen; b++) {
+        const by = bellStart + b;
+        const bellW = Math.max(1, Math.round(2.2 - b * 1.6 / bellLen)); // tapers from 2 to 1
+        const bellC = shade(0x9a3f9e, 0.8 + p.rng() * 0.35);
+        const innerC = shade(0xc060c8, 0.9 + p.rng() * 0.2);
+        if (b % 2 === 0) { // alternate rows for clear bell spacing
+          for (let bx = 1; bx <= bellW + 1; bx++) p.px(x + bx, by, bellC);
+          p.px(x + 1, by, innerC); // lighter inner
+          if (bellW > 0) p.px(x + 2, by, innerC);
+        }
       }
-      p.px(x, top, '#c878c8'); // pale bud at t' tip
+      p.px(x, bellStart,     '#d890d8'); // pale closed bud at t' very tip
+      p.px(x, bellStart + 1, '#c070c0');
     }
   },
   [TILE.DOG_ROSE](p) {
@@ -463,6 +480,164 @@ const TILE_PAINTERS = {
       p.rect(x, y, 2, 2, '#e6e6fa'); p.px(x, y, '#ffffff'); p.px(x+1, y+1, '#f8f8ff');
     }
   },
+  [TILE.BRAMBLE](p) {
+    p.clear();
+    for (let i = 0; i < 9; i++) { let x = 2 + ((p.rng()*12)|0), y = T-1; const h = 8 + ((p.rng()*6)|0);
+      for (let s = 0; s < h; s++) { p.px(x&15, y, shade(0x2f4a24, 0.8 + p.rng()*0.4)); y--; x += p.rng()<0.5?0:(p.rng()<0.5?-1:1); } }
+    p.dots(0x213518, 16);
+  },
+  [TILE.SNOWDROP](p) {
+    p.clear();
+    // short green stem wi' a small white nodding bell near t' top
+    for (let i = 0; i < 3; i++) {
+      const x = 4 + ((p.rng() * 8) | 0);
+      const h = 7 + ((p.rng() * 4) | 0);
+      for (let y = 0; y < h; y++) p.px(x, T - 1 - y, shade(0x3a6028, 0.85 + p.rng() * 0.3));
+      // nodding bell: stem droops slightly at t' tip, bell hangs down
+      const tipY = T - h;
+      const bx = x + 1;
+      p.px(bx,     tipY,     shade(0x3a6028, 0.8)); // drooping pedicel
+      p.px(bx,     tipY + 1, '#e8e8e8');            // outer bell
+      p.px(bx + 1, tipY + 1, '#f0f0f0');
+      p.px(bx,     tipY + 2, '#d8d8d8');            // inner shadow
+      p.px(bx + 1, tipY + 2, '#e0e0e0');
+      p.px(bx,     tipY + 3, '#c8eab4');            // green tip o' t' ovary
+    }
+  },
+  [TILE.DAFFODIL](p) {
+    p.clear();
+    // taller green stem wi' a yellow trumpet flower
+    for (let i = 0; i < 3; i++) {
+      const x = 3 + ((p.rng() * 10) | 0);
+      const h = 10 + ((p.rng() * 4) | 0);
+      for (let y = 2; y < h; y++) p.px(x, T - 1 - y, shade(0x3a6028, 0.85 + p.rng() * 0.3));
+      // narrow strap leaves alongside t' stem
+      if (p.rng() < 0.7) p.px(x - 1, T - 3, shade(0x4a7030, 0.9));
+      // trumpet: pale-yellow outer petals + orange-yellow cup
+      const tx = x, ty = T - h - 1;
+      p.px(tx - 1, ty,     '#f2dc70'); // outer petals
+      p.px(tx + 1, ty,     '#f2dc70');
+      p.px(tx,     ty - 1, '#ede060');
+      p.px(tx - 1, ty + 1, '#ece858');
+      p.px(tx + 1, ty + 1, '#ece858');
+      p.px(tx,     ty,     '#e8a020'); // central cup — deeper orange
+      p.px(tx,     ty + 1, '#f0b830');
+    }
+  },
+  [TILE.WILDFLOWER](p) {
+    p.clear();
+    // small meadow tuft wi' flower dots in mixed warm hues
+    for (let i = 0; i < 8; i++) {
+      const x = 2 + ((p.rng() * 12) | 0);
+      const h = 4 + ((p.rng() * 7) | 0);
+      for (let y = 0; y < h; y++) p.px(x, T - 1 - y, shade(0x4a6a2e, 0.8 + p.rng() * 0.4));
+    }
+    // scattered flower heads in warm varied hues
+    for (let i = 0; i < 6; i++) {
+      const fx = 2 + ((p.rng() * 12) | 0), fy = 2 + ((p.rng() * 9) | 0);
+      const hue = p.rng();
+      let col;
+      if (hue < 0.25)      col = shade(0xd44060, 0.9 + p.rng() * 0.2);  // pink-red
+      else if (hue < 0.5)  col = shade(0xe8a020, 0.9 + p.rng() * 0.2);  // amber
+      else if (hue < 0.75) col = shade(0xcc50cc, 0.9 + p.rng() * 0.2);  // purple
+      else                 col = shade(0xf0dc40, 0.9 + p.rng() * 0.2);  // yellow
+      p.px(fx, fy, col);
+      p.px(fx + 1, fy, col);
+    }
+  },
+  [TILE.BRAMBLE_FLOWER](p) {
+    p.clear();
+    // tiny white 5-petal blossom sprite, centred
+    const cx = 8, cy = 8;
+    // 5 petals arranged round t' centre
+    const petals = [[-1,-2],[1,-2],[-2,0],[2,0],[0,2]];
+    for (const [dx, dy] of petals) {
+      p.px(cx + dx, cy + dy, '#f0f0f4');
+      p.px(cx + dx + (dx > 0 ? 1 : 0), cy + dy, '#e0e0ea');
+    }
+    p.px(cx, cy, '#f8e060');     // yellow centre
+    p.px(cx - 1, cy, '#f0f0f4');
+    p.px(cx + 1, cy, '#f0f0f4');
+    p.px(cx, cy - 1, '#f0f0f4');
+    p.px(cx, cy + 1, '#f0f0f4');
+    // short green stems below
+    for (let i = 0; i < 3; i++) {
+      const sx = 5 + ((p.rng() * 6) | 0);
+      for (let y = cy + 3; y < T - 1; y++) p.px(sx, y, shade(0x3a6028, 0.85 + p.rng() * 0.3));
+    }
+  },
+  [TILE.BLACKBERRY](p) {
+    p.clear();
+    // short green stems
+    for (let i = 0; i < 5; i++) {
+      const x = 3 + ((p.rng() * 10) | 0), h = 4 + ((p.rng() * 5) | 0);
+      for (let y = 0; y < h; y++) p.px(x, T - 1 - y, shade(0x2f4a24, 0.8 + p.rng() * 0.4));
+    }
+    // cluster o' dark purple-black berries
+    for (let i = 0; i < 8; i++) {
+      const bx = 2 + ((p.rng() * 12) | 0), by = 3 + ((p.rng() * 9) | 0);
+      const dark = p.rng() < 0.5;
+      p.px(bx,     by,     dark ? '#1c1230' : '#2e1d4a');
+      p.px(bx + 1, by,     dark ? '#2e1d4a' : '#3a2860');
+      p.px(bx,     by + 1, dark ? '#241840' : '#1c1230');
+      p.px(bx + 1, by + 1, '#1a1028');
+    }
+    p.dots(0x1c1230, 6);
+  },
+  [TILE.BILBERRY_FRUIT](p) {
+    p.clear();
+    // short leafy green stems
+    for (let i = 0; i < 5; i++) {
+      const x = 3 + ((p.rng() * 10) | 0), h = 4 + ((p.rng() * 4) | 0);
+      for (let y = 0; y < h; y++) p.px(x, T - 1 - y, shade(0x46622e, 0.8 + p.rng() * 0.4));
+    }
+    // a few small blue-black bilberries
+    for (let i = 0; i < 6; i++) {
+      const bx = 3 + ((p.rng() * 10) | 0), by = 3 + ((p.rng() * 8) | 0);
+      p.px(bx,     by,     '#2c3460');
+      p.px(bx + 1, by,     '#3a4480');
+      p.px(bx,     by + 1, '#242c54');
+      p.px(bx + 1, by + 1, '#2c3460');
+    }
+  },
+  [TILE.HOLLY](p) {
+    p.clear();
+    // spiky dark-green evergreen leaves wi' jagged edges — no berries
+    for (let i = 0; i < 5; i++) {
+      const cx = 3 + ((p.rng() * 10) | 0), cy = 3 + ((p.rng() * 10) | 0);
+      const w = 3 + ((p.rng() * 3) | 0), h = 4 + ((p.rng() * 3) | 0);
+      // leaf body
+      for (let dy = 0; dy < h; dy++) for (let dx = -w; dx <= w; dx++) {
+        const inside = Math.abs(dx) <= w - Math.abs(dy - h / 2) * 0.9;
+        if (inside && p.rng() < 0.88) p.px(cx + dx, cy + dy, shade(0x1a4a1a, 0.8 + p.rng() * 0.4));
+      }
+      // jagged spine tips — alternating spikes along edge
+      for (let sp = 0; sp < 3; sp++) {
+        const sx = cx - w + sp * w; const sy = cy + ((sp % 2 === 0) ? 0 : h - 1);
+        p.px(sx, sy, shade(0x0e3010, 1));  // dark spike tip
+      }
+      // midrib
+      for (let dy = 0; dy < h; dy++) p.px(cx, cy + dy, shade(0x2a6028, 0.9));
+    }
+    p.dots(0x0e3010, 8);
+  },
+  [TILE.HOLLY_BERRY](p) {
+    p.clear();
+    // dark green leaf background
+    for (let y = 4; y < T; y++) for (let x = 1; x < 15; x++) {
+      if (p.rng() < 0.55) p.px(x, y, shade(0x1a4a1a, 0.75 + p.rng() * 0.4));
+    }
+    // cluster o' bright red berries
+    for (let i = 0; i < 7; i++) {
+      const bx = 2 + ((p.rng() * 11) | 0), by = 2 + ((p.rng() * 9) | 0);
+      const bright = p.rng() < 0.5;
+      p.px(bx,     by,     bright ? '#e03030' : '#c01818');
+      p.px(bx + 1, by,     bright ? '#f04040' : '#d82020');
+      p.px(bx,     by + 1, '#c01818');
+      p.px(bx + 1, by + 1, '#a81010');
+      p.px(bx,     by,     '#ff6060'); // specular highlight
+    }
+  },
 };
 
 let atlasCanvas = null;   // the LIVE atlas (may be season-tinted)
@@ -493,7 +668,7 @@ export function buildAtlas() {
 }
 
 // ---- seasonal re-tint o' t' growing things (re-paints tiles in place; no chunk re-mesh) ----
-const SEASON_TILES = [TILE.GRASS_TOP, TILE.GRASS_SIDE, TILE.HEATHER, TILE.BRACKEN, TILE.FERN, TILE.BILBERRY, TILE.GORSE, TILE.LEAVES, TILE.MONKEY_LEAVES];
+const SEASON_TILES = [TILE.GRASS_TOP, TILE.GRASS_SIDE, TILE.HEATHER, TILE.BRACKEN, TILE.FERN, TILE.BILBERRY, TILE.GORSE, TILE.LEAVES, TILE.MONKEY_LEAVES, TILE.BRAMBLE];
 function blendPx(d, i, r, g, b, amt) {
   d[i] += (r - d[i]) * amt; d[i + 1] += (g - d[i + 1]) * amt; d[i + 2] += (b - d[i + 2]) * amt;
 }
@@ -522,6 +697,9 @@ export function seasonShiftPx(tile, d, i, s) {
     desatPx(d, i, winter * 0.45); blendPx(d, i, 120, 100, 74, winter * 0.4); // winter: brown, bare-looking
   } else if (tile === TILE.MONKEY_LEAVES) {
     desatPx(d, i, winter * 0.18);                        // evergreen: only a faint winter frost
+  } else if (tile === TILE.BRAMBLE) {
+    blendPx(d, i, 96, 132, 58, s.greenness * 0.18);                         // spring/summer green
+    desatPx(d, i, winter * 0.5); blendPx(d, i, 110, 92, 64, winter * 0.5);  // winter die-back: brown/bare
   }
 }
 export function retintAtlasForSeason(season) {

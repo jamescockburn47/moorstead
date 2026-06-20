@@ -52,5 +52,11 @@ const GRASS = [90, 120, 55];    // a grass base
   (spread(grassWinter) < spread(grassSummer) ? ok : bad)('winter grass is paler/desaturated vs summer');
 }
 
+{
+  const shiftB = (phase) => { const d = [70,100,45,255]; seasonShiftPx(TILE.BRAMBLE, d, 0, seasonStateAtPhase(phase)); return d; };
+  const summer = shiftB(0.375), winter = shiftB(0.875);
+  (winter[1] - winter[2] < summer[1] - summer[2] ? ok : bad)('brambles die back browner in winter than summer');
+}
+
 console.log('\nRESULT: ' + (failed ? 'FAIL' : 'PASS'));
 process.exit(failed ? 1 : 0);
