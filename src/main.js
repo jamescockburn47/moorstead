@@ -11,7 +11,7 @@ import { World } from './world.js';
 import { Player } from './player.js';
 import * as npc from './npc.js';
 import { Quests } from './quests.js';
-import { Economy, bestMarket, FREIGHT_ALLOWANCE } from './economy.js';
+import { Economy, bestMarket, FREIGHT_ALLOWANCE, farmRegisterCheck, CHARTER_FEE } from './economy.js';
 import { commandFromKey } from './herding.js';
 import { Milestones } from './milestones.js';
 import { Net } from './multiplayer.js';
@@ -1592,6 +1592,45 @@ class Game {
     const close = ui.el('button', 'mc', ui.boardPanel, 'Not today, ta');
     close.addEventListener('click', () => this.closeScreens());
     ui.show('boardScreen');
+  }
+
+  // ---- Slice 2: registered farm status ----
+  // Head of penned stock the player keeps (sheep for now; Slice 4 widens the kinds).
+  farmHeadCount() {
+    return (this.player.pets || []).filter(p => p && p.kind === 'sheep').length;
+  }
+
+  // Is the player stood at the market town (Moorstead) — where a farm is registered?
+  atMarketTown() {
+    const geo = this.world.gen.geo;
+    const m = geo.villages.find(v => /moorstead/i.test(v.name));
+    if (!m) return false;
+    const p = this.player.pos;
+    return Math.hypot(m.x - p.x, m.z - p.z) <= 70; // within Moorstead's bounds
+  }
+
+  // Register the farm: a deliberate, paid choice at the Moorstead board. Returns true on success.
+  registerFarm() {
+    const r = farmRegisterCheck({
+      head: this.farmHeadCount(),
+      registered: this.player.farmStatus.registered,
+      brass: this.economy.balance,
+      atMarket: this.atMarketTown(),
+    });
+    if (!r.ok) {
+      const msg = r.reason === 'already' ? 'Tha&rsquo;s already a registered farmer.'
+        : r.reason === 'short' ? `Tha needs <b>${r.need}</b> head penned to register &mdash; tha&rsquo;s ${r.have}.`
+        : r.reason === 'away' ? 'Tha registers a farm at <b>Moorstead</b>&rsquo;s notice board.'
+        : `T&rsquo; charter&rsquo;s <b>${this.economy.format(r.fee)}</b> &mdash; tha&rsquo;s not got it just yet.`;
+      this.ui.toast(msg, 5000);
+      return false;
+    }
+    this.economy.spend(CHARTER_FEE);
+    this.player.farmStatus.registered = true;
+    this.ui.toast('🌾 <b>Tha&rsquo;s a registered farmer o&rsquo; Moorstead parish now!</b>', 7000);
+    if (this.milestones) this.milestones.fire('farm_registered');
+    if (this.saveNow) this.saveNow(false);
+    return true;
   }
 
   // ---- moorland ponies: a rideable mount 'twixt shanks's pony an' t' railway ----
