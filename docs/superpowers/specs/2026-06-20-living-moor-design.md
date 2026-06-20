@@ -37,6 +37,7 @@ Edits inside an **active deed** are the exception (§6): a land **claim** protec
 
 Harvest and dig edits expire on a **per-category, per-block lifespan** (game-days; tuning in §14):
 - **Fast (days):** heather, bracken, bilberry and other moor plants (cutouts) — the moor's green comes back quickly.
+- **Moderate (a week or so):** **peat** cut from the boggy tops (surface turbary, §5) — the bank regrows, so the bog is never cut bare for good.
 - **Slow (a week or two):** trees (felled logs/leaves regenerate from the seed's wood placement).
 - **Slow (a week+):** a **surface scrape** (the 1-block dig allowed in open ground) backfills. *Deep* excavation only exists inside a licensed mine, where it **persists while you pay** and **refills only when the mine lapses** (§5, §7) — the seam you opened doesn't grow back under you, but an abandoned mine caves in.
 
@@ -51,7 +52,8 @@ Open-cast is prevented **structurally**, not by healing (James's design):
 - **Depth = an investment ladder (better picks + paid kit — James's call).** The envelope descends in **depth bands**, each gated by BOTH a minimum **pick tier** (wood → gritstone → iron) AND an installed, **purchased fixture** (pit-props → safety lamp → winch). To break below a band's floor you must hold the band's pick *and* have its fixture installed in the mine. Cost rises with depth, matching the ore-value gradient: the **shallow coal** band is cheap and accessible (a cheap licence + a wood pick — a child's first mine isn't over-gated), while the **deep jet** band (`y<20`) demands the iron pick + the dear fixtures. "Deep mining must become more difficult" falls straight out.
 - **Healing still applies at the surface; an abandoned mine caves in.** A one-block surface scrape is a `dig` edit and regrows (§4). The mine's own works persist while the licence is paid, and **reclaim if it lapses** (§7) — leave a mine untended and it falls in.
 
-**The ore palette (researched — real North York Moors workings; §15).** Distributed by region + depth so each maps to a historical industry:
+**The resource palette (researched — real North York Moors workings; §15).** Distributed by region + depth, from the free surface down to the licensed deeps:
+- **Peat** *(surface, no licence)* — cut at grade from the boggy tops (blanket bog, `bogginess`), the moor's traditional fuel (turbary); the **lowest-priced** good and the accessible bottom of the ladder. Regrows (§4). *(a block in game as fuel; gains a surface-cut + a price)*
 - **Coal** — thin, poor moor seams worked 18th–20thC; the cheap, shallow entry band. *(in game)*
 - **Cleveland ironstone** — the great 19thC Cleveland/Rosedale/Grosmont seams; the mid-depth industrial staple. *(in game)*
 - **Whitby jet** — Britain's only jet, in coastal shale; the historic luxury prize — deep + skill-gated. *(in game)*
@@ -99,6 +101,7 @@ No mechanic ships without its in-game telling (the project rule):
 - **`src/ui.js`** — the claims/deed panel + upkeep on the parish board; handbook section.
 - **`src/defs.js` / `src/textures.js`** — new blocks/items: the **mine-entrance** block, the depth-band **fixtures** (pit-props, safety lamp, winch), and the new ores + products (**alum shale**, **potash/polyhalite**, rock salt).
 - **`src/worldgen.js` `oreAt`** — gains the new ores by region + depth (alum shale in the coastal cliffs; potash/polyhalite deep at the NE/Boulby coast), a **skill-scaled richness threshold** (the precious finds need `miningSkill`), and a **worked-out thinning** of ore near old workings (reframing today's `nearKilns` boost). Existing coal/iron/jet seam depths stay.
+- **`src/geography.js` / `src/worldgen.js`** — harvestable **peat** banks at the surface on the boggy tops (the existing `bogginess`), cut at grade (a `harvest` edit that regrows). **`src/economy.js`** — `B.PEAT` gains the **lowest** price (the cheap bulk fuel / trade good).
 - **`src/player.js`** — `miningSkill` (mining XP) persisted in serialize/deserialize.
 
 Isolation: the decision logic (categories, lifespans, expiry, claim membership, fees, upkeep) is one pure module (`editledger.js`); world.js, the relay, and the UI are thin consumers. The client and relay run the **same** pure rules (ported), so they cannot diverge.
@@ -130,7 +133,7 @@ Isolation: the decision logic (categories, lifespans, expiry, claim membership, 
 ## 13. Build slices (one spec, sliced builds)
 
 Each its own plan → implementation → deploy, in order:
-- **Slice 1 — the ledger + flora/ore regrowth:** `editledger.js` (pure + headless) + edit metadata + client expiry generalising the beach-revert. Proves "the moor heals" single-player.
+- **Slice 1 — the ledger + flora/ore regrowth:** `editledger.js` (pure + headless) + edit metadata + client expiry generalising the beach-revert; surface **peat** banks (cut at grade + regrow + lowest price). Proves "the moor heals" single-player.
 - **Slice 2 — the deeds backbone:** the pure deed record + helpers (fee, upkeep, membership, lapse) + the deeds store + the stake / settle-up UI. Abstract; serves both claims and mine licences.
 - **Slice 3 — land claims (homesteads):** apply deeds to surface land — build-edit protection + lapse → gradual reclamation + warnings.
 - **Slice 4 — licensed mining:** the mine-entrance block + the 1-block-deep hard rule + the shaft envelope + depth bands (pick tier + purchased fixtures) + the mining cues. Applies deeds underground. Includes the **researched ore palette** (alum coastal, potash/polyhalite deepest), the **prospecting skill** (precious finds need `miningSkill`), and **free-but-exhausted old workings**.
@@ -151,6 +154,7 @@ h. **Relay role (to confirm at Slice 5 spec time):** `server.py` currently store
 i. **Ore palette (researched, §15):** coal (shallow) · Cleveland ironstone (mid) · Whitby jet (deep, precious) · NEW alum shale (coastal cliff) · NEW potash/polyhalite + rock salt (deepest, Boulby NE coast — the modern precious prize). Distributed by region + depth; exact placement + yields tuned at build.
 j. **Prospecting skill (James's call):** a `miningSkill` (XP from mining) gates the *precious* finds (jet, polyhalite) — a novice finds bare rock where an expert reads the seam; the deepest prize needs licence + equipment + skill.
 k. **Old workings free but exhausted (James's call):** pre-existing mine structures are free to explore (already cut, no licence), but their seams are worked out (sparse ore near old workings, reframing `nearKilns`); real yield needs a new licensed mine.
+l. **Peat (surface, James's call):** harvestable peat banks on the boggy tops (`bogginess`), cut at grade with **no licence** (the accessible entry), the **lowest-priced** good (cheap fuel/trade), regrowing as a `harvest` edit — completes the resource ladder below coal.
 
 ## 15. References (North York Moors mining history)
 
