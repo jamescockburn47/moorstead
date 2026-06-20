@@ -41,6 +41,7 @@ export function initMaterials() {
   };
   return atlas;
 }
+export function getMaterials() { return materials; }
 
 // Face tables (threejs voxel convention): two triangles 0,1,2 / 2,1,3
 const FACES = [
