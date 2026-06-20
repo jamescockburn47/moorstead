@@ -137,6 +137,7 @@ class Game {
     this.auth = JSON.parse(localStorage.getItem('moorcraft-auth') || 'null');
     this.refreshAdmin();
     this.ui.setLoggedIn(this.auth);
+    this.recordVisit('landing');
     this.ui.show('titleScreen');
 
     this.clock = new THREE.Clock();
@@ -954,6 +955,24 @@ class Game {
       localStorage.setItem('moorcraft-pid', pid);
     }
     return pid;
+  }
+
+  // Once-per-session landing ping so the parish ledger can count site visits.
+  recordVisit(event = 'landing') {
+    const key = `moorstead-visit-${event}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, '1');
+    } catch { /* private browsing */ }
+    fetch('/dash/visit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pid: this.devicePid(),
+        name: (this.auth && this.auth.name) || '',
+        event,
+      }),
+    }).catch(() => {});
   }
 
   playerId() {

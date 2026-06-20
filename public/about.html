@@ -504,7 +504,7 @@
   <ul>
     <li><strong>No download.</strong> There is no installer, no <code>.exe</code>, no app store package, and no browser extension. You play in a normal tab.</li>
     <li><strong>No access to your files.</strong> The game cannot read your documents, photos, or other folders. It uses only what browsers allow games to use: memory, graphics, and optional local storage inside the browser.</li>
-    <li><strong>No ads or trackers.</strong> There are no advertising networks, analytics pixels, or social-media widgets in the client. The shipped code is my JavaScript plus the Three.js graphics library.</li>
+    <li><strong>No ads or third-party trackers.</strong> There are no advertising networks, analytics pixels, or social-media widgets. The client sends a once-per-session landing ping to my server (browser id only) so I can see who visited; see below.</li>
     <li><strong>No cryptocurrency or background mining.</strong> Nothing in the client hashes coins or runs hidden work when the tab is closed.</li>
     <li><strong>Network use is limited.</strong> If you play solo on your own seed, after the first load the world can run from your browser alone. Multiplayer, villager chat, and login talk to my home server. Weather optionally reads a public forecast for Goathland.</li>
   </ul>
@@ -523,6 +523,7 @@
   <h2>What I collect (and why)</h2>
   <p>If you only play solo worlds, I see nothing. If you use the shared moor or villager chat, I necessarily see some session data to run the service and keep order:</p>
   <ul>
+    <li><strong>Site landing</strong> — once per browser session when you open the game: a browser device id and optional display name (if logged in). No page URLs or referrer tracking.</li>
     <li><strong>Login / invite claim</strong> — your invite code (validated once), chosen display name, and a browser device id, to bind your account and world room.</li>
     <li><strong>Session heartbeat</strong> — about once a minute while playing: coarse progress (day count, standing, location name), display name, and your IP address as seen by the server.</li>
     <li><strong>Multiplayer chat</strong> — in-world speech within ~60 metres is logged on the server with timestamp, name, position, and text (profanity filtered). This is the audit trail for moderation.</li>

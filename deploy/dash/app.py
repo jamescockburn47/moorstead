@@ -1,7 +1,7 @@
 """Moorstead parish ledger — players, login codes, and full EVO diagnostics.
 
-:8095 on LAN/Tailscale only. The Cloudflare tunnel routes just two endpoints
-here (POST /ping, POST /auth/claim); the dashboard and admin data never leave
+:8095 on LAN/Tailscale only. The Cloudflare tunnel routes three public endpoints
+here (POST /ping, POST /auth/claim, POST /visit); the dashboard UI never leaves
 the house.
 """
 import hashlib
@@ -22,6 +22,7 @@ DASH = ROOT / "dash"
 DASH.mkdir(exist_ok=True)
 PLAYERS_F = DASH / "players.json"
 SESSIONS_F = DASH / "sessions.json"
+VISITS_F = DASH / "visits.json"
 CODES_F = DASH / "codes.json"
 ACCOUNTS_F = DASH / "accounts.json"
 WS_TOKENS_F = DASH / "ws_tokens.json"
@@ -34,6 +35,7 @@ ROOM_CAP = 15
 
 PID_RE = re.compile(r"^[a-z0-9-]{4,40}$")
 CODE_RE = re.compile(r"^[a-z]+-[a-z]+-\d{2}$")
+ROOM_RE = re.compile(r"^[a-z0-9-]{1,24}$")
 
 app = FastAPI()
 
@@ -49,6 +51,61 @@ def _save(p, data):
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=1))
     tmp.replace(p)
+
+
+def _utc_day(ts=None):
+    return time.strftime("%Y-%m-%d", time.gmtime(ts or time.time()))
+
+
+def _client_ip(req):
+    return (req.headers.get("x-forwarded-for", "").split(",")[0].strip()
+            or (req.client.host if req.client else "?"))
+
+
+def _record_visit(pid, ip, name="", event="landing"):
+    if not PID_RE.match(pid):
+        return
+    now = time.time()
+    day = _utc_day(now)
+    players = _load(PLAYERS_F, {})
+    p = players.setdefault(pid, {"first": now, "names": [], "minutes": 0, "worlds": {},
+                                 "visits": 0, "visitDays": []})
+    p["last"] = now
+    p["lastIp"] = ip
+    if event == "landing":
+        p["landings"] = p.get("landings", 0) + 1
+        p["lastLanding"] = now
+    elif event == "login":
+        p["logins"] = p.get("logins", 0) + 1
+    days = list(p.get("visitDays") or [])
+    if day not in days:
+        days.append(day)
+        p["visitDays"] = days[-120:]
+    p["visits"] = p.get("visits", 0) + 1
+    if name and name not in p.get("names", []):
+        p["names"] = (p.get("names", []) + [name])[-5:]
+    _save(PLAYERS_F, players)
+    log = _load(VISITS_F, [])
+    log.append({"ts": now, "pid": pid, "name": name[:24], "event": event, "ip": ip})
+    _save(VISITS_F, log[-2000:])
+
+
+def _player_stats(players, now):
+    today = _utc_day(now)
+    week_cut = _utc_day(now - 7 * 86400)
+    month_cut = _utc_day(now - 30 * 86400)
+    st = {"total": len(players), "today": 0, "week": 0, "month": 0, "returning": 0}
+    for p in players.values():
+        days = p.get("visitDays") or []
+        if today in days:
+            st["today"] += 1
+        if any(d >= week_cut for d in days):
+            st["week"] += 1
+        if any(d >= month_cut for d in days):
+            st["month"] += 1
+        if len(days) > 1 or p.get("visits", 0) > 1:
+            st["returning"] += 1
+    return st
 
 
 def _room_for_code(code, entry, acct):
@@ -144,10 +201,35 @@ async def claim(req: Request):
     acct_id = hashlib.sha1(code.encode()).hexdigest()[:10]
     room = acct["room"]
     token = _mint_ws_token(code, acct_id, room, acct["name"])
+    if pid and PID_RE.match(pid):
+        _record_visit(pid, _client_ip(req), acct["name"], "login")
     return {"ok": True, "name": acct["name"],
             "room": room,
             "acct": acct_id,
             "token": token}
+
+
+@app.post("/api/setroom")
+async def setroom(req: Request):
+    """LAN-only: put a code/account in a world-room (moor, bairns, ...)."""
+    try:
+        d = await req.json()
+    except Exception:
+        return {"ok": False, "err": "bad request"}
+    code = str(d.get("code", "")).strip().lower()
+    room = str(d.get("room", "")).strip().lower()
+    if not CODE_RE.match(code) or not ROOM_RE.match(room):
+        return {"ok": False, "err": "bad code or room"}
+    codes = _load(CODES_F, {})
+    if code not in codes:
+        return {"ok": False, "err": "no such code"}
+    codes[code] = {"room": room}
+    _save(CODES_F, codes)
+    accounts = _load(ACCOUNTS_F, {})
+    if code in accounts:
+        accounts[code]["room"] = room
+        _save(ACCOUNTS_F, accounts)
+    return {"ok": True, "code": code, "room": room}
 
 
 # ---------------- heartbeat ----------------
@@ -187,6 +269,24 @@ async def ping(req: Request):
                              "croft": entry["croft"], "quests": entry["quests"],
                              "loc": entry["loc"], "last": time.time()}
     _save(PLAYERS_F, players)
+    return {"ok": True}
+
+
+@app.post("/visit")
+async def visit(req: Request):
+    """Once-per-session site landing beacon from the public client."""
+    try:
+        d = await req.json()
+    except Exception:
+        return {"ok": False}
+    pid = str(d.get("pid", ""))[:40].lower()
+    if not PID_RE.match(pid):
+        return {"ok": False}
+    name = re.sub(r"[^\w \-']", "", str(d.get("name", "")))[:24]
+    event = str(d.get("event", "landing"))[:12]
+    if event not in ("landing", "login"):
+        event = "landing"
+    _record_visit(pid, _client_ip(req), name, event)
     return {"ok": True}
 
 
@@ -340,10 +440,14 @@ async def overview():
         pass
     accounts = _load(ACCOUNTS_F, {})
     codes = _load(CODES_F, {})
+    players = _load(PLAYERS_F, {})
+    recent_visits = list(reversed(_load(VISITS_F, [])[-40:]))
     return {
         "now": now,
         "live": list(live.values()),
-        "players": _load(PLAYERS_F, {}),
+        "players": players,
+        "stats": _player_stats(players, now),
+        "recentVisits": recent_visits,
         "visitors": _visitors_from_caddy(),
         "conversations": _conversations(),
         "brain": brain, "llm": llm,
@@ -353,6 +457,9 @@ async def overview():
         "codes": {"total": len(codes),
                   "claimed": len(accounts),
                   "names": sorted(a["name"] for a in accounts.values())},
+        "accounts": sorted([{"code": c, "name": a.get("name", "?"),
+                             "room": a.get("room", "moor"), "last": a.get("last", 0)}
+                            for c, a in accounts.items()], key=lambda x: -x["last"]),
     }
 
 
@@ -391,12 +498,30 @@ a{color:#9ec27a}
 <div class="sub">Players, natters an&rsquo; t&rsquo; health o&rsquo; t&rsquo; EVO. Refreshes every 15s. <a href="/api/codes">invite codes</a></div>
 <div id="content">Loading...</div>
 <script>
+async function setRoom(code, cur){
+  const room = prompt('World-room for '+code+' (moor = grown-ups, bairns = kids):', cur);
+  if(!room) return;
+  const r = await fetch('/api/setroom',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:code,room:room.trim().toLowerCase()})});
+  const d = await r.json();
+  alert(d.ok ? code+' -> '+d.room : ('nay: '+(d.err||'failed')));
+  location.reload();
+}
 const ago=(now,t)=>{const s=now-t;if(s<90)return Math.round(s)+'s ago';if(s<5400)return Math.round(s/60)+'m ago';if(s<90000)return (s/3600).toFixed(1)+'h ago';return Math.round(s/86400)+'d ago';};
 const bar=(v,max,hotAt)=>'<div class="bar"><i'+(v/max>(hotAt||0.85)?' class="hot"':'')+' style="width:'+Math.min(100,100*v/max)+'%"></i></div>';
 async function refresh(){
   const d=await (await fetch('/api/overview')).json();
   const s=d.sys||{}, t=d.talk||{};
   let h='';
+  const st=d.stats||{};
+  h+='<h2>Site visitors</h2><div class="cards">';
+  h+='<div class="card"><div class="v">'+st.total+'</div><div class="k">browsers ever seen</div></div>';
+  h+='<div class="card"><div class="v">'+st.today+'</div><div class="k">active today (UTC)</div></div>';
+  h+='<div class="card"><div class="v">'+st.week+'</div><div class="k">active last 7 days</div></div>';
+  h+='<div class="card"><div class="v">'+st.returning+'</div><div class="k">returning visitors</div></div>';
+  h+='</div>';
+  h+='<h2>Recent site activity</h2><table><tr><th>When</th><th>Event</th><th>Name</th><th>IP</th><th>Browser id</th></tr>';
+  for(const v of (d.recentVisits||[])) h+='<tr><td>'+ago(d.now,v.ts)+'</td><td>'+v.event+'</td><td>'+(v.name||'(anon)')+'</td><td>'+v.ip+'</td><td class="pid">'+v.pid.slice(0,12)+'</td></tr>';
+  h+='</table>';
   h+='<h2>EVO diagnostics</h2><div class="cards">';
   if(s.load) h+='<div class="card"><div class="v">'+s.load[0]+'</div><div class="k">CPU load (1m) / '+s.cores+' cores</div>'+bar(s.load[0],s.cores)+'</div>';
   if(s.memUsedGB!==undefined) h+='<div class="card"><div class="v">'+s.memUsedGB+' / '+s.memTotalGB+' GB</div><div class="k">system RAM</div>'+bar(s.memUsedGB,s.memTotalGB)+'</div>';
@@ -416,14 +541,16 @@ async function refresh(){
   for(const [k,v] of Object.entries(d.services)) h+='<tr><td>'+k+'</td><td class="'+(v==='active'?'ok':'bad')+'">'+v+'</td></tr>';
   h+='</table>';
   h+='<h2>Invites</h2><div class="cards"><div class="card"><div class="v">'+d.codes.claimed+' / '+d.codes.total+'</div><div class="k">codes claimed</div></div></div>';
-  if(d.codes.names.length) h+='<div class="muted" style="margin-top:6px">'+d.codes.names.join(' &middot; ')+'</div>';
+  if(d.accounts&&d.accounts.length){h+='<table><tr><th>Account</th><th>Code</th><th>World (room)</th><th>Last login</th><th></th></tr>';
+    for(const a of d.accounts) h+='<tr><td>'+a.name+'</td><td class="pid">'+a.code+'</td><td><b>'+a.room+'</b></td><td>'+ago(d.now,a.last)+'</td><td><button onclick="setRoom(&quot;'+a.code+'&quot;,&quot;'+a.room+'&quot;)">move</button></td></tr>';
+    h+='</table>';}
   h+='<h2>On t\\' moor now ('+d.live.length+')</h2>';
   if(!d.live.length) h+='<div class="muted">Nob&rsquo;dy out just now.</div>';
   else{h+='<table><tr><th>Name</th><th>Where</th><th>Day</th><th>Standing</th><th>Croft</th><th>Ventures</th><th>IP</th><th>Seen</th></tr>';
     for(const x of d.live) h+='<tr><td class="live">'+(x.name||'(nameless)')+'</td><td>'+x.loc+'</td><td>'+x.day+'</td><td>'+x.standing+'</td><td>'+x.croft+'/4</td><td>'+x.quests+'</td><td>'+x.ip+'</td><td>'+ago(d.now,x.ts)+'</td></tr>';h+='</table>';}
-  const ps=Object.entries(d.players).sort((a,b)=>b[1].last-a[1].last);
-  h+='<h2>All players ('+ps.length+')</h2><table><tr><th>Name(s)</th><th>Minutes</th><th>Worlds</th><th>Last IP</th><th>First</th><th>Last</th><th>id</th></tr>';
-  for(const [pid,p] of ps) h+='<tr><td>'+(p.names.join(', ')||'(nameless)')+'</td><td>'+p.minutes+'</td><td>'+Object.keys(p.worlds||{}).length+'</td><td>'+(p.lastIp||'')+'</td><td>'+ago(d.now,p.first)+'</td><td>'+ago(d.now,p.last)+'</td><td class="pid">'+pid.slice(0,12)+'</td></tr>';
+  const ps=Object.entries(d.players).sort((a,b)=>(b[1].visitDays?.length||0)-(a[1].visitDays?.length||0)||b[1].last-a[1].last);
+  h+='<h2>All browsers / players ('+ps.length+')</h2><div class="muted">Sorted by distinct visit days, then last seen. Minutes = in-world heartbeats only.</div><table><tr><th>Name(s)</th><th>Days</th><th>Visits</th><th>Landings</th><th>Minutes</th><th>Worlds</th><th>Last IP</th><th>First</th><th>Last</th><th>id</th></tr>';
+  for(const [pid,p] of ps) h+='<tr><td>'+(p.names.join(', ')||'(nameless)')+'</td><td>'+(p.visitDays?.length||0)+'</td><td>'+(p.visits||0)+'</td><td>'+(p.landings||0)+'</td><td>'+(p.minutes||0)+'</td><td>'+Object.keys(p.worlds||{}).length+'</td><td>'+(p.lastIp||'')+'</td><td>'+ago(d.now,p.first)+'</td><td>'+ago(d.now,p.last)+'</td><td class="pid">'+pid.slice(0,12)+'</td></tr>';
   h+='</table>';
   h+='<h2>Latest natters</h2>';
   for(const c of d.conversations.slice(0,8)){
@@ -434,7 +561,7 @@ async function refresh(){
       for(const m of ch.last) h+='<div class="'+(m.role==='user'?'you':'them')+'">'+(m.role==='user'?'&#9656; ':'&#9666; ')+m.text+'</div>';
       h+='</div>';}
     h+='</div>';}
-  h+='<h2>Visitors by IP</h2><table><tr><th>IP</th><th>Requests</th><th>First</th><th>Last</th></tr>';
+  h+='<h2>Backend traffic by IP</h2><div class="muted">Caddy log: brain / dash / ws API calls — not static Vercel page loads.</div><table><tr><th>IP</th><th>Requests</th><th>First</th><th>Last</th></tr>';
   for(const v of d.visitors.slice(0,30)) h+='<tr><td>'+v.ip+'</td><td>'+v.n+'</td><td>'+ago(d.now,v.first)+'</td><td>'+ago(d.now,v.last)+'</td></tr>';
   h+='</table>';
   document.getElementById('content').innerHTML=h;
