@@ -1338,6 +1338,39 @@ export class Entities {
     }
   }
 
+  // En-route risk: a droving sheep strung out far from thee strays off — slow by day, fast at
+  // neet, and a barghest in the dark will have her. Bunched + daytime = safe. You're paid for
+  // what ARRIVES; never a hard fail. (All four numbers are tuning — confirm live with James.)
+  droveRisk(dt, player, night) {
+    const STRAY_DIST = 22;        // strung-out threshold (m from the player)
+    const GRACE_DAY = 10;         // seconds strung out before a daytime stray is lost
+    const GRACE_NIGHT = 4;        // … much less after dark
+    const BARGHEST_REACH = 12;    // a night-thing this close to a strayed beast takes her at once
+    for (const m of this.mobs) {
+      if (!m || m.dead || !m.droving) continue;
+      const d = Math.hypot(m.pos.x - player.pos.x, m.pos.z - player.pos.z);
+      if (d <= STRAY_DIST) { m.strayT = 0; continue; }
+      m.strayT = (m.strayT || 0) + dt;
+      let lost = m.strayT > (night ? GRACE_NIGHT : GRACE_DAY);
+      let toBarghest = false;
+      if (night && !lost) {
+        for (const h of this.mobs) {
+          if (h.dead || h.type !== 'barghest') continue;
+          if (Math.hypot(h.pos.x - m.pos.x, h.pos.z - m.pos.z) < BARGHEST_REACH) { lost = true; toBarghest = true; break; }
+        }
+      }
+      if (lost) {
+        if (player.pets) player.pets = player.pets.filter(p => p.name !== m.petName);
+        m.dead = true; this.scene.remove(m.model.group);
+        if (this.game && this.game.ui) {
+          this.game.ui.toast(toBarghest
+            ? `🐺 A barghest had <b>${m.petName}</b> out o’ thi flock in t’ dark.`
+            : `<b>${m.petName}</b> strayed off on t’ moor — gone frae thi drove.`, 5000);
+        }
+      }
+    }
+  }
+
   // Find the player's fenced fold(s): for each gate nearby, flood-fill its open neighbours;
   // an enclosed fill is the fold interior. Cached in this.foldCells (cell keys "x,z"), used
   // by the one-way gate (an animal inside can't leave) and the pen trigger. Throttled.
@@ -1365,6 +1398,7 @@ export class Entities {
     this.foldScanT = (this.foldScanT || 0) - dt;
     if (this.foldScanT <= 0) { this.foldScanT = 0.5; this.foldScan(player); }
     this.herd(dt, player);
+    this.droveRisk(dt, player, isNight);
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
       this.spawnTimer = 1.2;
