@@ -1,6 +1,6 @@
 // Chunk storage, streaming, and block access.
 import { B, BLOCKS, CHUNK, HEIGHT, isLiquid, isSolid } from './defs.js';
-import { categoryOf, isExpired } from './editledger.js';
+import { categoryOf, isExpired, LIFESPAN } from './editledger.js';
 import { Gen } from './worldgen.js';
 import { buildChunkMeshes, disposeChunkMeshes } from './mesher.js';
 import { tileColor } from './textures.js';
@@ -131,6 +131,41 @@ export class World {
       n++;
     }
     return n;
+  }
+
+  // Gradual tree regrowth: a felled stump sprouts a sapling after the tree lifespan, and a sapling
+  // matures into a full tree after more days — so clear-felling leaves saplings (let woods recover).
+  growTrees(nowDay) {
+    for (const [k, felledDay] of this.treeRegrowth) {
+      if (nowDay - felledDay < LIFESPAN.tree) continue;
+      const [x, y, z] = k.split(',').map(Number);
+      if (!this.isLoaded(x, z)) continue;
+      if (this.getBlock(x, y, z) !== B.AIR || !isSolid(this.getBlock(x, y - 1, z))) { this.treeRegrowth.delete(k); continue; }
+      this.setBlock(x, y, z, B.LOG); this.setBlock(x, y + 1, z, B.LEAVES); // a wee sapling
+      this.saplings.set(k, nowDay);
+      this.treeRegrowth.delete(k);
+    }
+    for (const [k, sproutedDay] of this.saplings) {
+      const [x, y, z] = k.split(',').map(Number);
+      if (!this.isLoaded(x, z)) continue;
+      if (this.getBlock(x, y, z) !== B.LOG) { this.saplings.delete(k); continue; } // chopped — forget it
+      if (nowDay - sproutedDay < LIFESPAN.sapling) continue;
+      this.placeTree(x, y, z);
+      this.saplings.delete(k);
+    }
+  }
+
+  // Stamp a full oak (trunk + canopy) at a stump, modelled on worldgen's stampTree.
+  placeTree(x, y, z, th = 5) {
+    for (let i = 0; i < th; i++) this.setBlock(x, y + i, z, B.LOG);
+    for (let dy = 0; dy < 2; dy++) {
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+        if (dx === 0 && dz === 0 && dy === 0) continue;
+        const cx = x + dx, cy = y + th - 1 + dy, cz = z + dz;
+        if (this.getBlock(cx, cy, cz) === B.AIR) this.setBlock(cx, cy, cz, B.LEAVES);
+      }
+    }
+    if (this.getBlock(x, y + th + 1, z) === B.AIR) this.setBlock(x, y + th + 1, z, B.LEAVES);
   }
 
   // Stream chunks around t' player. Budgeted per frame.

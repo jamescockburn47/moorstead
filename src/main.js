@@ -297,6 +297,7 @@ class Game {
       this.sky.deserialize(meta.sky);
       this.quests.deserialize(meta.quests);
       this.world.editLedger = new Map(meta.editLedger || []); // regrowth picks up where it left off
+      this.world.treeRegrowth = new Map(meta.treeRegrowth || []); this.world.saplings = new Map(meta.saplings || []);
     } else if (this.auth && this.auth.name) {
       this.player.name = this.auth.name; // t' villagers already know thi name
     } else {
@@ -365,6 +366,7 @@ class Game {
       sky: this.sky.serialize(),
       quests: this.quests.serialize(),
       editLedger: [...this.world.editLedger], // harvest edits awaiting regrowth — so the moor heals across reloads
+      treeRegrowth: [...this.world.treeRegrowth], saplings: [...this.world.saplings], // tree regrowth in progress
       savedAt: Date.now(),
     };
     await saveGame(meta, this.world.collectModified());
@@ -2805,7 +2807,7 @@ class Game {
       this.processBeachReverts();
       // the moor heals: revert expired harvest edits once a game-day (cheap, day-scale regrowth)
       const regenDay = Math.floor(this.sky.day);
-      if (regenDay !== this._lastExpireDay) { this._lastExpireDay = regenDay; this.world.expireEdits(this.sky.day); }
+      if (regenDay !== this._lastExpireDay) { this._lastExpireDay = regenDay; this.world.expireEdits(this.sky.day); this.world.growTrees(this.sky.day); }
 
       // sky & weather
       const season = (this.seasonOverride != null)

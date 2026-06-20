@@ -13,7 +13,7 @@ const TERRAIN = new Set([B.STONE, B.DIRT, B.GRASS, B.GRAVEL, B.COBBLE, B.SAND]);
 // game-days a harvested resource takes to grow back. A day = 30 real min (DAY_LENGTH=1800), so these
 // are deliberately SLOW — healing must never be perceptible within a session (James's call). Start slow,
 // tune live by observation. These four are the regrowth tuning knobs.
-export const LIFESPAN = { plant: 6, tree: 24, ore: 24, peat: 12 };
+export const LIFESPAN = { plant: 6, tree: 24, ore: 24, peat: 12, sapling: 24 };
 
 export function categoryOf(was, newId) {
   if (newId !== B.AIR) return 'build';      // a placement
