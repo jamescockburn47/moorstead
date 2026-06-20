@@ -28,7 +28,7 @@ export class Footprints {
     this.rebuild(now);
   }
   rebuild(now) {
-    if (this.mesh) { this.scene.remove(this.mesh); this.mesh = null; }
+    if (this.mesh) { this.scene.remove(this.mesh); this.mesh.dispose(); this.mesh = null; }
     const live = this.buf.alive(now);
     if (!live.length) return;
     const mesh = new THREE.InstancedMesh(FOOT_GEOM, FOOT_MAT, live.length);
@@ -43,5 +43,5 @@ export class Footprints {
     this.scene.add(mesh);
     this.mesh = mesh;
   }
-  clear() { if (this.mesh) { this.scene.remove(this.mesh); this.mesh = null; } this.buf.prints.length = 0; }
+  clear() { if (this.mesh) { this.scene.remove(this.mesh); this.mesh.dispose(); this.mesh = null; } this.buf.prints.length = 0; }
 }

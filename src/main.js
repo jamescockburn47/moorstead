@@ -300,6 +300,7 @@ class Game {
     this.floraLayer = new FloraLayer(this.scene, this.world);
     if (this.footprints) this.footprints.clear();
     this.footprints = new Footprints(this.scene, this.world);
+    this.snowAccum = 0;
     this.entities.game = this;
     this.entities.onKill = mob => { this.quests.onMobKilled(mob); this.milestones.onKill(mob.type); };
     window.moorstead = window.moorcraft = this; // a handle for t' dev console
@@ -340,9 +341,10 @@ class Game {
     }
     // remove sky objects
     for (const o of [this.sky.sun, this.sky.sun.target, this.sky.ambient, this.sky.stars,
-      this.sky.clouds, this.sky.rain, this.sky.sunSprite, this.sky.moonSprite]) {
+      this.sky.clouds, this.sky.rain, this.sky.sunSprite, this.sky.moonSprite, this.sky.snow]) {
       this.scene.remove(o);
     }
+    if (this.sky.snow) { this.sky.snow.geometry.dispose(); this.sky.snow.material.map?.dispose(); this.sky.snow.material.dispose(); }
     this.scene.fog = null;
   }
 
