@@ -1,3 +1,5 @@
+import { escHtml } from './escape.js';
+
 // T' Shared Moor: one world for everyone, relayed through t' EVO.
 // Terrain is deterministic frae t' shared seed; t' server keeps block edits,
 // player positions an' a village chat line. (WebSockets can't ride Vercel
@@ -86,13 +88,14 @@ export class Net {
     };
   }
 
-  connect(room, pid, name) {
+  connect(room, pid, name, token) {
     this.diag.room = room; this.diag.pid = pid;
     if (!this.diag.sessionStart) this.diag.sessionStart = Date.now();
     clearTimeout(this.reTimer);
     this.log('connecting', { room, attempt: this.reconnectAttempt });
     return new Promise((resolve, reject) => {
-      const url = `${WS_BASE}/ws?room=${room}&pid=${encodeURIComponent(pid)}&name=${encodeURIComponent(name || 'rambler')}`;
+      let url = `${WS_BASE}/ws?room=${encodeURIComponent(room)}&pid=${encodeURIComponent(pid)}&name=${encodeURIComponent(name || 'rambler')}`;
+      if (token) url += `&token=${encodeURIComponent(token)}`;
       let settled = false;
       this.ws = new WebSocket(url);
       this.ws.onopen = () => {
@@ -113,6 +116,18 @@ export class Net {
         this.diag.lastMsgAt = Date.now();
         let m; try { m = JSON.parse(e.data); } catch { return; }
         if (m.type === 'time' && this.diag.pingAt) { this.diag.lastRtt = Date.now() - this.diag.pingAt; this.diag.pingAt = 0; }
+        if (m.type === 'full') {
+          this.game.ui?.toast(`T\u2019 room\u2019s full (${m.max} at once) \u2014 finding thee another patch o\u2019 moor\u2026`, 6000);
+          this.game.refreshAuth?.().then(() => {
+            const g = this.game;
+            if (g.netActive && g.auth?.room && g.auth.room !== this.diag.room) {
+              g.netRoom = g.auth.room;
+              g.ui?.toast(`Sent to <b>${escHtml(g.auth.room)}</b> where there\u2019s room.`, 5000);
+            }
+          });
+          if (!settled) { settled = true; reject(new Error('room full')); }
+          return;
+        }
         if (m.type === 'init') { this.onInit(m); if (!settled) { settled = true; resolve(m); } }
         else this.handle(m);
       };
@@ -131,12 +146,21 @@ export class Net {
         this.diag.lastDrop = rec; this.diag.lastCloseAt = now;
         this.log('close', rec);
         if (!settled) { settled = true; reject(new Error('ws closed')); }
+        if (ev.code === 4003 && this.game.ui) {
+          this.game.ui.toast('Thi session’s expired or isn’t welcome here — log in again wi’ thi invite.', 8000);
+          if (this.game.logout) this.game.logout();
+        }
         if (this.game.netActive) {
           this.reconnectAttempt = Math.min(this.reconnectAttempt + 1, 6);
           const delay = Math.min(30000, 800 * 2 ** (this.reconnectAttempt - 1)) + Math.random() * 700; // backoff + jitter
           this.log('reconnect-scheduled', { inMs: Math.round(delay), attempt: this.reconnectAttempt });
-          if (this.reconnectAttempt <= 1) this.game.ui.toast('Lost t’ thread to t’ shared moor — reconnecting…', 3500);
-          this.reTimer = setTimeout(() => { if (this.game.netActive) this.connect(room, pid, name).catch(() => {}); }, delay);
+          if (this.reconnectAttempt <= 1 && ev.code !== 4003) this.game.ui.toast('Lost t’ thread to t’ shared moor — reconnecting…', 3500);
+          if (ev.code !== 4003) this.reTimer = setTimeout(() => {
+            if (this.game.netActive) {
+              const t = this.game.auth && this.game.auth.token;
+              this.connect(room, pid, name, t).catch(() => {});
+            }
+          }, delay);
         }
       };
       this.ws.onerror = () => { this.log('error', 'ws error'); if (!settled) { settled = true; reject(new Error('ws failed')); } };
@@ -152,6 +176,9 @@ export class Net {
       g.world.netEdits.set(`${x},${y},${z}`, id);
       g.world.setBlock(x, y, z, id); // applies now if t' chunk's loaded
     }
+    if (m.deeds) {
+      g.world.deeds = m.deeds;
+    }
     for (const [pid, p] of Object.entries(m.players)) this.addRemote(pid, p.name, p);
     g.sky.time = m.time;
   }
@@ -162,6 +189,11 @@ export class Net {
       g.world.netEdits = g.world.netEdits || new Map();
       g.world.netEdits.set(`${m.x},${m.y},${m.z}`, m.id);
       g.world.setBlock(m.x, m.y, m.z, m.id);
+    } else if (m.type === 'deeds') {
+      g.world.deeds = m.deeds;
+      if (g.state === 'board' || g.ui.boardScreen.className.indexOf('hidden') === -1) {
+        g.ui.openBoard(true);
+      }
     } else if (m.type === 'pos') {
       const r = this.remotes.get(m.pid);
       if (r) { r.target = m; }
@@ -171,7 +203,7 @@ export class Net {
       const pend = this.leaving.get(m.pid);
       if (pend) { clearTimeout(pend); this.leaving.delete(m.pid); }
       const fresh = this.addRemote(m.pid, m.name, { x: 0, y: 40, z: 0 });
-      if (fresh) g.ui.toast(`<b>${m.name}</b> has come up onto t’ moor.`, 4000);
+      if (fresh) g.ui.toast(`<b>${escHtml(m.name)}</b> has come up onto t’ moor.`, 4000);
     } else if (m.type === 'leave') {
       // hold off — idle tabs drop an' return constantly. Only let her go if she's
       // still away after a grace, so folk don't blink in an' out (nor re-announce).
@@ -179,7 +211,7 @@ export class Net {
       this.leaving.set(m.pid, setTimeout(() => { this.leaving.delete(m.pid); this.removeRemote(m.pid); }, 25000));
     } else if (m.type === 'chat') {
       if (m.pid && m.pid === this.diag.pid) return; // don't echo our OWN words back (we already showed "Thee:")
-      g.ui.toast(`<b>${m.name}:</b> ${m.text.replace(/</g, '&lt;')}`, 16000);
+      g.ui.toast(`<b>${escHtml(m.name)}:</b> ${escHtml(m.text)}`, 16000);
       const r = this.remotes.get(m.pid);
       if (r && r.mob) g.entities.speak(r.mob, m.text, 18);
     } else if (m.type === 'time') {
@@ -255,10 +287,10 @@ export class Net {
     if (this.connected && this.ws.readyState === 1) this.ws.send(JSON.stringify(obj));
   }
 
-  // eph: {revert} marks a beach edit t' relay should undo after a while
-  sendEdit(x, y, z, id, eph) {
-    this.send(eph ? { type: 'edit', x, y, z, id, ttl: 300, revert: eph.revert } : { type: 'edit', x, y, z, id });
+  sendEdit(x, y, z, id, was = 0, cat = 'build', day = 0, by = '') {
+    this.send({ type: 'edit', x, y, z, id, was, cat, day, by });
   }
+  sendDeeds(deeds) { this.send({ type: 'deeds', deeds }); }
   sendChat(text) { this.send({ type: 'chat', text }); }
   sendSleep(on) { this.send({ type: 'sleep', on: !!on }); }
   sendSave(data) { this.send({ type: 'save', data }); }

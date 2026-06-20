@@ -7,6 +7,7 @@ the house.
 import hashlib
 import json
 import re
+import secrets
 import shutil
 import subprocess
 import time
@@ -23,10 +24,13 @@ PLAYERS_F = DASH / "players.json"
 SESSIONS_F = DASH / "sessions.json"
 CODES_F = DASH / "codes.json"
 ACCOUNTS_F = DASH / "accounts.json"
+WS_TOKENS_F = DASH / "ws_tokens.json"
 MEM = ROOT / "brain_memory" / "players"
 CADDY_LOG = Path("/var/log/caddy/moorstead.log")
 BRAIN = "http://127.0.0.1:8010"
 LLM = "http://127.0.0.1:8086"
+RELAY = "http://127.0.0.1:8096"
+ROOM_CAP = 15
 
 PID_RE = re.compile(r"^[a-z0-9-]{4,40}$")
 CODE_RE = re.compile(r"^[a-z]+-[a-z]+-\d{2}$")
@@ -47,6 +51,64 @@ def _save(p, data):
     tmp.replace(p)
 
 
+def _room_for_code(code, entry, acct):
+    if isinstance(entry, dict) and entry.get("room"):
+        return str(entry["room"]).lower()
+    if acct and acct.get("room"):
+        return str(acct["room"]).lower()
+    if code.startswith("bairn-"):
+        return "bairns"
+    if code.startswith("dale-"):
+        return "dale"
+    if code.startswith("crag-"):
+        return "crag"
+    if code.startswith("tarn-"):
+        return "tarn"
+    return "moor"
+
+
+def _prune_ws_tokens(tokens):
+    now = time.time()
+    return {k: v for k, v in tokens.items() if v.get("exp", 0) > now - 60}
+
+
+def _relay_rooms():
+    try:
+        r = httpx.get(f"{RELAY}/status", timeout=2)
+        if r.status_code == 200:
+            return r.json().get("rooms", {})
+    except Exception:
+        pass
+    return {}
+
+
+def _pick_room(base, current=None):
+    """Least-full shard of a world family: moor, moor-2, moor-3, …"""
+    base = re.sub(r"[^a-z0-9-]", "", (base or "moor"))[:24] or "moor"
+    live = _relay_rooms()
+    candidates = [base] + [f"{base}-{i}"[:24] for i in range(2, 12)]
+    if current and current in candidates:
+        if live.get(current, {}).get("players", 0) < ROOM_CAP:
+            return current
+    for rid in candidates:
+        if live.get(rid, {}).get("players", 0) < ROOM_CAP:
+            return rid
+    return f"{base}-x{int(time.time()) % 10000}"[:24]
+
+
+def _mint_ws_token(code, acct_id, room, name):
+    tokens = _prune_ws_tokens(_load(WS_TOKENS_F, {}))
+    token = secrets.token_urlsafe(32)
+    tokens[token] = {
+        "acct": acct_id,
+        "room": room,
+        "name": name,
+        "exp": time.time() + 7 * 86400,
+    }
+    _save(WS_TOKENS_F, tokens)
+    return token
+
+
 # ---------------- login ----------------
 @app.post("/auth/claim")
 async def claim(req: Request):
@@ -63,20 +125,29 @@ async def claim(req: Request):
     if code not in codes:
         return {"ok": False, "err": "No such invite. Check thi spelling."}
     accounts = _load(ACCOUNTS_F, {})
+    entry = codes.get(code)
     acct = accounts.get(code)
     if acct is None:
         if not name:
             return {"ok": False, "err": "Tell us thi name an' all."}
-        acct = {"name": name, "pids": [], "created": time.time()}
+        room = _room_for_code(code, entry, None)
+        acct = {"name": name, "pids": [], "created": time.time(), "room": room}
     elif name:
         acct["name"] = name  # whoever holds t' code owns t' name
+    base = _room_for_code(code, entry, acct)
+    acct["room"] = _pick_room(base, acct.get("room"))
     if pid and PID_RE.match(pid) and pid not in acct["pids"]:
         acct["pids"] = (acct["pids"] + [pid])[-6:]
     acct["last"] = time.time()
     accounts[code] = acct
     _save(ACCOUNTS_F, accounts)
+    acct_id = hashlib.sha1(code.encode()).hexdigest()[:10]
+    room = acct["room"]
+    token = _mint_ws_token(code, acct_id, room, acct["name"])
     return {"ok": True, "name": acct["name"],
-            "acct": hashlib.sha1(code.encode()).hexdigest()[:10]}
+            "room": room,
+            "acct": acct_id,
+            "token": token}
 
 
 # ---------------- heartbeat ----------------

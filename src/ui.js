@@ -5,6 +5,7 @@ import { deedFee, weeklyUpkeep } from './deeds.js';
 import { getIconURL } from './textures.js';
 import { CASTLE } from './geography.js';
 import { TitleFlyover } from './titlescene.js';
+import { escHtml } from './escape.js';
 
 const PIX = {
   heart: ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'],
@@ -121,7 +122,7 @@ export class UI {
     this.el('div', 'subtitle', this.titleScreen, 'A reet grand voxel adventure on t&rsquo; North York Moors');
     // a clear "About" button, pinned top-right → the full plain-English technical write-up
     this.aboutBtn = this.el('a', 'about-btn', this.titleScreen, 'About');
-    this.aboutBtn.href = '/about.html'; this.aboutBtn.target = '_blank'; this.aboutBtn.rel = 'noopener';
+    this.aboutBtn.href = '/about.html'; this.aboutBtn.rel = 'noopener';
     // a LIVE moor fly-over behind it all — procedural, no asset files (see titlescene.js).
     // A dark scrim over it keeps the text readable; falls back to the CSS gradient if WebGL won't start.
     const scene = this.el('div', 'title-scene', this.titleScreen);
@@ -130,9 +131,9 @@ export class UI {
     // what the world IS, at a glance — not a changelog
     const feats = this.el('div', 'title-feats', this.titleScreen);
     feats.innerHTML =
-      '<div class="feat"><div class="ico">&#9935;</div><div class="ft">Build &amp; delve</div><div class="fd">Raise a croft, mine the dale for jet</div></div>' +
+      '<div class="feat"><div class="ico">&#9935;</div><div class="ft">Build &amp; delve</div><div class="fd">Claim your land; license a deep mine</div></div>' +
       '<div class="feat"><div class="ico">&#127968;</div><div class="ft">A living parish</div><div class="fd">Folk who talk naturally and get to know you</div></div>' +
-      '<div class="feat"><div class="ico">&#128642;</div><div class="ft">The moors line</div><div class="fd">Ride her &mdash; or take the regulator</div></div>' +
+      '<div class="feat"><div class="ico">&#128642;</div><div class="ft">The moors line</div><div class="fd">Ride her; or take the regulator</div></div>' +
       '<div class="feat"><div class="ico">&#128017;</div><div class="ft">Sheepdog &amp; fold</div><div class="fd">Whistle her round, fold thi flock</div></div>' +
       '<div class="feat"><div class="ico">&#128176;</div><div class="ft">Brass &amp; trade</div><div class="fd">Buy cheap, sell dear by rail</div></div>' +
       '<div class="feat"><div class="ico">&#127769;</div><div class="ft">Owd tales</div><div class="fd">Folklore stirs once the sun&rsquo;s down</div></div>';
@@ -152,13 +153,13 @@ export class UI {
 
     this.seedInput = this.el('input', 'seed', this.titleScreen);
     this.seedInput.placeholder = "World seed (leave blank for t' fates to decide)";
-    this.btnNew = this.el('button', 'mc', this.titleScreen, 'New World &mdash; Gerron Wi&rsquo; It');
-    this.btnShared = this.el('button', 'mc', this.titleScreen, 'T&rsquo; Shared Moor &mdash; Play Wi&rsquo; Others');
+    this.btnNew = this.el('button', 'mc', this.titleScreen, 'New World: Gerron Wi&rsquo; It');
+    this.btnShared = this.el('button', 'mc', this.titleScreen, 'T&rsquo; Shared Moor: Play Wi&rsquo; Others');
     this.btnContinue = this.el('button', 'mc', this.titleScreen, 'Carry On Where Tha Left Off');
     this.btnHow = this.el('button', 'mc', this.titleScreen, 'Ow Ter Play');
-    this.el('div', 'muted-note', this.titleScreen, 'New to t&rsquo; moor? <b>Give &lsquo;Ow Ter Play&rsquo; a read</b> &mdash; how to build, ride, drive an&rsquo; stay alive.');
-    this.el('div', 'muted-note', this.titleScreen, 'Watch thissen at neet &mdash; t&rsquo; barghest walks when t&rsquo; sun goes down.');
-    this.el('div', 'title-foot', this.titleScreen, 'Created purely with AI by a non-coder &middot; procedurally generated, not a single asset file &middot; villagers, jobs an&rsquo; adventures run on large local AI models');
+    this.el('div', 'muted-note', this.titleScreen, 'New to t&rsquo; moor? <b>Give &lsquo;Ow Ter Play&rsquo; a read</b>: learn how to build, ride, drive, and stay alive.');
+    this.el('div', 'muted-note', this.titleScreen, 'Watch thissen at neet: t&rsquo; barghest walks when t&rsquo; sun goes down.');
+    this.el('div', 'title-foot', this.titleScreen, 'Created purely with AI by a non-coder &middot; procedurally generated, not a single asset file &middot; villagers, jobs an&rsquo; adventures run on large local AI models &middot; <a href="/about.html?tab=security" style="color:#d8b95a">Security &amp; privacy</a>');
 
     // ---------- pause ----------
     this.pauseScreen = this.el('div', 'overlay hidden', body);
@@ -299,11 +300,12 @@ export class UI {
 <li><b>Sleep the night away.</b> Find a <b>roof and a light</b> (a villager's house, the pub, a shelter, or your own cottage with a torch inside) and press <b>N</b> to sleep until morning. You will wake up with <b>full health</b> and a small appetite. In multiplayer, the night only passes when <b>everyone</b> sleeps.</li>
 <li><b>Dying</b> carries no penalty: you wake up on the village green with your inventory intact.</li>
 </ul>
-<h3>Tools and mining</h3>
+<h3>Claims and build decay</h3>
 <ul>
-<li>Tiers: <b>wood &rarr; gritstone &rarr; iron</b>. Better tools mine faster and last longer (watch the durability bar).</li>
-<li>Stone, ores, and brick <b>require a pickaxe</b> to harvest. Use a spade for dirt and peat, an axe for wood, and a sword for creatures.</li>
-<li>Ores: <b>coal</b> (shallow), <b>ironstone</b> (deeper—smelt it into ingots), and <b>Whitby jet</b> (deepest, rare, and highly valuable). Explore caves to find rich veins.</li>
+<li><b>Land Claims:</b> Stake a claim deed at the parish notice board to hold a circular plot (8m round) for a charter fee. Unclaimed building edits expire after 30 days.</li>
+<li><b>Decay Durations:</b> If a claim's weekly upkeep lapses, its builds crumble gradually over 14 days after a 7-day grace period. Inside active claims, builds never decay.</li>
+<li><b>Mode Scaling:</b> In the children's world mode, claims and builds decay twice as slow.</li>
+<li><b>Breeding:</b> Keeping two or more animals of the same species inside an active claim allows them to breed tamed baby offspring.</li>
 </ul>`,
 
       'T\u2019 Village': `
@@ -335,7 +337,7 @@ export class UI {
 <h3>Count Dracula on the Moors &#8224;</h3>
 <p>A <b>separate</b> storyline, marked with a dagger &#8224; in your journal. Start at the <b>Dracula Museum in Whitby</b> (on the north coast, below the abbey cliffs). Learn how Bram Stoker's 1890 visit inspired his famous vampire, then draw <b>holy water</b> from the abbey font and craft a <b>wooden stake</b> at a bench. At night, Count Dracula walks the open moor—you will <b>feel his presence before you see him</b>. Use the holy stake to strike him down. Slaying him makes the moors <b>far safer after dark</b>, ensuring nothing worse than barghests will roam.</p>`,
 
-      'T’ Railway': `
+      'T\u2019 Railway': `
 <h3>The Moors Railway</h3>
 <ul>
 <li><b>A steam train</b> works the entire line on a shared clock—you can watch it steam past from the moor, trailing a plume of smoke.</li>
@@ -389,12 +391,6 @@ export class UI {
 <li><b>Dogs, cats, pigs, and rats</b> become <b>companions</b> that follow you everywhere.</li>
 <li><b>Ponies, cattle, sheep, and llamas</b> become <b>farm stock</b>. Once tamed, they <b>stay where you won them over and graze</b>, never wandering away or despawning.</li>
 </ul>
-<h3>Build your own farm &#127806;</h3>
-<ul>
-<li>Tame animals where you want your farm to be—they will stay there and graze. Build a <b>two-block-high fence</b> (cobble, planks, etc.) around them so they cannot hop out.</li>
-<li><b>Sneak (hold Shift) + right-click</b> your owned animal to toggle them between <b>'graze here'</b> and <b>'follow me'</b> so you can lead them to a new pen.</li>
-<li>All owned animals are <b>saved with your world</b> and will be there when you return.</li>
-</ul>
 <h3>Companion Utilities</h3>
 <ul>
 <li>&#128021; <b>Sheepdog</b> (tamed with <b>meat</b>): Guards you at night, keeping night monsters away while at heel, and herds droveable stock to your whistle.</li>
@@ -444,6 +440,39 @@ export class UI {
 </li>
 <li><b>Sty Stock (Pigs)</b>: Saddleback Pigs are kept as companions and cannot be herded. However, you can sell them individually at the Moorstead notice board for 150d (12s 6d) apiece.</li>
 <li>⚠️ <b>Bull Hazard</b>: Cattle bulls are aggressive and cannot be herded or droved. Avoid herding them to prevent goring.</li>
+</ul>`,
+
+      'Mining': `
+<h3>Mining rights and techniques</h3>
+<ul>
+<li><b>The Dig Limit:</b> Digging in open ground is restricted to a depth of 1 block below the surface level. Deep excavation requires a registered mine or a public quarry.</li>
+<li><b>Public Quarries:</b> Designated public quarries (in Moorstead, Goathland, and Pickering) allow deep digging for all players. Dug stone in public quarries regenerates over time.</li>
+<li><b>Start Your Own Mine:</b> Place a crafted <b>Mine Entrance</b> (6 planks + 4 dressed stone) anywhere away from town boundaries to define your shaft.</li>
+<li><b>Licensing:</b> Purchase a mining license deed at the Moorstead notice board. The initial fee is 120d plus 8d per block of licensed depth. Weekly upkeep is 1d per block of depth. Unpaid upkeep causes the mine to lapse.</li>
+<li><b>Upkeeps & Upgrades:</b> Pay upkeep or increase your mine's licensed depth envelope at the notice board. If a mine lapses, its digs will gradually backfill over 24 days.</li>
+</ul>
+<h3>Pick Tiers & Safety Fixtures</h3>
+<p>Deeper digging requires stronger picks and safety equipment placed inside the mine bounds:</p>
+<ul>
+<li><b>Band 1 (0 to 10 blocks below grade):</b> Wooden Pick or better. No fixtures needed.</li>
+<li><b>Band 2 (11 to 20 blocks below grade):</b> Gritstone Pick or better. Must install <b>Pit Props</b> (2 oak logs + 2 sticks) to support the shaft.</li>
+<li><b>Band 3 (21 to 30 blocks below grade):</b> Iron Pick or better. Must install a <b>Safety Lamp</b> (2 iron ingots + 1 torch) to ward off damp gases.</li>
+<li><b>Band 4 (31+ blocks below grade):</b> Iron Pick or better. Must install a <b>Winch</b> (3 planks + 2 sticks + 1 iron ingot) to haul loads from the deeps.</li>
+</ul>
+<h3>Ores & Pricing</h3>
+<ul>
+<li><b>Coal:</b> Shallow fuel. Smelts ironstone and cooks food.</li>
+<li><b>Cleveland Ironstone:</b> Found at mid depths. Smelt it on a range into iron ingots.</li>
+<li><b>Alum Shale:</b> Base price 8d. Sells cheaper on the coast (Staithes and Whitby: 0.6x) and dearer inland (Rosedale and Pickering: 1.5x).</li>
+<li><b>Rock Salt:</b> Base price 10d. Sells cheaper on the NE coast (Staithes: 0.6x) and dearer inland (Rosedale and Pickering: 1.6x).</li>
+<li><b>Whitby Jet:</b> Base price 120d. Highly valuable gemstone. Requires Prospecting Level 3 to harvest.</li>
+<li><b>Polyhalite (Potash):</b> Base price 60d. Excellent fertilizer. Sells cheaper at Staithes (0.6x) and dearer inland (Rosedale, Pickering, and Moorstead: 1.6x). Requires Prospecting Level 6 to harvest.</li>
+</ul>
+<h3>Prospecting Skill</h3>
+<ul>
+<li>Mining ores awards Prospecting XP: Coal (+1 XP), Ironstone and Alum (+2 XP), Rock Salt (+3 XP), Jet (+5 XP), and Polyhalite (+10 XP).</li>
+<li>Your level is calculated as the square root of your XP divided by 10.</li>
+<li><b>Harvest Gates:</b> If you try to harvest Whitby Jet (requires Level 3, 90+ XP) or Polyhalite (requires Level 6, 360+ XP) before reaching the required level, you will only receive bare stone. A notification will tell you: "Tha's too green to read t' seam: got bare stone."</li>
 </ul>`,
 
       'Coast & Sea': `
@@ -537,8 +566,6 @@ export class UI {
     }
     if (name) this[name].classList.remove('hidden');
     this.hud.classList.toggle('hidden', name === 'titleScreen' || name === 'loadingScreen');
-    // the title backdrop is now the REAL voxel world (main.js startTitlePreview),
-    // not a mock-up — so the old stand-in fly-over is left off
     if (name !== 'titleScreen') this._stopFlyover();
   }
 
@@ -577,17 +604,18 @@ export class UI {
     this.chatMsgs.innerHTML = '';
     if (!v.chatLog.length) {
       this.el('div', 'chat-msg sys', this.chatMsgs,
-        v.charId ? `${v.displayName} looks up as tha comes ower.` :
+        v.charId ? `${escHtml(v.displayName)} looks up as tha comes ower.` :
           (this.game && this.game.brainUp === false
             ? 'T&rsquo; village brain in&rsquo;t running &mdash; they&rsquo;ll potter abaht but say nowt till it wakes.'
-            : `${v.displayName} gives thee a nod &mdash; happy to natter, though a passer-by&rsquo;ll not recall thee after.`));
+            : `${escHtml(v.displayName)} gives thee a nod &mdash; happy to natter, though a passer-by&rsquo;ll not recall thee after.`));
     }
     for (const m of v.chatLog) {
       const cls = m.who === 'you' ? 'you' : m.who === 'sys' ? 'sys' : 'them';
       const who = m.who === 'you' ? 'Thee' : m.who === 'sys' ? '' : v.displayName;
-      this.el('div', 'chat-msg ' + cls, this.chatMsgs, (who ? `<b>${who}:</b> ` : '') + m.text);
+      this.el('div', 'chat-msg ' + cls, this.chatMsgs,
+        (who ? `<b>${escHtml(who)}:</b> ` : '') + escHtml(m.text));
     }
-    if (this.chatWaiting) this.el('div', 'chat-msg them thinking', this.chatMsgs, `<b>${v.displayName}</b> is thinking...`);
+    if (this.chatWaiting) this.el('div', 'chat-msg them thinking', this.chatMsgs, `<b>${escHtml(v.displayName)}</b> is thinking...`);
     this.chatMsgs.scrollTop = this.chatMsgs.scrollHeight;
   }
 
@@ -785,23 +813,75 @@ export class UI {
       this.el('div', 'inv-title', this.boardPanel, 'Thi Deeds');
       const stakeFee = deedFee('claim', 8);
       this.el('div', 'r-needs', this.boardPanel,
-        `Stake a <b>claim</b> to hold a plot (8m round) for <b>${g.economy.format(stakeFee)}</b>, then a little upkeep each week. (Claims will protect thi builds &mdash; that lands soon.)`);
+        `Stake a <b>claim</b> to hold a plot (8m round) for <b>${g.economy.format(stakeFee)}</b>, then a little upkeep each week. (Claims protect thi builds, that lands soon.)`);
       const stakeRow = this.el('div', 'recipe quest-row', this.boardPanel);
       stakeRow.innerHTML = `<div class="r-name"><b>Stake a claim where tha stands</b><br><span class="r-needs">${g.economy.format(stakeFee)} charter</span></div>`;
       const sb = this.el('button', 'mc chat-btn', stakeRow, 'Stake');
       sb.addEventListener('click', () => { if (g.stakeClaim(8)) this.openBoard(fromBoard); });
+
+      // Find unlicensed mine entrance near player
+      let nearUnlicensedMine = null;
+      const px = Math.floor(g.player.pos.x);
+      const py = Math.floor(g.player.pos.y);
+      const pz = Math.floor(g.player.pos.z);
+      outerLoop:
+      for (let dx = -8; dx <= 8; dx++) {
+        for (let dy = -4; dy <= 4; dy++) {
+          for (let dz = -8; dz <= 8; dz++) {
+            const bx = px + dx;
+            const by = py + dy;
+            const bz = pz + dz;
+            if (g.world.getBlock(bx, by, bz) === B.MINE_ENTRANCE) {
+              const activeMine = g.world.deeds.some(d => d.kind === 'mine' && !d.lapsedDay && (bx - d.cx) ** 2 + (bz - d.cz) ** 2 <= d.radius * d.radius);
+              if (!activeMine) {
+                nearUnlicensedMine = { x: bx, y: by, z: bz };
+                break outerLoop;
+              }
+            }
+          }
+        }
+      }
+
+      if (nearUnlicensedMine) {
+        const mineFee = deedFee('mine', 5, 10);
+        const mineRow = this.el('div', 'recipe quest-row', this.boardPanel);
+        mineRow.innerHTML = `<div class="r-name"><b>Buy Mining Licence</b><br><span class="r-needs">${g.economy.format(mineFee)} fee (10m depth) for mine at ${nearUnlicensedMine.x}, ${nearUnlicensedMine.z}</span></div>`;
+        const mb = this.el('button', 'mc chat-btn', mineRow, 'Licence');
+        mb.addEventListener('click', () => {
+          if (g.stakeMine(nearUnlicensedMine.x, nearUnlicensedMine.z, 10)) {
+            this.openBoard(fromBoard);
+          }
+        });
+      }
+
       if (!deeds.length) {
         this.el('div', 'chat-msg sys', this.boardPanel, 'Tha holds no deeds yet.');
       } else {
         for (const d of deeds) {
           const up = weeklyUpkeep(d.kind, d.radius, d.depth);
           const status = d.lapsedDay
-            ? '<span style="color:#d87a5a">lapsed &mdash; settle to save it</span>'
+            ? '<span style="color:#d87a5a">lapsed, settle to save it</span>'
             : `paid to day ${Math.floor(d.paidUntilDay)}`;
+          
           const row = this.el('div', 'recipe quest-row', this.boardPanel);
-          row.innerHTML = `<div class="r-name"><b>${d.kind} at ${d.cx}, ${d.cz}</b> (${d.radius}m)<br><span class="r-needs">${status} &mdash; upkeep ${g.economy.format(up)}/wk</span></div>`;
-          const pb = this.el('button', 'mc chat-btn', row, 'Settle up');
-          pb.addEventListener('click', () => { if (g.settleUp(d.id)) this.openBoard(fromBoard); });
+          if (d.kind === 'mine') {
+            const nextDepth = d.depth + 10;
+            const upgradeCost = nextDepth <= 40 ? (deedFee('mine', 5, nextDepth) - deedFee('mine', 5, d.depth)) : 0;
+            const upgradeText = nextDepth <= 40 ? ` ; upgrade ${nextDepth}m: ${g.economy.format(upgradeCost)}` : '';
+            row.innerHTML = `<div class="r-name"><b>Mining Licence at ${d.cx}, ${d.cz}</b> (depth ${d.depth}m)<br><span class="r-needs">${status} ; upkeep ${g.economy.format(up)}/wk${upgradeText}</span></div>`;
+            
+            const pb = this.el('button', 'mc chat-btn', row, 'Settle up');
+            pb.addEventListener('click', () => { if (g.settleUp(d.id)) this.openBoard(fromBoard); });
+            
+            if (!d.lapsedDay && d.depth < 40) {
+              const ub = this.el('button', 'mc chat-btn', row, 'Upgrade');
+              ub.addEventListener('click', () => { if (g.upgradeMine(d.id)) this.openBoard(fromBoard); });
+            }
+          } else {
+            row.innerHTML = `<div class="r-name"><b>${d.kind} at ${d.cx}, ${d.cz}</b> (${d.radius}m)<br><span class="r-needs">${status} ; upkeep ${g.economy.format(up)}/wk</span></div>`;
+            const pb = this.el('button', 'mc chat-btn', row, 'Settle up');
+            pb.addEventListener('click', () => { if (g.settleUp(d.id)) this.openBoard(fromBoard); });
+          }
         }
       }
     }
@@ -906,13 +986,12 @@ export class UI {
       document.getElementById('swap-user').onclick = () => this.game.logout();
       return;
     }
-    const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const roster = (this.game.loadAccounts ? this.game.loadAccounts() : []).filter(a => a.acct !== auth.acct);
-    let html = `Welcome back, <b>${esc(auth.name)}</b>`;
+    let html = `Welcome back, <b>${escHtml(auth.name)}</b>`;
     if (roster.length) {
       html += '<div class="who-switch"><span class="lbl">play as:</span>' + roster.map(a =>
-        `<button class="who-chip" data-acct="${esc(a.acct)}">${esc(a.name)}</button>` +
-        `<button class="who-forget" data-forget="${esc(a.acct)}" title="forget this un">&times;</button>`
+        `<button class="who-chip" data-acct="${escHtml(a.acct)}">${escHtml(a.name)}</button>` +
+        `<button class="who-forget" data-forget="${escHtml(a.acct)}" title="forget this un">&times;</button>`
       ).join('') + '</div>';
     }
     html += '<div class="who-new"><u id="swap-user">+ someone new</u></div>';

@@ -12,11 +12,13 @@ import { Player } from './player.js';
 import * as npc from './npc.js';
 import { Quests } from './quests.js';
 import { Economy, bestMarket, FREIGHT_ALLOWANCE, farmRegisterCheck, CHARTER_FEE, livestockPrice, droveValue } from './economy.js';
-import { deedFee, weeklyUpkeep, isLapsed, DEED } from './deeds.js';
+import { deedFee, weeklyUpkeep, isLapsed, DEED, findActiveDeed, findLapsedDeed, inDeed } from './deeds.js';
+import { mayDigDeep, categoryOf } from './editledger.js';
 import { commandFromKey } from './herding.js';
 import { Milestones } from './milestones.js';
 import { Net } from './multiplayer.js';
 import { initTelemetry } from './telemetry.js';
+import { escHtml } from './escape.js';
 import { buildTrain } from './train.js';
 import { Rails } from './rails.js';
 import { seasonState, seasonStateAtPhase, bilberryInSeason } from './season.js';
@@ -300,6 +302,13 @@ class Game {
       this.world.editLedger = new Map(meta.editLedger || []); // regrowth picks up where it left off
       this.world.treeRegrowth = new Map(meta.treeRegrowth || []); this.world.saplings = new Map(meta.saplings || []);
       this.world.deeds = meta.deeds || [];
+      if (!this.world.deeds.some(d => d.by === 'parish' && d.kind === 'quarry')) {
+        this.world.deeds.push(
+          { id: 'quarry_moorstead', kind: 'quarry', by: 'parish', cx: 40, cz: 60, radius: 10, paidUntilDay: Infinity, lapsedDay: null },
+          { id: 'quarry_goathland', kind: 'quarry', by: 'parish', cx: 280, cz: -80, radius: 10, paidUntilDay: Infinity, lapsedDay: null },
+          { id: 'quarry_pickering', kind: 'quarry', by: 'parish', cx: 480, cz: 820, radius: 12, paidUntilDay: Infinity, lapsedDay: null }
+        );
+      }
     } else if (this.auth && this.auth.name) {
       this.player.name = this.auth.name; // t' villagers already know thi name
     } else {
@@ -406,7 +415,7 @@ class Game {
         const text = ui.netChatInput.value.trim();
         if (text && this.net) {
           this.net.sendChat(text);
-          ui.toast(`<b>Thee:</b> ${text.replace(/</g, '&lt;')}`, 5000);
+          ui.toast(`<b>Thee:</b> ${escHtml(text)}`, 5000);
         }
         this.closeNetChat();
       } else if (e.code === 'Escape') this.closeNetChat();
@@ -983,7 +992,7 @@ class Game {
         this.ui.loginErr.textContent = d.err || 'That didn\u2019t work.';
         return;
       }
-      this.auth = { code, name: d.name, acct: d.acct, room: d.room || 'moor' };
+      this.auth = { code, name: d.name, acct: d.acct, room: d.room || 'moor', token: d.token || '' };
       localStorage.setItem('moorcraft-auth', JSON.stringify(this.auth));
       this.saveAccount(this.auth);
       this.refreshAdmin();
@@ -1010,7 +1019,7 @@ class Game {
       clearTimeout(t);
       const d = await res.json();
       if (d && d.ok) {
-        this.auth = { code: this.auth.code, name: d.name, acct: d.acct, room: d.room || 'moor' };
+        this.auth = { code: this.auth.code, name: d.name, acct: d.acct, room: d.room || 'moor', token: d.token || this.auth.token || '' };
         localStorage.setItem('moorcraft-auth', JSON.stringify(this.auth));
         this.saveAccount(this.auth);
         this.refreshAdmin();
@@ -1056,7 +1065,7 @@ class Game {
     localStorage.setItem('moorcraft-auth', JSON.stringify(this.auth));
     this.refreshAdmin();
     this.ui.setLoggedIn(this.auth);
-    this.ui.toast(`Now playing as <b>${a.name}</b>.`, 3000);
+    this.ui.toast(`Now playing as <b>${escHtml(a.name)}</b>.`, 3000);
     this.refreshAuth(); // quiet re-claim picks up owt t' ledger's changed
   }
 
@@ -1380,7 +1389,12 @@ class Game {
   async connectNet() {
     this.net = new Net(this);
     try {
-      await this.net.connect(this.netRoom || 'moor', (this.auth && this.auth.acct ? 'a' + this.auth.acct : this.devicePid()).slice(0, 40), this.player.name || (this.auth && this.auth.name) || 'rambler');
+      await this.net.connect(
+        this.netRoom || 'moor',
+        (this.auth && this.auth.acct ? 'a' + this.auth.acct : this.devicePid()).slice(0, 40),
+        this.player.name || (this.auth && this.auth.name) || 'rambler',
+        this.auth && this.auth.token ? this.auth.token : undefined,
+      );
       // pick up where tha left off: pockets, ventures, an' thi spot on t' map
       const sv = this.net.savedState;
       if (sv && sv.player) {
@@ -1719,7 +1733,47 @@ class Game {
     }
     this.economy.spend(fee);
     this.world.deeds.push({ id: 'd' + Math.round(this.sky.day * 1000) + '_' + this.world.deeds.length, kind: 'claim', by: this.player.name || '', cx, cz, radius, depth: 0, paidUntilDay: this.sky.day + DEED.week, lapsedDay: null });
+    if (this.net) this.net.sendDeeds(this.world.deeds);
     this.ui.toast(`🪧 <b>Claim staked</b> &mdash; ${radius}m round, paid up a week. Mind t&rsquo; upkeep or it lapses.`, 6000);
+    if (this.saveNow) this.saveNow(false);
+    return true;
+  }
+
+  stakeMine(cx, cz, depth = 10) {
+    const fee = deedFee('mine', 5, depth);
+    if (!this.economy.canAfford(fee)) { this.ui.toast(`A mine license here is <b>${this.economy.format(fee)}</b> &mdash; tha&rsquo;s not the brass.`, 5000); return false; }
+    if (this.world.deeds.some(d => d.kind === 'mine' && !d.lapsedDay && Math.hypot(d.cx - cx, d.cz - cz) < d.radius + 5)) {
+      this.ui.toast('Too close to another active mine.', 4000); return false;
+    }
+    this.economy.spend(fee);
+    this.world.deeds.push({
+      id: 'd' + Math.round(this.sky.day * 1000) + '_' + this.world.deeds.length,
+      kind: 'mine',
+      by: this.player.name || '',
+      cx,
+      cz,
+      radius: 5,
+      depth,
+      paidUntilDay: this.sky.day + DEED.week,
+      lapsedDay: null
+    });
+    if (this.net) this.net.sendDeeds(this.world.deeds);
+    this.ui.toast(`🪧 <b>Mining licence registered</b> &mdash; 5m radius, depth ${depth}m. Deep digging cleared.`, 6000);
+    if (this.saveNow) this.saveNow(false);
+    return true;
+  }
+
+  upgradeMine(id) {
+    const d = this.world.deeds.find(x => x.id === id);
+    if (!d || d.kind !== 'mine') return false;
+    if (d.depth >= 40) { this.ui.toast("Mine is already at max depth (40m).", 4000); return false; }
+    const nextDepth = d.depth + 10;
+    const upgradeCost = deedFee('mine', 5, nextDepth) - deedFee('mine', 5, d.depth);
+    if (!this.economy.canAfford(upgradeCost)) { this.ui.toast(`An upgrade is <b>${this.economy.format(upgradeCost)}</b> &mdash; tha&rsquo;s not the brass.`, 5000); return false; }
+    this.economy.spend(upgradeCost);
+    d.depth = nextDepth;
+    if (this.net) this.net.sendDeeds(this.world.deeds);
+    this.ui.toast(`🪧 <b>Mine depth upgraded</b> to ${nextDepth}m.`, 6000);
     if (this.saveNow) this.saveNow(false);
     return true;
   }
@@ -1731,14 +1785,56 @@ class Game {
     if (!this.economy.spend(up)) { this.ui.toast(`Upkeep&rsquo;s <b>${this.economy.format(up)}</b> &mdash; tha&rsquo;s short.`, 4000); return false; }
     d.paidUntilDay = Math.max(d.paidUntilDay, this.sky.day) + DEED.week;
     d.lapsedDay = null; // settling revives a deed that lapsed but hasn't reclaimed yet
+    if (this.net) this.net.sendDeeds(this.world.deeds);
     this.ui.toast(`Upkeep paid (${this.economy.format(up)}) &mdash; good for another week.`, 4000);
     if (this.saveNow) this.saveNow(false);
     return true;
   }
 
-  // Mark deeds whose upkeep has lapsed (the reclamation effect comes in Slice 3).
   deedTick() {
-    for (const d of this.world.deeds) if (!d.lapsedDay && isLapsed(d, this.sky.day)) d.lapsedDay = this.sky.day;
+    const decayScale = this.bairnLocked() ? 2 : 1;
+    for (const d of this.world.deeds) {
+      if (!d.lapsedDay && isLapsed(d, this.sky.day, DEED.grace * decayScale)) {
+        d.lapsedDay = this.sky.day;
+      }
+
+      // Kept-stock breeding (Slice 5)
+      if (d.kind === 'claim' && !d.lapsedDay && d.by !== 'parish') {
+        const mobsInDeed = this.entities.mobs.filter(m => m && !m.dead && m.owner &&
+          (m.pos.x - d.cx) ** 2 + (m.pos.z - d.cz) ** 2 <= d.radius * d.radius
+        );
+        const cap = Math.max(3, Math.floor(d.radius * d.radius / 12));
+        if (mobsInDeed.length < cap) {
+          const speciesList = ['sheep', 'cow', 'llama', 'pony'];
+          for (const species of speciesList) {
+            const count = mobsInDeed.filter(m => {
+              if (species === 'sheep') return m.type === 'sheep' || m.type === 'lamb';
+              return m.type === species;
+            }).length;
+            if (count >= 2 && Math.random() < 0.05) {
+              const babyType = (species === 'sheep') ? 'lamb' : species;
+              const spawnY = this.world.gen.height(d.cx, d.cz) + 1.05;
+              const baby = this.entities.spawnMob(babyType, d.cx + (Math.random() * 2 - 1), spawnY, d.cz + (Math.random() * 2 - 1));
+              if (baby) {
+                baby.owner = true;
+                baby.stay = true;
+                baby.home = { x: baby.pos.x, y: baby.pos.y, z: baby.pos.z };
+                baby.petKind = babyType;
+
+                const names = ['Barnaby', 'Bramble', 'Clover', 'Daisy', 'Fern', 'Gorse', 'Heather', 'Ivy', 'Moss', 'Pip', 'Rowan', 'Thistle'];
+                const name = names[Math.floor(Math.random() * names.length)] + ' ' + (Math.floor(Math.random() * 90) + 10);
+
+                const rec = { kind: species, name, stay: true, home: { ...baby.home } };
+                (this.player.pets || (this.player.pets = [])).push(rec);
+
+                this.ui.toast(`🎉 A new <b>${babyType === 'lamb' ? 'lamb' : species}</b> was born at thi claim!`, 5000);
+                break; // spawn only one baby per claim per day
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   // ---- moorland ponies: a rideable mount 'twixt shanks's pony an' t' railway ----
@@ -2344,6 +2440,71 @@ class Game {
       return;
     }
 
+    // Living Moor Slice 4: The 1-block-deep dig rule
+    const NATURAL_BLOCKS = new Set([
+      B.STONE, B.DIRT, B.GRASS, B.GRAVEL, B.SAND, B.PEAT,
+      B.COAL_ORE, B.IRON_ORE, B.JET_ORE, B.ALUM_SHALE, B.POLYHALITE, B.ROCK_SALT
+    ]);
+    const editKey = `${hit.x},${hit.y},${hit.z}`;
+    const ledgerEdit = this.world.editLedger.get(editKey);
+    const isPlayerBuild = ledgerEdit && ledgerEdit.cat === 'build';
+
+    if (!this.isAdmin() && NATURAL_BLOCKS.has(hit.id) && !isPlayerBuild) {
+      const grade = this.world.gen.height(hit.x, hit.z);
+      if (hit.y < grade - 1) {
+        // Deep digging! Allowed inside designated quarries or active mines
+        const inQuarry = inDeed(this.world.deeds, hit.x, hit.z, 'quarry');
+        if (!inQuarry) {
+          const mine = findActiveDeed(this.world.deeds, hit.x, hit.z, 'mine');
+          const allowedFixtures = [];
+          if (mine) {
+            for (const [k, e] of this.world.editLedger) {
+              if (e.cat === 'build') {
+                const [fx, fy, fz] = k.split(',').map(Number);
+                if ((fx - mine.cx) ** 2 + (fz - mine.cz) ** 2 <= mine.radius * mine.radius) {
+                  const fid = this.world.getBlock(fx, fy, fz);
+                  if ([B.PIT_PROPS, B.SAFETY_LAMP, B.WINCH].includes(fid)) {
+                    allowedFixtures.push(fid);
+                  }
+                }
+              }
+            }
+          }
+          const held = this.player.heldItem();
+          let pickType = 'none';
+          if (held && TOOLS[held.id] && TOOLS[held.id].type === 'pick') {
+            if (held.id === I.W_PICK) pickType = 'wood';
+            else if (held.id === I.S_PICK) pickType = 'stone';
+            else if (held.id === I.I_PICK) pickType = 'iron';
+          }
+
+          const check = mayDigDeep(hit.y, grade, mine, pickType, allowedFixtures);
+          if (!check.allowed) {
+            this.breakProgress = 0;
+            this.ui.drawBreakProgress(0);
+            const now = performance.now() / 1000;
+            if (!this._lmToast || now - this._lmToast > 4) {
+              this._lmToast = now;
+              if (check.reason === 'nomine') {
+                this.ui.toast("Tha can only dig deep inside a licensed mine — set a mine entrance an' buy a licence.", 4000);
+              } else if (check.reason === 'depthlimit') {
+                this.ui.toast("Tha's reached t' depth limit o' this mine's license (" + check.limit + " blocks) — visit t' board to upgrade it.", 4000);
+              } else if (check.reason === 'pick' || check.reason === 'fixture') {
+                const pickName = check.pickNeeded === 'wood' ? 'Wooden Pick' : check.pickNeeded === 'stone' ? 'Gritstone Pick' : 'Iron Pick';
+                const fixtureName = check.fixtureNeeded === B.PIT_PROPS ? 'Pit Props' : check.fixtureNeeded === B.SAFETY_LAMP ? 'Safety Lamp' : 'Winch';
+                if (check.fixtureNeeded) {
+                  this.ui.toast("Tha needs an " + pickName + " an' " + fixtureName + " installed to go deeper.", 4000);
+                } else {
+                  this.ui.toast("Tha needs a " + pickName + " to go deeper.", 4000);
+                }
+              }
+            }
+            return;
+          }
+        }
+      }
+    }
+
     if (this.player.creative) {
       this.creativeBreakCd = (this.creativeBreakCd || 0) - dt;
       if (this.creativeBreakCd <= 0) {
@@ -2394,7 +2555,7 @@ class Game {
     for (const [x, y, z, id] of cells) {
       if (id === B.LOG && y < by) { bx = x; by = y; bz = z; } // the lowest trunk block is the stump
       w.setBlock(x, y, z, B.AIR);
-      if (this.net) this.net.sendEdit(x, y, z, 0, null);
+      if (this.net) this.net.sendEdit(x, y, z, 0, id, 'harvest', this.sky.day, this.player.name || '');
       if (!this.player.creative && !noDrop && id === B.LOG) this.entities.spawnDrop(x + 0.5, y + 0.4, z + 0.5, B.LOG, 1);
     }
     this.entities.blockBurst(hit.x, hit.y, hit.z, B.LOG);
@@ -2415,13 +2576,45 @@ class Game {
       if (bareBilberry) {
         this.ui.toast('Nobbut bare twigs — bilberries aren’t out yet. Coom back i’ late summer.', 2500);
       } else {
-        this.entities.spawnDrop(hit.x + 0.5, hit.y + 0.4, hit.z + 0.5, def.drop, 1);
+        // Prospecting skill gate check
+        let dropId = def.drop;
+        const xp = this.player.miningSkill || 0;
+        const level = Math.floor(Math.sqrt(xp / 10));
+        let tooGreen = false;
+
+        if (hit.id === B.JET_ORE && level < 3) {
+          dropId = B.COBBLE;
+          tooGreen = true;
+          this.ui.toast("Tha's too green to read t' seam — got bare stone (requires Prospecting level 3).", 4000);
+        } else if (hit.id === B.POLYHALITE && level < 6) {
+          dropId = B.COBBLE;
+          tooGreen = true;
+          this.ui.toast("Tha's too green to read t' seam — got bare stone (requires Prospecting level 6).", 4000);
+        }
+
+        this.entities.spawnDrop(hit.x + 0.5, hit.y + 0.4, hit.z + 0.5, dropId, 1);
+        
+        // Award XP
+        let xpGained = 0;
+        if (hit.id === B.COAL_ORE) xpGained = 1;
+        else if (hit.id === B.IRON_ORE || hit.id === B.ALUM_SHALE) xpGained = 2;
+        else if (hit.id === B.ROCK_SALT) xpGained = 3;
+        else if (hit.id === B.JET_ORE && !tooGreen) xpGained = 5;
+        else if (hit.id === B.POLYHALITE && !tooGreen) xpGained = 10;
+
+        if (xpGained > 0) {
+          this.player.miningSkill = (this.player.miningSkill || 0) + xpGained;
+          const newLvl = Math.floor(Math.sqrt(this.player.miningSkill / 10));
+          if (newLvl > level) {
+            this.ui.toast("🎉 <b>Prospecting level up!</b> Tha's now level " + newLvl + ".", 5000);
+          }
+        }
       }
     }
     this.quests.onBlockBroken(hit.x, hit.y, hit.z, hit.id);
     this.milestones.onBreak(hit.id);
     const eph = this.beachEphemeral(hit.x, hit.y, hit.z);
-    if (this.net) this.net.sendEdit(hit.x, hit.y, hit.z, 0, eph ? { revert: hit.id } : null);
+    if (this.net) this.net.sendEdit(hit.x, hit.y, hit.z, 0, hit.id, categoryOf(hit.id, 0), this.sky.day, this.player.name || '');
     if (eph) this.queueBeachRevert(hit.x, hit.y, hit.z, hit.id, 0);
     this.world.recordEdit(hit.x, hit.y, hit.z, hit.id, 0, this.sky.day, this.player.name || ''); // harvest edits regrow
 
@@ -2540,7 +2733,7 @@ class Game {
     this.quests.onBlockPlaced(px, py, pz, held.id);
     this.milestones.onPlace(held.id);
     const eph = this.beachEphemeral(px, py, pz);
-    if (this.net) this.net.sendEdit(px, py, pz, held.id, eph ? { revert: cur } : null);
+    if (this.net) this.net.sendEdit(px, py, pz, held.id, cur, 'build', this.sky.day, this.player.name || '');
     if (eph) this.queueBeachRevert(px, py, pz, cur, held.id);
     this.world.recordEdit(px, py, pz, cur, held.id, this.sky.day, this.player.name || ''); // a build supersedes pending regrowth
   }
@@ -2864,7 +3057,13 @@ class Game {
       this.processBeachReverts();
       // the moor heals: revert expired harvest edits once a game-day (cheap, day-scale regrowth)
       const regenDay = Math.floor(this.sky.day);
-      if (regenDay !== this._lastExpireDay) { this._lastExpireDay = regenDay; this.world.expireEdits(this.sky.day); this.world.growTrees(this.sky.day); this.deedTick(); }
+      if (regenDay !== this._lastExpireDay) {
+        this._lastExpireDay = regenDay;
+        const decayScale = this.bairnLocked() ? 2 : 1;
+        this.world.expireEdits(this.sky.day, decayScale);
+        this.world.growTrees(this.sky.day);
+        this.deedTick();
+      }
 
       // sky & weather
       const season = (this.seasonOverride != null)

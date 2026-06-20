@@ -66,6 +66,20 @@
     footer { color: var(--muted); font-size: 14px; margin-top: 28px; }
     .tag { display: inline-block; font-size: 12px; color: var(--gold); border: 1px solid var(--border);
            border-radius: 20px; padding: 2px 11px; margin: 0 6px 6px 0; background: rgba(216,185,90,0.06); }
+    .about-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 28px 0 24px; }
+    .about-tab {
+      padding: 8px 18px; font-size: 14px; font-weight: 700; letter-spacing: 0.3px;
+      color: var(--gold); background: rgba(12, 14, 11, 0.55); border: 1px solid var(--border);
+      border-radius: 8px; cursor: pointer; font-family: inherit;
+    }
+    .about-tab:hover { background: rgba(216,185,90,0.12); border-color: var(--gold); }
+    .about-tab.active { background: rgba(216,185,90,0.2); border-color: var(--gold); }
+    .about-panel.hidden { display: none; }
+    .warn {
+      background: rgba(120, 40, 30, 0.35); border: 1px solid rgba(200, 100, 80, 0.45);
+      border-radius: 8px; padding: 16px 20px; margin: 18px 0;
+    }
+    .warn strong { color: #f0c8b8; }
   </style>
 </head>
 <body>
@@ -76,6 +90,13 @@
     <div class="sub">A voxel sandbox of the North York Moors. How I built it, how it works, and what it taught me.</div>
     <a class="back" href="/">&larr; Back to the moor</a>
   </header>
+
+  <nav class="about-tabs" aria-label="About sections">
+    <button type="button" class="about-tab active" data-tab="about">How it works</button>
+    <button type="button" class="about-tab" data-tab="security">Security &amp; privacy</button>
+  </nav>
+
+  <div id="panel-about" class="about-panel">
 
   <p class="lede">
     Moorstead is a browser game: a blocky, explorable model of the North York Moors that you
@@ -139,6 +160,17 @@
     A live beast is worth far more than its wool and mutton sold piecemeal, so this is the best
     money on the moor. But a flock that strings out loses stragglers to the moor, and after dark the
     barghest will take them, so keep them together and travel by day.
+  </p>
+
+  <h3>Claims, decay, and licensed mining: design for engagement and anti-griefing</h3>
+  <p>
+    Rather than letting the voxel landscape become a lawless, grief-prone wasteland, Moorstead implements rules that encourage cooperative engagement and protect the environment. Open-cast strip mining is forbidden by the parish. You cannot dig more than one block below the original terrain grade unless you are inside a designated public quarry or a licensed mine. Public quarries at Moorstead, Goathland, and Pickering allow free deep digging for everyone, and the rock there regenerates over time to prevent permanent unsightly scarring. To open a mine elsewhere, place a Mine Entrance block and register a Mining Licence at a notice board for a fee.
+  </p>
+  <p>
+    This licensing and upkeep system drives engagement with the trade economy; players must mine, transport, and sell goods to afford their mine's weekly upkeep. Deeper mines require better equipment and safety fixtures: you must install Pit Props, a Safety Lamp, or a Winch to dig into deeper bands, using gritstone and iron picks. Mining also yields Prospecting XP; rare ores like Whitby Jet and Polyhalite are level-gated, so novices receive only bare stone.
+  </p>
+  <p>
+    To protect your builds from griefing, you can stake a land claim. Active claims prevent your buildings from decaying; unclaimed builds decay after 30 days. If your claim's weekly upkeep lapses, the builds will crumble gradually over time. In the children's world, claims and builds decay twice as slow. Finally, keeping two or more animals of the same species in an active claim allows them to breed tamed baby offspring, rewarding active animal husbandry.
   </p>
 
   <h2>2. How I built it</h2>
@@ -262,17 +294,17 @@
   <h3>A separate, walled-off world for children</h3>
   <p>
     Moorstead has an entirely separate world for children, sealed off from the adult moor. A child
-    is let into it only by a specific kind of invite token. The token prefix is what does the
-    gating: a child's token routes into the children's room and nowhere else, and an adult token
-    cannot reach the children's room. Children never share a world with adult strangers.
+    is let into it only by a specific kind of invite token (<code>bairn-*</code>). The server checks
+    that token before anyone can enter that room: a child's invite routes into the children's world
+    and nowhere else, and an adult invite cannot reach it. Children do not share a world with adult
+    strangers.
   </p>
   <p>Inside it, the rules are tighter, and built in:</p>
   <ul>
     <li><strong>Survival mode is locked on</strong> and the creative build-and-destroy tools are hidden, so the world cannot be wiped or grief-built.</li>
     <li><strong>The real landmarks are protected.</strong> Built stone at or above ground cannot be broken inside a landmark (the abbey, the kilns, the standing stones, the stations, the moor crosses), though a child can always dig underneath and mine freely.</li>
     <li><strong>A guided first hour</strong> walks a new child through the basics with a ladder of small milestones.</li>
-    <li><strong>A parent sets the limits.</strong> A daily time allowance, quiet hours, an overnight lock, and a manual lock, with a warning before time is up.</li>
-    <li><strong>Merlin is kid-safe here.</strong> The in-world wizard appears in the children's world too, in a mode that governs what he says, and a parent can see the conversations.</li>
+    <li><strong>Merlin is kid-safe here.</strong> The in-world wizard appears in the children's world too, in a hardened persona that governs what he says.</li>
   </ul>
   <p>
     These are real constraints, the same guardrail-and-oversight thinking I bring to AI systems in
@@ -293,9 +325,10 @@
   <p>
     That makes position the binding constraint. Everyone's position has to reach everyone else in
     the same room, so the relay's work in one room grows with the square of the number of people in
-    it. On the current small home server, one room is comfortable with tens of players in it, and
-    would probably hold into the low hundreds before the position traffic started to tell. I have
-    not load-tested that. Real use has been a household, not a crowd.
+    it. Each room is capped at <strong>15 players</strong> so the relay stays responsive; when a
+    room fills, the parish clerk automatically assigns newcomers to an overflow shard of the same
+    world (<code>moor-2</code>, <code>bairns-2</code>, and so on), each with its own block edits but
+    the same terrain. Many rooms can run in parallel across the same box.
   </p>
   <p>
     Rooms are the trick for going wider. Each invite group lives in its own room, walled off from
@@ -455,6 +488,116 @@
     this is one project by one person. I offer it as evidence, not as a theorem.
   </p>
 
+  </div><!-- /panel-about -->
+
+  <div id="panel-security" class="about-panel hidden">
+
+  <p class="lede">
+    Moorstead is a <strong>browser game</strong>: you open a link, nothing installs. This page
+    explains, in plain English and in technical terms, what the game can and cannot do to your
+    machine, what data I see, how the worlds are walled off, and what happens if someone misbehaves.
+  </p>
+
+  <h2>Your machine: what Moorstead can and cannot do</h2>
+
+  <h3>In plain English</h3>
+  <ul>
+    <li><strong>No download.</strong> There is no installer, no <code>.exe</code>, no app store package, and no browser extension. You play in a normal tab.</li>
+    <li><strong>No access to your files.</strong> The game cannot read your documents, photos, or other folders. It uses only what browsers allow games to use: memory, graphics, and optional local storage inside the browser.</li>
+    <li><strong>No ads or trackers.</strong> There are no advertising networks, analytics pixels, or social-media widgets in the client. The shipped code is my JavaScript plus the Three.js graphics library.</li>
+    <li><strong>No cryptocurrency or background mining.</strong> Nothing in the client hashes coins or runs hidden work when the tab is closed.</li>
+    <li><strong>Network use is limited.</strong> If you play solo on your own seed, after the first load the world can run from your browser alone. Multiplayer, villager chat, and login talk to my home server. Weather optionally reads a public forecast for Goathland.</li>
+  </ul>
+
+  <h3>Technically (for the curious)</h3>
+  <div class="card">
+    <dl class="grid">
+      <dt>Delivery</dt><dd>Static files built with Vite, served over HTTPS from Vercel's CDN at <code>www.moorstead.app</code>. Subresource integrity is enforced by same-origin loading; a Content-Security-Policy header restricts scripts to this origin only.</dd>
+      <dt>Runtime</dt><dd>WebGL via Three.js inside the browser sandbox. No <code>eval</code>, no native bindings, no WebAssembly modules from third parties.</dd>
+      <dt>Dependencies</dt><dd>One production npm package: <code>three</code>. Vite is dev-only and never ships to players.</dd>
+      <dt>Local storage</dt><dd><strong>IndexedDB</strong> holds solo-world chunk saves. <strong>localStorage</strong> holds a per-browser id, your invite login (if you use one), and display preferences. Nothing leaves the browser unless you join the shared moor or talk to villagers.</dd>
+      <dt>Third parties</dt><dd><strong>Open-Meteo</strong> (optional weather, keyless). Everything else multiplayer-related goes to <code>moorstead.sovren.xyz</code> (my Cloudflare-tunnelled home server), proxied through the same site origin for <code>/brain</code> and <code>/dash</code>.</dd>
+    </dl>
+  </div>
+
+  <h2>What I collect (and why)</h2>
+  <p>If you only play solo worlds, I see nothing. If you use the shared moor or villager chat, I necessarily see some session data to run the service and keep order:</p>
+  <ul>
+    <li><strong>Login / invite claim</strong> — your invite code (validated once), chosen display name, and a browser device id, to bind your account and world room.</li>
+    <li><strong>Session heartbeat</strong> — about once a minute while playing: coarse progress (day count, standing, location name), display name, and your IP address as seen by the server.</li>
+    <li><strong>Multiplayer chat</strong> — in-world speech within ~60 metres is logged on the server with timestamp, name, position, and text (profanity filtered). This is the audit trail for moderation.</li>
+    <li><strong>Villager conversations</strong> — processed on my local large language model at home, not sent to OpenAI or similar. Named villagers keep per-player memory on that server.</li>
+    <li><strong>Crash reports</strong> — if the client throws an error, a truncated message and stack trace may be sent over the multiplayer connection (throttled, capped at 600 characters).</li>
+    <li><strong>World saves (shared moor)</strong> — inventory and quest progress for invited accounts are stored on my server so they follow you between visits.</li>
+  </ul>
+  <p class="note">I do not sell data. I do not run advertising. Retention is practical, not legalistic: logs exist to debug, moderate, and restore worlds.</p>
+
+  <h2>How worlds are walled off</h2>
+  <p>
+    Each invite group plays in its own <strong>room</strong> (shared terrain seed, separate block edits).
+    When you log in with an invite code, the parish ledger issues a <strong>short-lived session token</strong>
+    tied to your account id and your room. The multiplayer relay refuses connections that do not
+    match: you cannot enter the children's room without a <code>bairn-*</code> invite, and you cannot
+    use a child's token on the adult moor. Ramblers without an invite may walk the open
+    <code>moor</code> room only.
+  </p>
+  <p>
+    Villager AI runs on my hardware. Merlin (the wizard) is a <strong>walled-off persona</strong> with
+    no path to my private assistant data — in-game chat cannot be used to extract personal information
+    from the system that runs my life outside the game.
+  </p>
+
+  <h2>Expected behaviour — and what happens if you break it</h2>
+
+  <div class="warn">
+    <p><strong>Moorstead is a shared home, not a free-for-all.</strong> I run it for friends and family on a small machine in my house. Everyone is welcome who treats the place and the people in it with respect. Abuse is not tolerated.</p>
+  </div>
+
+  <h3>What counts as a breach</h3>
+  <ul>
+    <li><strong>Griefing</strong> — deliberately wrecking builds, spamming block edits to lag or ruin the world, harassing players, or trying to enter a room you were not invited to (especially the children's world).</li>
+    <li><strong>Harassment or hate</strong> — slurs, threats, sexual content, or sustained targeting of another player in chat (in-world or villager prompts used to abuse others).</li>
+    <li><strong>Impersonation or evasion</strong> — pretending to be the warden, using alt accounts to dodge a ban, or sharing invite codes publicly when they were meant for one household.</li>
+    <li><strong>Attacking the service</strong> — flooding the relay or brain, probing admin endpoints, or attempting to bypass session or room checks.</li>
+    <li><strong>Prompt abuse</strong> — trying to jailbreak villagers or Merlin into off-script, harmful, or exfiltration attempts (these are logged and reviewed).</li>
+  </ul>
+
+  <h3>What I do about it</h3>
+  <ul>
+    <li><strong>Immediate disconnect.</strong> Banned player ids and display names are checked on every multiplayer connection. A match is refused at the door with a plain message.</li>
+    <li><strong>Chat log.</strong> In-world speech is appended to a server log with time, name, and position — enough to decide what happened without ambiguity.</li>
+    <li><strong>Fast exclusion.</strong> For clear griefing or harassment I add the offender to the ban list on the server. There is no appeal bureaucracy: this is a private game on private hardware. Serious or repeated cases lose their invite permanently.</li>
+    <li><strong>Children's world.</strong> The <code>bairns</code> room is the strictest. Any adult stranger who reaches it without a valid child invite, or any player who misbehaves there, is removed and banned without a second warning.</li>
+    <li><strong>Operator response.</strong> I am the parish warden. Reports reach me through the session logs and, for people I know, directly. I aim to act within hours for abuse, not days.</li>
+  </ul>
+  <p class="note">
+    If you see something wrong, note the player's display name and roughly where/when it happened, and tell me. I would rather ban one fool than let a whole room suffer.
+  </p>
+
+  <h2>Your invite code is a key</h2>
+  <p>
+    Treat your invite like a password. Anyone with the code can claim the account name and enter your
+    world room. Do not post codes on public forums. If a code leaks, tell me and I will mint a fresh one
+    and retire the old.
+  </p>
+
+  <h2>Scale and room sharding</h2>
+  <p>
+    Each multiplayer room holds at most <strong>15 people</strong> at once. When you log in, if your
+    usual room is full, you are quietly placed in the next shard of the same world family
+    (<code>dale-2</code>, <code>bairns-3</code>, etc.). Same moor, separate building — like parallel
+    copies of the same map. I can add more shards in seconds; no new invite codes are needed.
+  </p>
+
+  <h2>Honest limits</h2>
+  <ul>
+    <li>This is a hobby project on a home server, not a bank or a Fortune 500 SaaS. I apply the same guardrail thinking I use in my professional work, but capacity and uptime are those of one box behind a tunnel.</li>
+    <li>No system is perfectly secure. I reduce risk by keeping the client tiny, the attack surface small, sessions token-bound, and admin tools off the public internet. You further reduce risk by using an up-to-date browser and not sharing invites.</li>
+    <li>If you need a guarantee no one will ever see your IP or chat, play solo on your own seed only — that mode sends nothing to my server.</li>
+  </ul>
+
+  </div><!-- /panel-security -->
+
   <hr />
   <footer>
     <p>
@@ -467,5 +610,22 @@
   </footer>
 
 </div>
+<script>
+(function () {
+  const tabs = document.querySelectorAll('.about-tab');
+  const panels = { about: document.getElementById('panel-about'), security: document.getElementById('panel-security') };
+  function show(name) {
+    for (const t of tabs) t.classList.toggle('active', t.dataset.tab === name);
+    for (const [k, el] of Object.entries(panels)) el.classList.toggle('hidden', k !== name);
+    document.title = name === 'security'
+      ? 'Moorstead — security & privacy'
+      : 'Moorstead: how I built it and how it works';
+    history.replaceState(null, '', name === 'security' ? '?tab=security' : location.pathname);
+  }
+  for (const t of tabs) t.addEventListener('click', () => show(t.dataset.tab));
+  const q = new URLSearchParams(location.search).get('tab');
+  if (q === 'security') show('security');
+})();
+</script>
 </body>
 </html>
