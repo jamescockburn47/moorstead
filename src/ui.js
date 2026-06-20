@@ -435,6 +435,12 @@ export class UI {
 <ul>
 <li>Once tha keeps <b>5 head</b> o&rsquo; penned stock, go to t&rsquo; <b>parish notice board at Moorstead</b> (by t&rsquo; village cross, or press <b>Q</b> when tha&rsquo;s there) an&rsquo; <b>register thi farm</b> for a <b>£1 charter</b>.</li>
 <li>That makes thee a <b>registered farmer o&rsquo; Moorstead parish</b> &mdash; thi fold&rsquo;s on t&rsquo; books.</li>
+</ul>
+<h3>Drovin&rsquo; to market</h3>
+<ul>
+<li>A registered farmer can <b>muster</b> a penned flock (<b>G</b>, stood by thi fold) into a drove, then <b>drive &rsquo;em to t&rsquo; Moorstead mart</b> wi&rsquo; thi dog &mdash; same whistles as ever.</li>
+<li><b>Sell t&rsquo; live flock</b> at t&rsquo; Moorstead notice board for <b>10s a head</b> &mdash; t&rsquo; best brass on t&rsquo; moor, far more than wool an&rsquo; mutton sold piecemeal.</li>
+<li><b>Keep &rsquo;em bunched an&rsquo; move by day.</b> A beast strung out on t&rsquo; moor strays off &mdash; an&rsquo; after dark t&rsquo; <b>barghest</b> teks &rsquo;em. Tha&rsquo;s paid for what gets there.</li>
 </ul>`,
 
       'Coast & Sea': `

@@ -2909,12 +2909,22 @@ class Game {
         else if (hit.id === B.BENCH) hint = 'Right-click: joiner\u2019s bench (craftin\u2019)';
         else if (hit.id === B.RANGE) hint = 'Right-click: t\u2019 range (cookin\u2019 an\u2019 smeltin\u2019)';
         this.ui.interactHint.textContent = hint;
+      } else if (this.entities && this.entities.mobs.some(m => m && !m.dead && m.droving && m.type === 'sheep')) {
+        // mid-drove — keep 'em bunched; the whistles still drive 'em
+        this.highlight.visible = false;
+        this.ui.interactHint.textContent = '🐑 Drove thi flock to Moorstead’s mart — keep ’em bunched  (← → ↑ ↓ whistle)';
       } else if (this.entities &&
         this.entities.mobs.some(m => m && m.owner && m.type === 'dog') &&
         this.entities.mobs.some(m => m && !m.owner && m.type === 'sheep' && Math.hypot(m.pos.x - this.player.pos.x, m.pos.z - this.player.pos.z) < 20)) {
         // a working dog an' sheep about — show the whistle commands (legibility)
         this.highlight.visible = false;
         this.ui.interactHint.textContent = '🐕 Whistle: ← come-bye  → away  ↑ walk on  ↓ lie down  (H: heel)';
+      } else if (this.player.farmStatus && this.player.farmStatus.registered && this.entities &&
+        this.entities.mobs.some(m => m && m.owner && m.type === 'dog') &&
+        this.entities.mobs.some(m => m && m.owner && m.stay && m.type === 'sheep' && Math.hypot(m.pos.x - this.player.pos.x, m.pos.z - this.player.pos.z) < 20)) {
+        // registered farmer stood by penned stock wi' a dog — offer to muster for market
+        this.highlight.visible = false;
+        this.ui.interactHint.textContent = '🐑 Press G to muster thi flock for market';
       } else {
         this.highlight.visible = false;
         this.ui.interactHint.textContent = '';
