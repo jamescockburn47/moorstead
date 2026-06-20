@@ -1,7 +1,7 @@
 """Moorstead parish ledger — players, login codes, and full EVO diagnostics.
 
 :8095 on LAN/Tailscale only. The Cloudflare tunnel routes three public endpoints
-here (POST /ping, POST /auth/claim, POST /visit, POST /request-invite); the dashboard UI never leaves
+here (POST /ping, POST /auth/claim, POST /visit, POST /request-invite, POST /feedback); the dashboard UI never leaves
 the house.
 """
 import hashlib
@@ -28,6 +28,8 @@ ACCOUNTS_F = DASH / "accounts.json"
 WS_TOKENS_F = DASH / "ws_tokens.json"
 REQUESTS_F = DASH / "token_requests.json"
 REQUEST_RATE_F = DASH / "request_rate.json"
+FEEDBACK_F = DASH / "feedback.json"
+FEEDBACK_RATE_F = DASH / "feedback_rate.json"
 MEM = ROOT / "brain_memory" / "players"
 CADDY_LOG = Path("/var/log/caddy/moorstead.log")
 BRAIN = "http://127.0.0.1:8010"
@@ -116,9 +118,9 @@ def _player_stats(players, now):
     return st
 
 
-def _rate_ok(ip, limit=2):
+def _rate_ok(ip, limit=2, rate_file=None):
     day = _utc_day()
-    rates = _load(REQUEST_RATE_F, {})
+    rates = _load(rate_file or REQUEST_RATE_F, {})
     rec = rates.get(ip, {"day": day, "n": 0})
     if rec.get("day") != day:
         rec = {"day": day, "n": 0}
@@ -126,7 +128,7 @@ def _rate_ok(ip, limit=2):
         return False
     rec["n"] += 1
     rates[ip] = rec
-    _save(REQUEST_RATE_F, rates)
+    _save(rate_file or REQUEST_RATE_F, rates)
     return True
 
 
@@ -374,6 +376,74 @@ async def request_invite(req: Request):
     return {"ok": True, "msg": "Thanks — I'll be in touch if there's a spot."}
 
 
+@app.post("/feedback")
+async def feedback(req: Request):
+    """Public: player feedback or bug report with page / in-game context."""
+    ip = _client_ip(req)
+    if not _rate_ok(ip, limit=8, rate_file=FEEDBACK_RATE_F):
+        return {"ok": False, "err": "Easy now — tha can only send a few reports a day."}
+    try:
+        d = await req.json()
+    except Exception:
+        return {"ok": False, "err": "bad request"}
+    kind = str(d.get("kind", "feedback")).strip().lower()
+    if kind not in ("bug", "feedback"):
+        kind = "feedback"
+    message = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", " ", str(d.get("message", "")).strip())[:2000]
+    if len(message) < 8:
+        return {"ok": False, "err": "Tell us a bit more — at least a sentence."}
+    email = str(d.get("email", "")).strip().lower()[:120]
+    if email and not EMAIL_RE.match(email):
+        return {"ok": False, "err": "That email doesn't look right."}
+    name = re.sub(r"[^\w \-']", "", str(d.get("name", "")).strip())[:24]
+    pid = str(d.get("pid", ""))[:40].lower()
+    ctx = d.get("context") if isinstance(d.get("context"), dict) else {}
+    ctx_safe = {
+        "page": str(ctx.get("page", ""))[:24],
+        "url": str(ctx.get("url", ""))[:240],
+        "ua": str(ctx.get("ua", ""))[:240],
+        "loc": str(ctx.get("loc", ""))[:36],
+        "room": str(ctx.get("room", ""))[:24],
+        "state": str(ctx.get("state", ""))[:16],
+        "seed": re.sub(r"\D", "", str(ctx.get("seed", "")))[:12],
+        "day": max(0, min(int(ctx.get("day", 0) or 0), 99999)),
+        "creative": bool(ctx.get("creative")),
+    }
+    pos = ctx.get("pos") if isinstance(ctx.get("pos"), dict) else {}
+    try:
+        ctx_safe["pos"] = {
+            "x": max(-9999, min(int(pos.get("x", 0) or 0), 9999)),
+            "y": max(-999, min(int(pos.get("y", 0) or 0), 999)),
+            "z": max(-9999, min(int(pos.get("z", 0) or 0), 9999)),
+        }
+    except Exception:
+        ctx_safe["pos"] = {}
+    entry = {
+        "id": secrets.token_hex(6),
+        "ts": time.time(),
+        "kind": kind,
+        "message": message,
+        "email": email,
+        "name": name,
+        "pid": pid if PID_RE.match(pid) else "",
+        "ip": ip,
+        "context": ctx_safe,
+    }
+    log = _load(FEEDBACK_F, [])
+    log.append(entry)
+    _save(FEEDBACK_F, log[-1000:])
+    if pid and PID_RE.match(pid):
+        players = _load(PLAYERS_F, {})
+        p = players.setdefault(pid, {"first": time.time(), "names": [], "minutes": 0, "worlds": {}})
+        p["last"] = time.time()
+        p["lastIp"] = ip
+        p["feedbackCount"] = p.get("feedbackCount", 0) + 1
+        if name and name not in p.get("names", []):
+            p["names"] = (p.get("names", []) + [name])[-5:]
+        _save(PLAYERS_F, players)
+    return {"ok": True, "msg": "Thanks — noted on t' parish ledger."}
+
+
 @app.post("/api/request-invite/respond")
 async def respond_request(req: Request):
     """LAN-only: approve (mints code) or reject a queued invite request."""
@@ -584,6 +654,7 @@ async def overview():
             "recent": sorted([r for r in _load(REQUESTS_F, []) if r.get("status") != "pending"],
                              key=lambda r: -(r.get("approvedTs") or r.get("closedTs") or r.get("ts", 0)))[:20],
         },
+        "feedback": list(reversed(_load(FEEDBACK_F, [])[-40:])),
     }
 
 
@@ -677,7 +748,19 @@ async function refresh(){
   for(const [k,v] of Object.entries(d.services)) h+='<tr><td>'+k+'</td><td class="'+(v==='active'?'ok':'bad')+'">'+v+'</td></tr>';
   h+='</table>';
   h+='<h2>Invites</h2><div class="cards"><div class="card"><div class="v">'+d.codes.claimed+' / '+d.codes.total+'</div><div class="k">codes claimed</div></div>';
-  h+='<div class="card"><div class="v">'+(d.inviteRequests?.pending?.length||0)+'</div><div class="k">invite requests waiting</div></div></div>';
+  h+='<div class="card"><div class="v">'+(d.inviteRequests?.pending?.length||0)+'</div><div class="k">invite requests waiting</div></div>';
+  h+='<div class="card"><div class="v">'+(d.feedback?.length||0)+'</div><div class="k">recent feedback (last 40)</div></div></div>';
+  const fb=d.feedback||[];
+  if(fb.length){
+    h+='<h2>Feedback &amp; bugs</h2><div class="muted">From t\\' title screen an\\' about page — includes URL, browser, an\\' any in-game coords sent.</div><table><tr><th>When</th><th>Kind</th><th>Message</th><th>Email</th><th>Page</th><th>Where</th><th>IP</th></tr>';
+    for(const f of fb) {
+      const pos=f.context?.pos;
+      const where=(f.context?.loc||'')+(pos&&pos.x!==undefined?' @ '+pos.x+','+pos.y+','+pos.z:'');
+      const msg=(f.message||'').replace(/</g,'&lt;').slice(0,180);
+      h+='<tr><td>'+ago(d.now,f.ts)+'</td><td>'+f.kind+'</td><td>'+msg+'</td><td>'+(f.email||'')+'</td><td>'+(f.context?.page||'')+'</td><td>'+(where||'')+'</td><td>'+f.ip+'</td></tr>';
+    }
+    h+='</table>';
+  }
   const pending=d.inviteRequests?.pending||[];
   if(pending.length){
     h+='<h2>Invite requests (adult rooms)</h2><div class="muted">Approve mints a fresh code — email it to them thysen.</div><table><tr><th>When</th><th>Email</th><th>Name</th><th>Note</th><th>IP</th><th></th></tr>';

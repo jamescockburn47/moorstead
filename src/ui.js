@@ -123,6 +123,7 @@ export class UI {
     // a clear "About" button, pinned top-right → the full plain-English technical write-up
     this.aboutBtn = this.el('a', 'about-btn', this.titleScreen, 'About');
     this.aboutBtn.href = '/about.html'; this.aboutBtn.rel = 'noopener';
+    this.feedbackBtn = this.el('button', 'about-btn feedback-btn', this.titleScreen, 'Feedback &amp; bugs');
     // a LIVE moor fly-over behind it all — procedural, no asset files (see titlescene.js).
     // A dark scrim over it keeps the text readable; falls back to the CSS gradient if WebGL won't start.
     const scene = this.el('div', 'title-scene', this.titleScreen);
@@ -199,6 +200,29 @@ export class UI {
     this.howContent = this.el('div', 'how-content', hp);
     this.buildHowSections();
     this.btnHowClose = this.el('button', 'mc', hp, 'Reet, Got It');
+
+    // ---------- feedback & bugs ----------
+    this.feedbackScreen = this.el('div', 'overlay hidden', body);
+    const fp = this.el('div', 'panel feedback-panel', this.feedbackScreen);
+    this.el('div', 'inv-title', fp, 'Feedback &amp; bugs');
+    this.el('div', 'muted-note', fp,
+      'Tell me what went wrong or what tha&rsquo;d like improved. I&rsquo;ll save the page, browser, and any game details with it.');
+    const fbKind = this.el('div', 'feedback-kind', fp);
+    fbKind.innerHTML =
+      '<label><input type="radio" name="fb-kind" value="bug" checked> Bug</label>' +
+      '<label><input type="radio" name="fb-kind" value="feedback"> Feedback</label>';
+    this.feedbackEmail = this.el('input', 'seed', fp);
+    this.feedbackEmail.type = 'email';
+    this.feedbackEmail.placeholder = 'Email (optional, if tha wants a reply)';
+    this.feedbackEmail.maxLength = 120;
+    this.feedbackMessage = this.el('textarea', 'seed feedback-msg', fp);
+    this.feedbackMessage.placeholder = 'What happened? Steps to reproduce help for bugs.';
+    this.feedbackMessage.maxLength = 2000;
+    this.feedbackMessage.rows = 6;
+    this.feedbackErr = this.el('div', 'login-err', fp, '');
+    this.feedbackOk = this.el('div', 'request-ok hidden', fp, '');
+    this.btnFeedbackSend = this.el('button', 'mc', fp, 'Send to t&rsquo; parish ledger');
+    this.btnFeedbackClose = this.el('button', 'mc', fp, 'Cancel');
 
     // ---------- death ----------
     this.deathScreen = this.el('div', 'overlay hidden', body); this.deathScreen.id = 'death-screen';
@@ -581,7 +605,7 @@ export class UI {
 
   // ============ screens ============
   show(name) {
-    for (const s of [this.titleScreen, this.pauseScreen, this.howScreen, this.deathScreen, this.invScreen, this.rangeScreen, this.loadingScreen, this.chatScreen, this.boardScreen, this.museumScreen]) {
+    for (const s of [this.titleScreen, this.pauseScreen, this.howScreen, this.feedbackScreen, this.deathScreen, this.invScreen, this.rangeScreen, this.loadingScreen, this.chatScreen, this.boardScreen, this.museumScreen]) {
       s.classList.add('hidden');
     }
     if (name) this[name].classList.remove('hidden');

@@ -128,6 +128,32 @@ input.seed {
   border-radius: 8px; box-shadow: 0 2px 14px rgba(0,0,0,0.35);
 }
 #title-screen a.about-btn:hover { background: rgba(216,185,90,0.18); border-color: var(--gold); }
+#title-screen button.about-btn { cursor: pointer; font-family: inherit; }
+#title-screen button.feedback-btn { top: 52px; }
+.feedback-kind { display: flex; gap: 18px; margin: 8px 0 4px; font-size: 14px; color: var(--text); }
+.feedback-kind label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.feedback-msg { width: 100%; max-width: 360px; resize: vertical; min-height: 110px; font-family: inherit; }
+.feedback-panel { max-width: 420px; }
+.feedback-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 10, 14, 0.82); padding: 20px;
+}
+.feedback-overlay.hidden { display: none; }
+.feedback-overlay .feedback-panel {
+  background: var(--panel, rgba(18, 20, 16, 0.95)); border: 1px solid var(--border, #4a4438);
+  border-radius: 10px; padding: 22px 24px; max-width: 440px; width: 100%;
+  color: var(--text, #e8e2d0);
+}
+.feedback-overlay .seed { width: 100%; margin: 6px 0; box-sizing: border-box; }
+.feedback-overlay .mc { margin-top: 8px; }
+.about-feedback-btn {
+  display: inline-block; margin-top: 14px; margin-right: 12px;
+  padding: 7px 16px; font-size: 13px; font-weight: 700; letter-spacing: 0.3px;
+  color: var(--gold); background: rgba(12, 14, 11, 0.55); border: 1px solid var(--border);
+  border-radius: 8px; cursor: pointer; font-family: inherit;
+}
+.about-feedback-btn:hover { background: rgba(216,185,90,0.12); border-color: var(--gold); }
 /* the title menu sits in a left column so it doesn't cover the train; left-align its buttons */
 #title-screen button.mc { margin-left: 0; margin-right: 0; }
 

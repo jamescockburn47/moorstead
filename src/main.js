@@ -13,7 +13,7 @@ import * as npc from './npc.js';
 import { Quests } from './quests.js';
 import { Economy, bestMarket, FREIGHT_ALLOWANCE, farmRegisterCheck, CHARTER_FEE, livestockPrice, droveValue } from './economy.js';
 import { deedFee, weeklyUpkeep, isLapsed, DEED, findActiveDeed, findLapsedDeed, inDeed } from './deeds.js';
-import { mayDigDeep, categoryOf } from './editledger.js';
+import { gatherContext, submitFeedback } from './feedback.js';
 import { commandFromKey } from './herding.js';
 import { Milestones } from './milestones.js';
 import { Net } from './multiplayer.js';
@@ -417,6 +417,9 @@ class Game {
     ui.requestEmail.addEventListener('keydown', e => { if (e.code === 'Enter') this.requestInvite(); e.stopPropagation(); });
     ui.requestName.addEventListener('keydown', e => { if (e.code === 'Enter') this.requestInvite(); e.stopPropagation(); });
     ui.requestNote.addEventListener('keydown', e => { if (e.code === 'Enter') this.requestInvite(); e.stopPropagation(); });
+    ui.feedbackBtn.addEventListener('click', () => this.openFeedback('title'));
+    ui.btnFeedbackClose.addEventListener('click', () => ui.show(this.feedbackReturn || 'titleScreen'));
+    ui.btnFeedbackSend.addEventListener('click', () => this.sendFeedback());
     ui.btnNew.addEventListener('click', () => { this.audio.init(); this.newWorld(ui.seedInput.value.trim()); });
     ui.btnShared.addEventListener('click', () => { this.audio.init(); this.joinShared(); });
     ui.netChatInput.addEventListener('keydown', e => {
@@ -1058,6 +1061,50 @@ class Game {
       this.ui.requestOk.textContent = d.msg || 'Thanks \u2014 I\u2019ll be in touch if there\u2019s a spot.';
     } catch {
       this.ui.requestErr.textContent = 'Can\u2019t reach t\u2019 parish clerk \u2014 try again later.';
+    }
+  }
+
+  openFeedback(page = 'title') {
+    this.feedbackReturn = this.ui.titleScreen.classList.contains('hidden') ? null : 'titleScreen';
+    this.ui.feedbackErr.textContent = '';
+    this.ui.feedbackOk.classList.add('hidden');
+    this.ui.feedbackMessage.value = '';
+    this.ui.feedbackPage = page;
+    this.ui.show('feedbackScreen');
+    this.ui.feedbackMessage.focus();
+  }
+
+  async sendFeedback() {
+    const message = this.ui.feedbackMessage.value.trim();
+    const email = this.ui.feedbackEmail.value.trim().toLowerCase();
+    const kind = this.ui.feedbackScreen.querySelector('input[name="fb-kind"]:checked')?.value || 'feedback';
+    if (message.length < 8) {
+      this.ui.feedbackErr.textContent = 'A bit more detail, love — at least a sentence.';
+      return;
+    }
+    this.ui.feedbackErr.textContent = 'Sending...';
+    this.ui.feedbackOk.classList.add('hidden');
+    const page = this.ui.feedbackPage || (this.world ? 'in-game' : 'title');
+    const name = (this.auth && this.auth.name) || this.player?.name || '';
+    try {
+      const d = await submitFeedback({
+        kind,
+        message,
+        email,
+        name,
+        context: gatherContext(this, page),
+        pid: this.devicePid(),
+      });
+      if (!d.ok) {
+        this.ui.feedbackErr.textContent = d.err || 'That didn\u2019t work.';
+        return;
+      }
+      this.ui.feedbackErr.textContent = '';
+      this.ui.feedbackOk.classList.remove('hidden');
+      this.ui.feedbackOk.textContent = d.msg || 'Thanks — noted on t\u2019 parish ledger.';
+      this.ui.feedbackMessage.value = '';
+    } catch {
+      this.ui.feedbackErr.textContent = 'Can\u2019t reach t\u2019 parish ledger — try again later.';
     }
   }
 
