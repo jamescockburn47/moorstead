@@ -1,4 +1,5 @@
 // Snow maths — run wi': node scripts/verify-snow.mjs
+import { TrampleBuffer } from '../src/footprints.js';
 import { stepAccumulation, snowfallIntensity, showerOscillation, snowLineFor } from '../src/snow.js';
 import { seasonStateAtPhase, YEAR, ANCHOR_SEC, ANCHOR_PHASE } from '../src/season.js';
 
@@ -37,6 +38,18 @@ const nowAtPhase = p => (ANCHOR_SEC + (p - ANCHOR_PHASE) * YEAR) * 1000 + 1;
 {
   (snowLineFor(0) > snowLineFor(1) ? ok : bad)('snow-line is higher with less snow');
   (snowLineFor(1) <= 30 ? ok : bad)('full snow blankets down to the valley floor (' + snowLineFor(1) + ')');
+}
+
+{
+  const tb = new TrampleBuffer(8);
+  tb.mark(0, 0, 100); tb.mark(0, 0, 100);          // same spot -> no duplicate
+  (tb.prints.length === 1 ? ok : bad)('trample buffer dedups the same step');
+  tb.mark(5, 5, 100);
+  (tb.prints.length === 2 ? ok : bad)('a step away adds a print');
+  for (let i = 0; i < 12; i++) tb.mark(i * 2, 0, 100);   // overflow the cap of 8
+  (tb.prints.length <= 8 ? ok : bad)('buffer is capped (got ' + tb.prints.length + ')');
+  (Array.isArray(tb.alive(100)) ? ok : bad)('alive() returns current prints');
+  (tb.alive(1000).length === 0 ? ok : bad)('old prints expire');
 }
 
 console.log('\nRESULT: ' + (failed ? 'FAIL' : 'PASS'));

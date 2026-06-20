@@ -25,6 +25,7 @@ import { escHtml } from './escape.js';
 import { buildTrain } from './train.js';
 import { Rails } from './rails.js';
 import { FloraLayer } from './floraLayer.js';
+import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase, bilberryInSeason } from './season.js';
 import { startLiveWeather } from './weather-live.js';
 import { boardingFolk } from './trainfolk.js';
@@ -297,6 +298,8 @@ class Game {
     this.rails = new Rails(this.scene, this.world.gen.geo); // t' permanent way, drawn proper
     if (this.floraLayer) this.floraLayer.clear();
     this.floraLayer = new FloraLayer(this.scene, this.world);
+    if (this.footprints) this.footprints.clear();
+    this.footprints = new Footprints(this.scene, this.world);
     this.entities.game = this;
     this.entities.onKill = mob => { this.quests.onMobKilled(mob); this.milestones.onKill(mob.type); };
     window.moorstead = window.moorcraft = this; // a handle for t' dev console
@@ -330,6 +333,7 @@ class Game {
   teardownWorld() {
     if (this.rails) { this.rails.dispose(); this.rails = null; }
     if (this.floraLayer) { this.floraLayer.clear(); this.floraLayer = null; }
+    if (this.footprints) { this.footprints.clear(); this.footprints = null; }
     this.entities.clear();
     for (const c of this.world.chunks.values()) {
       if (c.meshes) for (const m of c.meshes) { this.scene.remove(m); m.geometry.dispose(); }
@@ -3176,6 +3180,13 @@ class Game {
         : seasonState();
       this.season = season; // cached for other systems + the debug API
       if (this.floraLayer) this.floraLayer.update(dt, this.player.pos, season);
+      if (this.footprints && this.snowAccum > 0.1) {
+        const fpNow = performance.now() / 1000;
+        const walkers = [{ x: this.player.pos.x, z: this.player.pos.z }];
+        if (this.net) for (const r of this.net.remotes.values()) { const t = r.target; if (t) walkers.push({ x: t.x, z: t.z }); }
+        if (this.entities && this.entities.mobs) for (const mob of this.entities.mobs) walkers.push({ x: mob.pos.x, z: mob.pos.z });
+        this.footprints.update(dt, fpNow, walkers);
+      } else if (this.footprints) this.footprints.clear();
       this.snowAccum = stepAccumulation(this.snowAccum, season, dt);
       setSnowLevel(this.snowAccum); // height-gated snow on the tops (cheap uniform)
       const sbk = Math.floor(season.yearPhase * 40);
