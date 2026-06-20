@@ -114,8 +114,8 @@ Remove the drop-in (`sudo systemctl edit clint-body`, delete the lines) then
 
 ```bash
 # Copy files to the EVO
-scp clint_body.py james@100.90.66.54:/home/james/moorstead/clint-body/
-scp clint-body.service james@100.90.66.54:/etc/systemd/system/
+scp clint_body.py evo-tailscale:/home/james/moorstead/clint-body/
+scp clint-body.service evo-tailscale:/etc/systemd/system/
 
 # On the EVO
 sudo systemctl daemon-reload

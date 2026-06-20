@@ -16,6 +16,8 @@ export const TILE = {
   FERN: 35, FOXGLOVE: 36, DOG_ROSE: 37, ELDER: 38, MONKEY_LEAVES: 39,
   SLATE: 40, ST_CREAM: 41, ST_RED: 42, RBRICK: 43,
   TER_MINT: 44, TER_BLUE: 45, TER_PINK: 46, TER_YELLOW: 47,
+  MINE_ENTRANCE: 48, PIT_PROPS: 49, SAFETY_LAMP: 50, WINCH: 51,
+  ALUM: 52, POLYHALITE: 53, ROCK_SALT: 54,
 };
 
 // ---- Block ids ----
@@ -31,6 +33,13 @@ export const B = {
   TER_MINT: 41, TER_BLUE: 42, TER_PINK: 43, TER_YELLOW: 44,
   FENCE: 45, // sheep hurdle — a buildable stock barrier (farm/droving feature)
   GATE: 46,  // one-way field gate — open to an animal from outside, shut from inside; player passes
+  MINE_ENTRANCE: 47,
+  PIT_PROPS: 48,
+  SAFETY_LAMP: 49,
+  WINCH: 50,
+  ALUM_SHALE: 51,
+  POLYHALITE: 52,
+  ROCK_SALT: 53,
 };
 
 // ---- Item ids (blocks double as items; pure items start at 64) ----
@@ -64,7 +73,7 @@ export const I = {
 // t' relay keeps its own warden list for where/fx.) Dedicated warden login,
 // separate frae owt anybody plays on.
 // (Note: t' dash returns acct = sha1(code)[:10], so this is sha256 o' THAT.)
-export const ADMIN_HASHES = ['7335dca7ccd870b9b623258d8b389d8f2b33b1e496868d83c01d7d4af301cddc'];
+export const ADMIN_HASHES = ['29889b77f82b79d1585f514ac0e6489deed67ddb27b55a81109492a443b8e950'];
 
 // kind: 'solid' | 'cutout' (cross plants) | 'liquid' | 'air'
 // tex: {t, s, b} tile ids; hard: seconds to break by hand; tool: best tool
@@ -125,6 +134,14 @@ D[B.FENCE] = { name: 'Sheep Hurdle', kind: 'solid', tex: { t: TILE.PLANKS, s: TI
 // physics lets the player through allus, an' an animal through only frae OUTSIDE the fold
 // (see boxCollides + entity.passGate). Log-built, so it reads different frae the hurdle.
 D[B.GATE] = { name: 'Field Gate', kind: 'solid', tex: { t: TILE.LOG_TOP, s: TILE.LOG_SIDE, b: TILE.LOG_TOP }, hard: 1.2, tool: 'axe', drop: B.GATE };
+D[B.MINE_ENTRANCE] = { name: 'Mine Entrance', kind: 'solid', tex: { t: TILE.MINE_ENTRANCE, s: TILE.MINE_ENTRANCE, b: TILE.MINE_ENTRANCE }, hard: 2.5, tool: 'pick', drop: B.MINE_ENTRANCE };
+D[B.PIT_PROPS] = { name: 'Pit Props', kind: 'solid', tex: { t: TILE.PIT_PROPS, s: TILE.PIT_PROPS, b: TILE.PIT_PROPS }, hard: 1.5, tool: 'axe', drop: B.PIT_PROPS };
+D[B.SAFETY_LAMP] = { name: 'Safety Lamp', kind: 'solid', tex: { t: TILE.SAFETY_LAMP, s: TILE.SAFETY_LAMP, b: TILE.SAFETY_LAMP }, hard: 0.4, tool: 'pick', drop: B.SAFETY_LAMP, light: true };
+D[B.WINCH] = { name: 'Winch', kind: 'solid', tex: { t: TILE.WINCH, s: TILE.WINCH, b: TILE.WINCH }, hard: 2.0, tool: 'pick', drop: B.WINCH };
+D[B.ALUM_SHALE] = { name: 'Alum Shale', kind: 'solid', tex: { t: TILE.ALUM, s: TILE.ALUM, b: TILE.ALUM }, hard: 2.5, tool: 'pick', needsPick: true, drop: B.ALUM_SHALE };
+D[B.POLYHALITE] = { name: 'Polyhalite Seam', kind: 'solid', tex: { t: TILE.POLYHALITE, s: TILE.POLYHALITE, b: TILE.POLYHALITE }, hard: 3.2, tool: 'pick', needsPick: true, drop: B.POLYHALITE };
+D[B.ROCK_SALT] = { name: 'Rock Salt Seam', kind: 'solid', tex: { t: TILE.ROCK_SALT, s: TILE.ROCK_SALT, b: TILE.ROCK_SALT }, hard: 2.8, tool: 'pick', needsPick: true, drop: B.ROCK_SALT };
+
 
 export const BLOCKS = D;
 
@@ -236,6 +253,10 @@ export const RECIPES = [
   { out: I.HOLY_STAKE, n: 1, needs: [[I.WOODEN_STAKE, 1], [I.HOLY_WATER, 1]], bench: true },
   { out: B.FENCE, n: 3, needs: [[B.PLANKS, 1], [I.STICK, 2]] }, // a hurdle or three frae a plank an' a couple o' sticks
   { out: B.GATE, n: 1, needs: [[B.PLANKS, 2], [I.STICK, 2]] },  // a field gate frae a couple o' planks an' sticks
+  { out: B.MINE_ENTRANCE, n: 1, needs: [[B.PLANKS, 6], [B.STONEBRICK, 4]], bench: true },
+  { out: B.PIT_PROPS, n: 1, needs: [[B.LOG, 2], [I.STICK, 2]] },
+  { out: B.SAFETY_LAMP, n: 1, needs: [[I.IRON_INGOT, 2], [B.TORCH, 1]], bench: true },
+  { out: B.WINCH, n: 1, needs: [[B.PLANKS, 3], [I.STICK, 2], [I.IRON_INGOT, 1]], bench: true },
 ];
 
 // ---- Smelting (at t' range). Fuel: coal = 4 ops, peat = 1 op ----
@@ -274,6 +295,7 @@ export const CREATIVE_ITEMS = [
   B.TUSSOCK, B.BILBERRY_BUSH, B.FERN, B.FOXGLOVE, B.DOG_ROSE, B.ELDER, B.MONKEY_LEAVES,
   B.COAL_ORE, B.IRON_ORE, B.JET_ORE,
   B.BENCH, B.RANGE, B.LANTERN, B.WINDOW, B.TORCH, B.SIGNPOST, B.BOARD,
+  B.MINE_ENTRANCE, B.PIT_PROPS, B.SAFETY_LAMP, B.WINCH, B.ALUM_SHALE, B.POLYHALITE, B.ROCK_SALT,
   I.W_PICK, I.S_PICK, I.I_PICK, I.W_AXE, I.S_AXE, I.I_AXE,
   I.W_SHOVEL, I.S_SHOVEL, I.I_SHOVEL, I.W_SWORD, I.S_SWORD, I.I_SWORD,
   I.STICK, I.COAL_LUMP, I.RAW_IRON, I.IRON_INGOT, I.JET_GEM,

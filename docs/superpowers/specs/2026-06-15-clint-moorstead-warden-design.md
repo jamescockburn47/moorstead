@@ -23,7 +23,7 @@ This is **operational embedding**, not code-merging: Clint and Moorstead remain 
 
 ## 2. The two systems and the seam
 
-**Moorstead** — voxel game (vite + three.js). Client source of truth is this repo (`C:\Users\James\Desktop\Moorcraft`), public at `moorstead.app`. The live backend runs on the **EVO** box (Tailscale `100.90.66.54`), under `~/moorstead/` which is **not under git**:
+**Moorstead** — voxel game (vite + three.js). Client source of truth is this repo (`C:\Users\James\Desktop\Moorcraft`), public at `moorstead.app`. The live backend runs on the **EVO** box (`ssh evo-tailscale`), under `~/moorstead/` which is **not under git**:
 - **worldsvc relay** (`:8096`, uvicorn) — the multiplayer WebSocket server. Holds live presence (who is connected, in which room) and persists block edits to `~/moorstead/world/<room>.json`. **This is the source of truth for entry/exit and activity, and the broadcast bus for any in-world character.**
 - **Parish Ledger dashboard** (`:8095`) — the admin console: accounts, rooms (`/api/setroom`), invite codes (`codes.json`), claim. LAN/Tailscale-only; the Cloudflare tunnel exposes only `/ping` + `/auth/claim`.
 - **brain** (`:8010`) — NPC persona AI (Gemma), serves 18 personas across 7 settlements. Existing substrate for in-world AI characters.

@@ -13,7 +13,7 @@ if ($running) { exit 0 }
 
 $urls = @(
   'http://192.168.1.230:8095/',   # EVO on t' home LAN
-  'http://100.90.66.54:8095/'     # EVO ower Tailscale (away frae home)
+  'http://evo-tailscale:8095/'     # EVO ower Tailscale (away frae home)
 )
 $target = $null
 foreach ($u in $urls) {

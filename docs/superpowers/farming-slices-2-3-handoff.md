@@ -12,7 +12,7 @@ The make-or-break: **droving must clearly out-earn every other income path** (Ja
 
 ## What Moorstead is, and the stack
 
-A browser voxel sandbox of the North York Moors (Vite + three.js, fully procedural, no asset files). Public client is **www.moorstead.app** on Vercel. Backend services run on a home box ("the EVO", `ssh evo-tailscale` = james@100.90.66.54, passwordless sudo): the villager **brain** (FastAPI :8010, gemma MoE via llama.cpp), the multiplayer **relay** (worldsvc :8096), the LAN-only **dashboard** (:8095), and **Merlin** (clint-body). It is played by children (the `bairns` room), so: never ship unverified mechanics, keep everything legible to a ten-year-old, and treat it as production.
+A browser voxel sandbox of the North York Moors (Vite + three.js, fully procedural, no asset files). Public client is **www.moorstead.app** on Vercel. Backend services run on a home box ("the EVO", `ssh evo-tailscale`, passwordless sudo): the villager **brain** (FastAPI :8010, gemma MoE via llama.cpp), the multiplayer **relay** (worldsvc :8096), the LAN-only **dashboard** (:8095), and **Merlin** (clint-body). It is played by children (the `bairns` room), so: never ship unverified mechanics, keep everything legible to a ten-year-old, and treat it as production.
 
 Client source of truth (git): `C:\Users\James\Desktop\Moorcraft`. Deploy + verify flow is in `README.md` "Deploying" and the `moorcraft-evo-stack` / `moorstead-npc-memory` memories.
 
@@ -68,7 +68,7 @@ The "needn't be near the railway" path — the physical, atmospheric alternative
 - **Production, kids play it.** Verify everything live before claiming done. Never ship an unverified balance change.
 - **Accuracy (James's #1 rule):** never document a mechanic that isn't wired. The current handbook/about.html deliberately omit the registered farm + droving because they aren't built — that's correct; only add them once reachable.
 - **James's voice prose (about.html, write-ups): NO em-dashes, no AI tells, first-person, plain English.** In-game dialect UI uses `&mdash;` entities deliberately — that's fine and separate.
-- **Secrets / git:** the repo is PRIVATE. `moorstead keys.md` is gitignored. **Never `git add -A`** (it sweeps `finetune/`, `__pycache__`, secrets, scratch). Stage explicit paths. Commit messages end with the Co-Authored-By trailer; deploy only when asked.
+- **Secrets / git:** the repo is **public**. Live invite codes stay on the EVO only (`moorstead keys.md` is gitignored). **Never `git add -A`** (it sweeps `finetune/`, `__pycache__`, secrets, scratch). Stage explicit paths. See `SECURITY.md`. Deploy only when asked.
 
 ## Gotchas worth knowing
 

@@ -74,7 +74,7 @@ Today the regen is **client-only**, so on the **shared bairns moor** the relay r
 - **Accuracy (James's #1 rule):** never document a mechanic that isn't wired. No invented authorities anywhere.
 - **James's voice prose (about.html, write-ups): NO em-dashes, no AI tells, first-person, plain English.** In-game dialect UI uses `&mdash;` entities deliberately — that's fine and separate.
 - **Rates bias SLOW** (§14b): healing/decay never perceptible within a session; all rates are isolated constants; bairns world decays ~2× slower. Start slow; it's easier to speed up than to walk back a moor that cycled too fast.
-- **Secrets / git:** the repo is PRIVATE. **Never `git add -A`** (it sweeps `finetune/`, `__pycache__`, secrets, scratch). Stage explicit paths. Commit messages end with the Co-Authored-By trailer; deploy only when asked. The repo works directly on `main` (James's workflow).
+- **Secrets / git:** the repo is **public**. Live invite codes stay on the EVO only. **Never `git add -A`**. See `SECURITY.md`. Deploy only when asked. The repo works directly on `main` (James's workflow).
 
 ## Gotchas worth knowing
 

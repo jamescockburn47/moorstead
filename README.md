@@ -12,7 +12,7 @@ npm run dev
 Then open the printed local URL (usually `http://localhost:5173`).
 
 To build for production: `npm run build` (output in `dist/`).
-Headless test suite — `npm run verify` (13 checks: railway, rail clearance, train view, resources, landmarks, season, weather, pets, villagers, economy, herding, game-facts, NPC activity). Run it before every deploy.
+Headless test suite — `npm run verify` (18 checks: railway, rail clearance, train view, resources, landmarks, season, weather, pets, villagers, economy, herding, game-facts, NPC activity, farm, regeneration, deeds, menagerie, mining). Run it before every deploy.
 
 ## Deploying
 
@@ -32,8 +32,8 @@ Vercel rebuilds from local source — a `git push` does **not** deploy. Verify l
 | --- | --- | --- |
 | Merlin (in-world wizard) | `clint-body/` (in repo) | `scp clint-body/{clint_body.py,npc_facts.py,game-facts.json}` → `~/moorstead/clint-body/`, then `sudo systemctl restart clint-body clint-body-bairns` |
 | Villager brain (FastAPI :8010) | `~/moorstead/yorkshire_bot/brain/` (**not** in repo) | edit working copies under `C:\Users\James\moorstead-evo-work\brain\`, `scp` back, `sudo systemctl restart moorstead-brain` |
-| Relay (worldsvc :8096) | `~/moorstead/worldsvc/` (not in repo) | `scp` + `sudo systemctl restart moorstead-world` |
-| Dashboard (parish ledger, LAN-only :8095) | `~/moorstead/dash/` (not in repo) | edit `moorstead-evo-work/dash/`, `scp` back, `sudo systemctl restart moorstead-dash` |
+| Relay (worldsvc :8096) | `deploy/world/server.py` → EVO `~/moorstead/worldsvc/` | `scp` + `sudo systemctl restart moorstead-world` |
+| Dashboard (parish ledger, LAN-only :8095) | `deploy/dash/app.py` → EVO `~/moorstead/dash/` | `scp` + `sudo systemctl restart moorstead-dash` |
 
 `deploy/ship.ps1` does the client build + EVO mirror + Vercel in one go (it hangs off home LAN — see the `moorcraft-evo-stack` memory for the manual Tailscale path). Full host/port/tunnel detail is in `deploy/README.md`.
 
@@ -79,6 +79,14 @@ cliffs to the east. Fixed landmarks: **Roseberry Topping**, **T' Hole of Horcum*
 **the Wainstones**, **Rosedale ironstone kilns**, **Wade's Causey**, scattered
 **moor crosses** (say hello to Fat Betty), and the ruined **abbey** on the cliff
 top above Whitby.
+
+## Claims, decay & mining
+
+* **Deep dig restrictions**: Digging more than 1 block below the original terrain grade is restricted outside designated public quarries (Moorstead, Goathland, Pickering) and licensed mines.
+* **Mine licensing**: Players can place a Mine Entrance block and buy a Mining Licence at notice boards to unlock a depth band. Deepening the mine up to 40m requires upgrades.
+* **Safety fixtures**: Digging in deep bands requires a corresponding pick tier and at least one safety fixture block (Pit Props, Safety Lamp, Winch) placed inside the mine's 5m cylinder.
+* **Prospecting skill**: Mining Jet requires Prospecting Level 3, and Polyhalite requires Level 6. Novices get only bare stone.
+* **Land claims**: Players can stake a claim to protect their builds. Unclaimed builds decay after 30 days, and builds in lapsed claims crumble gradually. Breeding triggers in claims with 2 or more of the same animal species.
 
 ## Controls
 

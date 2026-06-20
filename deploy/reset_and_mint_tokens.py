@@ -1,5 +1,6 @@
-# Token reset + typed mint (run on t' EVO).
-# Keeps: beck-kiln-87 (Alice) an' bilberry-gloaming-67 (t' warden login).
+# Token reset + typed mint (run on t' EVO only — never commit live codes).
+# Before running, set KEEP to the warden code you want to preserve (see moorstead keys.md
+# on the EVO, not in git). Example: KEEP = {"warden-example-42"}
 # Wipes every other code an' account, then mints typed batches whose PREFIX
 # designates t' world-room:
 #   bairn-*  -> room "bairns"  (t' kids)       x20
@@ -11,7 +12,7 @@ import json
 import shutil
 import time
 
-KEEP = {"beck-kiln-87", "bilberry-gloaming-67"}
+KEEP = set()  # populate on the EVO before running, e.g. {"warden-example-42"} — never commit real codes
 CODES_F = "/home/james/moorstead/dash/codes.json"
 ACCTS_F = "/home/james/moorstead/dash/accounts.json"
 
@@ -53,8 +54,7 @@ json.dump(kept_codes, open(CODES_F, "w"), indent=1)
 json.dump(kept_accts, open(ACCTS_F, "w"), indent=1)
 
 sheet = "Moorstead invite tokens — minted %s\n" % stamp
-sheet += "Kept: beck-kiln-87 (Alice, room %s), warden login (not a hand-out token)\n" % (
-    kept_accts.get("beck-kiln-87", {}).get("room", "moor"))
+sheet += "Kept codes: %s\n" % (", ".join(sorted(KEEP)) or "(none)")
 sheet += "Removed: %d old codes, %d old accounts\n" % (removed_codes, removed_accts)
 sheet += "\n".join(lines) + "\n"
 open("/home/james/moorstead/dash/handout.txt", "w").write(sheet)

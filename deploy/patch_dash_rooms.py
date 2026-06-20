@@ -5,6 +5,7 @@
 # - 20 bairn-* codes (room=bairns); wardens.json fixed to t' sha1-prefix acct
 import hashlib
 import json
+import os
 
 P = "/home/james/moorstead/dash/app.py"
 s = open(P).read()
@@ -112,6 +113,9 @@ for i, w in enumerate(words):
 json.dump(codes, open(CP, "w"), indent=1)
 print("kid codes added:", added)
 
-wacct = hashlib.sha1(b"bilberry-gloaming-67").hexdigest()[:10]
+wcode = os.environ.get("WARDEN_CODE", "").strip().lower()
+if not wcode:
+    raise SystemExit("Set WARDEN_CODE to the warden invite (run on EVO only), then re-run.")
+wacct = hashlib.sha1(wcode.encode()).hexdigest()[:10]
 json.dump({"pids": ["a" + wacct]}, open("/home/james/moorstead/world/wardens.json", "w"), indent=1)
 print("wardens.json fixed: a" + wacct)
