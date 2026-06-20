@@ -1,0 +1,38 @@
+# Moorstead on the EVO (tunnel :8090). Canonical copy for rebuilds — live file is /etc/caddy/Caddyfile.
+:8090 {
+	encode gzip
+
+	log {
+		output file /var/log/caddy/moorstead.log {
+			roll_size 20mb
+			roll_keep 5
+			mode 0644
+		}
+		format json
+	}
+
+	handle /ws {
+		reverse_proxy 127.0.0.1:8096
+	}
+
+	# Parish ledger: only these paths are public; dashboard UI stays LAN-only
+	handle_path /dash/* {
+		@notallowed not path /ping /auth/claim /visit /request-invite /feedback
+		respond @notallowed 403
+		reverse_proxy 127.0.0.1:8095
+	}
+
+	handle_path /brain/* {
+		@blocked path /api/generate-sprite* /api/sprite/*
+		respond @blocked 403
+		reverse_proxy 127.0.0.1:8010
+	}
+
+	handle {
+		header /index.html Cache-Control "no-cache"
+		header / Cache-Control "no-cache"
+		root * /home/james/moorstead/game
+		try_files {path} /index.html
+		file_server
+	}
+}
