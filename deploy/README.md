@@ -5,7 +5,7 @@
 > - **The EVO runs the backend services**, reached via the `sovren-cloudflared` tunnel + Caddy on **:8090**:
 >   - `/brain/*` → villager **brain** `moorstead-brain` (FastAPI **:8010**) → llama.cpp **:8086** (gemma MoE, not Ollama).
 >   - `/ws` → multiplayer **relay** `moorstead-world` (**:8096**).
->   - `/dash/*` → **dashboard** `moorstead-dash` (**:8095**, LAN/Tailscale-only; only `/ping` + `/auth/claim` are tunnelled).
+>   - `/dash/*` → **dashboard** `moorstead-dash` (**:8095**, LAN/Tailscale-only; only `/ping`, `/auth/claim`, and `/visit` are tunnelled).
 >   - **Merlin** = `clint-body` + `clint-body-bairns` services.
 > - **Editing the off-repo services** (brain, relay, dash): keep local working copies under `C:\Users\James\moorstead-evo-work\`, edit + test there, `cp x x.bak-YYYYMMDD-tag` on the EVO, `scp` back, `sudo systemctl restart <service>`, smoke-test. `ssh evo-tailscale`, passwordless sudo.
 > - **Debug:** client loads but login/chat fails ⇒ check `systemctl is-active sovren-cloudflared` FIRST (login `/dash` + relay `/ws` both ride the tunnel).
