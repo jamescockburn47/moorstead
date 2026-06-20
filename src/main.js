@@ -946,6 +946,16 @@ class Game {
     return `${this.devicePid()}-s${this.seed}`.toLowerCase().slice(0, 64);
   }
 
+  // Tell a brain-backed vendor about a completed trade so they remember the deal.
+  // Fire-and-forget; passers-by (no charId) keep no memory, so skip them.
+  recordTrade(villager, itemId, direction) {
+    if (!villager || !villager.charId) return;
+    try {
+      const item = itemName(itemId).toLowerCase().replace(/^(raw|roast)\s+/, '');
+      npc.trade(villager.charId, item, 1, direction, this.playerId());
+    } catch { /* never let trade-memory break a trade */ }
+  }
+
   async login() {
     const code = this.ui.loginCode.value.trim().toLowerCase();
     const name = this.ui.loginName.value.trim();

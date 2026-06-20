@@ -85,6 +85,23 @@ export function talkGeneric(persona, message, playerName, context) {
   });
 }
 
+// Tell the brain about a completed trade so the vendor remembers the specific
+// deal and can bring it up later. Best-effort, fire-and-forget: a failure here
+// must never affect the trade the player just made.
+export function trade(characterId, item, qty, direction, playerId) {
+  return req('/api/trade', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      character_id: characterId,
+      item: item || '',
+      qty: qty || 1,
+      direction: direction || 'sell',
+      player_id: playerId || null,
+    }),
+  }, 8000).catch(() => null);
+}
+
 // -> {total_trust, standing, next_threshold, progress, villagers}
 export function standing(playerId) {
   return req('/api/standing?player_id=' + encodeURIComponent(playerId || ''), {}, 8000);

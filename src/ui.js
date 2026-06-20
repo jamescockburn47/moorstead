@@ -627,6 +627,7 @@ export class UI {
           b.addEventListener('click', () => {
             if (econ.doBuy(v, id)) {
               v.chatLog.push({ who: 'sys', text: `Bought ${itemName(id)} for ${econ.format(price)}.` });
+              this.game.recordTrade(v, id, 'buy');
               this.renderChatLog(); this.renderChatActions();
             }
           });
@@ -642,6 +643,7 @@ export class UI {
         b.addEventListener('click', () => {
           if (econ.dropInSell(v, id)) {
             v.chatLog.push({ who: 'sys', text: `Sold ${itemName(id)} for ${econ.format(price)}.` });
+            this.game.recordTrade(v, id, 'sell');
             this.renderChatLog(); this.renderChatActions();
           }
         });

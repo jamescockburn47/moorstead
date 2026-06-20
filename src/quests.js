@@ -6,6 +6,7 @@ import { mulberry32, hash2i } from './noise.js';
 import { ROSEBERRY, WAINSTONES, KILNS, HORCUM, DRACULA_MOOR } from './geography.js';
 import { loreFor } from './lore.js';
 import * as npc from './npc.js';
+import { buildActivityDigest } from './activity.js';
 
 const STANDINGS = ['Newcomer', 'Known', 'Welcomed', 'Respected', 'Treasured'];
 const STANDING_THRESHOLDS = [0, 5, 20, 50, 100];
@@ -955,6 +956,10 @@ export class Quests {
 
     parts.push(`Village reputation note: the visitor is currently "${STANDINGS[sIdx]}" in the village.` +
       (this.shame > 0 ? ' You have also heard they have caused damage or trouble around the village lately; you are noticeably cooler with them until they make amends, and you may mention what you heard.' : ''));
+
+    // a nosey glance at what the visitor's been up to (inventory, stock, progress)
+    const activity = buildActivityDigest(this.game);
+    if (activity) parts.push(activity);
 
     // matters o' record: arc progress everyone in t' village knows
     if (this.completed.includes('arc5')) {
