@@ -8,7 +8,7 @@
 
 Build the rest of Moorstead's **Living Moor** (world-sustainability) system. The design is one coherent system built in 5 slices; **Slices 1 and 2 are already built and verified**. Your priority is **Slice 4 — licensed mining** (the part James most wants — "all the mining work"), then **Slice 3 — land claims** and **Slice 5 — relay + breeding**.
 
-The full, approved design is in `docs/superpowers/specs/2026-06-20-living-moor-design.md` — **read it first** (15 sections). This prompt summarises it and tells you exactly what is already built so you don't redo it.
+The full, approved design is in `docs/superpowers/specs/2026-06-20-living-moor-design.md` — **read it first** (15 sections). This prompt summarises it and tells you exactly what is already built so you don't redo it. Two further pieces discussed this session but not built — the farming **menagerie** (Slice 4) and the **Goods Market price-board** — are captured under "Other work" near the end, so this handoff is the *complete* remaining picture.
 
 **The make-or-break for mining:** the **depths, fees, fixtures, ore yields, and the prospecting-skill curve are balance-sensitive** — present concrete numbers and a feel-comparison and **tune them with James in the loop**, the way the droving payout was tuned. Do not silently ship balance numbers.
 
@@ -84,6 +84,18 @@ Today the regen is **client-only**, so on the **shared bairns moor** the relay r
 - **Textures are procedural** (`textures.js` draws each atlas tile in code) — copy an existing block's tile and adapt; don't expect image files.
 - **`npm run verify` is currently 16 checks** — each new pure module adds one.
 - **Don't reinvent:** the deeds backbone (`deeds.js` + `world.deeds` + `stakeClaim`/`settleUp`) and the edit-ledger revert (`setBlock(was)`) already exist — the mine licence is just a `kind:'mine'` deed, and reversion is "forget the edit".
+
+## Other work discussed this session but not yet built (beyond the Living Moor)
+
+Fold these into the same coordinated deploy.
+
+**Farming Slice 4 — the wider menagerie (specced, NOT built).** Spec: `docs/superpowers/specs/2026-06-19-farming-droving-design.md` §6, §14 d/i/k. Generalise the built sheep drove to the rest of the livestock **as data** — a `droveable` flag on the mob def + a per-species `livestockPrice`, reusing the built muster→drove→Moorstead-yard-sale loop and the `herd()` filter. Per-species (tune the value ladder **live with James**, anchored on sheep = 120d): **cattle** (Dale Cow — the classic cattle drove, ~340d, slow + big), **horses** (Moorland Pony — a horse fair, ~540d, but the pony **stays a rideable mount** so you sell spares), **pigs** (Saddleback — **sty stock sold individually, not droved**, ~150d, keep the truffle-snuffle), **llamas** (Pack Llama — wool stock ~110d). The **Dale Bull is excluded** (a goring hazard). Two real-state fixes it must carry: the llama **isn't `tameable` today** (add it); the pig drops `RAW_BEEF` as a pork stand-in (add pork, or leave — decide at build).
+
+**The Goods Market price-board + limited-time offers (SP3 incentive layer — discussed, NOT yet specced).** James's idea: the Goods Market board today only reflects what the player holds — make it an **incentive engine**. Show where **every** good sells dear (the full `PRICES × SPREAD` in `economy.js`, including goods not yet held) so the player gets a goal ("jet's fetching a fortune at Whitby — go mine some"), plus **limited-time 'wanted' offers / surge demand** that motivate gathering a specific item. This is **SP3** of the economy program, pulled forward. Two tiers: (1) a cheap UI win — the price board over data that already exists; (2) the dynamic-offers engine (new state on game-days, the shared "moor market report" over the relay). **Keep it gentle and legible for the bairns** — no 50-row matrix, no anxious countdown timers. **Not yet designed — start with the brainstorming skill → a spec.** Tracked as the market-board task.
+
+**Deploy coordination:** the farming vertical (Slices 2–3 **built**, Slice 4 to build), the whole Living Moor (Slices 1–2 built, 3–5 to build), and ideally the market board ship in **one coordinated deploy** once built + verified — `npx vercel deploy --prod --yes`, then verify the live bundle (curl the homepage, grep `assets/index-*.js` for a string unique to your change). Players cache hard (Ctrl+Shift+R). Deploy only when James asks.
+
+**Explicitly OUT / future (do not scope-creep into these):** the monthly fair; NPC farmers / NPC agency (SP4); player-foundable settlements + new rail (SP5); weather/seasonal erosion; soil fertility / crop rotation; the full emergent per-sheep flocking model. The specs note these as later sub-projects.
 
 ## References
 
