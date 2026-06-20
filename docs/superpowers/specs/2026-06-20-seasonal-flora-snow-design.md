@@ -56,6 +56,8 @@ Add pure scalars built with the existing `bump()` idiom, all in `[0,1]`, all uni
 - `seedhead` — bump at autumn (~0.62), overlapping `autumn`.
 - `frost` — rises with winter (mirror of `warmth < 0`), for atmosphere and faint evergreen frosting.
 
+Plan 2 also adds a `brambleFlower` window (late spring/early summer) and a `blackberry` window (late summer→autumn) for the lineside brambles.
+
 No new state; pure functions of `yearPhase`.
 
 ### 2. Persistent flora colour — `src/textures.js` (extend, atlas retint, no re-mesh)
@@ -74,6 +76,7 @@ A client-side **instanced cutout overlay**, decoupled from chunk meshes.
 - Foxgloves move here as a summer-blooming overlay flower; the dense persistent `B.FOXGLOVE` block scatter in worldgen is thinned accordingly.
 - **Decorative, not harvestable** (overlay quads, not blocks). The persistent block flora (heather, gorse, fern, etc.) stay real, harvestable blocks — but their worldgen density is reduced and clumped to match the patchier look.
 - Renders around the player within view distance; recycles instances as the player moves (same pattern as `src/rails.js`).
+- **Density modes:** the open moor uses the patchy clump mask (sparse, bare ground between); the **lineside uses a dense mode** — its own premise, not the moor's — that may place **several instances per block cell** for a lush, riotous band. Bramble is an overlay species: small **white flowers** in late spring/early summer, then **blackberries** in late summer/autumn (the picking is added by the forage sibling spec, hooking onto these brambles).
 
 ### 4. Snow — `src/mesher.js` (extend) + `src/snow.js` (new) + `src/sky.js` (extend)
 
@@ -91,12 +94,13 @@ Evergreen contrast (monkey puzzle, holly + red berries), rosehips/haws on hedger
 
 ### 6. Lineside corridor — `src/worldgen.js` (extend)
 
-The railway already plants a narrow verge (`geo.railInfo(x,z).d`, flora on `d 2.4–5`). Thicken it significantly so the line runs through lush green corridors:
+The railway already plants a narrow verge (`geo.railInfo(x,z).d`, flora on `d 2.4–5`). Thicken it significantly so the line runs through lush green corridors. Unlike the open moor, the lineside is **deliberately, artificially dense** — it does NOT follow the moor's patchy-clump premise; the flower overlay packs **multiple instances per block cell** on the verge for a riotous band (still fully seasonal).
 
-- Widen the planted band and raise density — hedgerow, brambles, ferns and flowers on the verges and cutting tops, denser than the open moor.
-- Add trackside copses and hedgerow trees (regular species; fruit trees arrive with the forage sibling spec), placed by the same clumped, patchy distribution as the rest of the moor.
+- Widen the planted band and raise density well beyond the open moor — hedgerow, ferns, flowers and dense bramble running the length of the line.
+- **Thick brambles are the signature lineside plant:** a near-continuous bramble band on the verges, carrying **small white flowers** in late spring/early summer, then **blackberries** in late summer/autumn. These brambles are placed and shown seasonally here; **blackberry foraging (picking → edible item) is the forage sibling spec**, which hooks onto the brambles this plan establishes.
+- Add trackside copses and hedgerow trees (regular species; fruit trees arrive with the forage sibling spec).
 - **Clearance constraint:** nothing is placed inside the loading-gauge envelope or where it would block the train's window sightlines. The cleared four-foot (`d < 4`) stays clear, new planting sits beyond the gauge, and `verify-rail-clearance` + `verify-train-view` must still pass.
-- Seasonal colour and flowers on the corridor come free from Layers 1–3; this is purely a density/placement change to worldgen.
+- Seasonal colour and foliage on the corridor come free from Layers 1–3; the new worldgen/overlay work is the dense placement, the brambles, and the lineside overlay density.
 
 ## Determinism, multiplayer, performance
 
