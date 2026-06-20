@@ -118,18 +118,20 @@ input.seed {
 /* once the real voxel world is meshed in behind the UI, drop the gradient to reveal it */
 #title-screen.world-shown { background: none; }
 .title-foot { position: absolute; left: 4.5vw; bottom: 12px; max-width: 60vw; font-size: 12px; color: #9a948a; }
-/* a clear "About" button pinned top-right of the title screen -> full technical write-up.
-   selector carries id+class+type so it outranks the blanket position:relative on title children */
-#title-screen a.about-btn {
-  position: absolute; top: 16px; right: 18px; z-index: 3;
+/* Top-right title links — selector outranks #title-screen > * { position: relative }. */
+#title-screen .about-btn {
+  position: absolute; right: 18px; z-index: 4;
   padding: 7px 16px; font-size: 13px; font-weight: 700; letter-spacing: 0.4px;
   color: var(--gold); text-decoration: none;
   background: rgba(12, 14, 11, 0.62); border: 1px solid rgba(216, 185, 90, 0.5);
   border-radius: 8px; box-shadow: 0 2px 14px rgba(0,0,0,0.35);
+  pointer-events: auto;
 }
-#title-screen a.about-btn:hover { background: rgba(216,185,90,0.18); border-color: var(--gold); }
-#title-screen button.about-btn { cursor: pointer; font-family: inherit; }
-#title-screen button.feedback-btn { top: 52px; }
+#title-screen a.about-btn { top: 16px; }
+#title-screen button.about-btn {
+  top: 52px; cursor: pointer; font-family: inherit;
+}
+#title-screen .about-btn:hover { background: rgba(216,185,90,0.18); border-color: var(--gold); }
 .feedback-kind { display: flex; gap: 18px; margin: 8px 0 4px; font-size: 14px; color: var(--text); }
 .feedback-kind label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .feedback-msg { width: 100%; max-width: 360px; resize: vertical; min-height: 110px; font-family: inherit; }
