@@ -20,6 +20,8 @@ const MILESTONES = {
   iron_tools:   'Iron tools — top o’ t’ toolbox. Tha’s earned that, that tha has.',
   stood_ground: 'Tha saw it off! T’ moor’s a bit safer for thi pluck.',
   first_neet:   'Tha’s seen a neet through on t’ moors. Not bad, that — not bad at all.',
+  flock_penned:    'Tha’s penned thi first stock! Keep 5 head in a fold an’ tha can register a farm at t’ Moorstead notice board.',
+  farm_registered: 'Tha’s a registered farmer now! T’ parish has thi fold on t’ books.',
 };
 const STEERS = new Set(['iron_tools', 'first_neet']);
 const STEER_TEXT = 'T’ village folk have jobs for them as’ll do ’em — find a <b>notice board</b>, or have a word wi’ a villager who looks like they’ve summat on their mind.';

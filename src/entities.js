@@ -1,6 +1,7 @@
 // Mobs (Swaledale sheep, grouse, hares, barghest, boggarts), item drops, particles.
 import * as THREE from 'three';
 import { B, I, BLOCKS, isSolid } from './defs.js';
+import { FARM_THRESHOLD } from './economy.js';
 import { moveEntity } from './physics.js';
 import { getIconURL, tileColor } from './textures.js';
 import { hash2i } from './noise.js';
@@ -1314,7 +1315,18 @@ export class Entities {
         this.makeCompanion(m, name);
         m.stay = true; m.home = { x: m.pos.x, y: m.pos.y, z: m.pos.z }; m.herding = false;
         (player.pets || (player.pets = [])).push({ kind: 'sheep', name, stay: true, home: { ...m.home } });
-        if (this.game && this.game.ui) this.game.ui.toast(`<b>${name}</b>’s penned — she’s thi stock now.`, 3500);
+        if (this.game) {
+          const head = (player.pets || []).filter(p => p && p.kind === 'sheep').length;
+          const registered = player.farmStatus && player.farmStatus.registered;
+          let msg = `<b>${name}</b>’s penned — she’s thi stock now.`;
+          if (!registered) {
+            msg += head >= FARM_THRESHOLD
+              ? ` <b>${head} head!</b> Tha can register thi farm at t’ Moorstead notice board.`
+              : ` <b>${head}/${FARM_THRESHOLD} head</b> — pen ${FARM_THRESHOLD - head} more to register a farm.`;
+          }
+          if (this.game.ui) this.game.ui.toast(msg, 4500);
+          if (this.game.milestones) this.game.milestones.fire('flock_penned');
+        }
       }
     }
   }
