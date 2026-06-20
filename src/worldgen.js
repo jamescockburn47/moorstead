@@ -301,19 +301,18 @@ export class Gen {
           const surf = data[IDX(lx, h, lz)];
           const r = hash2i(x, z, this.seed ^ 0xf10);
           const heath = geo.heatheriness(x, z);
-          const onVerge = ri && ri.d >= 2.4 && ri.d < 5; // t' railway's banks an' cuttin' tops
-          if (onVerge && (surf === B.GRASS || surf === B.DIRT)) {
-            // lineside verge: where t' railway fenced its land off frae t'
-            // grazin', ferns an' flowers run riot — t' character o' t' line
+          const onVerge = ri && ri.d >= 4 && ri.d < 7;   // widened band, beyond the four-foot
+          if (onVerge && (surf === B.GRASS || surf === B.DIRT) && data[IDX(lx, h + 1, lz)] === B.AIR) {
+            // lineside verge: dense varied band — brambles, ferns, foxgloves,
+            // holly an' bracken; t' four-foot stays clean beyond ri.d < 4
             const v = hash2i(x, z, this.seed ^ 0x5a1e);
             let plant = 0;
-            if (v < 0.20) plant = B.FERN;
-            else if (v < 0.32) plant = B.FOXGLOVE;
-            else if (v < 0.40) plant = B.DOG_ROSE;
-            else if (v < 0.46) plant = B.ELDER;
-            else if (v < 0.54) plant = B.BRACKEN;
-            else if (v < 0.60) plant = B.TUSSOCK;
-            if (plant && data[IDX(lx, h + 1, lz)] === B.AIR) data[IDX(lx, h + 1, lz)] = plant;
+            if (v < 0.22) plant = B.BRAMBLE;        // brambles
+            else if (v < 0.46) plant = B.FERN;      // thick ferns
+            else if (v < 0.62) plant = B.FOXGLOVE;  // foxglove spikes
+            else if (v < 0.74) plant = B.HOLLY;     // evergreen winter anchor
+            else if (v < 0.84) plant = B.BRACKEN;   // bracken
+            if (plant) data[IDX(lx, h + 1, lz)] = plant;   // ~16% left bare
           } else if (surf === B.GRASS) {
             // patches o' colour on an open moor: heather drifts (purple),
             // gorse banks (yellow), woods — wi' bare ground between
