@@ -1272,7 +1272,7 @@ class Game {
         if (v.memory) { v.memory.push(text.slice(0, 60)); if (v.memory.length > 4) v.memory.shift(); }
       } catch {
         this.brainUp = false;
-        v.chatLog.push({ who: 'sys', text: `${v.displayName} says nowt \u2014 t\u2019 village brain in\u2019t running.` });
+        v.chatLog.push({ who: 'sys', text: `${v.displayName} says nowt \u2014 t\u2019 village brain didn\u2019t answer. Try again in a moment.` });
       }
       this.ui.chatWaiting = false;
       this.ui.renderChatLog();
@@ -1292,7 +1292,7 @@ class Game {
       this.maybeReward(v, res.tier);
     } catch {
       this.brainUp = false;
-      v.chatLog.push({ who: 'sys', text: 'T\u2019 brain didn\u2019t answer \u2014 is Ollama up an\u2019 running?' });
+      v.chatLog.push({ who: 'sys', text: 'T\u2019 village brain didn\u2019t answer \u2014 try again in a moment.' });
     }
     this.ui.chatWaiting = false;
     this.ui.renderChatLog();
