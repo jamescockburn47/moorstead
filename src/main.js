@@ -1656,6 +1656,30 @@ class Game {
     this.ui.toast(`🐑 <b>Mustered ${n} head.</b> Drove ’em to <b>Moorstead’s mart</b> wi’ thi dog — keep ’em bunched.`, 6000);
   }
 
+  // Droving sheep within the mart yard (near thee). Used by the board to offer the sale.
+  droveHeadNear() {
+    const p = this.player.pos;
+    return this.entities.mobs.filter(m => m && !m.dead && m.droving && m.type === 'sheep' &&
+      Math.hypot(m.pos.x - p.x, m.pos.z - p.z) <= 25);
+  }
+
+  // Sell every droved head in the yard: pays per head, leads them off, drops them from thi stock.
+  sellDrove() {
+    if (!this.atMarketTown()) { this.ui.toast('Tha sells a droved flock at <b>Moorstead’s mart</b>.', 4000); return false; }
+    const herd = this.droveHeadNear();
+    if (!herd.length) { this.ui.toast('Tha’s no flock in t’ yard to sell. Drove ’em in first.', 4000); return false; }
+    const pay = droveValue(herd.length, this.economy.standing());
+    for (const m of herd) {
+      if (this.player.pets) this.player.pets = this.player.pets.filter(p => p.name !== m.petName);
+      m.dead = true; this.entities.scene.remove(m.model.group);
+    }
+    this.economy.earn(pay);
+    this.ui.toast(`💷 <b>Sold ${herd.length} head at Moorstead mart for ${this.economy.format(pay)}.</b>`, 7000);
+    if (this.milestones) this.milestones.fire('first_drove');
+    if (this.saveNow) this.saveNow(false);
+    return true;
+  }
+
   // ---- moorland ponies: a rideable mount 'twixt shanks's pony an' t' railway ----
   mountPony(pony) {
     if (this.mount || !pony || pony.dead) return;

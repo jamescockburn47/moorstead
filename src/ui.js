@@ -1,6 +1,6 @@
 // All DOM UI: title, HUD, inventory/crafting/smelting, chat, quests, pause, death, minimap, toasts.
 import { B, I, RECIPES, SMELTS, FUELS, FOODS, TOOLS, itemName, maxStack, CREATIVE_ITEMS, CHUNK, WATER_LEVEL } from './defs.js';
-import { FARM_THRESHOLD, CHARTER_FEE, farmRegisterCheck } from './economy.js';
+import { FARM_THRESHOLD, CHARTER_FEE, farmRegisterCheck, droveValue } from './economy.js';
 import { getIconURL } from './textures.js';
 import { CASTLE } from './geography.js';
 import { TitleFlyover } from './titlescene.js';
@@ -719,6 +719,14 @@ export class UI {
       if (fs.registered) {
         this.el('div', 'r-needs', this.boardPanel,
           '🌾 <b>Tha&rsquo;s a registered farmer o&rsquo; Moorstead parish.</b> Thi fold&rsquo;s on t&rsquo; books.');
+        const inYard = g.atMarketTown() ? g.droveHeadNear().length : 0;
+        if (inYard > 0) {
+          const pay = g.economy.format(droveValue(inYard, g.economy.standing()));
+          const row = this.el('div', 'recipe quest-row', this.boardPanel);
+          row.innerHTML = `<div class="r-name"><b>Sell thi droved flock</b><br><span class="r-needs">${inYard} head in t&rsquo; yard &mdash; fetches <b>${pay}</b></span></div>`;
+          const sb = this.el('button', 'mc chat-btn trade-btn', row, 'Sell at t’ mart');
+          sb.addEventListener('click', () => { if (g.sellDrove()) this.openBoard(fromBoard); });
+        }
       } else {
         const need = FARM_THRESHOLD;
         const atMkt = g.atMarketTown();
