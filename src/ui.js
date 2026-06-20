@@ -1,6 +1,7 @@
 // All DOM UI: title, HUD, inventory/crafting/smelting, chat, quests, pause, death, minimap, toasts.
 import { B, I, RECIPES, SMELTS, FUELS, FOODS, TOOLS, itemName, maxStack, CREATIVE_ITEMS, CHUNK, WATER_LEVEL } from './defs.js';
 import { FARM_THRESHOLD, CHARTER_FEE, farmRegisterCheck, droveValue } from './economy.js';
+import { deedFee, weeklyUpkeep } from './deeds.js';
 import { getIconURL } from './textures.js';
 import { CASTLE } from './geography.js';
 import { TitleFlyover } from './titlescene.js';
@@ -753,6 +754,34 @@ export class UI {
           this.el('div', 'r-needs', this.boardPanel, 'Come to <b>Moorstead</b>&rsquo;s notice board to sign t&rsquo; register.');
         } else if (head >= need && chk.reason === 'poor') {
           this.el('div', 'r-needs', this.boardPanel, `Tha needs <b>${g.economy.format(CHARTER_FEE)}</b> for t&rsquo; charter (tha&rsquo;s ${g.economy.format(bal)}).`);
+        }
+      }
+    }
+
+    // ---- Thi Deeds: stake a plot, keep it with upkeep (Living Moor Slice 2) ----
+    {
+      const g = this.game;
+      const deeds = (g.world && g.world.deeds) || [];
+      this.el('div', 'inv-title', this.boardPanel, 'Thi Deeds');
+      const stakeFee = deedFee('claim', 8);
+      this.el('div', 'r-needs', this.boardPanel,
+        `Stake a <b>claim</b> to hold a plot (8m round) for <b>${g.economy.format(stakeFee)}</b>, then a little upkeep each week. (Claims will protect thi builds &mdash; that lands soon.)`);
+      const stakeRow = this.el('div', 'recipe quest-row', this.boardPanel);
+      stakeRow.innerHTML = `<div class="r-name"><b>Stake a claim where tha stands</b><br><span class="r-needs">${g.economy.format(stakeFee)} charter</span></div>`;
+      const sb = this.el('button', 'mc chat-btn', stakeRow, 'Stake');
+      sb.addEventListener('click', () => { if (g.stakeClaim(8)) this.openBoard(fromBoard); });
+      if (!deeds.length) {
+        this.el('div', 'chat-msg sys', this.boardPanel, 'Tha holds no deeds yet.');
+      } else {
+        for (const d of deeds) {
+          const up = weeklyUpkeep(d.kind, d.radius, d.depth);
+          const status = d.lapsedDay
+            ? '<span style="color:#d87a5a">lapsed &mdash; settle to save it</span>'
+            : `paid to day ${Math.floor(d.paidUntilDay)}`;
+          const row = this.el('div', 'recipe quest-row', this.boardPanel);
+          row.innerHTML = `<div class="r-name"><b>${d.kind} at ${d.cx}, ${d.cz}</b> (${d.radius}m)<br><span class="r-needs">${status} &mdash; upkeep ${g.economy.format(up)}/wk</span></div>`;
+          const pb = this.el('button', 'mc chat-btn', row, 'Settle up');
+          pb.addEventListener('click', () => { if (g.settleUp(d.id)) this.openBoard(fromBoard); });
         }
       }
     }
