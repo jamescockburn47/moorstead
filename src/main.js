@@ -12,6 +12,7 @@ import { Player } from './player.js';
 import * as npc from './npc.js';
 import { Quests } from './quests.js';
 import { Economy, bestMarket, FREIGHT_ALLOWANCE, farmRegisterCheck, CHARTER_FEE, livestockPrice, droveValue } from './economy.js';
+import { deedFee, weeklyUpkeep, isLapsed, DEED } from './deeds.js';
 import { commandFromKey } from './herding.js';
 import { Milestones } from './milestones.js';
 import { Net } from './multiplayer.js';
@@ -298,6 +299,7 @@ class Game {
       this.quests.deserialize(meta.quests);
       this.world.editLedger = new Map(meta.editLedger || []); // regrowth picks up where it left off
       this.world.treeRegrowth = new Map(meta.treeRegrowth || []); this.world.saplings = new Map(meta.saplings || []);
+      this.world.deeds = meta.deeds || [];
     } else if (this.auth && this.auth.name) {
       this.player.name = this.auth.name; // t' villagers already know thi name
     } else {
@@ -367,6 +369,7 @@ class Game {
       quests: this.quests.serialize(),
       editLedger: [...this.world.editLedger], // harvest edits awaiting regrowth — so the moor heals across reloads
       treeRegrowth: [...this.world.treeRegrowth], saplings: [...this.world.saplings], // tree regrowth in progress
+      deeds: this.world.deeds, // staked deeds (claims + mine licences)
       savedAt: Date.now(),
     };
     await saveGame(meta, this.world.collectModified());
@@ -1684,6 +1687,38 @@ class Game {
     return true;
   }
 
+  // ---- Living Moor Slice 2: deeds — stake a plot, keep it with upkeep (effects land in Slices 3-4) ----
+  stakeClaim(radius = 8) {
+    const fee = deedFee('claim', radius);
+    if (!this.economy.canAfford(fee)) { this.ui.toast(`A claim here is <b>${this.economy.format(fee)}</b> &mdash; tha&rsquo;s not the brass.`, 5000); return false; }
+    const p = this.player.pos, cx = Math.round(p.x), cz = Math.round(p.z);
+    if (this.world.deeds.some(d => !d.lapsedDay && Math.hypot(d.cx - cx, d.cz - cz) < d.radius + radius)) {
+      this.ui.toast('That overlaps a claim already staked here.', 4000); return false;
+    }
+    this.economy.spend(fee);
+    this.world.deeds.push({ id: 'd' + Math.round(this.sky.day * 1000) + '_' + this.world.deeds.length, kind: 'claim', by: this.player.name || '', cx, cz, radius, depth: 0, paidUntilDay: this.sky.day + DEED.week, lapsedDay: null });
+    this.ui.toast(`🪧 <b>Claim staked</b> &mdash; ${radius}m round, paid up a week. Mind t&rsquo; upkeep or it lapses.`, 6000);
+    if (this.saveNow) this.saveNow(false);
+    return true;
+  }
+
+  settleUp(id) {
+    const d = this.world.deeds.find(x => x.id === id);
+    if (!d) return false;
+    const up = weeklyUpkeep(d.kind, d.radius, d.depth);
+    if (!this.economy.spend(up)) { this.ui.toast(`Upkeep&rsquo;s <b>${this.economy.format(up)}</b> &mdash; tha&rsquo;s short.`, 4000); return false; }
+    d.paidUntilDay = Math.max(d.paidUntilDay, this.sky.day) + DEED.week;
+    d.lapsedDay = null; // settling revives a deed that lapsed but hasn't reclaimed yet
+    this.ui.toast(`Upkeep paid (${this.economy.format(up)}) &mdash; good for another week.`, 4000);
+    if (this.saveNow) this.saveNow(false);
+    return true;
+  }
+
+  // Mark deeds whose upkeep has lapsed (the reclamation effect comes in Slice 3).
+  deedTick() {
+    for (const d of this.world.deeds) if (!d.lapsedDay && isLapsed(d, this.sky.day)) d.lapsedDay = this.sky.day;
+  }
+
   // ---- moorland ponies: a rideable mount 'twixt shanks's pony an' t' railway ----
   mountPony(pony) {
     if (this.mount || !pony || pony.dead) return;
@@ -2807,7 +2842,7 @@ class Game {
       this.processBeachReverts();
       // the moor heals: revert expired harvest edits once a game-day (cheap, day-scale regrowth)
       const regenDay = Math.floor(this.sky.day);
-      if (regenDay !== this._lastExpireDay) { this._lastExpireDay = regenDay; this.world.expireEdits(this.sky.day); this.world.growTrees(this.sky.day); }
+      if (regenDay !== this._lastExpireDay) { this._lastExpireDay = regenDay; this.world.expireEdits(this.sky.day); this.world.growTrees(this.sky.day); this.deedTick(); }
 
       // sky & weather
       const season = (this.seasonOverride != null)
