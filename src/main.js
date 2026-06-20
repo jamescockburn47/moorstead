@@ -14,6 +14,8 @@ import { Quests } from './quests.js';
 import { Economy, bestMarket, FREIGHT_ALLOWANCE, farmRegisterCheck, CHARTER_FEE, livestockPrice, droveValue } from './economy.js';
 import { deedFee, weeklyUpkeep, isLapsed, DEED, findActiveDeed, findLapsedDeed, inDeed } from './deeds.js';
 import { gatherContext, submitFeedback } from './feedback.js';
+import { miningDigGuide } from './mining-guide.js';
+import { mayDigDeep, categoryOf } from './editledger.js';
 import { commandFromKey } from './herding.js';
 import { Milestones } from './milestones.js';
 import { Net } from './multiplayer.js';
@@ -2591,18 +2593,9 @@ class Game {
             const now = performance.now() / 1000;
             if (!this._lmToast || now - this._lmToast > 4) {
               this._lmToast = now;
-              if (check.reason === 'nomine') {
-                this.ui.toast("Tha can only dig deep in a quarry, an old working (cave or moor pit), or a licensed mine — not open moor.", 4000);
-              } else if (check.reason === 'depthlimit') {
-                this.ui.toast("Tha's reached t' depth limit o' this mine's license (" + check.limit + " blocks) — visit t' board to upgrade it.", 4000);
-              } else if (check.reason === 'pick' || check.reason === 'fixture') {
-                const pickName = check.pickNeeded === 'wood' ? 'Wooden Pick' : check.pickNeeded === 'stone' ? 'Gritstone Pick' : 'Iron Pick';
-                const fixtureName = check.fixtureNeeded === B.PIT_PROPS ? 'Pit Props' : check.fixtureNeeded === B.SAFETY_LAMP ? 'Safety Lamp' : 'Winch';
-                if (check.fixtureNeeded) {
-                  this.ui.toast("Tha needs an " + pickName + " an' " + fixtureName + " installed to go deeper.", 4000);
-                } else {
-                  this.ui.toast("Tha needs a " + pickName + " to go deeper.", 4000);
-                }
+              const guide = miningDigGuide(check.reason, this.player, this.world, check);
+              if (guide.message) {
+                this.ui.guideMiningBlocked(this.player, this.world, check.reason, guide.message, guide.highlights);
               }
             }
             return;

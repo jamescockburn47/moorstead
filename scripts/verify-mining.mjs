@@ -3,6 +3,7 @@ import { B } from '../src/defs.js';
 import { mayDigDeep, depthBandFor, isExpired } from '../src/editledger.js';
 import { strSeed } from '../src/noise.js';
 import { Gen } from '../src/worldgen.js';
+import { miningDigGuide, parishQuarries, nearestFreeDigSites, directionLabel } from '../src/mining-guide.js';
 
 let failed = false;
 const ok = m => console.log('  ok    ' + m);
@@ -143,6 +144,23 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
   // A dig edit outside mine envelope backfills after 24 days
   (isExpired(digEdit, 24, [], 1, 10, 30, 10, hFunc) === false ? ok : bad)('dig outside mine at 23 days does not backfill');
   (isExpired(digEdit, 26, [], 1, 10, 30, 10, hFunc) === true ? ok : bad)('dig outside mine past 24 days backfills');
+}
+
+// --- 6. Mining guide (map + directions) ---
+{
+  const gen = new Gen(strSeed('t-shared-moor'));
+  const deeds = [
+    { id: 'quarry_moorstead', kind: 'quarry', by: 'parish', cx: 40, cz: 60, radius: 10, lapsedDay: null },
+  ];
+  (parishQuarries(deeds).length === 1 ? ok : bad)('parish quarries list extracts from deeds');
+  (directionLabel(100, 0) === 'north' ? ok : bad)('directionLabel north');
+  (directionLabel(0, 100) === 'east' ? ok : bad)('directionLabel east');
+  const wild = gen.listWildQuarries();
+  (wild.length > 20 ? ok : bad)('shared moor has scattered wild quarry pits');
+  const near = nearestFreeDigSites(gen, deeds, -313, 514, 2);
+  (near.length >= 2 ? ok : bad)('nearest free sites returns parish + wild options');
+  const guide = miningDigGuide('nomine', { pos: { x: -313, y: 37, z: 514 } }, { gen, deeds });
+  (guide.message.includes('Mine Entrance') && guide.highlights.length >= 1 ? ok : bad)('nomine guide mentions licence and highlights free sites');
 }
 
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));

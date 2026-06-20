@@ -158,9 +158,8 @@ export class Gen {
   }
 
   // Scattered worldgen quarries (stampQuarry): log-framed pits on t' open moor.
-  wildQuarryAt(x, z) {
+  wildQuarryChunk(cx, cz) {
     const geo = this.geo;
-    const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
     const x0 = cx * CHUNK, z0 = cz * CHUNK;
     const midH = geo.height(x0 + 8, z0 + 8);
     if (midH <= WATER_LEVEL + 1 || geo.bogginess(x0 + 8, z0 + 8) > 0.4) return null;
@@ -171,11 +170,32 @@ export class Gen {
     if (r < 0.016 && midH >= 33) return null;
     if (r >= 0.026) return null;
     const fx = 5, fz = 5, size = 6;
-    const qx0 = x0 + fx, qz0 = z0 + fz;
-    if (x < qx0 || x >= qx0 + size || z < qz0 || z >= qz0 + size) return null;
     const top = geo.height(x0 + fx + 3, z0 + fz + 3);
     if (top <= WATER_LEVEL + 2) return null;
-    return { top, qx0, qz0, size };
+    return { top, qx0: x0 + fx, qz0: z0 + fz, size, cx: x0 + fx + 3, cz: z0 + fz + 3 };
+  }
+
+  wildQuarryAt(x, z) {
+    const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
+    const q = this.wildQuarryChunk(cx, cz);
+    if (!q) return null;
+    if (x < q.qx0 || x >= q.qx0 + q.size || z < q.qz0 || z >= q.qz0 + q.size) return null;
+    return q;
+  }
+
+  /** All scattered moor pits in t' playable bounds (cached per seed). */
+  listWildQuarries(minX = -750, maxX = 600, minZ = -920, maxZ = 720) {
+    if (!this._wildQuarrySites) {
+      const sites = [];
+      for (let cx = Math.floor(minX / CHUNK); cx <= Math.floor(maxX / CHUNK); cx++) {
+        for (let cz = Math.floor(minZ / CHUNK); cz <= Math.floor(maxZ / CHUNK); cz++) {
+          const q = this.wildQuarryChunk(cx, cz);
+          if (q) sites.push({ kind: 'wild', name: 'Old moor pit', cx: q.cx, cz: q.cz, radius: 4, free: true });
+        }
+      }
+      this._wildQuarrySites = sites;
+    }
+    return this._wildQuarrySites;
   }
 
   inWildQuarryVolume(x, y, z) {

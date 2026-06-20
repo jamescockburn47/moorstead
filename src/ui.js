@@ -6,6 +6,7 @@ import { getIconURL } from './textures.js';
 import { CASTLE } from './geography.js';
 import { TitleFlyover } from './titlescene.js';
 import { escHtml } from './escape.js';
+import { parishQuarries, drawMinimapMarker } from './mining-guide.js';
 
 const PIX = {
   heart: ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'],
@@ -33,6 +34,8 @@ export class UI {
     this.drag = null;          // item stack on t' cursor
     this.invDirty = true;
     this.minimapTimer = 0;
+    this.miningHighlights = [];
+    this.miningHighlightUntil = 0;
     this.toastEls = [];
     this.buildPips();
     this.buildDOM();
@@ -120,10 +123,11 @@ export class UI {
     this.titleScreen = this.el('div', 'overlay', body); this.titleScreen.id = 'title-screen';
     this.el('h1', 'title', this.titleScreen, 'MOORSTEAD');
     this.el('div', 'subtitle', this.titleScreen, 'A reet grand voxel adventure on t&rsquo; North York Moors');
-    // a clear "About" button, pinned top-right → the full plain-English technical write-up
-    this.aboutBtn = this.el('a', 'about-btn', this.titleScreen, 'About');
+    // "About" + "Feedback & bugs" pinned together to the top-right corner (see .title-links)
+    const titleLinks = this.el('div', 'title-links', this.titleScreen);
+    this.aboutBtn = this.el('a', 'about-btn', titleLinks, 'About');
     this.aboutBtn.href = '/about.html'; this.aboutBtn.rel = 'noopener';
-    this.feedbackBtn = this.el('button', 'about-btn feedback-btn', this.titleScreen, 'Feedback &amp; bugs');
+    this.feedbackBtn = this.el('button', 'about-btn feedback-btn', titleLinks, 'Feedback &amp; bugs');
     // a LIVE moor fly-over behind it all — procedural, no asset files (see titlescene.js).
     // A dark scrim over it keeps the text readable; falls back to the CSS gradient if WebGL won't start.
     const scene = this.el('div', 'title-scene', this.titleScreen);
@@ -1195,6 +1199,32 @@ export class UI {
     // north marker
     ctx.fillStyle = '#d8b95a'; ctx.font = 'bold 11px sans-serif';
     ctx.fillText('N', size / 2 - 3, 11);
+    this.drawMiningOnMinimap(ctx, player, scale, size, world);
+  }
+
+  setMiningHighlights(sites, ms = 60000) {
+    const until = performance.now() + ms;
+    this.miningHighlightUntil = until;
+    this.miningHighlights = (sites || []).map(s => ({ ...s, until }));
+  }
+
+  guideMiningBlocked(player, world, reason, message, highlights) {
+    this.toast(message, 9000);
+    if (highlights && highlights.length) this.setMiningHighlights(highlights);
+  }
+
+  drawMiningOnMinimap(ctx, player, scale, size, world) {
+    if (!world) return;
+    const now = performance.now();
+    for (const q of parishQuarries(world.deeds)) {
+      drawMinimapMarker(ctx, player, scale, size, q.cx, q.cz, 'rgba(202,168,74,0.85)', 3, false);
+    }
+    for (const h of this.miningHighlights) {
+      if (h.until <= now) continue;
+      const pulse = 5 + Math.sin(now / 280) * 2;
+      const col = h.kind === 'quarry' ? '#ffe080' : '#ffb040';
+      drawMinimapMarker(ctx, player, scale, size, h.cx, h.cz, col, pulse, true);
+    }
   }
 
   // ============ expanded "peek" map (hold Tab) ============
@@ -1255,6 +1285,18 @@ export class UI {
       b.beginPath(); b.arc(X, Y, 5, 0, 7); b.fill(); b.stroke();
       b.fillStyle = '#fff'; b.font = 'bold 12px sans-serif'; b.textAlign = 'left'; b.fillText(v.name, X + 7, Y + 4);
     }
+    for (const q of parishQuarries(world.deeds)) {                        // parish quarries (free deep stone)
+      const X = w2x(q.cx, q.cz), Y = w2y(q.cx, q.cz);
+      b.strokeStyle = 'rgba(255,224,128,0.9)'; b.lineWidth = 2;
+      b.beginPath(); b.arc(X, Y, Math.max(4, q.radius * sc * 0.35), 0, 7); b.stroke();
+      b.fillStyle = '#caa84a'; b.beginPath(); b.arc(X, Y, 4, 0, 7); b.fill();
+      b.fillStyle = '#ffe8a0'; b.font = '10px sans-serif'; b.textAlign = 'left';
+      b.fillText('⛏ ' + q.name, X + 6, Y - 5);
+    }
+    for (const p of world.gen.listWildQuarries()) {                       // old moor pits (faint)
+      const X = w2x(p.cx, p.cz), Y = w2y(p.cx, p.cz);
+      b.fillStyle = 'rgba(255,176,64,0.55)'; b.beginPath(); b.arc(X, Y, 2.5, 0, 7); b.fill();
+    }
     b.fillStyle = '#a59c8c'; b.font = 'italic 11px sans-serif';         // landmarks
     for (const [label, x, z] of [['Roseberry Topping', -700, -880], ['Hole of Horcum', 540, 680], ['Wainstones', -380, -620], ['Rosedale Kilns', -260, 380], ['Whitby Abbey', geo.abbeySite().x, geo.abbeySite().z], ["Merlin's Keep", CASTLE.x, CASTLE.z]]) {
       b.fillText('▲ ' + label, w2x(x, z) + 4, w2y(x, z));
@@ -1284,6 +1326,19 @@ export class UI {
     ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(6, 7); ctx.lineTo(0, 3); ctx.lineTo(-6, 7); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.restore();
+    const now = performance.now();
+    if (this.miningHighlightUntil > now) {
+      for (const h of this.miningHighlights) {
+        if (h.until <= now) continue;
+        const X = w2x(h.cx, h.cz), Y = w2y(h.cx, h.cz);
+        const pulse = 7 + Math.sin(now / 260) * 3;
+        ctx.strokeStyle = h.kind === 'quarry' ? '#ffe080' : '#ffb040';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(X, Y, pulse, 0, 7); ctx.stroke();
+        ctx.fillStyle = h.kind === 'quarry' ? '#caa84a' : '#ffb040';
+        ctx.beginPath(); ctx.arc(X, Y, 5, 0, 7); ctx.fill();
+      }
+    }
   }
 
   showBigMap(player, world) {
@@ -1298,6 +1353,13 @@ export class UI {
     }
     if (this.mapBaseKey !== world.gen.seed) this.buildBigMap(player, world);
     this.drawBigMapDots(player, this.game.net);
+    const titleEl = document.getElementById('big-map-title');
+    if (titleEl) {
+      const hint = performance.now() < this.miningHighlightUntil
+        ? ' <span class="dim">· gold = free quarry · amber pulse = nearest pit</span>'
+        : ' <span class="dim">· ⛏ parish quarries · amber dots = old moor pits</span>';
+      titleEl.innerHTML = 'T&rsquo; Moors &mdash; <span class="dim">hold Tab to peek</span>' + hint;
+    }
     this.mapOverlay.classList.remove('hidden');
   }
 
