@@ -1,6 +1,7 @@
 // Flower overlay logic — run wi': node scripts/verify-flora.mjs
 import { activeScatter, activeAdornments } from '../src/flora-season.js';
 import { seasonStateAtPhase } from '../src/season.js';
+import { cellInstances } from '../src/flora-placement.js';
 import { TILE, B } from '../src/defs.js';
 
 let failed = false;
@@ -27,6 +28,25 @@ const adornAt = p => activeAdornments(seasonStateAtPhase(p));
   const holly = adornAt(0.875).find(a => a.tile === TILE.HOLLY_BERRY);
   (holly && holly.bush === B.HOLLY ? ok : bad)('holly berries on holly in deep winter');
   (!adornAt(0.40).some(a => a.tile === TILE.HOLLY_BERRY) ? ok : bad)('no holly berries in summer');
+}
+
+{
+  const a = cellInstances(12345, 10, 20, 'moor', TILE.WILDFLOWER);
+  const b = cellInstances(12345, 10, 20, 'moor', TILE.WILDFLOWER);
+  (JSON.stringify(a) === JSON.stringify(b) ? ok : bad)('placement is deterministic for same seed+cell');
+  (JSON.stringify(a) !== JSON.stringify(cellInstances(999, 10, 20, 'moor', TILE.WILDFLOWER)) ? ok : bad)('different seed gives different placement');
+  for (const inst of a) {
+    if (!(inst.dx >= 0 && inst.dx < 1 && inst.dz >= 0 && inst.dz < 1)) bad('instance dx/dz inside cell');
+    if (!(inst.yaw >= 0 && inst.yaw < Math.PI * 2)) bad('instance yaw in range');
+  }
+  ok('moor instances jittered inside the cell with yaw + variant');
+  let moorEmpty = 0, lineMin = 99;
+  for (let cz = 0; cz < 40; cz++) {
+    if (cellInstances(7, 5, cz, 'moor', TILE.WILDFLOWER).length === 0) moorEmpty++;
+    lineMin = Math.min(lineMin, cellInstances(7, 5, cz, 'lineside', TILE.WILDFLOWER).length);
+  }
+  (moorEmpty > 0 ? ok : bad)('moor placement leaves bare cells (patchy clump)');
+  (lineMin >= 3 ? ok : bad)('lineside placement is dense (>=3 per cell, got min ' + lineMin + ')');
 }
 
 console.log('\nRESULT: ' + (failed ? 'FAIL' : 'PASS'));
