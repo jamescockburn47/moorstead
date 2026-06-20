@@ -23,6 +23,7 @@ import { initTelemetry } from './telemetry.js';
 import { escHtml } from './escape.js';
 import { buildTrain } from './train.js';
 import { Rails } from './rails.js';
+import { FloraLayer } from './floraLayer.js';
 import { seasonState, seasonStateAtPhase, bilberryInSeason } from './season.js';
 import { startLiveWeather } from './weather-live.js';
 import { boardingFolk } from './trainfolk.js';
@@ -292,6 +293,7 @@ class Game {
     this.milestones = new Milestones(this);
     if (this.rails) this.rails.dispose();
     this.rails = new Rails(this.scene, this.world.gen.geo); // t' permanent way, drawn proper
+    this.floraLayer = new FloraLayer(this.scene, this.world);
     this.entities.game = this;
     this.entities.onKill = mob => { this.quests.onMobKilled(mob); this.milestones.onKill(mob.type); };
     window.moorstead = window.moorcraft = this; // a handle for t' dev console
@@ -3169,6 +3171,7 @@ class Game {
         ? seasonStateAtPhase(this.seasonOverride)
         : seasonState();
       this.season = season; // cached for other systems + the debug API
+      if (this.floraLayer) this.floraLayer.update(dt, this.player.pos, season);
       setSnowLevel(season.snowiness); // height-gated snow on the tops (cheap uniform)
       const sbk = Math.floor(season.yearPhase * 40);
       if (sbk !== this._seasonBucket) { this._seasonBucket = sbk; retintAtlasForSeason(season); } // heather purple, bracken rust…
