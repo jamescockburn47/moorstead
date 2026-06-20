@@ -1,5 +1,6 @@
 // All DOM UI: title, HUD, inventory/crafting/smelting, chat, quests, pause, death, minimap, toasts.
 import { B, I, RECIPES, SMELTS, FUELS, FOODS, TOOLS, itemName, maxStack, CREATIVE_ITEMS, CHUNK, WATER_LEVEL } from './defs.js';
+import { FARM_THRESHOLD, CHARTER_FEE, farmRegisterCheck } from './economy.js';
 import { getIconURL } from './textures.js';
 import { CASTLE } from './geography.js';
 import { TitleFlyover } from './titlescene.js';
@@ -429,7 +430,12 @@ export class UI {
 <li><b>Drive t&rsquo; flock through t&rsquo; gate</b>, an&rsquo; every sheep as steps inside becomes <b>thi kept stock</b> &mdash; she teks a name, grazes at home, an&rsquo; she&rsquo;s there whenever tha comes back. Saved wi&rsquo; thi world.</li>
 <li>No dog yet? Tha can still keep a beast t&rsquo; simple way &mdash; tame her where tha wants her an&rsquo; fence her in (see <b>Pets</b>).</li>
 </ul>
-<p class="how-note">A loose dog only works t&rsquo; <b>un-owned</b> sheep out on t&rsquo; moor &mdash; thi own penned stock bide put.</p>`,
+<p class="how-note">A loose dog only works t&rsquo; <b>un-owned</b> sheep out on t&rsquo; moor &mdash; thi own penned stock bide put.</p>
+<h3>Becomin&rsquo; a registered farmer</h3>
+<ul>
+<li>Once tha keeps <b>5 head</b> o&rsquo; penned stock, go to t&rsquo; <b>parish notice board at Moorstead</b> (by t&rsquo; village cross, or press <b>Q</b> when tha&rsquo;s there) an&rsquo; <b>register thi farm</b> for a <b>£1 charter</b>.</li>
+<li>That makes thee a <b>registered farmer o&rsquo; Moorstead parish</b> &mdash; thi fold&rsquo;s on t&rsquo; books.</li>
+</ul>`,
 
       'Coast & Sea': `
 <h3>T&rsquo; coast &amp; t&rsquo; open sea &#9973;</h3>
@@ -702,6 +708,39 @@ export class UI {
     }
     if (!q.boardOffers.length && !Object.keys(q.offers).length && !arcDef) {
       this.el('div', 'chat-msg sys', list, 'Nowt doing today. T&rsquo; moor keeps its own counsel.');
+    }
+
+    // ---- Become a Farmer (Slice 2): the registered-farm path, always shown for legibility ----
+    {
+      const g = this.game;
+      const fs = g.player.farmStatus || { registered: false };
+      const head = g.farmHeadCount();
+      this.el('div', 'inv-title', this.boardPanel, 'Become a Farmer');
+      if (fs.registered) {
+        this.el('div', 'r-needs', this.boardPanel,
+          '🌾 <b>Tha&rsquo;s a registered farmer o&rsquo; Moorstead parish.</b> Thi fold&rsquo;s on t&rsquo; books.');
+      } else {
+        const need = FARM_THRESHOLD;
+        const atMkt = g.atMarketTown();
+        const bal = g.economy.balance;
+        this.el('div', 'r-needs', this.boardPanel,
+          `Keep <b>${need} head</b> o&rsquo; stock penned in a fold, then register here for a <b>${g.economy.format(CHARTER_FEE)}</b> charter.`);
+        this.el('div', 'r-needs', this.boardPanel,
+          head >= need
+            ? `<b style="color:#9ec27a">${head}/${need} head penned</b> &mdash; tha&rsquo;s ready to register.`
+            : `<b>${head}/${need} head penned</b> &mdash; pen <b>${need - head}</b> more.`);
+        const chk = farmRegisterCheck({ head, registered: false, brass: bal, atMarket: atMkt });
+        if (chk.ok) {
+          const row = this.el('div', 'recipe quest-row', this.boardPanel);
+          row.innerHTML = `<div class="r-name"><b>Register thi farm</b><br><span class="r-needs">pay t&rsquo; ${g.economy.format(CHARTER_FEE)} charter</span></div>`;
+          const b = this.el('button', 'mc chat-btn', row, 'Register');
+          b.addEventListener('click', () => { if (g.registerFarm()) this.openBoard(fromBoard); });
+        } else if (head >= need && !atMkt) {
+          this.el('div', 'r-needs', this.boardPanel, 'Come to <b>Moorstead</b>&rsquo;s notice board to sign t&rsquo; register.');
+        } else if (head >= need && chk.reason === 'poor') {
+          this.el('div', 'r-needs', this.boardPanel, `Tha needs <b>${g.economy.format(CHARTER_FEE)}</b> for t&rsquo; charter (tha&rsquo;s ${g.economy.format(bal)}).`);
+        }
+      }
     }
 
     const close = this.el('button', 'mc', this.boardPanel, 'Reet, Ta');
