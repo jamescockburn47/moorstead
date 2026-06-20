@@ -2317,7 +2317,35 @@ class Game {
     }
   }
 
+  // ---- Living Moor: a chopped tree falls whole, then regrows from a sapling ----
+  // Fell the whole connected tree from the chopped block (no floating canopy); mark the stump so
+  // a sapling sprouts there in time (world.growTrees does the gradual regrowth).
+  fellTree(hit, noDrop) {
+    const w = this.world, isWood = id => id === B.LOG || id === B.LEAVES || id === B.MONKEY_LEAVES;
+    const seen = new Set(), stack = [[hit.x, hit.y, hit.z]], cells = [];
+    while (stack.length && cells.length < 80) {
+      const [x, y, z] = stack.pop(), k = x + ',' + y + ',' + z;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      if (!isWood(w.getBlock(x, y, z))) continue;
+      cells.push([x, y, z, w.getBlock(x, y, z)]);
+      stack.push([x + 1, y, z], [x - 1, y, z], [x, y + 1, z], [x, y - 1, z], [x, y, z + 1], [x, y, z - 1]);
+    }
+    let bx = hit.x, by = hit.y, bz = hit.z;
+    for (const [x, y, z, id] of cells) {
+      if (id === B.LOG && y < by) { bx = x; by = y; bz = z; } // the lowest trunk block is the stump
+      w.setBlock(x, y, z, B.AIR);
+      if (this.net) this.net.sendEdit(x, y, z, 0, null);
+      if (!this.player.creative && !noDrop && id === B.LOG) this.entities.spawnDrop(x + 0.5, y + 0.4, z + 0.5, B.LOG, 1);
+    }
+    this.entities.blockBurst(hit.x, hit.y, hit.z, B.LOG);
+    this.audio.breakBlock();
+    w.treeRegrowth.set(bx + ',' + by + ',' + bz, this.sky.day); // a sapling sprouts here in time
+    this.milestones.onBreak(B.LOG);
+  }
+
   finishBreak(hit, noDrop) {
+    if (hit.id === B.LOG) { this.fellTree(hit, noDrop); this.quests.onBlockBroken(hit.x, hit.y, hit.z, hit.id); return; }
     const def = BLOCKS[hit.id];
     this.world.setBlock(hit.x, hit.y, hit.z, B.AIR);
     this.entities.blockBurst(hit.x, hit.y, hit.z, hit.id);

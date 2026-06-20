@@ -15,6 +15,8 @@ export class World {
     this.chunks = new Map();
     this.savedChunks = savedChunks || new Map(); // "cx,cz" -> Uint8Array
     this.editLedger = new Map(); // "x,y,z" -> { cat, day, by, was } — harvest edits awaiting regrowth
+    this.treeRegrowth = new Map(); // "x,y,z" (stump) -> felledDay — a sapling sprouts here in time
+    this.saplings = new Map(); // "x,y,z" -> sproutedDay — a young tree growing toward full
     this.lanterns = new Set(); // "x,y,z"
     this.renderDist = 6;
     this.genQueue = [];
