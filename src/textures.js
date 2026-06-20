@@ -493,7 +493,7 @@ export function buildAtlas() {
 }
 
 // ---- seasonal re-tint o' t' growing things (re-paints tiles in place; no chunk re-mesh) ----
-const SEASON_TILES = [TILE.GRASS_TOP, TILE.GRASS_SIDE, TILE.HEATHER, TILE.BRACKEN, TILE.FERN, TILE.BILBERRY, TILE.GORSE];
+const SEASON_TILES = [TILE.GRASS_TOP, TILE.GRASS_SIDE, TILE.HEATHER, TILE.BRACKEN, TILE.FERN, TILE.BILBERRY, TILE.GORSE, TILE.LEAVES, TILE.MONKEY_LEAVES];
 function blendPx(d, i, r, g, b, amt) {
   d[i] += (r - d[i]) * amt; d[i + 1] += (g - d[i + 1]) * amt; d[i + 2] += (b - d[i + 2]) * amt;
 }
@@ -501,21 +501,27 @@ function desatPx(d, i, amt) {
   const y = d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
   d[i] += (y - d[i]) * amt; d[i + 1] += (y - d[i + 1]) * amt; d[i + 2] += (y - d[i + 2]) * amt;
 }
-function seasonShiftPx(tile, d, i, s) {
+export function seasonShiftPx(tile, d, i, s) {
   const winter = s.warmth < 0 ? -s.warmth : 0;
   if (tile === TILE.HEATHER) {
-    blendPx(d, i, 150, 74, 168, s.heatherBloom * 0.7);  // late-summer bloom: t' whole plant purples
-    blendPx(d, i, 92, 74, 56, winter * 0.45);           // winter: browned off
+    blendPx(d, i, 150, 74, 168, s.heatherBloom * 0.82);  // late-summer bloom: the whole plant purples
+    blendPx(d, i, 92, 74, 56, winter * 0.45);            // winter: browned off
   } else if (tile === TILE.BRACKEN || tile === TILE.FERN) {
-    blendPx(d, i, 156, 86, 38, s.autumn * 0.6);         // autumn rust
-    blendPx(d, i, 120, 100, 74, winter * 0.4);          // dead-brown in winter
+    blendPx(d, i, 156, 86, 38, s.autumn * 0.72);         // autumn rust
+    blendPx(d, i, 120, 100, 74, winter * 0.4);           // dead-brown in winter
   } else if (tile === TILE.GRASS_TOP || tile === TILE.GRASS_SIDE) {
-    blendPx(d, i, 96, 132, 58, s.greenness * 0.22);     // spring/summer flush
-    desatPx(d, i, winter * 0.4); blendPx(d, i, 150, 148, 118, winter * 0.22); // winter: pale an' strawy
+    blendPx(d, i, 96, 132, 58, s.greenness * 0.22);      // spring/summer flush
+    desatPx(d, i, winter * 0.5); blendPx(d, i, 150, 148, 118, winter * 0.28); // winter: pale an' strawy
   } else if (tile === TILE.GORSE) {
     desatPx(d, i, winter * 0.3);
   } else if (tile === TILE.BILBERRY) {
     blendPx(d, i, 150, 80, 50, s.autumn * 0.35); desatPx(d, i, winter * 0.4);
+  } else if (tile === TILE.LEAVES) {
+    blendPx(d, i, 96, 150, 60, s.greenness * 0.20);      // spring/summer flush
+    blendPx(d, i, 178, 116, 38, s.autumn * 0.6);         // autumn gold -> rust
+    desatPx(d, i, winter * 0.45); blendPx(d, i, 120, 100, 74, winter * 0.4); // winter: brown, bare-looking
+  } else if (tile === TILE.MONKEY_LEAVES) {
+    desatPx(d, i, winter * 0.18);                        // evergreen: only a faint winter frost
   }
 }
 export function retintAtlasForSeason(season) {
