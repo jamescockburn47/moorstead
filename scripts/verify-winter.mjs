@@ -1,6 +1,7 @@
 // Winter weather/ice helpers — run wi': node scripts/verify-winter.mjs
-import { winterPrecip, overcastGrey } from '../src/snow.js';
+import { winterPrecip, overcastGrey, freezableWater, isFrozen } from '../src/snow.js';
 import { seasonStateAtPhase } from '../src/season.js';
+import { B } from '../src/defs.js';
 
 let failed = false;
 const ok = m => console.log('  ok    ' + m);
@@ -21,6 +22,15 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
   (overcastGrey('clear', 0.6, 0) > 0.3 ? ok : bad)('snowing -> overcast');
   (overcastGrey('clear', 0, 0) === 0 ? ok : bad)('clear + no precip -> sunny (grey 0)');
   (overcastGrey('rain', 0, 0.8) > 0.3 ? ok : bad)('raining -> overcast');
+}
+
+{
+  (freezableWater(B.BOG, 0.5, B) ? ok : bad)('bogs freeze regardless of coast');
+  (freezableWater(B.WATER, 0.05, B) ? ok : bad)('inland beck water freezes');
+  (!freezableWater(B.WATER, 0.6, B) ? ok : bad)('open sea does not freeze');
+  (!freezableWater(B.GRASS, 0.05, B) ? ok : bad)('non-liquid does not freeze');
+  (isFrozen(seasonStateAtPhase(0.875)) ? ok : bad)('deep winter is frozen');
+  (!isFrozen(seasonStateAtPhase(0.375)) ? ok : bad)('summer is not frozen');
 }
 
 console.log('\nRESULT: ' + (failed ? 'FAIL' : 'PASS'));

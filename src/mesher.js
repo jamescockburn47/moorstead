@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { B, BLOCKS, CHUNK, HEIGHT, isOpaque, isLiquid, isCutout } from './defs.js';
 import { tileUV, buildAtlas } from './textures.js';
 import { hash2i } from './noise.js';
-import { snowLineFor } from './snow.js';
+import { snowLineFor, freezableWater } from './snow.js';
 
 let materials = null;
 
@@ -31,15 +31,29 @@ function addSnow(mat, key = 'terrain-snow') {
   return mat;
 }
 
+const iceUniform = { uFrozen: { value: 0 } };
+export function setFrozen(frozen) { iceUniform.uFrozen.value = frozen ? 1 : 0; }
+function addIce(mat) {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uFrozen = iceUniform.uFrozen;
+    shader.vertexShader = 'attribute float aFreeze;\nvarying float vFreeze;\n' + shader.vertexShader
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vFreeze = aFreeze;');
+    shader.fragmentShader = 'uniform float uFrozen;\nvarying float vFreeze;\n' + shader.fragmentShader
+      .replace('#include <color_fragment>', '#include <color_fragment>\n  float ice = uFrozen * vFreeze;\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.88, 0.95), ice);');
+  };
+  mat.customProgramCacheKey = () => 'liquid-ice';
+  return mat;
+}
+
 export function initMaterials() {
   const atlas = buildAtlas();
   materials = {
     opaque: addSnow(new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true }), 'snow-opaque'),
     cutout: addSnow(new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }), 'snow-cutout'),
-    liquid: new THREE.MeshLambertMaterial({
+    liquid: addIce(new THREE.MeshLambertMaterial({
       map: atlas, vertexColors: true, transparent: true, opacity: 0.78,
       depthWrite: false, side: THREE.DoubleSide,
-    }),
+    })),
   };
   return atlas;
 }
@@ -67,8 +81,8 @@ function faceTile(def, faceIdx, x, z) {
 }
 
 class GeoBuilder {
-  constructor() { this.pos = []; this.norm = []; this.uv = []; this.col = []; this.exp = []; this.idx = []; this.n = 0; }
-  quad(corners, normal, uvRect, aos, light, exp = 1) {
+  constructor() { this.pos = []; this.norm = []; this.uv = []; this.col = []; this.exp = []; this.frz = []; this.idx = []; this.n = 0; }
+  quad(corners, normal, uvRect, aos, light, exp = 1, frz = 0) {
     const [u0, v0, u1, v1] = uvRect;
     for (const c of corners) {
       this.pos.push(c[0], c[1], c[2]);
@@ -76,6 +90,7 @@ class GeoBuilder {
       this.uv.push(u0 + (u1 - u0) * c[3], v0 + (v1 - v0) * c[4]);
       this.exp.push(exp);
     }
+    this.frz.push(frz, frz, frz, frz);
     for (let i = 0; i < 4; i++) {
       const b = AO_LEVELS[aos[i]] * light;
       this.col.push(b, b, b);
@@ -96,6 +111,7 @@ class GeoBuilder {
     g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     g.setAttribute('aSnowExp', new THREE.Float32BufferAttribute(this.exp, 1));
+    g.setAttribute('aFreeze', new THREE.Float32BufferAttribute(this.frz, 1));
     g.setIndex(this.idx);
     g.computeBoundingSphere();
     return new THREE.Mesh(g, material);
@@ -180,7 +196,8 @@ export function buildChunkMeshes(world, chunk) {
               const yy = (c[1] === 1) ? y + 1 - drop : y;
               return [lx + c[0], yy, lz + c[2], c[3], c[4]];
             });
-            liquid.quad(cs, dir, uvr, [3, 3, 3, 3], FACE_LIGHT[f]);
+            const frz = freezableWater(id, world.gen.geo.coastT(x0 + lx, z0 + lz), B) ? 1 : 0;
+            liquid.quad(cs, dir, uvr, [3, 3, 3, 3], FACE_LIGHT[f], 1, frz);
           }
           continue;
         }

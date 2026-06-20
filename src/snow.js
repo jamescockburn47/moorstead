@@ -46,6 +46,15 @@ export function winterPrecip(season, livePrecip, fallback = 0) {
   return { snow: 0, rain: (livePrecip != null ? livePrecip : 0) };
 }
 
+// A water/bog cell freezes in deep winter if it's an inland beck or a bog — never
+// the open sea. `coastT` in [0,1]: 0 inland, 1 open sea.
+export function freezableWater(block, coastT, B) {
+  if (block === B.BOG) return true;
+  if (block === B.WATER) return coastT <= 0.15;
+  return false;
+}
+export function isFrozen(season) { return !!season && season.warmth < -0.4; }
+
 // Sky greyness [0,1]: overcast while it actively snows or rains, else the
 // weather-state base (so a clear winter forecast reads sunny).
 export function overcastGrey(weather, snow, rain) {

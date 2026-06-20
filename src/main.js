@@ -5,8 +5,8 @@ import * as THREE from 'three';
 import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_HASHES } from './defs.js';
 import { strSeed } from './noise.js';
 import { protectedAt } from './landmarks.js';
-import { initMaterials, setSnowLevel } from './mesher.js';
-import { stepAccumulation } from './snow.js';
+import { initMaterials, setSnowLevel, setFrozen } from './mesher.js';
+import { stepAccumulation, isFrozen } from './snow.js';
 import { getIconURL, retintAtlasForSeason } from './textures.js';
 import { World } from './world.js';
 import { Player } from './player.js';
@@ -3191,6 +3191,7 @@ class Game {
       } else if (this.footprints) this.footprints.clear();
       this.snowAccum = stepAccumulation(this.snowAccum, season, dt);
       setSnowLevel(this.snowAccum); // height-gated snow on the tops (cheap uniform)
+      setFrozen(isFrozen(season));
       const sbk = Math.floor(season.yearPhase * 40);
       if (sbk !== this._seasonBucket) { this._seasonBucket = sbk; retintAtlasForSeason(season); } // heather purple, bracken rust…
       // is there a roof overhead? (stops rain fallin' through ceilings + drives wetness)

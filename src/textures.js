@@ -621,6 +621,14 @@ const TILE_PAINTERS = {
     }
     p.dots(0x0e3010, 8);
   },
+  [TILE.ICE](p) {
+    p.clear();
+    p.speckle(0xb8d0e0, 0.10);
+    for (let i = 0; i < 5; i++) {
+      let x = (p.rng() * T) | 0, y = (p.rng() * T) | 0;
+      for (let s = 0; s < 4; s++) { p.px(x & 15, y & 15, shade(0xdff0ff, 1)); x += p.rng() < 0.5 ? 1 : 0; y += 1; }
+    }
+  },
   [TILE.HOLLY_BERRY](p) {
     p.clear();
     // dark green leaf background
