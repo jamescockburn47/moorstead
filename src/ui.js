@@ -252,271 +252,264 @@ export class UI {
   buildHowSections() {
     const S = {
       'First Day': `
-<h3>Tha&rsquo;s just moved to Moorstead. Here&rsquo;s thi first day, sorted:</h3>
+<h3>You have just moved to Moorstead. Here is your first day, sorted:</h3>
 <ol>
-<li><b>Click t&rsquo; screen</b> to grab t&rsquo; mouse, then have a wander round t&rsquo; green. Walk up to a villager (their name floats ower their head) and <b>right-click for a natter</b> &mdash; tell &rsquo;em thi name, ask about work.</li>
-<li><b>Punch a tree</b> (hold left-click on t&rsquo; trunk) for logs. Press <b>E</b>, craft <b>Planks</b>, then <b>Sticks</b>, then a <b>Joiner&rsquo;s Bench</b>. Place t&rsquo; bench (right-click) and stand by it to unlock proper recipes.</li>
-<li>Dig a bit o&rsquo; gritstone wi&rsquo; a <b>wooden pick</b>, then make a <b>gritstone sword and pick</b>. T&rsquo; sword matters: 2 cobble + 1 stick.</li>
-<li>Grab some scran for thi pockets &mdash; punch <b>bilberry bushes</b> for berries, or clout a yow for mutton (not in t&rsquo; village, mind &mdash; folk talk).</li>
-<li>Check t&rsquo; <b>parish notice board</b> by t&rsquo; village cross (or press <b>Q</b>) and tek a job or two.</li>
-<li>When t&rsquo; light turns amber &mdash; t&rsquo; gloamin&rsquo; &mdash; <b>get back to t&rsquo; village</b>. Nowt dark sets foot on Moorstead ground. Out on t&rsquo; moor at neet, tha&rsquo;s fair game.</li>
+<li><b>Click the screen</b> to capture the mouse, then look around the village green. Walk up to a villager (their name floats over their head) and <b>right-click to talk to them</b>. Ask about work or tell them your name.</li>
+<li><b>Punch a tree</b> (hold left-click on the trunk) to gather logs. Press <b>E</b> to open your pockets, craft <b>Planks</b>, then <b>Sticks</b>, and then a <b>Joiner’s Bench</b>. Place the bench (right-click) and stand near it to unlock advanced recipes.</li>
+<li>Dig a bit of gritstone with a <b>wooden pickaxe</b>, then make a <b>gritstone sword and pickaxe</b>. A sword is essential: 2 cobbles + 1 stick.</li>
+<li>Gather some food for your pockets. Punch <b>bilberry bushes</b> for berries, or hunt a sheep for mutton (but not inside the village bounds, or people will gossip).</li>
+<li>Check the <b>parish notice board</b> by the village cross (or press <b>Q</b>) and take a job or two.</li>
+<li>When the light turns amber—twilight—<b>return to the village</b>. No dark creatures can set foot on Moorstead's hallowed ground. Out on the open moor at night, you are fair game.</li>
 </ol>
-<p class="how-note">If tha dies: tha keeps all thi stuff and wakes on t&rsquo; green. No harm done, bar thi pride.</p>`,
+<p class="how-note">If you die, you keep all your items and wake up safely on the village green. Only your pride is harmed.</p>`,
 
       'Controls': `
 <div class="controls-list">
-<b>Mouse</b> Look abaht<br>
-<b>Left click</b> Dig blocks (hold) / clout beasts<br>
-<b>Right click</b> Place blocks / eat scran / talk to folk / use bench, range &amp; board<br>
+<b>Mouse</b> Look around<br>
+<b>Left click</b> Dig blocks (hold) / Attack creatures<br>
+<b>Right click</b> Place blocks / Eat food / Talk to villagers / Use bench, range, and board<br>
 <b>W A S D</b> Walk<br>
-<b>Z</b> Leg it (sprint &mdash; burns hunger, outruns a barghest)<br>
-<b>Space</b> Jump / swim up<br>
-<b>Shift</b> Sneak &mdash; slow, but tha won&rsquo;t walk off edges<br>
-<b>1&ndash;9 / mouse wheel</b> Pick hotbar slot<br>
-<b>E</b> Thi pockets &mdash; inventory &amp; crafting<br>
-<b>Q</b> Venture journal (same as t&rsquo; notice board)<br>
-<b>T</b> Village chat on t&rsquo; Shared Moor (carries ~60m)<br>
-<b>N</b> Sleep till morn (of a neet, under a roof, near a light)<br>
+<b>Z</b> Sprint (burns hunger, outruns a barghest)<br>
+<b>Space</b> Jump / Swim up<br>
+<b>Shift</b> Sneak (prevents falling off edges)<br>
+<b>1&ndash;9 / mouse wheel</b> Select hotbar slot<br>
+<b>E</b> Open pockets (inventory & crafting)<br>
+<b>Q</b> Open venture journal (notice board)<br>
+<b>T</b> Talk in village chat (covers ~60m)<br>
+<b>N</b> Sleep (available at night under a roof, near a light source)<br>
 <b>M</b> Mute sound<br>
-<b>Esc</b> Pause / close a screen<br>
+<b>Esc</b> Pause / Close screens<br>
 <b>Space &times;2</b> Toggle flying (creative mode only)
 </div>
-<p class="how-note"><b>Ridin&rsquo; &amp; drivin&rsquo;:</b> on a pony or t&rsquo; footplate, <b>W A S D</b> shifts thee; <b>F</b> gets thee down off a pony (or shovels coal when tha&rsquo;s drivin&rsquo;); <b>E</b> brings t&rsquo; train to a stand. Full details under <b>Ponies</b> an&rsquo; <b>T&rsquo; Railway</b>.</p>
-<p class="how-note">Creative mode lives in t&rsquo; pause menu: fly, infinite blocks, instant digging, nowt can hurt thee.</p>`,
+<p class="how-note"><b>Riding & driving:</b> On a pony or the train footplate, use <b>W A S D</b> to move. Press <b>F</b> to dismount a pony or shovel coal on the train. Press <b>E</b> to stop the train and step down. Full details under <b>Ponies</b> and <b>T’ Railway</b>.</p>
+<p class="how-note">Creative mode can be toggled in the pause menu, offering flight, infinite blocks, instant digging, and invulnerability.</p>`,
 
       'Staying Alive': `
-<h3>Hearts, hunger an&rsquo; what kills thee</h3>
+<h3>Health, hunger, and hazards</h3>
 <ul>
-<li><b>Hunger</b> drains as tha walks, sprints, jumps an&rsquo; digs. Below 6 pies tha can&rsquo;t sprint; at nowt, tha starves down to half a heart. Eat wi&rsquo; right-click: bilberries (+3), raw mutton (+3), <b>roast mutton (+8)</b>, grouse. Cook on a range.</li>
-<li><b>Health</b> heals on its own when tha&rsquo;s well fed (16+ hunger). Otherwise: eat, wait, or stay out o&rsquo; trouble.</li>
-<li><b>Falling</b> hurts past 3 blocks. <b>Water</b>: tha can swim (Space), but air bubbles run out &mdash; surface afore they do.</li>
-<li><b>Keep dry.</b> Caught out in t&rsquo; rain (or wadin&rsquo; t&rsquo; beck) an&rsquo; tha gets <b>soaked through</b> &mdash; soaked, tha can&rsquo;t rest up nor heal, an&rsquo; tha burns thi scran keepin&rsquo; warm. Get <b>under a roof or by a fire</b> an&rsquo; tha&rsquo;ll soon dry off.</li>
-<li><b>Bogs</b> on t&rsquo; high moor are t&rsquo; dark pools in t&rsquo; peat. They grip thee, sink thee, and they&rsquo;re hungry. Skirt round, or sprint-jump if tha must.</li>
-<li><b>Neet</b> belongs to t&rsquo; <b>barghest</b> (great black hound, eyes like coals) and <b>boggarts</b> (little horrors frae t&rsquo; mires). They walk frae dusk till dawn, out on t&rsquo; open moor only &mdash; <b>Moorstead ground is hallowed; nowt dark sets foot on it</b>. Tha can sprint faster than a barghest. Just.</li>
-<li><b>Dark things fear flame.</b> Craft <b>torches</b> (1 stick + 1 coal = 4, no bench needed): a <b>placed</b> torch or lantern wards off all but t&rsquo; worst within ~9 blocks an&rsquo; stops owt rising nearby &mdash; plant a ring o&rsquo; them an&rsquo; camp anywhere. A torch <b>in thi hand</b> lights thi way an&rsquo; sees off boggarts, but a barghest&rsquo;s bolder than that.</li>
-<li><b>Caught out at neet?</b> Stone <b>moor shelters</b> stand scattered across t&rsquo; tops, lantern-lit an&rsquo; safe. <b>Right-click any waymark signpost</b> &mdash; it&rsquo;ll tell thee t&rsquo; bearing an&rsquo; distance to t&rsquo; nearest shelter an&rsquo; back to Moorstead. Tha can craft thi own signposts (3 planks + 1 stick) to mark routes.</li>
-<li><b>T&rsquo; GREAT FOG.</b> Every three days or so, a fog like wet wool comes down on t&rsquo; <b>high tops</b> for half a day. Tha can&rsquo;t see five yards, an&rsquo; t&rsquo; <b>map an&rsquo; bearings go wi&rsquo; it</b> &mdash; no minimap, no coordinates, nowt. Villages, t&rsquo; coast an&rsquo; t&rsquo; low dales stay clear. If it catches thee on t&rsquo; tops: <b>stop</b>. Find a waymark stone or a wall an&rsquo; follow it; signposts still know t&rsquo; way to shelter if tha stumbles on one. Or place torches as breadcrumbs an&rsquo; sit it out &mdash; it lifts as sudden as it falls.</li>
-<li><b>Sleep t&rsquo; neet away.</b> Find a <b>roof an&rsquo; a light</b> &mdash; a villager&rsquo;s house, t&rsquo; pub, a moor shelter, or thi own cottage wi&rsquo; a torch in &mdash; an&rsquo; press <b>N</b>: tha sleeps till morn an&rsquo; wakes wi&rsquo; <b>full health</b> (an&rsquo; a bit of an appetite). On t&rsquo; Shared Moor t&rsquo; neet only passes when <b>everybody</b> kips down &mdash; so shout &rsquo;em in off t&rsquo; moor first.</li>
-<li><b>Dying</b> loses thee nowt &mdash; tha wakes on t&rsquo; green wi&rsquo; thi pockets intact.</li>
+<li><b>Hunger</b> drains as you walk, sprint, jump, and dig. Below 6 hunger bars you cannot sprint; at zero hunger, your health drains down to half a heart. Eat food by right-clicking it: bilberries (+3), raw mutton (+3), <b>roast mutton (+8)</b>, or grouse. Cook food on a range.</li>
+<li><b>Health</b> regenerates automatically when you are well fed (16+ hunger). Otherwise, eat, wait, or stay out of danger.</li>
+<li><b>Falling</b> from heights past 3 blocks causes damage. In <b>water</b>, you can swim (Space), but your air bubbles will deplete—surface before they do.</li>
+<li><b>Keep dry.</b> Getting caught in the rain or wading through deep streams will cause you to become <b>soaked through</b>. While soaked, you cannot rest or heal, and you burn food faster to stay warm. Stand <b>under a roof or near a fire</b> to dry off quickly.</li>
+<li><b>Bogs</b> on the high moor are dark, dangerous pools of peat. They will trap and sink you. Skirt around them or sprint-jump across if you must.</li>
+<li><b>Nighttime</b> belongs to the <b>barghest</b> (a giant black hound with eyes like burning coals) and <b>boggarts</b> (mud creatures from the mires). They roam from dusk till dawn on the open moor. <b>Moorstead's ground is hallowed and safe; night monsters will not set foot on it.</b> You can sprint faster than a barghest, but only just.</li>
+<li><b>Monsters fear flame.</b> Craft <b>torches</b> (1 stick + 1 coal = 4, no bench needed). A <b>placed</b> torch or lantern wards off all but the strongest monsters within a 9-block radius and prevents them from spawning nearby. A torch <b>in your hand</b> lights your way and scares off boggarts, but a barghest is bolder.</li>
+<li><b>Caught out at night?</b> Stone <b>moor shelters</b> are scattered across the tops, lantern-lit and safe. <b>Right-click any waymark signpost</b> to find the direction and distance to the nearest shelter or back to Moorstead. You can craft signposts (3 planks + 1 stick) to mark your own routes.</li>
+<li><b>THE GREAT FOG.</b> Every few days, a thick fog descends on the <b>high tops</b> for half a day. Visibility drops to five yards, and <b>your map and bearings are disabled</b> (no minimap, no coordinates). Valleys and the coast remain clear. If caught on the tops: <b>stop</b>. Find a waymark stone or wall and follow it; signposts still show the way to shelters. Alternatively, place torches as breadcrumbs and wait it out.</li>
+<li><b>Sleep the night away.</b> Find a <b>roof and a light</b> (a villager's house, the pub, a shelter, or your own cottage with a torch inside) and press <b>N</b> to sleep until morning. You will wake up with <b>full health</b> and a small appetite. In multiplayer, the night only passes when <b>everyone</b> sleeps.</li>
+<li><b>Dying</b> carries no penalty: you wake up on the village green with your inventory intact.</li>
 </ul>
-<h3>Tools an&rsquo; digging</h3>
+<h3>Tools and mining</h3>
 <ul>
-<li>Tiers: <b>wood &rarr; gritstone &rarr; iron</b>. Better tools dig faster an&rsquo; last longer (watch t&rsquo; little durability bar).</li>
-<li>Stone, ores an&rsquo; brick <b>need a pick</b> or tha gets nowt. Dirt an&rsquo; peat like a spade; trees like an axe; beasts respect a sword.</li>
-<li>Ores: <b>coal</b> (shallow), <b>ironstone</b> (deeper &mdash; smelt to ingots), <b>Whitby jet</b> (deepest, rare, precious). Caves honeycomb t&rsquo; hills if tha&rsquo;s bold.</li>
+<li>Tiers: <b>wood &rarr; gritstone &rarr; iron</b>. Better tools mine faster and last longer (watch the durability bar).</li>
+<li>Stone, ores, and brick <b>require a pickaxe</b> to harvest. Use a spade for dirt and peat, an axe for wood, and a sword for creatures.</li>
+<li>Ores: <b>coal</b> (shallow), <b>ironstone</b> (deeper—smelt it into ingots), and <b>Whitby jet</b> (deepest, rare, and highly valuable). Explore caves to find rich veins.</li>
 </ul>`,
 
       'T\u2019 Village': `
-<h3>T&rsquo; folk o&rsquo; t&rsquo; moors</h3>
+<h3>The people of the moors</h3>
 <ul>
-<li><b>Every settlement is lived in</b>: t&rsquo; family at Moorstead, t&rsquo; stationmaster an&rsquo; shepherdess at Goathland, t&rsquo; innkeeper an&rsquo; owd miner at Rosedale Abbey, fisherfolk at Staithes, t&rsquo; vicar an&rsquo; market trader at Pickering, engine crew at Grosmont, an&rsquo; t&rsquo; fishwife an&rsquo; jet carver at Whitby. Each knows their own patch best.</li>
-<li><b>Of an evening they head indoors</b> &mdash; tha&rsquo;ll see &rsquo;em walk to their own door at dusk. Follow &rsquo;em in an&rsquo; <b>right-click for a natter by t&rsquo; lantern</b>; they&rsquo;re home all neet an&rsquo; out again of a morning.</li>
-<li><b>Right-click a villager</b> to talk &mdash; proper talk, they remember thee between visits, and word travels round t&rsquo; family. Tell &rsquo;em things, ask &rsquo;em things. They know t&rsquo; moors better than thee.</li>
-<li><b>Friendship</b> grows wi&rsquo; every chat: Stranger &rarr; Acquaintance &rarr; Friendly &rarr; Friend &rarr; Close friend. As folk warm to thee they <b>press presents into thi hands</b> &mdash; t&rsquo; closer t&rsquo; friend, t&rsquo; finer t&rsquo; gift.</li>
-<li><b>Give</b> hands ower whatever tha&rsquo;s holding. Folk have favourites &mdash; Glinda&rsquo;s partial to heather, t&rsquo; kids like bilberries. A good gift builds trust faster than talk.</li>
-<li><b>Swaps (barter)</b>: trade buttons sit under t&rsquo; chat &mdash; wool for ingots, heather for wool, jet for an iron pick. Better stock unlocks as thi standing rises.</li>
-<li><b>Standing</b> (under t&rsquo; minimap) is thi name across t&rsquo; whole village: Newcomer &rarr; Known &rarr; Welcomed &rarr; Respected &rarr; Treasured. It gates t&rsquo; bigger ventures an&rsquo; t&rsquo; better swaps.</li>
-<li><b>Mind thissen</b>: wreck folk&rsquo;s houses or kill t&rsquo; village flock and word gets round &mdash; standing falls, folk turn cold, jobs dry up. Good deeds (and time) mend it.</li>
+<li><b>Every settlement is inhabited</b>: the farming family at Moorstead, the stationmaster and shepherdess at Goathland, the innkeeper and retired miner at Rosedale Abbey, fisherfolk at Staithes, the vicar and market trader at Pickering, the engine crew at Grosmont, and the fishwife and jet carver at Whitby. Each knows their own area best.</li>
+<li><b>At dusk, villagers head indoors.</b> You can follow them inside and <b>right-click to talk by the lantern</b>; they stay home all night and go back out in the morning.</li>
+<li><b>Right-click a villager</b> to talk. They remember you between visits, and gossip travels through families. Talk to them and ask questions; they know the moors better than anyone.</li>
+<li><b>Friendship</b> grows with every chat: Stranger &rarr; Acquaintance &rarr; Friendly &rarr; Friend &rarr; Close Friend. As people warm to you, they will <b>give you gifts</b>—the closer the friendship, the better the gifts.</li>
+<li><b>Give items</b> to villagers by holding the item and talking to them. People have favorites—Granny Glinda loves heather, while the kids love bilberries. A good gift builds trust quickly.</li>
+<li><b>Bartering</b>: Trade buttons appear under the chat window. Swap wool for ingots, heather for wool, or jet for an iron pickaxe. Better trades unlock as your standing rises.</li>
+<li><b>Standing</b> (shown under the minimap) is your reputation across the parish: Newcomer &rarr; Known &rarr; Welcomed &rarr; Respected &rarr; Treasured. High standing is required for advanced trades and ventures.</li>
+<li><b>Mind your behavior</b>: Destroying houses or killing the village flock will damage your reputation. Standing will fall, villagers will turn cold, and jobs will dry up. Good deeds and time will mend it.</li>
 </ul>
-<p class="how-note">Quiet villagers? T&rsquo; village brain&rsquo;s asleep &mdash; they&rsquo;ll potter abaht but say nowt till it wakes.</p>`,
+<p class="how-note">If villagers are quiet, the village brain may be sleeping. They will walk around but won't talk until it wakes up.</p>`,
 
       'Ventures': `
-<h3>Finding work an&rsquo; adventure</h3>
+<h3>Finding work and adventure</h3>
 <ul>
-<li><b>Villagers offer jobs in conversation</b> &mdash; ask about work, news, or owt to do. A green button appears when there&rsquo;s a job going: <i>Tek t&rsquo; job</i>.</li>
-<li>T&rsquo; <b>parish notice board</b> by t&rsquo; village cross (or press <b>Q</b> owt where) lists pinned notices: deliveries, beast bounties, owd treasure riddles.</li>
-<li>Active ventures show <b>top-left</b> wi&rsquo; a compass bearing an&rsquo; distance (&ldquo;NW &middot; 290m&rdquo;). Riddles show nowt &mdash; tha must read t&rsquo; land.</li>
-<li><b>Stuck? Ask t&rsquo; villagers.</b> They hold clues: t&rsquo; kids blurt &rsquo;em out plain, Granny Glinda talks in riddles worth untangling. Different folk know different pieces.</li>
-<li>Some jobs <b>hand back in</b> &mdash; go see t&rsquo; giver and press <i>Hand ower</i>. Others (deliveries, bounties, digs) pay out on t&rsquo; spot.</li>
-<li>Rewards: goods, tools, trust wi&rsquo; t&rsquo; giver &mdash; and finished jobs polish thi standing.</li>
+<li><b>Villagers offer jobs in conversation.</b> Ask about work, news, or things to do. A green button appears when a job is available: <i>Take the job</i>.</li>
+<li>The <b>parish notice board</b> by the village cross (or press <b>Q</b> anywhere) lists pinned notices: deliveries, monster bounties, and ancient treasure riddles.</li>
+<li>Active ventures show in the <b>top-left corner</b> with a compass bearing and distance (e.g., "NW &middot; 290m"). Riddles show no indicators; you must read the landmarks.</li>
+<li><b>Stuck? Ask the villagers.</b> They hold clues: the kids might tell you plainly, while Granny Glinda speaks in riddles worth untangling. Different people know different pieces.</li>
+<li>Some jobs must be <b>turned in</b>—go see the quest giver and press <i>Hand over</i>. Others (deliveries, bounties, digs) pay out immediately.</li>
+<li>Completing jobs rewards you with items, tools, trust with the giver, and boosts your village standing.</li>
 </ul>
-<h3>T&rsquo; Hound o&rsquo; the Mires &#9733;</h3>
-<p>Summat&rsquo;s been taking sheep in t&rsquo; night. <b>T&rsquo; Hound o&rsquo; the Mires</b> runs five chapters across t&rsquo; real landmarks &mdash; starred &#9733; in thi journal. It starts wi&rsquo; Farmer James, and it ends on a crooked hill, at neet, wi&rsquo; summat as has eyes like coals. Higher chapters need higher standing &mdash; t&rsquo; village doesn&rsquo;t hand its secrets to strangers.</p>
-<h3>Count Dracula on t&rsquo; Moors &#8224;</h3>
-<p>A <b>separate</b> storyline, marked &#8224; in thi journal. Start at t&rsquo; <b>Dracula Museum in Whitby</b> (north coast, below t&rsquo; abbey cliffs). Learn how Bram Stoker&rsquo;s 1890 visit gave England its vampire; then draw <b>holy water</b> frae t&rsquo; abbey font, craft a <b>wooden stake</b> at a bench an&rsquo; steep it in t&rsquo; water. At neet, Count Dracula walks t&rsquo; open moor &mdash; tha&rsquo;ll <b>feel him afore tha sees him</b>. Hold t&rsquo; holy stake to strike true; hide in <b>moor shelters</b> or reach a village if tha must. Slaying him makes t&rsquo; moors <b>far safer after dark</b> &mdash; barghests still walk, but nowt worse.</p>`,
+<h3>The Hound of the Mires &#9733;</h3>
+<p>Something has been taking sheep in the night. <b>The Hound of the Mires</b> is a five-chapter storyline set across real landmarks, marked with a star &#9733; in your journal. It starts with Farmer James and ends on a crooked hill at night. Higher chapters require higher standing—the village does not hand its secrets to strangers.</p>
+<h3>Count Dracula on the Moors &#8224;</h3>
+<p>A <b>separate</b> storyline, marked with a dagger &#8224; in your journal. Start at the <b>Dracula Museum in Whitby</b> (on the north coast, below the abbey cliffs). Learn how Bram Stoker's 1890 visit inspired his famous vampire, then draw <b>holy water</b> from the abbey font and craft a <b>wooden stake</b> at a bench. At night, Count Dracula walks the open moor—you will <b>feel his presence before you see him</b>. Use the holy stake to strike him down. Slaying him makes the moors <b>far safer after dark</b>, ensuring nothing worse than barghests will roam.</p>`,
 
       'T’ Railway': `
-<h3>T&rsquo; Moors Railway</h3>
+<h3>The Moors Railway</h3>
 <ul>
-<li><b>One steam train</b> works t&rsquo; whole line, on t&rsquo; same clock for every player &mdash; tha can watch her steam past frae out on t&rsquo; moor, plume an&rsquo; all.</li>
-<li>T&rsquo; line runs like t&rsquo; real un: <b>Pickering</b> (south end) &rarr; <b>Levisham</b> (a lone halt under t&rsquo; Hole of Horcum) &rarr; <b>Moorstead</b> &rarr; <b>Goathland</b> &rarr; <b>Grosmont</b> &rarr; <b>Whitby</b> by t&rsquo; sea.</li>
-<li><b>To ride</b>: find t&rsquo; station platform (lantern, departures board, signpost), <b>right-click t&rsquo; board</b>, pick where tha&rsquo;s bound an&rsquo; pay t&rsquo; fare &mdash; <b>coal lumps</b>, more for further (free in creative). Then be <b>stood on t&rsquo; platform when she calls</b> &mdash; t&rsquo; board says how long. She waits half a minute at each stop, doors open.</li>
-<li>Aboard, tha gets a <b>window seat</b> &mdash; watch t&rsquo; dales an&rsquo; embankments roll by. She&rsquo;ll set thee down at thi stop wi&rsquo; a whistle.</li>
-<li>Miss her an&rsquo; thi fare comes back. Stations are <b>safe, lit ground</b> at neet an&rsquo; all.</li>
-<li>It&rsquo;s t&rsquo; fastest way across t&rsquo; map by far &mdash; an&rsquo; t&rsquo; bonniest.</li>
-<li><b>Folk ride wi&rsquo; thee.</b> Locals get on at t&rsquo; platforms an&rsquo; tek a seat in thi carriage &mdash; <b>right-click one for a natter</b>. They&rsquo;ll share t&rsquo; news, a tip worth knowin&rsquo;, an&rsquo; now an&rsquo; then a <b>parcel to run</b> to their stop for a bit o&rsquo; coal.</li>
+<li><b>A steam train</b> works the entire line on a shared clock—you can watch it steam past from the moor, trailing a plume of smoke.</li>
+<li>The line follows the real route: <b>Pickering</b> (south end) &rarr; <b>Levisham</b> (a halt under the Hole of Horcum) &rarr; <b>Moorstead</b> &rarr; <b>Goathland</b> &rarr; <b>Grosmont</b> &rarr; <b>Whitby</b> by the sea.</li>
+<li><b>To ride</b>: Find a station platform (marked by a lantern, departures board, and signpost), <b>right-click the board</b>, choose your destination, and pay the fare in <b>coal lumps</b> (free in creative mode). Stand on the platform when the train arrives; it stops for 30 seconds.</li>
+<li>Enjoy a window seat as the valleys and embankments roll by. The train will set you down at your stop with a whistle.</li>
+<li>If you miss the train, your fare is refunded. Stations are safe, well-lit ground at night.</li>
+<li><b>Ride with passengers.</b> Locals board at platforms and take seats in your carriage—<b>right-click them to chat</b>. They will share news, tips, and sometimes offer <b>cargo parcels</b> to deliver for extra coal.</li>
 </ul>
-<h3>Drive her thissen &#128642;</h3>
+<h3>Drive the train yourself &#128642;</h3>
 <ul>
-<li>When she&rsquo;s <b>stood at thi platform</b>, t&rsquo; board offers <b>&ldquo;Take the regulator&rdquo;</b> &mdash; climb on t&rsquo; footplate an&rsquo; drive her thissen.</li>
-<li><b>W</b> opens t&rsquo; regulator (faster), <b>S</b> or <b>space</b> brakes, <b>R</b> throws t&rsquo; reverser to back her up. <b>E</b> brings her to a stand an&rsquo; gets thee down.</li>
-<li><b>Fire t&rsquo; boiler.</b> Watch t&rsquo; steam gauge &mdash; <b>F shovels coal</b> on t&rsquo; fire to keep her pressed up. Let t&rsquo; fire die an&rsquo; she&rsquo;ll not pull. A long climb&rsquo;s a proper job.</li>
-<li><b>Goods runs.</b> At a station, <b>load a wagon</b> (or tek a passenger&rsquo;s parcel) bound for another stop; drive her there an&rsquo; <b>step down for coal</b>.</li>
+<li>When the train is stopped at your platform, select <b>"Take the regulator"</b> from the board to climb on the footplate and drive.</li>
+<li>Use <b>W</b> to open the regulator (accelerate), <b>S</b> or <b>space</b> to brake, and <b>R</b> to throw the reverser (reverse). Press <b>E</b> to stop the train and step down.</li>
+<li><b>Fire the boiler.</b> Watch the steam gauge—<b>press F to shovel coal</b> into the firebox to keep steam pressure up. If the fire dies, the train will lose power.</li>
+<li><b>Goods runs</b>: Load cargo wagons at a station platform, drive to the destination stop, and step down to collect your payment in coal.</li>
 </ul>`,
 
       'Brass & Trade': `
-<h3>Owd money &mdash; thi purse o&rsquo; brass &#128176;</h3>
-<p>Thi brass shows top o&rsquo; t&rsquo; screen, counted t&rsquo; owd way: <b>pence</b> (d), <b>shillings</b> (s &mdash; twelve pence to one) an&rsquo; <b>pounds</b> (&pound; &mdash; twenty shillin&rsquo; to one). Tha starts wi&rsquo; <b>five bob</b> (5s) in thi pocket.</p>
-<h3>Buyin&rsquo; an&rsquo; sellin&rsquo; wi&rsquo; folk</h3>
+<h3>Currency & trade &#128176;</h3>
+<p>Your money is shown at the top of the screen, counted in historical currency: **pence** (d), **shillings** (s—12 pence to a shilling), and **pounds** (£—20 shillings/240 pence to a pound). You start with **five shillings** (5s) in your pocket.</p>
+<h3>Buying and selling</h3>
 <ul>
-<li>Press <b>T</b> to natter to a villager, an&rsquo; use t&rsquo; <b>Buy</b> an&rsquo; <b>Sell</b> buttons under t&rsquo; chat. Different folk deal in different goods.</li>
-<li><b>Prices shift frae place to place.</b> A thing&rsquo;s worth little where it&rsquo;s dug or made an&rsquo; dear where it&rsquo;s wanted: <b>coal</b>&rsquo;s cheap at t&rsquo; pit villages an&rsquo; dear ower at t&rsquo; coast, <b>sea-fish</b> fetches most t&rsquo; further inland it travels, an&rsquo; <b>wool</b>&rsquo;s wanted at Whitby an&rsquo; Pickering. That spread is t&rsquo; whole game o&rsquo; tradin&rsquo;.</li>
-<li><b>Sellin&rsquo; on t&rsquo; spot pays poor.</b> A villager buys frae thi hand at a <b>drop-in price</b>, well under t&rsquo; goin&rsquo; rate &mdash; an&rsquo; each soul nobbut carries so much brass, which builds back up ower a day. Grand for a quick bob; no way to get rich.</li>
-<li><b>Don&rsquo;t buy an&rsquo; sell to t&rsquo; same soul</b> hopin&rsquo; to turn a profit &mdash; tha&rsquo;ll allus come off worse. T&rsquo; brass is in carryin&rsquo; goods frae where they&rsquo;re cheap to where they&rsquo;re dear.</li>
+<li>Press <b>T</b> to talk to a villager, and use the <b>Buy</b> and <b>Sell</b> buttons under the chat window. Different villagers deal in different goods.</li>
+<li><b>Prices vary by location.</b> Goods are cheap where they are harvested and expensive where they are in demand: <b>coal</b> is cheap at pit villages like Rosedale and expensive on the coast, <b>sea fish</b> fetches the highest price far inland, and <b>wool</b> is sought after in Whitby and Pickering. Transporting goods to take advantage of these spreads is key to trading.</li>
+<li><b>Spot selling to villagers carries a penalty.</b> If you sell directly to a villager, you receive a <b>drop-in price</b> (60% of the local market value), and each vendor has a shallow brass purse (up to 120d, refilling daily).</li>
+<li><b>High-Reputation Spot Trades</b>: If you reach <b>Respected</b> or <b>Treasured</b> standing (standing index 3+), you can bypass the 60% penalty and vendor purse limits when selling rare goods (Whitby Jet, fossils, and iron ingots). A special <b>"Sell (Trust)"</b> button will appear, paying you full market value.</li>
+<li><b>Do not buy and sell to the same person</b> hoping to turn a profit; you will always lose money. The profit lies in carrying goods between different towns.</li>
 </ul>
-<h3>Sellin&rsquo; by rail &mdash; t&rsquo; Goods Market &#128642;</h3>
+<h3>Shipping by rail &mdash; the Goods Market &#128642;</h3>
 <ul>
-<li><b>Right-click a station notice board</b> an&rsquo; pick t&rsquo; <b>Goods Market</b> tab (t&rsquo; other tab&rsquo;s for t&rsquo; train departures).</li>
-<li>It lists what tha&rsquo;s <b>carryin&rsquo;</b>, which town down t&rsquo; line <b>pays best</b> for it, an&rsquo; t&rsquo; brass tha&rsquo;ll get &mdash; t&rsquo; <b>full market price</b>, none o&rsquo; t&rsquo; drop-in penalty.</li>
-<li><b>Book it</b> an&rsquo; thi goods go wi&rsquo; t&rsquo; next train. T&rsquo; <b>brass lands when t&rsquo; shipment arrives</b> &mdash; about half a day on t&rsquo; moor&rsquo;s clock &mdash; an&rsquo; a note tells thee t&rsquo; sale went through. A wagon holds <b>96</b> at a go.</li>
-<li>Booked shipments are <b>saved wi&rsquo; thi world</b> &mdash; sign off, an&rsquo; thi brass is still waitin&rsquo; when tha comes back.</li>
-</ul>
-<p class="how-note">Far frae a market wi&rsquo; nobbut a villager to hand? Ship by rail an&rsquo; tha gets full price for thi load wi&rsquo;out stirrin&rsquo; frae t&rsquo; dale.</p>`,
+<li><b>Right-click a station notice board</b> and open the <b>Goods Market</b> tab.</li>
+<li>It lists what you are carrying, which town down the line pays best, and the payout you will receive—paying the <b>full market price</b> with no drop-in penalty.</li>
+<li><b>Book the shipment</b>, and your goods will be sent on the next train. Your <b>money arrives when the shipment is delivered</b> (about half a game-day), and a notification will confirm the sale. A wagon holds up to <b>96</b> units.</li>
+</ul>`,
 
       'Ponies': `
 <h3>Moorland ponies &#128052;</h3>
-<p>Half-wild ponies graze t&rsquo; open moor &mdash; shaggy, dark, sure-footed little things. They&rsquo;ll let a body up.</p>
+<p>Half-wild ponies graze the open moor. They are shaggy, dark, sure-footed creatures that can be tamed and ridden.</p>
 <ul>
-<li><b>Find one grazin&rsquo;</b> out on t&rsquo; heather, walk up to her, an&rsquo; <b>right-click to climb on.</b></li>
-<li><b>W A S D</b> to ride &mdash; she fair shifts, near twice walkin&rsquo; pace, an&rsquo; she&rsquo;ll <b>leap a low wall hersen</b>, no need to jump. Grand for crossin&rsquo; t&rsquo; tops.</li>
-<li><b>F</b> to get down. She&rsquo;ll graze where tha left her till tha wants her again.</li>
-<li>She sits &rsquo;twixt shanks&rsquo;s pony an&rsquo; t&rsquo; railway: quicker than walkin&rsquo;, an&rsquo; free to roam where no rails run.</li>
+<li><b>Find a wild pony</b> out on the heather, walk up to her, and <b>right-click to mount</b>.</li>
+<li>Use <b>W A S D</b> to ride. Ponies move at twice your walking speed and will <b>automatically jump low walls</b> without needing to jump manually. They are excellent for crossing the tops.</li>
+<li>Press <b>F</b> to dismount. The pony will stay and graze where you left her until you return.</li>
 </ul>`,
 
       'Pets': `
-<h3>Tamin&rsquo; beasts, keepin&rsquo; pets &amp; buildin&rsquo; a farm &#128054;</h3>
-<p>Near any beast tha meets can be won ower wi&rsquo; patience an&rsquo; t&rsquo; right scran &mdash; then kept at thi heel, or set to graze in a pen o&rsquo; thi own makin&rsquo;.</p>
+<h3>Taming and companions &#128054;</h3>
+<p>Almost any creature you meet can be tamed with patience and their favorite food, then kept at your side or set to graze in a pasture.</p>
 <ul>
-<li><b>To tame one</b>: hold its favourite food an&rsquo; <b>right-click t&rsquo; beast</b> to feed it. Do it a few times ower &mdash; she warms to thee, then throws her lot in wi&rsquo; thee an&rsquo; teks a name. <b>Ponies, sheep an&rsquo; cattle</b> tek to <b>bilberries</b>.</li>
-<li><b>Shy beasts</b> (a cat, a hare) bolt when tha gets near &mdash; but <b>hold their food</b> an&rsquo; they&rsquo;ll stand for thee.</li>
-<li><b>Dogs, cats, pigs an&rsquo; rats</b> become <b>companions</b> &mdash; they follow tha everywhere an&rsquo; earn their keep (below).</li>
-<li><b>Horses, cattle, sheep an&rsquo; llamas</b> become <b>farm stock</b> &mdash; once tamed they <b>bide where tha won &rsquo;em ower an&rsquo; graze</b>, an&rsquo; they <b>never wander off nor vanish</b>.</li>
+<li><b>To tame a creature</b>: Hold their favorite food in your hand and <b>right-click the creature</b> to feed them. Repeat this until they warm to you, accept a name, and throw their lot in with you. <b>Ponies, sheep, cattle, and llamas</b> can be tamed with <b>bilberries</b>.</li>
+<li><b>Shy creatures</b> (cats, hares) will run away if you approach—but if you <b>hold their favorite food</b>, they will stand still for you.</li>
+<li><b>Dogs, cats, pigs, and rats</b> become <b>companions</b> that follow you everywhere.</li>
+<li><b>Ponies, cattle, sheep, and llamas</b> become <b>farm stock</b>. Once tamed, they <b>stay where you won them over and graze</b>, never wandering away or despawning.</li>
 </ul>
-<h3>Build thi own farm &#127806;</h3>
+<h3>Build your own farm &#127806;</h3>
 <ul>
-<li>Tame a beast where tha wants thi farm &mdash; she&rsquo;ll <b>stop there an&rsquo; graze</b>. <b>Fence a pen</b> round her (cobble, planks, owt) &mdash; build it <b>two blocks high</b> so she can&rsquo;t hop out.</li>
-<li><b>Sneak (hold Shift) + right-click</b> any beast o&rsquo; thine to swap her &rsquo;twixt <b>&lsquo;graze here&rsquo;</b> an&rsquo; <b>&lsquo;follow me&rsquo;</b> &mdash; so tha can lead her to a fresh pen, then set her down.</li>
-<li>A <b>tamed pony</b>: right-click to ride, <b>F</b> to get down &mdash; she bides where tha leaves her. Ride her home an&rsquo; build her a stable.</li>
-<li>Thi whole farm is <b>saved wi&rsquo; thi world</b> &mdash; thi beasts are there when tha comes back.</li>
+<li>Tame animals where you want your farm to be—they will stay there and graze. Build a <b>two-block-high fence</b> (cobble, planks, etc.) around them so they cannot hop out.</li>
+<li><b>Sneak (hold Shift) + right-click</b> your owned animal to toggle them between <b>'graze here'</b> and <b>'follow me'</b> so you can lead them to a new pen.</li>
+<li>All owned animals are <b>saved with your world</b> and will be there when you return.</li>
 </ul>
-<h3>What companions are good for</h3>
+<h3>Companion Utilities</h3>
 <ul>
-<li>&#128021; <b>Sheepdog</b> &mdash; feed her <b>meat</b>. She <b>keeps t&rsquo; neet-things off thee</b> (nowt dark will close while she&rsquo;s at heel) &mdash; an&rsquo; she&rsquo;ll <b>work a flock o&rsquo; sheep</b> to thi whistle. See <b>Sheepdog &amp; Flock</b>.</li>
-<li>&#128008; <b>Cat</b> &mdash; feed her <b>fish</b>. <b>Right-click to send her scoutin&rsquo;</b>; she slinks back wi&rsquo; summat in her teeth.</li>
-<li>&#128055; <b>Pig</b> &mdash; feed her <b>bilberries or meat</b>. <b>Right-click to snuffle</b> up buried finds: jet, snakestones, coal.</li>
-<li>&#128000; <b>Rat</b> &mdash; feed her <b>scraps</b>. She <b>forages i&rsquo; t&rsquo; dark</b> as tha mines.</li>
-</ul>
-<p class="how-note">Find dogs an&rsquo; cats about t&rsquo; village edges, pigs on t&rsquo; pasture, ponies, sheep an&rsquo; cattle out on t&rsquo; moor, an&rsquo; rats out at neet. Thi kept beasts are saved wi&rsquo; thi world.</p>`,
+<li>&#128021; <b>Sheepdog</b> (tamed with <b>meat</b>): Guards you at night, keeping night monsters away while at heel, and herds droveable stock to your whistle.</li>
+<li>&#128008; <b>Cat</b> (tamed with <b>fish</b>): Right-click to send her scouting; she will return with useful items.</li>
+<li>&#128055; <b>Pig</b> (tamed with <b>bilberries or meat</b>): Right-click to make her snuffle up buried treasures like jet, fossils, or coal.</li>
+<li>&#128000; <b>Rat</b> (tamed with <b>scraps</b>): Forages for extra resources in the dark while you mine underground.</li>
+</ul>`,
 
-      'Sheepdog & Flock': `
-<h3>A workin&rsquo; sheepdog &#128021;</h3>
-<p>Tame a dog &mdash; hold t&rsquo; meat she likes (<b>mutton, beef or grouse</b>) an&rsquo; right-click her a few times ower (see <b>Pets</b>) &mdash; an&rsquo; tha&rsquo;s a workin&rsquo; collie. She&rsquo;ll keep t&rsquo; dark off thee an&rsquo; all, but her real work&rsquo;s t&rsquo; sheep.</p>
-<h3>Whistlin&rsquo; her round</h3>
-<p>Wi&rsquo; thi dog out an&rsquo; loose sheep near, whistle her wi&rsquo; t&rsquo; <b>arrow keys</b> (a reminder shows on t&rsquo; screen). Thi own walkin&rsquo; (<b>W A S D</b>) is nowt bothered:</p>
-<div class="controls-list">
-<b>&larr; Come-bye</b> Send her round one side o&rsquo; t&rsquo; flock<br>
-<b>&rarr; Away</b> Send her round t&rsquo; other side<br>
-<b>&uarr; Walk on</b> Press her straight in on t&rsquo; sheep<br>
-<b>&darr; Lie down</b> Settle her where she stands<br>
-<b>H</b> Heel &mdash; call her back to thi side
-</div>
-<p>Atween thee an&rsquo; t&rsquo; dog tha bunches t&rsquo; loose sheep an&rsquo; drives &rsquo;em on &mdash; send her round to turn &rsquo;em, walk on to push, lie down to let &rsquo;em settle.</p>
-<h3>Buildin&rsquo; a fold</h3>
+      'Farming': `
+<h3>Building a fold &#127806;</h3>
 <ul>
-<li>Craft <b>Sheep Hurdles</b> (1 plank + 2 sticks meks 3) an&rsquo; a <b>Field Gate</b> (2 planks + 2 sticks). No bench needed.</li>
-<li><b>Fence a closed pen</b> wi&rsquo; one gate set in t&rsquo; ring. T&rsquo; gate&rsquo;s t&rsquo; trick on it: a beast walks <b>in</b> through it but <b>never back out</b> &mdash; while tha thissen passes through freely, both ways.</li>
+<li>Craft <b>Sheep Hurdles</b> (1 plank + 2 sticks makes 3) and a <b>Field Gate</b> (2 planks + 2 sticks). No bench is needed.</li>
+<li>Enclose a pen with hurdles and set a gate in the ring. The gate is a special one-way barrier: animals can walk <b>in</b> from the outside, but <b>never back out</b>. You, however, can pass through freely.</li>
 </ul>
-<h3>Pennin&rsquo; thi stock</h3>
+<h3>Penning your stock</h3>
 <ul>
-<li><b>Drive t&rsquo; flock through t&rsquo; gate</b>, an&rsquo; every sheep as steps inside becomes <b>thi kept stock</b> &mdash; she teks a name, grazes at home, an&rsquo; she&rsquo;s there whenever tha comes back. Saved wi&rsquo; thi world.</li>
-<li>No dog yet? Tha can still keep a beast t&rsquo; simple way &mdash; tame her where tha wants her an&rsquo; fence her in (see <b>Pets</b>).</li>
+<li>Drive wild animals through the gate into your fold. Any droveable species (sheep, cow, pony, llama) that steps inside becomes <b>your kept stock</b>. They receive a name, stay in the fold, and are saved with your world.</li>
+<li>If you do not have a dog yet, you can tame a wild beast with bilberries where you stand and build a fence around it.</li>
 </ul>
-<p class="how-note">A loose dog only works t&rsquo; <b>un-owned</b> sheep out on t&rsquo; moor &mdash; thi own penned stock bide put.</p>
-<h3>Becomin&rsquo; a registered farmer</h3>
+<h3>Registering your farm</h3>
 <ul>
-<li>Once tha keeps <b>5 head</b> o&rsquo; penned stock, go to t&rsquo; <b>parish notice board at Moorstead</b> (by t&rsquo; village cross, or press <b>Q</b> when tha&rsquo;s there) an&rsquo; <b>register thi farm</b> for a <b>£1 charter</b>.</li>
-<li>That makes thee a <b>registered farmer o&rsquo; Moorstead parish</b> &mdash; thi fold&rsquo;s on t&rsquo; books.</li>
+<li>Once you keep <b>5 head of penned stock</b>, visit the <b>parish notice board at Moorstead</b> and <b>register your farm</b> for a <b>£1 charter fee</b> (240d). This registers your farm on the parish books and unlocks droving.</li>
 </ul>
-<h3>Drovin&rsquo; to market</h3>
+<h3>Droving to market</h3>
 <ul>
-<li>A registered farmer can <b>muster</b> a penned flock (<b>G</b>, stood by thi fold) into a drove, then <b>drive &rsquo;em to t&rsquo; Moorstead mart</b> wi&rsquo; thi dog &mdash; same whistles as ever.</li>
-<li><b>Sell t&rsquo; live flock</b> at t&rsquo; Moorstead notice board for <b>10s a head</b> &mdash; t&rsquo; best brass on t&rsquo; moor, far more than wool an&rsquo; mutton sold piecemeal.</li>
-<li><b>Keep &rsquo;em bunched an&rsquo; move by day.</b> A beast strung out on t&rsquo; moor strays off &mdash; an&rsquo; after dark t&rsquo; <b>barghest</b> teks &rsquo;em. Tha&rsquo;s paid for what gets there.</li>
+<li>Stand by your fold and press <b>G</b> to <b>muster</b> your penned animals into a drove. Use your working dog and whistle commands to drive them to the Moorstead mart.</li>
+<li><b>Whistle controls</b> (using the arrow keys):
+  <div class="controls-list">
+  <b>&larr; Come-bye</b> Send the dog flanking to the left around the flock<br>
+  <b>&rarr; Away</b> Send the dog flanking to the right around the flock<br>
+  <b>&uarr; Walk on</b> Press the dog straight in to push the flock forward<br>
+  <b>&darr; Lie down</b> Settle the dog where she stands<br>
+  <b>H</b> Heel (call the dog back to your side)
+  </div>
+</li>
+<li><b>Keep them bunched and move by day.</b> Animals that stray too far from you on the open moor will wander off, and after dark the <b>barghest</b> will attack them. You are paid for what arrives safely in the yard.</li>
+</ul>
+<h3>Livestock Market Value</h3>
+<ul>
+<li>Sell your droved flock at the Moorstead notice board. Payouts are species-specific:
+  <ul>
+  <li>🐑 <b>Sheep</b>: 120d (10s) per head</li>
+  <li>🦙 <b>Pack Llama</b>: 110d (9s 2d) per head</li>
+  <li>🐄 <b>Dale Cow</b>: 340d (£1 8s 4d) per head</li>
+  <li>🐎 <b>Moorland Pony</b>: 540d (£2 5s) per head</li>
+  </ul>
+</li>
+<li><b>Sty Stock (Pigs)</b>: Saddleback Pigs are kept as companions and cannot be herded. However, you can sell them individually at the Moorstead notice board for 150d (12s 6d) apiece.</li>
+<li>⚠️ <b>Bull Hazard</b>: Cattle bulls are aggressive and cannot be herded or droved. Avoid herding them to prevent goring.</li>
 </ul>`,
 
       'Coast & Sea': `
-<h3>T&rsquo; coast &amp; t&rsquo; open sea &#9973;</h3>
-<p>Follow t&rsquo; railway (or t&rsquo; cliff path) east to t&rsquo; sea &mdash; <b>Whitby</b> under t&rsquo; abbey, an&rsquo; t&rsquo; fishin&rsquo; town o&rsquo; <b>Staithes</b>. There&rsquo;s allus a <b>coble</b> (a Yorkshire fishin&rsquo; boat) moored at t&rsquo; harbour.</p>
+<h3>The coast and the open sea &#9973;</h3>
+<p>Follow the railway or the cliff path east to the sea—<b>Whitby</b> under the abbey, and the fishing village of <b>Staithes</b>. A <b>coble</b> (a traditional fishing boat) is moored at the harbour.</p>
 <ul>
-<li><b>To sail</b>: <b>right-click t&rsquo; coble</b> to climb aboard. <b>W</b> rows her on, <b>S</b> backs her, an&rsquo; tha <b>steers wi&rsquo; where tha looks</b>. <b>F</b> to step ashore &mdash; she moors where tha leaves her.</li>
-<li>She only goes where there&rsquo;s watter under her &mdash; t&rsquo; open sea, a wide beck, a tarn. Pull in to a beach or t&rsquo; pier to get off.</li>
-<li><b>Sea fishin&rsquo;</b>: cast a line frae t&rsquo; boat out in t&rsquo; deep for <b>fuller hauls</b> &mdash; an&rsquo; now an&rsquo; then summat snags on thi hook frae t&rsquo; sea bed: sea-washed jet, a snakestone, sea-coal.</li>
-<li>Sell thi catch to t&rsquo; folk at Whitby for coal &mdash; or a proper fish supper.</li>
-</ul>
-<p class="how-note">T&rsquo; sea opens t&rsquo; whole seaward half o&rsquo; t&rsquo; map: t&rsquo; North Sea, Robin Hood&rsquo;s Bay, t&rsquo; heritage coast.</p>`,
+<li><b>To sail</b>: <b>Right-click the coble</b> to board. Use <b>W</b> to row forward, <b>S</b> to reverse, and <b>steer by looking in the direction</b> you want to go. Press <b>F</b> to step ashore; she will moor where you leave her.</li>
+<li>The coble only sails in water—open sea, wide streams, or tarns. Pull up to a beach or pier to dismount.</li>
+<li><b>Sea fishing</b>: Hold a fishing rod and cast your line from the boat into deep water for <b>larger catches</b>. You may also hook valuable treasures from the sea bed: sea-washed jet, snakestones, or sea-coal.</li>
+<li>Sell your catch to the villagers at Whitby for coal or purchase a hot fish supper.</li>
+</ul>`,
 
       'Craft & Cook': `
 <h3>Crafting</h3>
 <ul>
-<li>Press <b>E</b>: simple recipes (planks, sticks, bench, thatch) craft owt where. Owt serious needs thee <b>stood near a joiner&rsquo;s bench</b>.</li>
-<li>Key recipes: pick/axe/spade/sword in wood, gritstone an&rsquo; iron &middot; <b>range</b> (8 cobble) &middot; <b>lantern</b> (ingot + coal) &middot; dressed stone (4 gritstone) &middot; thatch (4 bracken) &middot; windows for thi cottage.</li>
-<li>There&rsquo;s a free bench an&rsquo; range in t&rsquo; pub &mdash; T&rsquo; Black Sheep, west side o&rsquo; t&rsquo; green.</li>
+<li>Press <b>E</b> to open your pockets. Basic recipes (planks, sticks, bench, thatch) can be crafted anywhere. Advanced recipes require you to be <b>stood near a joiner's bench</b>.</li>
+<li>Key recipes: pickaxes, axes, spades, and swords (wood, gritstone, and iron), <b>ranges</b> (8 cobble), <b>lanterns</b> (ingot + coal), dressed stone, thatch, and windows for your cottage.</li>
+<li>A free bench and range are available in the pub (The Black Sheep, on the west side of the village green).</li>
 </ul>
-<h3>T&rsquo; Range (cooking an&rsquo; smelting)</h3>
+<h3>The Range (cooking & smelting)</h3>
 <ul>
-<li>Right-click a range. <b>Stoke t&rsquo; firebox first</b>: coal&rsquo;s worth 4 goes, a peat block 1 go.</li>
-<li>Then: ironstone &rarr; <b>iron ingots</b> &middot; raw mutton &rarr; <b>roast mutton</b> (best scran going) &middot; grouse roasts likewise &middot; cobble fires back to gritstone.</li>
-</ul>
-<h3>Building &mdash; thi own croft</h3>
-<ul>
-<li>T&rsquo; <b>owd croft</b> at t&rsquo; south-east corner o&rsquo; t&rsquo; green (marked wi&rsquo; posts an&rsquo; a gravel edge) is <b>thine</b>. Build thissen a cottage: <b>walls</b> (stone, planks, owt solid) &rarr; a <b>thatch roof</b> &rarr; a <b>window, a lantern, an&rsquo; a bench or range</b> inside.</li>
-<li>T&rsquo; village watches thi progress &mdash; folk talk about it, thi standing rises wi&rsquo; every stage, an&rsquo; finishing it earns thee a proper <b>housewarming</b>, gifts an&rsquo; all.</li>
-<li>Villagers also offer <b>building commissions</b> &mdash; a lambing shed for James, a garden wall for Glinda &mdash; materials placed at a marked spot, paid fair.</li>
-<li>Build owt else tha likes on t&rsquo; open moor &mdash; just <b>not through folk&rsquo;s houses</b>, unless tha fancies being t&rsquo; talk o&rsquo; t&rsquo; parish.</li>
+<li>Right-click a range. <b>Stoke the firebox first</b>: coal provides 4 cooking operations, while a peat block provides 1.</li>
+<li>Smelting: ironstone &rarr; <b>iron ingots</b> &middot; raw mutton &rarr; <b>roast mutton</b> &middot; raw grouse &rarr; <b>roast grouse</b> &middot; raw beef &rarr; <b>roast beef</b> &middot; raw pork &rarr; <b>roast pork</b>. Cobble can also be fired back into gritstone.</li>
 </ul>`,
 
       'T\u2019 Land': `
-<h3>Reading t&rsquo; moors</h3>
+<h3>Reading the map</h3>
 <ul>
-<li>T&rsquo; HUD names where tha stands &mdash; high moors, dales (Rosedale, Farndale, Bilsdale...), May Moss, t&rsquo; coast. T&rsquo; minimap shows t&rsquo; lie o&rsquo; t&rsquo; land, north up.</li>
-<li><b>T&rsquo; high moor</b>: a sea o&rsquo; heather, blanket bog, moor crosses, owd stone circles. <b>T&rsquo; dales</b>: becks, woods, walled pasture. <b>North</b>, past Wade&rsquo;s Causey, t&rsquo; land ends in cliffs ower t&rsquo; North Sea.</li>
+<li>The HUD names your current location: high moors, dales (Rosedale, Farndale, Bilsdale...), May Moss, and the coast. The minimap shows the terrain, with north at the top.</li>
+<li><b>The high moor</b> is a sea of heather, blanket bogs, waymark crosses, and ancient stone circles. <b>The dales</b> feature becks, woodlands, and walled pastures. To the <b>north</b>, the land ends in high cliffs overlooking the North Sea.</li>
 </ul>
-<h3>Landmarks worth t&rsquo; trek</h3>
+<h3>Landmarks worth the trek</h3>
 <ul>
-<li><b>Roseberry Topping</b> (far SW) &mdash; t&rsquo; lonely crooked peak. Summat lives up there, they say.</li>
-<li><b>The Wainstones</b> (SW) &mdash; a crag o&rsquo; jumbled stones on t&rsquo; ridge.</li>
-<li><b>T&rsquo; Hole of Horcum</b> (NE) &mdash; a giant&rsquo;s handful scooped out o&rsquo; t&rsquo; moor.</li>
-<li><b>Rosedale Ironstone Kilns</b> (SE) &mdash; stone arches wi&rsquo; an ember as never dies. Rich iron seams nearby.</li>
-<li><b>Wade&rsquo;s Causey</b> &mdash; t&rsquo; owd Roman road, running straight ower t&rsquo; tops.</li>
-<li><b>Moor crosses</b> &mdash; waymarks on t&rsquo; high moor. One&rsquo;s painted white: say hello to <b>Fat Betty</b>, and mebbe leave her summat.</li>
-<li><b>T&rsquo; Abbey</b> (far N, on t&rsquo; cliffs) &mdash; a drowned-voiced ruin ower t&rsquo; sea. A <b>holy water font</b> still glimmers in t&rsquo; nave.</li>
-<li><b>Whitby</b> (below t&rsquo; abbey) &mdash; harbour, pier, fish &amp; chip shop, fossil shop, an&rsquo; t&rsquo; <b>Dracula Museum</b>. Right-click t&rsquo; museum boards to enter.</li>
-<li><b>Robin Hood&rsquo;s Bay</b> (NE coast) &mdash; a sweeping bay wi&rsquo; broad <b>beaches</b>. <b>Dig t&rsquo; sand</b> for fossils: ammonites (snakestones), Devil&rsquo;s Toenails, an&rsquo; now an&rsquo; then washed-up jet. T&rsquo; bay sands are twice as rich as owt else. Harry an&rsquo; Glinda trade for fossils, an&rsquo; Harry treasures a gifted ammonite above all else.</li>
-<li><b>T&rsquo; tide minds t&rsquo; beaches</b>: owt dug or built on t&rsquo; sands smooths back ower in a few minutes &mdash; t&rsquo; fossil grounds can&rsquo;t be ruined, so dig wi&rsquo; a clear conscience (just don&rsquo;t build thi house on &rsquo;em).</li>
-<li>Other settlements stand across t&rsquo; moors: <b>Goathland</b>, <b>Rosedale Abbey</b>, <b>Staithes</b> on t&rsquo; clifftop, <b>Grosmont</b> in t&rsquo; valley, an&rsquo; <b>Pickering</b> t&rsquo; capital, minster, market an&rsquo; all. All safe ground, all lived in &mdash; an&rsquo; all on or near t&rsquo; railway.</li>
+<li><b>Roseberry Topping</b> (far SW): The crooked peak. Rumor has it something mysterious lives at the summit.</li>
+<li><b>The Wainstones</b> (SW): A crag of tumbled stones on the ridge.</li>
+<li><b>The Hole of Horcum</b> (NE): A massive natural amphitheater scooped out of the moor.</li>
+<li><b>Rosedale Ironstone Kilns</b> (SE): Stone arches with an ember that never dies. Rich ironstone veins are nearby.</li>
+<li><b>Wade’s Causey</b>: The ancient Roman road, running straight over the tops.</li>
+<li><b>Moor crosses</b>: Stone waymarks on the high moor. One is painted white: <b>Fat Betty</b>. Leaving her a small offering is customary.</li>
+<li><b>The Abbey</b> (far N, on the cliffs): A ruined abbey overlooking the sea. A holy water font glimmers in the nave.</li>
+<li><b>Whitby</b> (below the abbey cliffs): Features a harbour, pier, fish and chip shop, fossil shop, and the <b>Dracula Museum</b>.</li>
+<li><b>Robin Hood’s Bay</b> (NE coast): A sweeping bay with broad <b>beaches</b>. <b>Dig the sand</b> to find fossils: ammonites (snakestones), Devil's Toenails (gryphaea), and washed-up jet. Harry and Glinda trade for fossils, and Harry treasures ammonites above all else.</li>
+<li><b>The tide clears the beaches</b>: Anything dug or built on the sands will be smoothed over by the tide in a few minutes. Dig freely, but do not build permanent structures on the beach.</li>
 </ul>
-<p class="how-note">A full day on t&rsquo; moors is <b>half an hour</b>. Thi world saves itsen every half-minute, in this browser. &ldquo;Carry On&rdquo; picks up where tha left off.</p>`,
+<p class="how-note">A full day-night cycle on the moors takes <b>30 minutes</b>. Your progress is saved automatically every 30 seconds in your browser.</p>`,
 
       'Merlin': `
-<h3>Merlin, t&rsquo; wizard o&rsquo; t&rsquo; moor</h3>
-<p>A glowin&rsquo; owd wizard walks these moors &mdash; <b>beard, pointed hat an&rsquo; all</b>. He&rsquo;s a friend to every traveller, an&rsquo; he&rsquo;s in <b>every world</b>, t&rsquo; bairns&rsquo; included.</p>
+<h3>Merlin, the wizard of the moor</h3>
+<p>An ancient wizard walks these moors, complete with a <b>beard and pointed hat</b>. He is a friend to all travelers and exists in every world.</p>
 <ul>
-<li><b>Call him by name.</b> Press <b>T</b> to chat an&rsquo; say <b>&ldquo;Merlin&rdquo;</b> &mdash; he&rsquo;ll hear thee frae owt where on t&rsquo; map an&rsquo; <b>come straight to thee</b>. He can be in more than one place at once, so he&rsquo;ll never leave another soul waitin&rsquo;.</li>
-<li><b>Then just natter.</b> Once he&rsquo;s wi&rsquo; thee tha needn&rsquo;t say his name again &mdash; talk on an&rsquo; he&rsquo;ll answer, an&rsquo; he walks alongside thee as tha goes. He knows t&rsquo; lie o&rsquo; t&rsquo; land, what&rsquo;s in thi pack, how far tha&rsquo;s come, an&rsquo; where t&rsquo; ore an&rsquo; t&rsquo; folk are.</li>
-<li><b>He&rsquo;ll lead thee.</b> Ask <i>&ldquo;take me to Goathland&rdquo;</i>, <i>&ldquo;where&rsquo;s t&rsquo; iron?&rdquo;</i>, <i>&ldquo;lead me to thi keep&rdquo;</i> or <i>&ldquo;where should I build?&rdquo;</i> an&rsquo; he&rsquo;ll <b>set off walkin&rsquo;</b> &mdash; follow him. Ower far to walk, an&rsquo; he&rsquo;ll point thee t&rsquo; way.</li>
-<li><b>He&rsquo;ll help thee build.</b> <i>&ldquo;Mark me a plot&rdquo;</i> an&rsquo; he lanterns out a building spot; <i>&ldquo;lay me a foundation&rdquo;</i> an&rsquo; he sets thee a dressed-stone footing to build up frae.</li>
+<li><b>Call him by name.</b> Press <b>T</b> to open chat and say <b>"Merlin"</b>. He will hear you from anywhere on the map and <b>teleport directly to you</b>. He can manifest in multiple places, so he never keeps anyone waiting.</li>
+<li><b>Talk and explore.</b> Once he is with you, speak normally and he will answer, walking alongside you as you travel. He knows your inventory, coordinates, and where ores and villagers are located.</li>
+<li><b>Let him lead you.</b> Ask him to <i>"take me to Goathland"</i>, <i>"where's the iron?"</i>, or <i>"lead me to your keep"</i>, and he will <b>set off walking</b>—simply follow him. If the destination is too far to walk, he will point you in the right direction.</li>
+<li><b>Building assistance.</b> Ask him to <i>"mark me a plot"</i> to outline a building spot, or <i>"lay me a foundation"</i> to place a dressed-stone footing for a cottage.</li>
 </ul>
-<h3>Merlin&rsquo;s magic &#10024;</h3>
-<p>He&rsquo;s a <b>true wizard</b>: <b>fetch him t&rsquo; right token</b>, carry it in thi pack, an&rsquo; ask him to <b>work some magic</b>. He&rsquo;ll conjure it up beside thee:</p>
+<h3>Merlin’s magic &#10024;</h3>
+<p>Carry the appropriate token in your pack and ask Merlin to <b>work some magic</b> to conjure a structure beside you:
 <ul>
-<li><b>Whitby jet</b> &rarr; a <b>Circle of Light</b> &mdash; a warding ring o&rsquo; lanterns to keep t&rsquo; dark off.</li>
-<li><b>Holy water</b> &rarr; a <b>Wayside Shrine</b> &mdash; a lit stone cross on hallowed ground.</li>
-<li><b>An iron ingot</b> &rarr; a <b>Standing Stone</b> &mdash; a lit waymark on t&rsquo; moor.</li>
-<li><b>Coal</b> &rarr; a <b>Beacon</b> &mdash; a fire burnin&rsquo; atop a stone tower.</li>
-<li><b>A snakestone</b> (ammonite, or a Devil&rsquo;s toenail) &rarr; a <b>Stone Causeway</b> &mdash; a paved path frae t&rsquo; livin&rsquo; rock.</li>
-<li><b>T&rsquo; Amulet o&rsquo; t&rsquo; Moors</b> &rarr; a <b>great Monument</b> &mdash; a lit obelisk ringed wi&rsquo; standin&rsquo; stones, for them as finish t&rsquo; quest.</li>
+<li><b>Whitby jet</b> &rarr; a <b>Circle of Light</b> (a protective ring of lanterns).</li>
+<li><b>Holy water</b> &rarr; a <b>Wayside Shrine</b> (a lit stone cross on hallowed ground).</li>
+<li><b>An iron ingot</b> &rarr; a <b>Standing Stone</b> (a lit waymark).</li>
+<li><b>Coal</b> &rarr; a <b>Beacon</b> (a fire burning atop a stone tower).</li>
+<li><b>A snakestone</b> (ammonite or Devil’s toenail) &rarr; a <b>Stone Causeway</b> (a paved path from the living rock).</li>
+<li><b>The Amulet of the Moors</b> &rarr; a <b>great Monument</b> (a lit obelisk ringed with standing stones).</li>
 </ul>
-<p class="how-note">Ask him empty-handed an&rsquo; he&rsquo;ll tell thee which token works which spell. He keeps thi token &mdash; t&rsquo; magic nobbut borrows its power.</p>`,
+<p class="how-note">Ask him empty-handed, and he will tell you which tokens trigger which structures. He consumes the token to cast the spell.</p>`
     };
 
     this.howTabs.innerHTML = '';
@@ -649,17 +642,34 @@ export class UI {
           this.bindTooltip(b, `Tha needs ${econ.format(price)} for that.`);
         }
       }
+      const isRare = (id) => [I.JET_GEM, I.AMMONITE, I.GRYPHAEA, I.IRON_INGOT].includes(id);
+      const standing = econ.standing();
+      const fullPrices = new Map(econ.sellList(v).map(x => [x.id, x.price]));
       for (const { id, price } of econ.dropInList(v)) {
-        const b = this.el('button', 'mc chat-btn trade-btn', this.chatQuestRow,
-          `Sell ${itemName(id)} for <b>${econ.format(price)}</b>`);
-        this.bindTooltip(b, `A drop-in price, sold on t&rsquo; spot. Ship it by rail to where it&rsquo;s dear an&rsquo; tha&rsquo;ll get more.`);
-        b.addEventListener('click', () => {
-          if (econ.dropInSell(v, id)) {
-            v.chatLog.push({ who: 'sys', text: `Sold ${itemName(id)} for ${econ.format(price)}.` });
-            this.game.recordTrade(v, id, 'sell');
-            this.renderChatLog(); this.renderChatActions();
-          }
-        });
+        if (standing >= 3 && isRare(id) && fullPrices.has(id)) {
+          const fullPrice = fullPrices.get(id);
+          const b = this.el('button', 'mc chat-btn trade-btn', this.chatQuestRow,
+            `Sell ${itemName(id)} (Trust) for <b>${econ.format(fullPrice)}</b>`);
+          this.bindTooltip(b, `As a Respected/Treasured traveller, they'll buy thi rare goods at the full export rate directly.`);
+          b.addEventListener('click', () => {
+            if (econ.doSell(v, id)) {
+              v.chatLog.push({ who: 'sys', text: `Sold ${itemName(id)} to ${v.displayName} for ${econ.format(fullPrice)}.` });
+              this.game.recordTrade(v, id, 'sell');
+              this.renderChatLog(); this.renderChatActions();
+            }
+          });
+        } else {
+          const b = this.el('button', 'mc chat-btn trade-btn', this.chatQuestRow,
+            `Sell ${itemName(id)} for <b>${econ.format(price)}</b>`);
+          this.bindTooltip(b, `A drop-in price, sold on t&rsquo; spot. Ship it by rail to where it&rsquo;s dear an&rsquo; tha&rsquo;ll get more.`);
+          b.addEventListener('click', () => {
+            if (econ.dropInSell(v, id)) {
+              v.chatLog.push({ who: 'sys', text: `Sold ${itemName(id)} for ${econ.format(price)}.` });
+              this.game.recordTrade(v, id, 'sell');
+              this.renderChatLog(); this.renderChatActions();
+            }
+          });
+        }
       }
     }
   }
@@ -726,13 +736,23 @@ export class UI {
       if (fs.registered) {
         this.el('div', 'r-needs', this.boardPanel,
           '🌾 <b>Tha&rsquo;s a registered farmer o&rsquo; Moorstead parish.</b> Thi fold&rsquo;s on t&rsquo; books.');
-        const inYard = g.atMarketTown() ? g.droveHeadNear().length : 0;
-        if (inYard > 0) {
-          const pay = g.economy.format(droveValue(inYard, g.economy.standing()));
+        const herd = g.atMarketTown() ? g.droveHeadNear() : [];
+        if (herd.length > 0) {
+          const pay = g.economy.format(droveValue(herd, g.economy.standing()));
           const row = this.el('div', 'recipe quest-row', this.boardPanel);
-          row.innerHTML = `<div class="r-name"><b>Sell thi droved flock</b><br><span class="r-needs">${inYard} head in t&rsquo; yard &mdash; fetches <b>${pay}</b></span></div>`;
+          row.innerHTML = `<div class="r-name"><b>Sell thi droved flock</b><br><span class="r-needs">${herd.length} head in t&rsquo; yard &mdash; fetches <b>${pay}</b></span></div>`;
           const sb = this.el('button', 'mc chat-btn trade-btn', row, 'Sell at t’ mart');
           sb.addEventListener('click', () => { if (g.sellDrove()) this.openBoard(fromBoard); });
+        }
+        // Sell pigs individually
+        const pets = g.player.pets || [];
+        const pigs = pets.filter(p => p && p.kind === 'pig');
+        if (pigs.length > 0 && g.atMarketTown()) {
+          const row = this.el('div', 'recipe quest-row', this.boardPanel);
+          const pigPrice = g.economy.format(g.economy.livestockPrice('pig', g.economy.standing()));
+          row.innerHTML = `<div class="r-name"><b>Sell Saddleback Pig</b><br><span class="r-needs">Sell ${pigs[0].name} for <b>${pigPrice}</b></span></div>`;
+          const sb = this.el('button', 'mc chat-btn trade-btn', row, 'Sell Pig');
+          sb.addEventListener('click', () => { if (g.sellPig(pigs[0].name)) this.openBoard(fromBoard); });
         }
       } else {
         const need = FARM_THRESHOLD;

@@ -58,7 +58,7 @@ function lerpAngle(a, b, t) {
   if (d > Math.PI) d -= Math.PI * 2; else if (d < -Math.PI) d += Math.PI * 2;
   return a + d * t;
 }
-import { Entities } from './entities.js';
+import { Entities, MOB_TYPES } from './entities.js';
 import { PET_BENEFIT, PET_KINDS, TAME_GOAL } from './pets.js';
 import { EXTRA_FOLK, moodWord } from './villagerlife.js';
 import { Sky } from './sky.js';
@@ -1605,7 +1605,11 @@ class Game {
   // ---- Slice 2: registered farm status ----
   // Head of penned stock the player keeps (sheep for now; Slice 4 widens the kinds).
   farmHeadCount() {
-    return (this.player.pets || []).filter(p => p && p.kind === 'sheep').length;
+    return (this.player.pets || []).filter(p => {
+      if (!p) return false;
+      const t = MOB_TYPES[p.kind];
+      return t && t.droveable;
+    }).length;
   }
 
   // Is the player stood at the market town (Moorstead) — where a farm is registered?
@@ -1655,18 +1659,18 @@ class Game {
     const p = this.player.pos;
     let n = 0;
     for (const m of this.entities.mobs) {
-      if (!m || m.dead || !m.owner || m.type !== 'sheep' || !m.stay) continue;
+      if (!m || m.dead || !m.owner || !MOB_TYPES[m.type]?.droveable || !m.stay) continue;
       if (Math.hypot(m.pos.x - p.x, m.pos.z - p.z) > 20) continue;
       m.stay = false; m.droving = true; m.herding = false; n++;
     }
     if (!n) { this.ui.toast('No penned stock close by to muster. Stand by thi fold.', 4000); return; }
-    this.ui.toast(`🐑 <b>Mustered ${n} head.</b> Drove ’em to <b>Moorstead’s mart</b> wi’ thi dog — keep ’em bunched.`, 6000);
+    this.ui.toast(`🌱 <b>Mustered ${n} head o’ stock.</b> Drove ’em to <b>Moorstead’s mart</b> wi’ thi dog, and keep ’em bunched.`, 6000);
   }
 
   // Droving sheep within the mart yard (near thee). Used by the board to offer the sale.
   droveHeadNear() {
     const p = this.player.pos;
-    return this.entities.mobs.filter(m => m && !m.dead && m.droving && m.type === 'sheep' &&
+    return this.entities.mobs.filter(m => m && !m.dead && m.droving && MOB_TYPES[m.type]?.droveable &&
       Math.hypot(m.pos.x - p.x, m.pos.z - p.z) <= 25);
   }
 
@@ -1675,7 +1679,7 @@ class Game {
     if (!this.atMarketTown()) { this.ui.toast('Tha sells a droved flock at <b>Moorstead’s mart</b>.', 4000); return false; }
     const herd = this.droveHeadNear();
     if (!herd.length) { this.ui.toast('Tha’s no flock in t’ yard to sell. Drove ’em in first.', 4000); return false; }
-    const pay = droveValue(herd.length, this.economy.standing());
+    const pay = droveValue(herd, this.economy.standing());
     for (const m of herd) {
       if (this.player.pets) this.player.pets = this.player.pets.filter(p => p.name !== m.petName);
       m.dead = true; this.entities.scene.remove(m.model.group);
@@ -1683,6 +1687,24 @@ class Game {
     this.economy.earn(pay);
     this.ui.toast(`💷 <b>Sold ${herd.length} head at Moorstead mart for ${this.economy.format(pay)}.</b>`, 7000);
     if (this.milestones) this.milestones.fire('first_drove');
+    if (this.saveNow) this.saveNow(false);
+    return true;
+  }
+
+  // Sell a Saddleback Pig individually (sty stock)
+  sellPig(name) {
+    if (!this.atMarketTown()) { this.ui.toast('Tha sells a pig at <b>Moorstead</b>.', 4000); return false; }
+    const rec = (this.player.pets || []).find(p => p.name === name && p.kind === 'pig');
+    if (!rec) { this.ui.toast('Tha’s no pig o’ that name to sell.', 4000); return false; }
+    const mob = this.entities.mobs.find(m => m && !m.dead && m.petName === name && m.type === 'pig');
+    if (mob) {
+      mob.dead = true;
+      this.entities.scene.remove(mob.model.group);
+    }
+    this.player.pets = this.player.pets.filter(p => p.name !== name);
+    const pay = this.economy.livestockPrice('pig', this.economy.standing());
+    this.economy.earn(pay);
+    this.ui.toast(`💷 <b>Sold Saddleback Pig ${name} for ${this.economy.format(pay)}.</b>`, 7000);
     if (this.saveNow) this.saveNow(false);
     return true;
   }

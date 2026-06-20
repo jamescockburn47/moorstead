@@ -45,6 +45,8 @@ try:
 except Exception:  # degrade gracefully if it isn't deployed alongside
     npc_facts = None
 
+from geography_noise import Geography
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -108,16 +110,20 @@ log = logging.getLogger("clint-body")
 
 _WORLD: dict = {}
 _FACTS: list = []
+_GEO: Optional[Geography] = None
 
 def _load_world() -> None:
     """Load merlin-world.json + game-facts.json from this script's dir.  Fail-safe."""
-    global _WORLD, _FACTS
+    global _WORLD, _FACTS, _GEO
     try:
         world_path = pathlib.Path(__file__).parent / "merlin-world.json"
         with open(world_path, encoding="utf-8") as f:
             _WORLD = json.load(f)
         log.info("Loaded world data: %d places, %d NPCs",
                  len(_WORLD.get("places", [])), len(_WORLD.get("npcs", [])))
+        seed_str = _WORLD.get("seed", "t-shared-moor")
+        _GEO = Geography(seed_str, _WORLD)
+        log.info("Initialized Geography noise generator with seed: %s", seed_str)
     except Exception as exc:
         log.warning("Could not load merlin-world.json (%s) — world context disabled", exc)
         _WORLD = {}
@@ -609,6 +615,14 @@ class Manager:
         self.last_reply: dict[str, float] = {}     # caller pid -> monotonic of last reply
 
     async def start(self) -> None:
+        global WAYPOINTS, HOME_POS
+        if _GEO:
+            WAYPOINTS = [
+                (wp[0], float(_GEO.height(wp[0], wp[2])), wp[2])
+                for wp in WAYPOINTS
+            ]
+            HOME_POS = WAYPOINTS[0]
+            log.info("Updated waypoints with accurate ground heights: %s", WAYPOINTS)
         home = Manifestation(PID, home=True)
         self.manifs[PID] = home
         log.info("Merlin manager — room=%s home=%s max=%d", ROOM, PID, MAX_MANIFEST)
@@ -673,9 +687,10 @@ class Manager:
         m.last_active = now
         # stand just beside the caller (not inside them)
         bx, bz = sx + 1.5, sz + 1.5
-        m.x, m.y, m.z = bx, sy, bz
-        m.q.put_nowait(("teleport", bx, sy, bz))
-        log.info("Merlin %s summoned by %s (%s) -> (%.0f,%.0f,%.0f)", m.pid, cname, cpid, sx, sy, sz)
+        by = float(_GEO.height(bx, bz)) if _GEO else sy
+        m.x, m.y, m.z = bx, by, bz
+        m.q.put_nowait(("teleport", bx, by, bz))
+        log.info("Merlin %s summoned by %s (%s) -> (%.0f,%.0f,%.0f)", m.pid, cname, cpid, sx, by, sz)
         # situational reply from the brain (use the caller's reported position)
         ctx = ""
         try:
@@ -804,7 +819,8 @@ class Manager:
                         self._maybe_lead(m, text, px, pz)
                     if not m.lead and not did_cast:
                         # not leading or conjuring: drift back beside the player
-                        m.x, m.y, m.z = px + 1.5, py, pz + 1.5
+                        m.x, m.z = px + 1.5, pz + 1.5
+                        m.y = float(_GEO.height(m.x, m.z)) if _GEO else py
                         m.q.put_nowait(("teleport", m.x, m.y, m.z))
                     log.info("Merlin %s follow-up to %s: %s", m.pid, cname, text[:40])
         elif mtype == "time":
@@ -900,6 +916,8 @@ async def manifestation_loop(m: "Manifestation", manager: "Manager") -> None:
                                 step = min(dist, LEAD_STEP)
                                 m.x += dx / dist * step
                                 m.z += dz / dist * step
+                                if _GEO:
+                                    m.y = float(_GEO.height(m.x, m.z))
                                 m.yaw = math.degrees(math.atan2(dx, dz))
                                 m.last_active = now
                             await ws.send(_pos_msg(m.x, m.y, m.z, m.yaw))
@@ -907,7 +925,8 @@ async def manifestation_loop(m: "Manifestation", manager: "Manager") -> None:
                             m.yaw = (m.yaw + random.uniform(15.0, 45.0)) % 360.0
                             jx = m.x + random.uniform(-0.25, 0.25)
                             jz = m.z + random.uniform(-0.25, 0.25)
-                            await ws.send(_pos_msg(jx, m.y, jz, m.yaw))
+                            jy = float(_GEO.height(jx, jz)) if _GEO else m.y
+                            await ws.send(_pos_msg(jx, jy, jz, m.yaw))
                         last_pos = now
 
                     # Drain command queue. Teleport before chat keeps speech in range.

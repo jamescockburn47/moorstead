@@ -99,14 +99,43 @@ export function farmRegisterCheck({ head = 0, registered = false, brass = 0, atM
 // --- Slice 3: the drove — live-animal market value (signed off 2026-06-20) ---
 export const LIVESTOCK_PRICE = 120; // flat 10s per head at the Moorstead mart; NOT wool-spread-derived
 
+export const LIVESTOCK_PRICES = {
+  sheep: 120,
+  llama: 110,
+  pig: 150,
+  cow: 340,
+  pony: 540,
+};
+
 // Per-head live price, lifted only by farm standing (reuses the ±2%/idx loyalty curve).
-export function livestockPrice(standingIdx = 0) {
-  return Math.max(1, Math.round(LIVESTOCK_PRICE * (1 + 0.02 * standingIdx)));
+// Supports signatures: livestockPrice(standingIdx) or livestockPrice(kind, standingIdx)
+export function livestockPrice(kindOrStanding = 'sheep', standingIdx = 0) {
+  let kind = 'sheep';
+  let idx = 0;
+  if (typeof kindOrStanding === 'number') {
+    idx = kindOrStanding;
+    kind = 'sheep';
+  } else {
+    kind = kindOrStanding;
+    idx = standingIdx;
+  }
+  const base = LIVESTOCK_PRICES[kind] || 120;
+  return Math.max(1, Math.round(base * (1 + 0.02 * idx)));
 }
 
 // Total brass for a droved flock delivered to the mart: pays per head that ARRIVES.
-export function droveValue(head, standingIdx = 0) {
-  return Math.max(0, Math.floor(head)) * livestockPrice(standingIdx);
+// Supports both a raw head count or an array of mob/pet objects/kinds.
+export function droveValue(mobsOrCount, standingIdx = 0) {
+  if (Array.isArray(mobsOrCount)) {
+    let total = 0;
+    for (const m of mobsOrCount) {
+      const kind = typeof m === 'string' ? m : (m.type || m.kind || 'sheep');
+      total += livestockPrice(kind, standingIdx);
+    }
+    return total;
+  }
+  const count = Math.max(0, Math.floor(mobsOrCount || 0));
+  return count * livestockPrice('sheep', standingIdx);
 }
 
 // What a vendor pays for one unit sold on the spot: the local sell price, penalised.

@@ -552,6 +552,8 @@ const ITEM_ICON_PAINTERS = {
   [I.COOKED_GROUSE](ctx) { drawMeat(ctx, '#96603a', '#ba8456', 0.7); },
   [I.RAW_BEEF](ctx) { drawMeat(ctx, '#aa3f44', '#cc6a64', 1.1); },
   [I.COOKED_BEEF](ctx) { drawMeat(ctx, '#723c24', '#9a5e36', 1.1); },
+  [I.RAW_PORK](ctx) { drawMeat(ctx, '#d66d9b', '#f29ec6', 0.95); },
+  [I.COOKED_PORK](ctx) { drawMeat(ctx, '#9b5d3d', '#be815e', 0.95); },
   [I.FISHING_ROD](ctx) {
     ctx.strokeStyle = '#8a6a40'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(5, 28); ctx.lineTo(27, 4); ctx.stroke();          // t' rod

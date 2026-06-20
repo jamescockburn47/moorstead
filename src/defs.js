@@ -55,6 +55,7 @@ export const I = {
   FISHING_ROD: 100, RAW_TROUT: 101, SEA_FISH: 102, COOKED_FISH: 103,
   // beef frae t' cows in t' dale pastures
   RAW_BEEF: 104, COOKED_BEEF: 105,
+  RAW_PORK: 106, COOKED_PORK: 107,
 };
 
 // Parish wardens: SHA-256 o' t' dash account id, never t' id itsen —
@@ -143,6 +144,7 @@ export const ITEM_NAMES = {
   [I.RAW_MUTTON]: 'Raw Mutton', [I.COOKED_MUTTON]: 'Roast Mutton',
   [I.RAW_GROUSE]: 'Raw Grouse', [I.COOKED_GROUSE]: 'Roast Grouse',
   [I.RAW_BEEF]: 'Raw Beef', [I.COOKED_BEEF]: 'Roast Beef',
+  [I.RAW_PORK]: 'Raw Pork', [I.COOKED_PORK]: 'Roast Pork',
   [I.FISHING_ROD]: 'Fishing Rod',
   [I.RAW_TROUT]: 'Brown Trout', [I.SEA_FISH]: 'Sea Fish', [I.COOKED_FISH]: 'Fish Supper',
   [I.BILBERRIES]: 'Bilberries',
@@ -193,6 +195,8 @@ export const FOODS = {
   [I.COOKED_GROUSE]: 6,
   [I.RAW_BEEF]: 3,
   [I.COOKED_BEEF]: 8,
+  [I.RAW_PORK]: 3,
+  [I.COOKED_PORK]: 8,
   [I.RAW_TROUT]: 2,
   [I.SEA_FISH]: 2,
   [I.COOKED_FISH]: 8,
@@ -241,6 +245,7 @@ export const SMELTS = [
   { in: I.RAW_MUTTON, out: I.COOKED_MUTTON, label: 'Roast mutton' },
   { in: I.RAW_GROUSE, out: I.COOKED_GROUSE, label: 'Roast grouse' },
   { in: I.RAW_BEEF, out: I.COOKED_BEEF, label: 'Roast beef' },
+  { in: I.RAW_PORK, out: I.COOKED_PORK, label: 'Roast pork' },
   { in: I.RAW_TROUT, out: I.COOKED_FISH, label: 'Cook t’ trout' },
   { in: I.SEA_FISH, out: I.COOKED_FISH, label: 'Fry t’ sea fish' },
 ];
@@ -273,7 +278,7 @@ export const CREATIVE_ITEMS = [
   I.W_SHOVEL, I.S_SHOVEL, I.I_SHOVEL, I.W_SWORD, I.S_SWORD, I.I_SWORD,
   I.STICK, I.COAL_LUMP, I.RAW_IRON, I.IRON_INGOT, I.JET_GEM,
   I.RAW_MUTTON, I.COOKED_MUTTON, I.RAW_GROUSE, I.COOKED_GROUSE,
-  I.RAW_BEEF, I.COOKED_BEEF, I.BILBERRIES,
+  I.RAW_BEEF, I.COOKED_BEEF, I.RAW_PORK, I.COOKED_PORK, I.BILBERRIES,
   I.FISHING_ROD, I.RAW_TROUT, I.SEA_FISH, I.COOKED_FISH,
   I.HOLY_WATER, I.WOODEN_STAKE, I.HOLY_STAKE, I.DRACULA_JOURNAL,
 ];
