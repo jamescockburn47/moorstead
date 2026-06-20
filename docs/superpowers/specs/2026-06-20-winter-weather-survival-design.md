@@ -14,6 +14,7 @@ Winter looks static and means nothing. The just-shipped snow falls on a determin
 - Winter snowfall is driven by the **live moor forecast** (Open-Meteo): when it would rain on the real moors in winter, it snows in-game. Clear forecast → no snowfall but lying snow remains.
 - Sky goes **overcast only while it's actively snowing**; clear winter days are bright and sunny with snow underfoot.
 - Snow covers **roofs, ground and exterior tops** but **never interior floors**, and doesn't fall inside buildings.
+- **Becks and bogs freeze** in deep winter into walkable ice (open water / the sea stays liquid), and ice is **slippery** — you slide on it.
 
 **Survival (gameplay):**
 - A new **temperature gauge**: cold outdoors in winter, warmed by fire, shelter, a coat, and hot food.
@@ -70,6 +71,15 @@ Today the snow shader whitens any up-facing face above the snow-line, including 
 - In `addSnow`, pass `aSnowExp` to a varying and multiply the snow factor by it: `snow *= vSnowExp;`
 
 Result: roofs, open ground, exterior ledges and exposed flora whiten; floors under a roof and indoor flora never do. Snow particles already cut out when the player is `covered`, so it doesn't "fall indoors". (Walls are near-vertical — the existing up-face gate keeps coverage to tops/ledges, which reads correct; a faint exterior-wall rime is optional polish, not required.)
+
+### A4. Frozen becks & bogs + ice sliding — `src/defs.js` + liquid shader (`src/mesher.js`) + `src/player.js`
+
+In deep winter, inland water (becks) and bogs **freeze into walkable ice**; the sea / open water stays liquid.
+
+- **Determination (deterministic, client-side):** `frozenSurface(x, z, season)` = deep cold (`season.warmth < ~-0.4`) AND the surface block is `B.BOG`, or `B.WATER` that is an **inland beck** (not the coast/sea — via the geography's coast/sea test; bogs are always small pools and freeze). No world-data change — the water/bog block stays; it's rendered and collided as ice only while frozen.
+- **Visual:** add `TILE.ICE`. Bake a per-vertex `freezable` flag onto the **liquid** geometry (beck/bog = 1, open sea = 0) at mesh time; extend the liquid material with a winter `frozen` uniform so freezable water renders as flat pale-blue ice when frozen (no re-mesh; thaw reverts). Alternative if shader-icing the shared liquid material is awkward: a thin instanced ice-quad overlay on frozen cells.
+- **Collision (walkable):** in the player ground/solidity check, a frozen freezable surface's top is a **standable solid** — you walk across the frozen beck/bog. v1: solid, no breaking through.
+- **Sliding:** standing on ice sets a `slippery` ground flag → low friction in the movement step, so you **skid** and carry momentum. Applies to frozen becks/bogs (and any future ice block).
 
 ---
 
@@ -144,6 +154,7 @@ Hunger already starves at 0 and gates regen at ≥16. Make it *matter* by: cold 
 - **M4 — Cold consequences** (`player.js`): slow → frost vignette → freezing damage; cold-accelerated hunger.
 - **M5 — Coat + hot food** (`defs.js` item/recipe, `player.js`): carried coat halves chill; cooked food warms.
 - **M6 — Food scarcity** (`entities.js` winter spawns, `main.js` fishing gate).
+- **M7 — Frozen becks/bogs + ice sliding** (`defs.js` ice tile, liquid-material freeze + freezable flag, `player.js` walkable-ice collision + slippery movement).
 
 ## Risks / open questions
 
@@ -151,4 +162,7 @@ Hunger already starves at 0 and gates regen at ≥16. Make it *matter* by: cold 
 - **Skylight pass + the existing per-block flora rotation + AO**: confirm the new `aSnowExp` attribute composes with the existing vertex attributes without bloating the cutout/opaque geometry unduly.
 - **`altitudeFactor`**: define against the world's valley/tops range (e.g. normalise player Y over ~26–60); confirm it reads sensibly on the real terrain.
 - **Coat "carried = warm"** is a simplification; if it feels unintuitive (warm without wearing), a later worn-slot could replace it — flagged, not built.
-- **Fishing freeze** — decide whether becks visibly freeze (ice tile) or just the catch is gated; spec assumes catch-gated for now (visible ice is optional polish).
+- **Beck-vs-sea distinction:** freezing must exclude the sea / open water — relies on a reliable inland/coast test in the geography; confirm becks + bogs freeze but the bay / open water doesn't.
+- **Ice visual approach:** shader-icing the shared liquid material (per-vertex `freezable` flag + `frozen` uniform) vs a separate ice overlay — pick during planning by what composes cleanly with the liquid + snow shaders.
+- **Walkable-ice collision** must integrate with the existing swim / feet-block physics so you stand on frozen becks/bogs but never on open (unfrozen) water; ice is solid-on-top only while frozen.
+- **Fishing in winter** — with becks frozen you can't cast through the ice, so fishing is gated in deep winter anyway; confirm the interaction (no casting onto frozen water).
