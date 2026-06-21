@@ -21,9 +21,23 @@ export class AudioEngine {
     const d = this.noiseBuf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
 
+    // pink noise (Paul Kellet) for the soft ambient beds. White noise is flat —
+    // its high-frequency energy reads as a constant static/hiss; pink (-3 dB/oct)
+    // gives a natural rush, so the always-on wind no longer hisses under everything.
+    this.pinkBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const pd = this.pinkBuf.getChannelData(0);
+    let p0 = 0, p1 = 0, p2 = 0, p3 = 0, p4 = 0, p5 = 0, p6 = 0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      p0 = 0.99886 * p0 + w * 0.0555179; p1 = 0.99332 * p1 + w * 0.0750759;
+      p2 = 0.96900 * p2 + w * 0.1538520; p3 = 0.86650 * p3 + w * 0.3104856;
+      p4 = 0.55000 * p4 + w * 0.5329522; p5 = -0.7616 * p5 - w * 0.0168980;
+      pd[i] = (p0 + p1 + p2 + p3 + p4 + p5 + p6 + w * 0.5362) * 0.11; p6 = w * 0.115926;
+    }
+
     // ---- wind: noise -> lowpass, slow gust LFO ----
     this.windSrc = this.ctx.createBufferSource();
-    this.windSrc.buffer = this.noiseBuf; this.windSrc.loop = true;
+    this.windSrc.buffer = this.pinkBuf; this.windSrc.loop = true;
     const windFilter = this.ctx.createBiquadFilter();
     windFilter.type = 'bandpass'; windFilter.frequency.value = 320; windFilter.Q.value = 0.6;
     this.windGain = this.ctx.createGain(); this.windGain.gain.value = 0.06;
@@ -52,7 +66,7 @@ export class AudioEngine {
 
     // ---- sea: a low surf swell ----
     this.surfSrc = this.ctx.createBufferSource();
-    this.surfSrc.buffer = this.noiseBuf; this.surfSrc.loop = true;
+    this.surfSrc.buffer = this.pinkBuf; this.surfSrc.loop = true;
     const surfFilter = this.ctx.createBiquadFilter();
     surfFilter.type = 'lowpass'; surfFilter.frequency.value = 420;
     this.surfGain = this.ctx.createGain(); this.surfGain.gain.value = 0;
@@ -61,7 +75,7 @@ export class AudioEngine {
 
     // ---- tap-room: a low murmur o' talk by t' fire ----
     this.pubSrc = this.ctx.createBufferSource();
-    this.pubSrc.buffer = this.noiseBuf; this.pubSrc.loop = true;
+    this.pubSrc.buffer = this.pinkBuf; this.pubSrc.loop = true;
     const pubFilter = this.ctx.createBiquadFilter();
     pubFilter.type = 'bandpass'; pubFilter.frequency.value = 480; pubFilter.Q.value = 0.8;
     this.pubGain = this.ctx.createGain(); this.pubGain.gain.value = 0;
