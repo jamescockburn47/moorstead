@@ -35,6 +35,7 @@ import { cellInstances } from './flora-placement.js';
 import { startLiveWeather } from './weather-live.js';
 import { temperatureTarget, stepTemperature } from './temperature.js';
 import { boardingFolk } from './trainfolk.js';
+import { FestiveMusic } from './festiveMusic.js';
 
 const RAIL_VMAX = 11;  // blocks a second flat out — t' pace of a heritage steamer
 const RAIL_ACC = 0.18; // gentle acceleration: she works up to speed an' brakes early
@@ -350,6 +351,7 @@ class Game {
     if (this.floraLayer) { this.floraLayer.clear(); this.floraLayer = null; }
     if (this.festiveLayer) { this.festiveLayer.clear(); this.festiveLayer = null; }
     if (this.footprints) { this.footprints.clear(); this.footprints = null; }
+    if (this.festiveMusic) { this.festiveMusic.stop(); this.festiveMusic = null; }
     this.entities.clear();
     for (const c of this.world.chunks.values()) {
       if (c.meshes) for (const m of c.meshes) { this.scene.remove(m); m.geometry.dispose(); }
@@ -3569,6 +3571,31 @@ class Game {
         }).catch(() => { this.hailInFlight = false; });
         break;
       }
+    }
+
+    // festive brass music: lazy-init once AudioEngine has a ctx (user gesture has occurred)
+    if (this.audio.ctx && !this.festiveMusic) {
+      this.festiveMusic = new FestiveMusic(this.audio.ctx);
+    }
+    if (this.festiveMusic && this.world) {
+      const geo = this.world.gen && this.world.gen.geo;
+      let nearestVillageDist = 1e9;
+      if (geo) {
+        const pp = this.player.pos;
+        for (const v of geo.villages) {
+          const d = Math.hypot(v.x - pp.x, v.z - pp.z);
+          if (d < nearestVillageDist) nearestVillageDist = d;
+        }
+      }
+      const festVol = festiveActive(this.season)
+        ? Math.max(0, 1 - nearestVillageDist / 60) * 0.12
+        : 0;
+      if (festVol > 0) {
+        this.festiveMusic.start();
+      } else {
+        this.festiveMusic.stop();
+      }
+      this.festiveMusic.setVolume(festVol);
     }
 
     // audio ambience
