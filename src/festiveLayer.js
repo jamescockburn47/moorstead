@@ -63,6 +63,27 @@ export class FestiveLayer {
         this.scene.add(g);
         this.objects.push(g);
         g.traverse(c => { if (c.isMesh && c.userData.flicker) this._lit.push(c); });
+
+        // -- carol singers: 4 children in a semicircle facing the fir -------
+        // Fixed offsets keep positions deterministic per village.
+        const carolOffsets = [
+          { dx:  2.5, dz:  0.0 },
+          { dx:  1.8, dz:  2.0 },
+          { dx: -1.8, dz:  2.0 },
+          { dx: -2.5, dz:  0.0 },
+        ];
+        for (let ci = 0; ci < carolOffsets.length; ci++) {
+          const { dx, dz } = carolOffsets[ci];
+          const cx2 = fp.x + dx;
+          const cz2 = fp.z + dz;
+          const cy  = gen.height(Math.round(cx2), Math.round(cz2)) + 1;
+          const carol = this.buildCaroller(ci);
+          // Face toward the fir centre
+          carol.rotation.y = Math.atan2(fp.x - cx2, fp.z - cz2);
+          carol.position.set(cx2 + 0.5, cy, cz2 + 0.5);
+          this.scene.add(carol);
+          this.objects.push(carol);
+        }
       }
     }
     // Auto-snowmen on village greens — only when snow is at its deepest
@@ -140,6 +161,46 @@ export class FestiveLayer {
       }
     }
     return null; // genuinely no open cell in range (shouldn't happen in a real village)
+  }
+
+  // Build a small child caroller figure Group, feet at y=0, height ≈1.6.
+  // Roughly 0.7× the scale of a snowman. i selects coat colour (0..3).
+  buildCaroller(i) {
+    const g = new THREE.Group();
+
+    // Coat colours — festive wool palette, one per child
+    const coatColor = [0xb23b3b, 0x2f6e4f, 0x2a4d8f, 0x7a4da8][i % 4];
+    const matCoat = new THREE.MeshLambertMaterial({ color: coatColor });
+    const matSkin = new THREE.MeshLambertMaterial({ color: 0xd8ab8a });
+    const matHat  = new THREE.MeshLambertMaterial({ color: 0x222222 });
+    const matBook = new THREE.MeshLambertMaterial({ color: 0xf0ead8 });
+
+    // -- body: coat box, feet at y=0, top at y=0.5 --
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.5, 0.2), matCoat);
+    body.position.y = 0.25;
+    g.add(body);
+
+    // -- head: skin sphere, centred at y≈0.7 --
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), matSkin);
+    head.position.y = 0.7;
+    g.add(head);
+
+    // -- winter cap: small dark cylinder on top of head --
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.12, 0.15, 8), matHat);
+    cap.position.y = 0.88;
+    g.add(cap);
+
+    // -- songbook: a thin pale box held up at chest height, angled slightly --
+    const book = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.13, 0.03), matBook);
+    book.position.set(0, 0.42, 0.13);
+    g.add(book);
+
+    // -- hat brim: thin disc just below cap (gives it a top-hat silhouette) --
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.03, 8), matHat);
+    brim.position.y = 0.82;
+    g.add(brim);
+
+    return g;
   }
 
   // Build a blocky 3D conifer Group, feet at y=0, total height ≈11.
