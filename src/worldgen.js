@@ -178,6 +178,7 @@ export class Gen {
   // Scattered worldgen quarries (stampQuarry): log-framed pits on t' open moor.
   wildQuarryChunk(cx, cz) {
     const geo = this.geo;
+    if (geo.realWorld) return null;   // no stylised scattered moor-pits in the real-OS world
     const x0 = cx * CHUNK, z0 = cz * CHUNK;
     const midH = geo.height(x0 + 8, z0 + 8);
     if (midH <= WATER_LEVEL + 1 || geo.bogginess(x0 + 8, z0 + 8) > 0.4) return null;

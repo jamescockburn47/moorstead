@@ -952,6 +952,7 @@ class Game {
   async spawnVillagers() {
     if (this.villagersSpawned) return;
     this.villagersSpawned = true;
+    if (this.world.gen.geo.realWorld) return;   // real-Moors preview: no folk yet — population is a later slice (reset then)
     let roster = await npc.fetchRoster();
     const online = !!roster && roster.length > 0;
     if (!online) roster = npc.FALLBACK_ROSTER;

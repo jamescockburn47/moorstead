@@ -12,6 +12,7 @@ function smoothstep(t) { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 
 export class MoorsGeography {
   constructor(seed = 0) {
     this.seed = seed | 0;
+    this.realWorld = true;   // a real-OS world: suppresses stylised-only content (wild quarries, spawned folk)
     this.data = data;
     this.colCache = new Map();
     this.villages = data.towns.map(t => ({
@@ -94,10 +95,13 @@ export class MoorsGeography {
   npcHome() { return null; }          // ditto
   npcSpot(name, v = this.village) { return [v.x, v.z]; }
 
-  // ---------- surface character (noise; drives block choice, NOT height/parity) ----------
-  bogginess(x, z) { return fbm2(x * 0.007 + 503.7, z * 0.007 + 211.3, 3, this.seed ^ 0xb09); }
-  heatheriness(x, z) { return fbm2(x * 0.012 + 91.2, z * 0.012 + 37.8, 2, this.seed ^ 0x4ea); }
-  daleness(x, z) { const dn = fbm2(x * 0.0036 + 811.1, z * 0.0036 + 413.9, 3, this.seed ^ 0xda1e); return Math.max(0, 1 - Math.abs(dn) * 3.4); }
+  // ---------- surface character (drives the ground block + map tint, NOT height/parity) ----------
+  // Tied to the REAL relief so the moor reads naturally — heather on the high tops,
+  // pasture in the dales and the lower south, a little blanket bog on the highest
+  // ground — instead of arbitrary noise bands. (~block 33 = 105 m, 47 = 315 m.)
+  heatheriness(x, z) { const b = this._baseMetresToBlock(x, z); return Math.max(0, Math.min(1, (b - 33) / 14)); }
+  daleness(x, z)     { const b = this._baseMetresToBlock(x, z); return Math.max(0, Math.min(1, (38 - b) / 10)); }
+  bogginess(x, z)    { const b = this._baseMetresToBlock(x, z); return Math.max(0, Math.min(1, (b - 44) / 6)); }
 
   // ---------- Whitby helpers ----------
   inWhitby(x, z, pad = 0) { const w = this.villages.find(v => v.name === 'Whitby'); return !!w && Math.hypot(x - w.x, z - w.z) < (w.radius + pad); }
