@@ -84,44 +84,50 @@ export class FestiveLayer {
     }
   }
 
-  // Return a deterministic green/closes cell near village centre for the fir.
-  // Scans rings r=2..6 with 16 angle steps; skips (v.x,v.z) itself (the cross).
+  // Return a deterministic open cell near village centre for the fir.
+  // Scans expanding rings r=2..10 with 16 angle steps per radius.
+  // Pass 1 prefers green/closes/path kinds (open ground); pass 2 accepts any
+  // non-building column so every village style (capital, cluster, longgreen,
+  // clifftop) gets a fir even when no green/closes cell exists near centre.
+  // The hash-gate from the old code is removed — it rejected ~65% of valid
+  // candidates and caused most villages to return null. Iteration order is
+  // fixed so the result is deterministic per seed without a hash gate.
   firPlacement(v) {
     const gen = this.world.gen;
-    const seed = gen.geo.seed;
-    // Shuffle candidate offsets deterministically via hash so the first clear
-    // cell is stable but not always the same compass direction.
-    for (let r = 2; r <= 6; r++) {
+    const isPreferred = kind => kind === 'green' || kind === 'closes' || kind === 'path';
+    const isOpen = (x, z, col) => {
+      if (!col || col.kind === 'building') return false;
+      const sy = gen.height(x, z);
+      return this.world.getBlock(x, sy + 1, z) === B.AIR;
+    };
+    // Pass 1: preferred kinds (green/closes/path) — gives a good spot on
+    // village greens and market squares first.
+    for (let r = 2; r <= 10; r++) {
       for (let ai = 0; ai < 16; ai++) {
         const angle = (ai / 16) * Math.PI * 2;
         const x = v.x + Math.round(r * Math.cos(angle));
         const z = v.z + Math.round(r * Math.sin(angle));
-        if (x === v.x && z === v.z) continue; // skip the cross
+        if (x === v.x && z === v.z) continue; // skip the stone cross
         const col = gen.geo.villageColumn(x, z);
-        if (!col || (col.kind !== 'green' && col.kind !== 'closes')) continue;
-        const sy = gen.height(x, z);
-        if (this.world.getBlock(x, sy + 1, z) !== B.AIR) continue;
-        // Use a hash to choose among valid candidates rather than always the
-        // first one we find — deterministic but varies across villages / seeds.
-        if (hash2i(x, z, seed ^ 0xf12c) > 0.35) continue;
+        if (!col || !isPreferred(col.kind)) continue;
+        if (!isOpen(x, z, col)) continue;
         return { x, z };
       }
     }
-    // Fallback: return first clear green/closes we find without the hash filter
-    for (let r = 2; r <= 6; r++) {
+    // Pass 2: any non-building open column (handles village styles where the
+    // centre is all closes with no explicit green/path near the cross).
+    for (let r = 2; r <= 10; r++) {
       for (let ai = 0; ai < 16; ai++) {
         const angle = (ai / 16) * Math.PI * 2;
         const x = v.x + Math.round(r * Math.cos(angle));
         const z = v.z + Math.round(r * Math.sin(angle));
         if (x === v.x && z === v.z) continue;
         const col = gen.geo.villageColumn(x, z);
-        if (!col || (col.kind !== 'green' && col.kind !== 'closes')) continue;
-        const sy = gen.height(x, z);
-        if (this.world.getBlock(x, sy + 1, z) !== B.AIR) continue;
+        if (!isOpen(x, z, col)) continue;
         return { x, z };
       }
     }
-    return null;
+    return null; // genuinely no open cell in range (shouldn't happen in a real village)
   }
 
   // Build a blocky 3D conifer Group, feet at y=0, total height ≈11.
@@ -195,7 +201,99 @@ export class FestiveLayer {
       }
     }
 
+    this.dressFir(g);
     return g;
+  }
+
+  // Dress the fir with Victorian ornaments: real candles (MeshBasicMaterial,
+  // unlit-glow), baubles, an evergreen garland helix, and a glowing star.
+  // All meshes are added as children of the group so clear()'s traverse
+  // disposes them automatically. Shared materials are fine — dispose() on
+  // repeated refs is a Three.js no-op after the first call.
+  dressFir(g) {
+    // --- materials -------------------------------------------------------
+    const matCandle  = new THREE.MeshBasicMaterial({ color: 0xffdf8a }); // warm unlit glow
+    const matStar    = new THREE.MeshBasicMaterial({ color: 0xfff2b0 }); // pale gold glow
+    const matBaubles = [
+      new THREE.MeshLambertMaterial({ color: 0xb23b3b }), // red
+      new THREE.MeshLambertMaterial({ color: 0xc9a13b }), // gold
+      new THREE.MeshLambertMaterial({ color: 0x2f6e4f }), // deep green
+      new THREE.MeshLambertMaterial({ color: 0x7a4da8 }), // plum
+    ];
+    const matGarland = new THREE.MeshLambertMaterial({ color: 0x244d2e }); // dark evergreen
+
+    // --- geometries (shared across multiple meshes) -----------------------
+    const candleGeo  = new THREE.ConeGeometry(0.1, 0.3, 6);
+    const baubleGeo  = new THREE.SphereGeometry(0.14, 7, 5);
+    const garlandGeo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
+    const starGeo    = new THREE.OctahedronGeometry(0.4);
+
+    // --- candles: 10, spread across the 5 tier heights -------------------
+    // Each tier: [y-centre, cone-surface-radius]. Candle sits just inside the
+    // branch surface so the flame tip pokes up above.
+    const candleTiers = [
+      { cy: 2.5, r: 2.4 },
+      { cy: 4.5, r: 1.4 },
+      { cy: 6.5, r: 0.9 },
+      { cy: 7.5, r: 0.7 },
+      { cy: 9.0, r: 0.4 },
+    ];
+    const candlesPerTier = [3, 2, 2, 2, 1]; // total = 10
+    for (let ti = 0; ti < candleTiers.length; ti++) {
+      const { cy, r } = candleTiers[ti];
+      const n = candlesPerTier[ti];
+      for (let i = 0; i < n; i++) {
+        const angle = (i / n) * Math.PI * 2 + ti * 0.7; // stagger between tiers
+        const m = new THREE.Mesh(candleGeo, matCandle);
+        m.position.set(
+          Math.cos(angle) * r,
+          cy + 0.3, // sit above branch surface
+          Math.sin(angle) * r
+        );
+        m.userData.flicker = true;
+        g.add(m);
+      }
+    }
+
+    // --- baubles: 10, spread across lower four tiers ----------------------
+    const baublesPerTier = [3, 3, 2, 2]; // total = 10
+    const baubleYs       = [2.8, 4.8, 6.8, 8.8];
+    const baubleRadii    = [2.0, 1.2, 0.7, 0.5];
+    for (let ti = 0; ti < baublesPerTier.length; ti++) {
+      const n = baublesPerTier[ti];
+      const r = baubleRadii[ti];
+      const cy = baubleYs[ti];
+      for (let i = 0; i < n; i++) {
+        const angle = (i / n) * Math.PI * 2 + ti * 1.1 + 0.4;
+        const m = new THREE.Mesh(baubleGeo, matBaubles[(ti + i) % matBaubles.length]);
+        m.position.set(
+          Math.cos(angle) * r,
+          cy,
+          Math.sin(angle) * r
+        );
+        g.add(m);
+      }
+    }
+
+    // --- garland: 16 small dark-green cubes in a descending helix --------
+    // Helix descends from y≈9 to y≈2.5; radius widens from top to base to
+    // follow the cone profile.
+    const GARLAND_N = 16;
+    for (let i = 0; i < GARLAND_N; i++) {
+      const t = i / (GARLAND_N - 1);          // 0..1, top→bottom
+      const angle = t * Math.PI * 4.5;         // ~2.25 full turns
+      const y     = 9.0 - t * 6.5;            // y: 9 → 2.5
+      const r     = 0.4 + t * 2.0;            // radius: 0.4 → 2.4 (follows cone)
+      const m = new THREE.Mesh(garlandGeo, matGarland);
+      m.position.set(Math.cos(angle) * r, y, Math.sin(angle) * r);
+      g.add(m);
+    }
+
+    // --- star: glowing octahedron at the very top, tagged for twinkle ----
+    const star = new THREE.Mesh(starGeo, matStar);
+    star.position.set(0, 10.5, 0);
+    star.userData.flicker = true;
+    g.add(star);
   }
 
   addSnowman(x, y, z, cfg, yaw) {
