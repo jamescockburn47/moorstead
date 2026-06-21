@@ -19,6 +19,7 @@ export class World {
     this.forageLedger = new Map(); // "x,y,z" -> pickedDay — picked forage cells awaiting regrowth
     this.treeRegrowth = new Map(); // "x,y,z" (stump) -> felledDay — a sapling sprouts here in time
     this.saplings = new Map(); // "x,y,z" -> sproutedDay — a young tree growing toward full
+    this.fruitStumps = new Set(); // "x,y,z" keys whose sapling should regrow as a fruit tree
     this.deeds = [
       { id: 'quarry_moorstead', kind: 'quarry', by: 'parish', cx: 40, cz: 60, radius: 10, paidUntilDay: Infinity, lapsedDay: null },
       { id: 'quarry_goathland', kind: 'quarry', by: 'parish', cx: 280, cz: -80, radius: 10, paidUntilDay: Infinity, lapsedDay: null },
@@ -168,31 +169,36 @@ export class World {
       const [x, y, z] = k.split(',').map(Number);
       if (!this.isLoaded(x, z)) continue;
       if (this.getBlock(x, y, z) !== B.AIR || !isSolid(this.getBlock(x, y - 1, z))) { this.treeRegrowth.delete(k); continue; }
-      this.setBlock(x, y, z, B.LOG); this.setBlock(x, y + 1, z, B.LEAVES); // a wee sapling
+      const fruit = this.fruitStumps.has(k);
+      this.setBlock(x, y, z, B.LOG); this.setBlock(x, y + 1, z, fruit ? B.ORCHARD_LEAVES : B.LEAVES); // a wee sapling
       this.saplings.set(k, nowDay);
       this.treeRegrowth.delete(k);
     }
     for (const [k, sproutedDay] of this.saplings) {
       const [x, y, z] = k.split(',').map(Number);
       if (!this.isLoaded(x, z)) continue;
-      if (this.getBlock(x, y, z) !== B.LOG) { this.saplings.delete(k); continue; } // chopped — forget it
+      if (this.getBlock(x, y, z) !== B.LOG) { this.saplings.delete(k); this.fruitStumps.delete(k); continue; } // chopped — forget it
       if (nowDay - sproutedDay < LIFESPAN.sapling) continue;
-      this.placeTree(x, y, z);
+      const fruit = this.fruitStumps.has(k);
+      this.placeTree(x, y, z, 5, fruit);
+      this.fruitStumps.delete(k);
       this.saplings.delete(k);
     }
   }
 
-  // Stamp a full oak (trunk + canopy) at a stump, modelled on worldgen's stampTree.
-  placeTree(x, y, z, th = 5) {
+  // Stamp a full tree (trunk + canopy) at a stump, modelled on worldgen's stampTree.
+  // Pass fruit=true to grow orchard canopy (B.ORCHARD_LEAVES) instead of oak (B.LEAVES).
+  placeTree(x, y, z, th = 5, fruit = false) {
+    const canopy = fruit ? B.ORCHARD_LEAVES : B.LEAVES;
     for (let i = 0; i < th; i++) this.setBlock(x, y + i, z, B.LOG);
     for (let dy = 0; dy < 2; dy++) {
       for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
         if (dx === 0 && dz === 0 && dy === 0) continue;
         const cx = x + dx, cy = y + th - 1 + dy, cz = z + dz;
-        if (this.getBlock(cx, cy, cz) === B.AIR) this.setBlock(cx, cy, cz, B.LEAVES);
+        if (this.getBlock(cx, cy, cz) === B.AIR) this.setBlock(cx, cy, cz, canopy);
       }
     }
-    if (this.getBlock(x, y + th + 1, z) === B.AIR) this.setBlock(x, y + th + 1, z, B.LEAVES);
+    if (this.getBlock(x, y + th + 1, z) === B.AIR) this.setBlock(x, y + th + 1, z, canopy);
   }
 
   // Stream chunks around t' player. Budgeted per frame.

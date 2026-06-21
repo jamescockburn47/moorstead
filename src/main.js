@@ -317,6 +317,7 @@ class Game {
       this.world.editLedger   = new Map(meta.editLedger   || []); // regrowth picks up where it left off
       this.world.forageLedger = new Map(meta.forageLedger || []); // picked forage cells awaiting regrowth
       this.world.treeRegrowth = new Map(meta.treeRegrowth || []); this.world.saplings = new Map(meta.saplings || []);
+      this.world.fruitStumps = new Set(meta.fruitStumps || []); // which stumps regrow as fruit trees
       this.world.deeds = meta.deeds || [];
       if (!this.world.deeds.some(d => d.by === 'parish' && d.kind === 'quarry')) {
         this.world.deeds.push(
@@ -398,6 +399,7 @@ class Game {
       editLedger:   [...this.world.editLedger],   // harvest edits awaiting regrowth — so the moor heals across reloads
       forageLedger: [...this.world.forageLedger], // picked forage cells awaiting regrowth
       treeRegrowth: [...this.world.treeRegrowth], saplings: [...this.world.saplings], // tree regrowth in progress
+      fruitStumps: [...this.world.fruitStumps], // stumps that regrow as fruit trees, not oaks
       deeds: this.world.deeds, // staked deeds (claims + mine licences)
       savedAt: Date.now(),
     };
@@ -2657,7 +2659,7 @@ class Game {
   // Fell the whole connected tree from the chopped block (no floating canopy); mark the stump so
   // a sapling sprouts there in time (world.growTrees does the gradual regrowth).
   fellTree(hit, noDrop) {
-    const w = this.world, isWood = id => id === B.LOG || id === B.LEAVES || id === B.MONKEY_LEAVES;
+    const w = this.world, isWood = id => id === B.LOG || id === B.LEAVES || id === B.MONKEY_LEAVES || id === B.ORCHARD_LEAVES;
     const seen = new Set(), stack = [[hit.x, hit.y, hit.z]], cells = [];
     while (stack.length && cells.length < 80) {
       const [x, y, z] = stack.pop(), k = x + ',' + y + ',' + z;
@@ -2668,15 +2670,19 @@ class Game {
       stack.push([x + 1, y, z], [x - 1, y, z], [x, y + 1, z], [x, y - 1, z], [x, y, z + 1], [x, y, z - 1]);
     }
     let bx = hit.x, by = hit.y, bz = hit.z;
+    let hadOrchard = false;
     for (const [x, y, z, id] of cells) {
       if (id === B.LOG && y < by) { bx = x; by = y; bz = z; } // the lowest trunk block is the stump
+      if (id === B.ORCHARD_LEAVES) hadOrchard = true;
       w.setBlock(x, y, z, B.AIR);
       if (this.net) this.net.sendEdit(x, y, z, 0, id, 'harvest', this.sky.day, this.player.name || '');
       if (!this.player.creative && !noDrop && id === B.LOG) this.entities.spawnDrop(x + 0.5, y + 0.4, z + 0.5, B.LOG, 1);
     }
     this.entities.blockBurst(hit.x, hit.y, hit.z, B.LOG);
     this.audio.breakBlock();
-    w.treeRegrowth.set(bx + ',' + by + ',' + bz, this.sky.day); // a sapling sprouts here in time
+    const stumpKey = bx + ',' + by + ',' + bz;
+    w.treeRegrowth.set(stumpKey, this.sky.day); // a sapling sprouts here in time
+    if (hadOrchard) w.fruitStumps.add(stumpKey); // regrow as a fruit tree, not an oak
     this.milestones.onBreak(B.LOG);
   }
 

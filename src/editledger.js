@@ -6,7 +6,7 @@ import { findActiveDeed, findLapsedDeed } from './deeds.js';
 
 // What kind of edit was this? Placing anything is a build; breaking is classified by what WAS there.
 const PLANTS = new Set([B.HEATHER, B.BRACKEN, B.TUSSOCK, B.BILBERRY_BUSH, B.GORSE, B.FERN, B.FOXGLOVE, B.DOG_ROSE, B.ELDER]);
-const TREES  = new Set([B.LOG, B.LEAVES, B.MONKEY_LEAVES]);
+const TREES  = new Set([B.LOG, B.LEAVES, B.MONKEY_LEAVES, B.ORCHARD_LEAVES]);
 const ORES   = new Set([B.COAL_ORE, B.IRON_ORE, B.JET_ORE, B.ALUM_SHALE, B.POLYHALITE, B.ROCK_SALT]);
 const HARVEST = new Set([...PLANTS, ...TREES, ...ORES, B.PEAT]); // natural resources that regrow
 const TERRAIN = new Set([B.STONE, B.DIRT, B.GRASS, B.GRAVEL, B.COBBLE, B.SAND]); // natural ground
