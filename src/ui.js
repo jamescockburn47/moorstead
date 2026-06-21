@@ -314,7 +314,7 @@ export class UI {
 <li><b>Click the screen</b> to capture the mouse, then look around the village green. Walk up to a villager (their name floats over their head) and <b>right-click to talk to them</b>. Ask about work or tell them your name.</li>
 <li><b>Punch a tree</b> (hold left-click on the trunk) to gather logs. Press <b>E</b> to open your pockets, craft <b>Planks</b>, then <b>Sticks</b>, and then a <b>Joiner’s Bench</b>. Place the bench (right-click) and stand near it to unlock advanced recipes.</li>
 <li>Dig a bit of gritstone with a <b>wooden pickaxe</b>, then make a <b>gritstone sword and pickaxe</b>. A sword is essential: 2 cobbles + 1 stick.</li>
-<li>Gather some food for your pockets. Punch <b>bilberry bushes</b> for berries, or hunt a sheep for mutton (but not inside the village bounds, or people will gossip).</li>
+<li>Gather some food for your pockets. <b>Right-click</b> a glinting <b>bilberry bush</b> in late summer to pick the berries (the bush stays and fruits again), or hunt a sheep for mutton (but not inside the village bounds, or people will gossip).</li>
 <li>Check the <b>parish notice board</b> by the village cross (or press <b>Q</b>) and take a job or two.</li>
 <li>When the light turns amber—twilight—<b>return to the village</b>. No dark creatures can set foot on Moorstead's hallowed ground. Out on the open moor at night, you are fair game.</li>
 </ol>
