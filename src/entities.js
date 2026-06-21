@@ -9,6 +9,7 @@ import { TAME_GOAL, FOLLOW_RANGE, feedTrust, chooseName } from './pets.js';
 import { dayPhase, villagerRemark } from './villagerlife.js';
 import { HEIGHT, WATER_LEVEL } from './defs.js';
 import { flockCentroid, driveTarget, dogGoal, foldAt } from './herding.js';
+import { festiveActive } from './festive.js';
 
 const HERD_RADIUS = 18; // how near a working dog will gather loose sheep
 
@@ -539,18 +540,20 @@ function makeVillager(look) {
 }
 
 // ---------- Merlin wizard extras ----------
-// Re-robes a freshly-built villager into a proper glowing wizard: recolours the
-// body/arms/legs into the robe (so no default villager shows through), then adds
-// a full beard, a flared robe with gold trim, a wide-brim pointed hat with a
-// glowing tip, and a breathing glow.  Takes the whole villager model so it can
-// restyle its parts.  s = look.scale (1.0 for a standard-height adult).
-function makeWizardExtras(model, s) {
+// Re-robes a freshly-built villager.  isFC = true → Victorian Father Christmas
+// (deep holly-green robe, white fur trim, green hood with white bobble).
+// isFC = false (default) → indigo wizard (gold trim, pointed hat with glowing orb).
+// Takes the whole villager model so it can restyle its parts.
+// s = look.scale (1.0 for a standard-height adult).
+function makeWizardExtras(model, s, isFC = false) {
   const group   = model.group;
-  const ROBE    = 0x352a78; // deep indigo robe
-  const ROBE_DK = 0x231b52; // darker robe for the skirt/legs
-  const TRIM    = 0xc9a23a; // gold trim
-  const BEARD   = 0xeae6dc; // near-white beard
-  const GLOW    = 0xffe080; // warm gold glow
+
+  // Palette — wizard vs Father Christmas
+  const ROBE    = isFC ? 0x2f6e4f : 0x352a78; // holly green / deep indigo
+  const ROBE_DK = isFC ? 0x1e4d37 : 0x231b52; // darker green / darker indigo
+  const TRIM    = isFC ? 0xf2f2f2 : 0xc9a23a; // white fur / gold
+  const BEARD   = 0xeae6dc;                    // near-white beard (same both ways)
+  const GLOW    = isFC ? 0xa8e6c8 : 0xffe080;  // soft mint glow / warm gold glow
 
   // 1) Re-robe the villager: recolour body, arms and legs so no brown shows.
   //    The head (skin) stays as the face.  model.legs holds legs + arms.
@@ -561,23 +564,48 @@ function makeWizardExtras(model, s) {
     }
   } catch (e) { /* fail-safe — base avatar still renders */ }
 
-  // 2) A fuller robe over the body + a flared skirt, for a proper silhouette,
-  //    cinched with a gold belt.
+  // 2) A fuller robe over the body + a flared skirt, for a proper silhouette.
+  //    Wizard: cinched with a gold belt.  Father Christmas: white fur hem band.
   const torso = new THREE.Mesh(
     new THREE.BoxGeometry(0.62 * s, 0.72 * s, 0.44 * s),
-    new THREE.MeshLambertMaterial({ color: ROBE, emissive: GLOW, emissiveIntensity: 0.26 }),
+    new THREE.MeshLambertMaterial({ color: ROBE, emissive: GLOW, emissiveIntensity: 0.22 }),
   );
   torso.position.y = 0.86 * s; group.add(torso);
   const skirt = new THREE.Mesh(
     new THREE.BoxGeometry(0.82 * s, 0.62 * s, 0.52 * s),
-    new THREE.MeshLambertMaterial({ color: ROBE_DK, emissive: GLOW, emissiveIntensity: 0.16 }),
+    new THREE.MeshLambertMaterial({ color: ROBE_DK, emissive: GLOW, emissiveIntensity: 0.12 }),
   );
   skirt.position.y = 0.33 * s; group.add(skirt);
+  // belt / hem trim (gold for wizard, white fur for FC)
   const belt = new THREE.Mesh(
     new THREE.BoxGeometry(0.66 * s, 0.09 * s, 0.48 * s),
-    new THREE.MeshLambertMaterial({ color: TRIM, emissive: TRIM, emissiveIntensity: 0.3 }),
+    isFC
+      ? new THREE.MeshLambertMaterial({ color: TRIM })
+      : new THREE.MeshLambertMaterial({ color: TRIM, emissive: TRIM, emissiveIntensity: 0.3 }),
   );
   belt.position.y = 0.6 * s; group.add(belt);
+  if (isFC) {
+    // white fur hem at the base of the skirt
+    const hem = new THREE.Mesh(
+      new THREE.BoxGeometry(0.86 * s, 0.10 * s, 0.56 * s),
+      new THREE.MeshLambertMaterial({ color: TRIM }),
+    );
+    hem.position.y = 0.06 * s; group.add(hem);
+    // white fur cuffs on sleeves (arms are the lower items in model.legs — recolour front face via overlay box)
+    for (const cx of [-0.38, 0.38]) {
+      const cuff = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16 * s, 0.10 * s, 0.18 * s),
+        new THREE.MeshLambertMaterial({ color: TRIM }),
+      );
+      cuff.position.set(cx * s, 0.72 * s, 0); group.add(cuff);
+    }
+    // white fur collar at throat
+    const collar = new THREE.Mesh(
+      new THREE.BoxGeometry(0.50 * s, 0.10 * s, 0.46 * s),
+      new THREE.MeshLambertMaterial({ color: TRIM }),
+    );
+    collar.position.y = 1.20 * s; group.add(collar);
+  }
 
   // 3) A proper full beard: stacked tapering boxes from the jaw to mid-chest,
   //    with a moustache so it meets the face cleanly.  (Head centre ~1.34s.)
@@ -595,27 +623,54 @@ function makeWizardExtras(model, s) {
   );
   tash.position.set(0, 1.26 * s, 0.21 * s); group.add(tash);
 
-  // 4) Wide-brim pointed hat over the hair, with a gold band and a glowing tip.
-  const brim = new THREE.Mesh(
-    new THREE.BoxGeometry(0.74 * s, 0.06 * s, 0.74 * s),
-    new THREE.MeshLambertMaterial({ color: ROBE_DK }),
-  );
-  brim.position.y = 1.56 * s; group.add(brim);
-  const band = new THREE.Mesh(
-    new THREE.BoxGeometry(0.52 * s, 0.08 * s, 0.52 * s),
-    new THREE.MeshLambertMaterial({ color: TRIM, emissive: TRIM, emissiveIntensity: 0.3 }),
-  );
-  band.position.y = 1.62 * s; group.add(band);
-  const hat = new THREE.Mesh(
-    new THREE.ConeGeometry(0.3 * s, 0.66 * s, 8),
-    new THREE.MeshLambertMaterial({ color: ROBE, emissive: GLOW, emissiveIntensity: 0.4 }),
-  );
-  hat.position.y = (1.62 + 0.33) * s; group.add(hat);
-  const orb = new THREE.Mesh(
-    new THREE.SphereGeometry(0.1 * s, 10, 10),
-    new THREE.MeshBasicMaterial({ color: GLOW }),
-  );
-  orb.position.y = (1.62 + 0.7) * s; group.add(orb);
+  // 4) Hat.
+  if (isFC) {
+    // Victorian Father Christmas: a rounded hood/cap in green with a white fur brim
+    // band and a white wool bobble on top — no wizard star.
+    const hatBrim = new THREE.Mesh(
+      new THREE.BoxGeometry(0.62 * s, 0.10 * s, 0.62 * s),
+      new THREE.MeshLambertMaterial({ color: TRIM }),
+    );
+    hatBrim.position.y = 1.56 * s; group.add(hatBrim);
+    const hatCap = new THREE.Mesh(
+      new THREE.BoxGeometry(0.52 * s, 0.40 * s, 0.52 * s),
+      new THREE.MeshLambertMaterial({ color: ROBE, emissive: GLOW, emissiveIntensity: 0.18 }),
+    );
+    hatCap.position.y = 1.77 * s; group.add(hatCap);
+    const hatTop = new THREE.Mesh(
+      new THREE.BoxGeometry(0.38 * s, 0.22 * s, 0.38 * s),
+      new THREE.MeshLambertMaterial({ color: ROBE }),
+    );
+    hatTop.position.y = 2.04 * s; group.add(hatTop);
+    // white wool bobble
+    const bobble = new THREE.Mesh(
+      new THREE.SphereGeometry(0.10 * s, 8, 8),
+      new THREE.MeshLambertMaterial({ color: TRIM }),
+    );
+    bobble.position.y = 2.20 * s; group.add(bobble);
+  } else {
+    // Wizard: wide-brim pointed hat with a gold band and a glowing tip.
+    const brim = new THREE.Mesh(
+      new THREE.BoxGeometry(0.74 * s, 0.06 * s, 0.74 * s),
+      new THREE.MeshLambertMaterial({ color: ROBE_DK }),
+    );
+    brim.position.y = 1.56 * s; group.add(brim);
+    const band = new THREE.Mesh(
+      new THREE.BoxGeometry(0.52 * s, 0.08 * s, 0.52 * s),
+      new THREE.MeshLambertMaterial({ color: TRIM, emissive: TRIM, emissiveIntensity: 0.3 }),
+    );
+    band.position.y = 1.62 * s; group.add(band);
+    const hat = new THREE.Mesh(
+      new THREE.ConeGeometry(0.3 * s, 0.66 * s, 8),
+      new THREE.MeshLambertMaterial({ color: ROBE, emissive: GLOW, emissiveIntensity: 0.4 }),
+    );
+    hat.position.y = (1.62 + 0.33) * s; group.add(hat);
+    const orb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1 * s, 10, 10),
+      new THREE.MeshBasicMaterial({ color: GLOW }),
+    );
+    orb.position.y = (1.62 + 0.7) * s; group.add(orb);
+  }
 
   // 5) Glow: a bright warm core light + a wide soft halo, breathing (pulsed in
   //    updateVillager via group.userData.wizLights).
@@ -789,13 +844,16 @@ export class Entities {
   spawnVillager(charId, name, x, y, z, opts = {}) {
     const look = villagerLook(name);
     const model = makeVillager(look);
-    // Merlin gets the wizard treatment — keyed on pid (charId) with name fallback
+    // Merlin gets the wizard treatment — keyed on pid (charId) with name fallback.
+    // In winter (festiveActive) he becomes Father Christmas: green robe, white fur trim.
     const isMerlin = charId === 'clint-body' || (name || '').toLowerCase() === 'merlin';
+    const currentSeason = this.game && this.game.season;
+    const isFC = isMerlin && festiveActive(currentSeason);
     if (isMerlin) {
-      try { makeWizardExtras(model, look.scale); } catch (err) { /* fail safe — default avatar still rendered */ }
+      try { makeWizardExtras(model, look.scale, isFC); } catch (err) { /* fail safe — default avatar still rendered */ }
     }
     this.scene.add(model.group);
-    const displayName = name.replace(/\b\w/g, c => c.toUpperCase());
+    const displayName = isMerlin && isFC ? 'Father Christmas' : name.replace(/\b\w/g, c => c.toUpperCase());
     const plate = makeNameplate(displayName);
     plate.position.y = Math.max(0.9, 1.65 * look.scale) + 0.55;
     model.group.add(plate);
@@ -804,6 +862,7 @@ export class Entities {
       t: { hostile: false, speed: 1.1, name },
       model, charId, plate,
       displayName,
+      isMerlin, merlinFC: isFC, // track so we can swap outfit on season change
       pos: { x, y, z }, vel: { x: 0, y: 0, z: 0 },
       home: { x, z },
       village: opts.village || null,   // which settlement they belong to
@@ -1772,6 +1831,30 @@ export class Entities {
   }
 
   updateVillager(mob, dt, player, distP) {
+    // Merlin swaps between indigo wizard and Father Christmas when winter starts/ends.
+    // We rebuild his model+nameplate in-place — same position, same mob object.
+    if (mob.isMerlin) {
+      const _nowFC = festiveActive(this.game && this.game.season);
+      if (_nowFC !== mob.merlinFC) {
+        mob.merlinFC = _nowFC;
+        // Strip the old model from the scene and rebuild it.
+        this.scene.remove(mob.model.group);
+        const _look = villagerLook(mob.t.name);
+        const _newModel = makeVillager(_look);
+        try { makeWizardExtras(_newModel, _look.scale, _nowFC); } catch (_e) { /* fail-safe */ }
+        mob.model = _newModel;
+        mob.model.group.position.set(mob.pos.x, mob.pos.y, mob.pos.z);
+        mob.model.group.rotation.y = mob.yaw;
+        this.scene.add(mob.model.group);
+        // Rebuild the nameplate with the season-appropriate label.
+        const _label = _nowFC ? 'Father Christmas' : mob.t.name.replace(/\b\w/g, c => c.toUpperCase());
+        mob.displayName = _label;
+        const _plate = makeNameplate(_label); // starts at opacity 0, fades in naturally
+        _plate.position.y = Math.max(0.9, 1.65 * _look.scale) + 0.55;
+        mob.plate = _plate;
+        mob.model.group.add(_plate);
+      }
+    }
     // remote players: t' network drives their position, we just dress it
     if (mob.isRemotePlayer) {
       const lp = mob.lastPos || mob.pos;
