@@ -1,0 +1,46 @@
+{
+  "_note": "Slice-0 control-point FIXTURE. Positions approximate, elevation coarse. Replaced by OS Terrain 50 / Open Names in Task 9. Heights in metres ASL.",
+  "transform": { "minE": 445000, "minN": 488000, "maxE": 512000, "maxN": 522000, "metresPerBlock": 15 },
+  "elevation": {
+    "cols": 12, "rows": 7,
+    "_layout": "row-major, row 0 = north (maxN), col 0 = west (minE); each cell spans (maxE-minE)/(cols-1) east and (maxN-minN)/(rows-1) north",
+    "metres": [
+      0,  60, 180, 300, 360, 380, 300, 200, 120,  40,   0,   0,
+      0,  90, 250, 380, 420, 400, 360, 280, 200, 120,  20,   0,
+      40,140, 300, 410, 440, 420, 380, 320, 240, 160,  60,   0,
+      30,120, 260, 360, 400, 380, 340, 300, 220, 140,  80,  40,
+      20, 80, 180, 280, 320, 300, 260, 220, 180, 120,  90,  60,
+      15, 50, 120, 200, 240, 220, 190, 160, 130, 100,  80,  70,
+      10, 30,  70, 120, 150, 140, 120, 100,  90,  80,  70,  60
+    ]
+  },
+  "towns": [
+    { "name": "Whitby",            "x": 3720, "z": 720,  "tier": 1 },
+    { "name": "Pickering",         "x": 2320, "z": 2040, "tier": 1 },
+    { "name": "Grosmont",          "x": 3120, "z": 800,  "tier": 1 },
+    { "name": "Goathland",         "x": 3000, "z": 1160, "tier": 2 },
+    { "name": "Staithes",          "x": 3000, "z": 360,  "tier": 2 },
+    { "name": "Robin Hood's Bay",  "x": 3880, "z": 1120, "tier": 2 },
+    { "name": "Castleton",         "x": 1880, "z": 760,  "tier": 2 },
+    { "name": "Helmsley",          "x": 760,  "z": 2280, "tier": 2 }
+  ],
+  "stations": [
+    { "name": "Pickering",  "x": 2300, "z": 2010, "line": "moors",  "hasLoop": true },
+    { "name": "Levisham",   "x": 2380, "z": 1720, "line": "moors",  "hasLoop": true },
+    { "name": "Goathland",  "x": 3010, "z": 1150, "line": "moors",  "hasLoop": true },
+    { "name": "Grosmont",   "x": 3120, "z": 800,  "line": "moors",  "hasLoop": true },
+    { "name": "Sleights",   "x": 3460, "z": 760,  "line": "moors",  "hasLoop": false },
+    { "name": "Whitby",     "x": 3700, "z": 700,  "line": "moors",  "hasLoop": true }
+  ],
+  "lines": [
+    { "name": "Whitby & Pickering", "kind": "passenger", "stations": ["Pickering","Levisham","Goathland","Grosmont","Sleights","Whitby"] }
+  ],
+  "coast": [ [3000,360],[3180,520],[3520,620],[3720,700],[3880,1120],[3960,1360],[4040,1800] ],
+  "rivers": [
+    { "name": "Esk", "points": [[1880,760],[2200,720],[2600,740],[3120,800],[3460,760],[3700,720]] }
+  ],
+  "landmarks": [
+    { "name": "Whitby Abbey",      "x": 3760, "z": 700,  "kind": "abbey" },
+    { "name": "Roseberry Topping", "x": 600,  "z": 360,  "kind": "peak", "params": { "height": 320, "radius": 30 } }
+  ]
+}
