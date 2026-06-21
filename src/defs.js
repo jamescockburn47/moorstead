@@ -22,6 +22,7 @@ export const TILE = {
   BLACKBERRY: 60, BILBERRY_FRUIT: 61, HOLLY: 62, HOLLY_BERRY: 63,
   ICE: 64,
   CEP: 65, CHANTERELLE: 66, WILD_GARLIC: 67, SORREL: 68,
+  ROSEHIP: 69, SLOE: 70, ELDERBERRY: 71, HAZELNUT: 72, BLACKTHORN: 73, HAZEL: 74,
 };
 
 // ---- Block ids ----
@@ -45,6 +46,7 @@ export const B = {
   POLYHALITE: 52,
   ROCK_SALT: 53,
   BRAMBLE: 54, HOLLY: 55,
+  BLACKTHORN: 56, HAZEL: 57,
 };
 
 // ---- Item ids (blocks double as items; pure items start at 64) ----
@@ -72,6 +74,7 @@ export const I = {
   RAW_PORK: 106, COOKED_PORK: 107,
   WOOL_COAT: 108,
   CEP: 109, CHANTERELLE: 110, COOKED_MUSHROOMS: 111, WILD_GARLIC: 112, SORREL: 113,
+  BLACKBERRY: 114, ROSEHIP: 115, SLOE: 116, ELDERBERRY: 117, HAZELNUT: 118,
 };
 
 // Parish wardens: SHA-256 o' t' dash account id, never t' id itsen —
@@ -111,7 +114,7 @@ D[B.BENCH] = { name: "Joiner's Bench", kind: 'solid', tex: { t: TILE.BENCH_TOP, 
 D[B.LANTERN] = { name: 'Lantern', kind: 'solid', tex: { t: TILE.LANTERN, s: TILE.LANTERN, b: TILE.LANTERN }, hard: 0.4, tool: 'pick', drop: B.LANTERN, light: true };
 D[B.TUSSOCK] = { name: 'Tussock Grass', kind: 'cutout', tex: { t: TILE.TUSSOCK, s: TILE.TUSSOCK, b: TILE.TUSSOCK }, hard: 0.05, tool: null, drop: null };
 D[B.WOOL] = { name: 'Swaledale Wool', kind: 'solid', tex: { t: TILE.WOOL, s: TILE.WOOL, b: TILE.WOOL }, hard: 0.9, tool: null, drop: B.WOOL };
-D[B.BILBERRY_BUSH] = { name: 'Bilberry Bush', kind: 'cutout', tex: { t: TILE.BILBERRY, s: TILE.BILBERRY, b: TILE.BILBERRY }, hard: 0.05, tool: null, drop: I.BILBERRIES };
+D[B.BILBERRY_BUSH] = { name: 'Bilberry Bush', kind: 'cutout', tex: { t: TILE.BILBERRY, s: TILE.BILBERRY, b: TILE.BILBERRY }, hard: 0.05, tool: null, drop: null };
 D[B.RANGE] = { name: "T' Range", kind: 'solid', tex: { t: TILE.STONEBRICK, s: TILE.RANGE_SIDE, b: TILE.STONEBRICK }, sFront: TILE.RANGE_FRONT, hard: 2.5, tool: 'pick', needsPick: true, drop: B.RANGE };
 D[B.WINDOW] = { name: 'Cottage Window', kind: 'solid', tex: { t: TILE.WINDOW, s: TILE.WINDOW, b: TILE.WINDOW }, hard: 0.4, tool: null, drop: B.WINDOW };
 D[B.BOARD] = { name: 'Notice Board', kind: 'solid', tex: { t: TILE.PLANKS, s: TILE.BOARD, b: TILE.PLANKS }, hard: Infinity, drop: null };
@@ -121,6 +124,8 @@ D[B.SAND] = { name: 'Bay Sand', kind: 'solid', tex: { t: TILE.SAND, s: TILE.SAND
 D[B.GORSE] = { name: 'Gorse', kind: 'cutout', tex: { t: TILE.GORSE, s: TILE.GORSE, b: TILE.GORSE }, hard: 0.05, tool: null, drop: B.GORSE };
 D[B.BRAMBLE] = { name: 'Bramble', kind: 'cutout', tex: { t: TILE.BRAMBLE, s: TILE.BRAMBLE, b: TILE.BRAMBLE }, hard: 0.1, tool: null, drop: B.BRAMBLE };
 D[B.HOLLY] = { name: 'Holly', kind: 'cutout', tex: { t: TILE.HOLLY, s: TILE.HOLLY, b: TILE.HOLLY }, hard: 0.2, tool: null, drop: B.HOLLY };
+D[B.BLACKTHORN] = { name: 'Blackthorn', kind: 'cutout', tex: { t: TILE.BLACKTHORN, s: TILE.BLACKTHORN, b: TILE.BLACKTHORN }, hard: 0.1, tool: null, drop: B.BLACKTHORN };
+D[B.HAZEL]      = { name: 'Hazel',      kind: 'cutout', tex: { t: TILE.HAZEL,      s: TILE.HAZEL,      b: TILE.HAZEL      }, hard: 0.1, tool: null, drop: B.HAZEL };
 D[B.FERN] ={ name: 'Fern', kind: 'cutout', tex: { t: TILE.FERN, s: TILE.FERN, b: TILE.FERN }, hard: 0.05, tool: null, drop: B.FERN };
 D[B.FOXGLOVE] = { name: 'Foxglove', kind: 'cutout', tex: { t: TILE.FOXGLOVE, s: TILE.FOXGLOVE, b: TILE.FOXGLOVE }, hard: 0.05, tool: null, drop: B.FOXGLOVE };
 D[B.DOG_ROSE] = { name: 'Dog Rose', kind: 'cutout', tex: { t: TILE.DOG_ROSE, s: TILE.DOG_ROSE, b: TILE.DOG_ROSE }, hard: 0.05, tool: null, drop: B.DOG_ROSE };
@@ -190,6 +195,7 @@ export const ITEM_NAMES = {
   [I.DRACULA_JOURNAL]: 'Captain\u2019s Log (Dracula)',
   [I.WOOL_COAT]: 'Wool Coat',
   [I.CEP]: 'Cep', [I.CHANTERELLE]: 'Chanterelle', [I.COOKED_MUSHROOMS]: 'Fried Mushrooms', [I.WILD_GARLIC]: 'Wild Garlic', [I.SORREL]: 'Sorrel',
+  [I.BLACKBERRY]: 'Blackberries', [I.ROSEHIP]: 'Rosehips', [I.SLOE]: 'Sloes', [I.ELDERBERRY]: 'Elderberries', [I.HAZELNUT]: 'Hazelnuts',
 };
 
 export function itemName(id) {
@@ -230,6 +236,7 @@ export const FOODS = {
   [I.COOKED_FISH]: 8,
   [I.FISH_CHIPS]: 10, // best scran on t' moors — worth t' trip to Whitby
   [I.CEP]: 2, [I.CHANTERELLE]: 2, [I.COOKED_MUSHROOMS]: 6, [I.WILD_GARLIC]: 1, [I.SORREL]: 1,
+  [I.BLACKBERRY]: 3, [I.ROSEHIP]: 2, [I.SLOE]: 1, [I.ELDERBERRY]: 2, [I.HAZELNUT]: 3,
 };
 
 export const STACK_SIZE = 64;

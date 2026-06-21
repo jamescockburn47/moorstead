@@ -744,6 +744,138 @@ const TILE_PAINTERS = {
       }
     }
   },
+  [TILE.ROSEHIP](p) {
+    p.clear();
+    // thorny arching spray wi' bright red-orange hips
+    for (let i = 0; i < 4; i++) {
+      let x = 3 + ((p.rng() * 10) | 0), y = T - 1;
+      const h = 9 + ((p.rng() * 5) | 0);
+      for (let s = 0; s < h && y > 2; s++) {
+        p.px(x & 15, y, shade(0x4a3828, 0.85 + p.rng() * 0.3)); // dark woody cane
+        if (p.rng() < 0.25) p.px((x + (p.rng() < 0.5 ? -1 : 1)) & 15, y, shade(0x3a2c20, 1)); // thorns
+        x += p.rng() < 0.5 ? (p.rng() < 0.5 ? -1 : 1) : 0; y--;
+      }
+      // leaves along cane
+      for (let lf = 0; lf < 3; lf++) {
+        const lx = 2 + ((p.rng() * 12) | 0), ly = 4 + ((p.rng() * 8) | 0);
+        p.px(lx, ly, shade(0x3a5a28, 0.9 + p.rng() * 0.2));
+        p.px(lx + 1, ly, shade(0x4a6a32, 0.85 + p.rng() * 0.2));
+      }
+    }
+    // red-orange hips — oval, clustered
+    for (let i = 0; i < 6; i++) {
+      const hx = 2 + ((p.rng() * 12) | 0), hy = 2 + ((p.rng() * 10) | 0);
+      p.px(hx,     hy,     '#d43c18');
+      p.px(hx + 1, hy,     '#e85020');
+      p.px(hx,     hy + 1, '#c03010');
+      p.px(hx + 1, hy + 1, '#d44020');
+      p.px(hx,     hy,     '#ff7040'); // specular
+    }
+  },
+  [TILE.SLOE](p) {
+    p.clear();
+    // dark twiggy bush wi' blue-black sloes, dusty bloom
+    for (let i = 0; i < 8; i++) {
+      let x = 2 + ((p.rng() * 12) | 0), y = T - 1;
+      const h = 7 + ((p.rng() * 7) | 0);
+      for (let s = 0; s < h && y > 1; s++) {
+        p.px(x & 15, y, shade(0x2a2018, 0.85 + p.rng() * 0.3)); // near-black twig
+        if (p.rng() < 0.2) { // sparse small leaves
+          const lc = shade(0x2e4a22, 0.8 + p.rng() * 0.3);
+          p.px((x + (p.rng() < 0.5 ? -1 : 1)) & 15, y, lc);
+        }
+        x += p.rng() < 0.4 ? (p.rng() < 0.5 ? -1 : 1) : 0; y--;
+      }
+    }
+    // blue-black sloes wi' dusty bloom (slightly lighter highlight)
+    for (let i = 0; i < 8; i++) {
+      const sx = 2 + ((p.rng() * 12) | 0), sy = 2 + ((p.rng() * 10) | 0);
+      p.px(sx,     sy,     '#1c1a30');
+      p.px(sx + 1, sy,     '#2a2840');
+      p.px(sx,     sy + 1, '#16142a');
+      p.px(sx + 1, sy + 1, '#201e38');
+      p.px(sx,     sy,     '#6868a8'); // dusty bloom highlight
+    }
+  },
+  [TILE.ELDERBERRY](p) {
+    p.clear();
+    // drooping umbel sprays of tiny near-black berries on red-purple stems
+    // foliage body
+    for (let y = 2; y < T; y++) for (let x = 1; x < 15; x++) {
+      const cx = x - 8, cy = y - 9;
+      if (cx * cx / 45 + cy * cy / 50 < 1 && p.rng() < 0.78) p.px(x, y, shade(0x2e4822, 0.8 + p.rng() * 0.4));
+    }
+    p.rect(7, T - 3, 2, 3, shade(0x4a3a26, 1)); // woody base
+    // berry umbels: drooping clusters from central stem
+    for (let u = 0; u < 3; u++) {
+      const ux = 4 + ((p.rng() * 8) | 0), uy = 3 + ((p.rng() * 5) | 0);
+      // stems radiating down
+      for (let r = 0; r < 4; r++) {
+        const rx = ux + ((p.rng() * 6 - 3) | 0), ry = uy + 2 + ((p.rng() * 3) | 0);
+        p.px(rx, ry, '#6a2040'); // reddish-purple stem
+        // tiny berries at stem tips
+        p.px(rx,     ry + 1, '#0e0c18');
+        p.px(rx + 1, ry + 1, '#1a1828');
+        p.px(rx,     ry + 2, '#0a0814');
+        p.px(rx + 1, ry + 2, '#0e0c18');
+      }
+    }
+  },
+  [TILE.HAZELNUT](p) {
+    p.clear();
+    // rounded green hedge bush wi' clusters of pale-green nuts in leafy husks
+    for (let y = 1; y < T; y++) for (let x = 1; x < 15; x++) {
+      const cx = x - 8, cy = y - 9;
+      if (cx * cx / 46 + cy * cy / 52 < 1 && p.rng() < 0.80) p.px(x, y, shade(0x3a5c28, 0.8 + p.rng() * 0.4));
+    }
+    p.rect(7, T - 3, 2, 3, shade(0x4a3a26, 1)); // woody base
+    // nut clusters: 2-3 nuts per cluster in pale-green husks
+    for (let c = 0; c < 4; c++) {
+      const cx = 3 + ((p.rng() * 10) | 0), cy = 3 + ((p.rng() * 7) | 0);
+      // husk — ragged pale-green jacket
+      p.px(cx - 1, cy,     shade(0x7a9a40, 0.9 + p.rng() * 0.2));
+      p.px(cx,     cy - 1, shade(0x8aaa4a, 0.9 + p.rng() * 0.2));
+      p.px(cx + 1, cy,     shade(0x6a8a36, 0.9 + p.rng() * 0.2));
+      p.px(cx,     cy + 1, shade(0x7a9a40, 0.85 + p.rng() * 0.2));
+      // nut — pale tan-brown sphere
+      p.px(cx,     cy,     '#c8b860');
+      p.px(cx - 1, cy + 1, '#b8a850');
+      if (p.rng() < 0.6) {
+        // second nut alongside
+        p.px(cx + 2, cy,     '#c0b058');
+        p.px(cx + 2, cy - 1, shade(0x7a9a40, 0.85));
+        p.px(cx + 3, cy,     shade(0x8aaa4a, 0.9));
+      }
+    }
+  },
+  [TILE.BLACKTHORN](p) {
+    p.clear();
+    // dark twiggy bush wi' sparse leaves — the pre-sloe-flower look, angular silhouette
+    for (let i = 0; i < 10; i++) {
+      let x = 2 + ((p.rng() * 12) | 0), y = T - 1;
+      const h = 7 + ((p.rng() * 7) | 0);
+      for (let s = 0; s < h && y > 1; s++) {
+        p.px(x & 15, y, shade(0x1e1610, 0.85 + p.rng() * 0.3)); // very dark near-black
+        // occasional thorn spike
+        if (p.rng() < 0.18) p.px((x + (p.rng() < 0.5 ? -1 : 2)) & 15, y, shade(0x140e0a, 1));
+        // sparse small leaves
+        if (p.rng() < 0.15) p.px((x + (p.rng() < 0.5 ? -1 : 1)) & 15, y - (p.rng() < 0.5 ? 0 : 1), shade(0x2e4a1e, 0.85 + p.rng() * 0.3));
+        x += p.rng() < 0.45 ? (p.rng() < 0.5 ? -1 : 1) : 0; y--;
+      }
+    }
+    p.dots(0x160e08, 6); // extra dark specks for bark texture
+  },
+  [TILE.HAZEL](p) {
+    p.clear();
+    // rounded green hedge bush — leafy, full canopy, lighter than blackthorn
+    for (let y = 1; y < T; y++) for (let x = 1; x < 15; x++) {
+      const cx = x - 8, cy = y - 9;
+      if (cx * cx / 46 + cy * cy / 52 < 1 && p.rng() < 0.82) p.px(x, y, shade(0x3a5a26, 0.8 + p.rng() * 0.4));
+    }
+    p.rect(7, T - 3, 2, 3, shade(0x4a3a26, 1)); // woody base
+    // brighter leaf highlights to distinguish from elder
+    p.dots(0x5a7a38, 14); p.dots(0x2e4a1e, 10);
+  },
 };
 
 let atlasCanvas = null;   // the LIVE atlas (may be season-tinted)
@@ -1077,6 +1209,31 @@ const ITEM_ICON_PAINTERS = {
   },
   [I.SORREL](ctx) {
     const tile = TILE.SORREL;
+    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
+  },
+  [I.BLACKBERRY](ctx) {
+    const tile = TILE.BLACKBERRY;
+    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
+  },
+  [I.ROSEHIP](ctx) {
+    const tile = TILE.ROSEHIP;
+    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
+  },
+  [I.SLOE](ctx) {
+    const tile = TILE.SLOE;
+    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
+  },
+  [I.ELDERBERRY](ctx) {
+    const tile = TILE.ELDERBERRY;
+    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
+  },
+  [I.HAZELNUT](ctx) {
+    const tile = TILE.HAZELNUT;
     const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
