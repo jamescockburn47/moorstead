@@ -429,6 +429,7 @@ class Game {
     ui.loginName.addEventListener('keydown', e => { if (e.code === 'Enter') this.login(); e.stopPropagation(); });
     ui.loginCode.addEventListener('keydown', e => e.stopPropagation());
     ui.loginGuest.addEventListener('click', () => this.loginGuest());
+    ui.btnWarden.addEventListener('click', () => this.loginWarden());
     ui.requestToggle.addEventListener('click', () => {
       ui.requestBox.classList.toggle('hidden');
       ui.requestOk.classList.add('hidden');
@@ -620,6 +621,7 @@ class Game {
   // crypto.subtle — https or localhost; a raw-IP LAN page won't have it.
   async refreshAdmin() {
     this.adminOk = false;
+    if (this.auth && this.auth.warden) { this.adminOk = true; return; }
     if (!this.auth || !this.auth.acct || !(window.crypto && crypto.subtle)) return;
     try {
       const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(this.auth.acct));
@@ -1161,6 +1163,22 @@ class Game {
   loginGuest() {
     this.auth = { guest: true, name: '' };
     localStorage.setItem('moorcraft-auth', JSON.stringify(this.auth));
+    this.ui.setLoggedIn(this.auth);
+  }
+
+  async loginWarden() {
+    const key = (this.ui.wardenKey.value || '').trim();
+    if (!key) { this.ui.loginErr.textContent = 'Key needed.'; return; }
+    let hex = '';
+    try {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
+      hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch { this.ui.loginErr.textContent = "Couldn't check that key."; return; }
+    if (!ADMIN_HASHES.includes(hex)) { this.ui.loginErr.textContent = "That's not a warden key."; return; }
+    this.auth = { warden: true, name: 'Warden' };
+    localStorage.setItem('moorcraft-auth', JSON.stringify(this.auth));
+    this.adminOk = true;
+    this.ui.loginErr.textContent = '';
     this.ui.setLoggedIn(this.auth);
   }
 

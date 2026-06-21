@@ -86,7 +86,7 @@ export const I = {
 // t' relay keeps its own warden list for where/fx.) Dedicated warden login,
 // separate frae owt anybody plays on.
 // (Note: t' dash returns acct = sha1(code)[:10], so this is sha256 o' THAT.)
-export const ADMIN_HASHES = ['29889b77f82b79d1585f514ac0e6489deed67ddb27b55a81109492a443b8e950'];
+export const ADMIN_HASHES = ['29889b77f82b79d1585f514ac0e6489deed67ddb27b55a81109492a443b8e950', 'd3586a9e0a64041ad379c88e7e646866232700925b973f26297e7be1c5b62c14'];
 
 // kind: 'solid' | 'cutout' (cross plants) | 'liquid' | 'air'
 // tex: {t, s, b} tile ids; hard: seconds to break by hand; tool: best tool

@@ -162,6 +162,9 @@ export class UI {
     this.btnLogin = this.el('button', 'mc', this.loginBox, 'Come On In');
     this.loginErr = this.el('div', 'login-err', this.loginBox, '');
     this.loginGuest = this.el('div', 'muted-note login-guest', this.loginBox, 'no invite? <u>play as a passing rambler</u> (villagers won&rsquo;t remember thee proper)');
+    this.wardenKey = this.el('input', 'seed', this.loginBox);
+    this.wardenKey.placeholder = 'Warden key';
+    this.btnWarden = this.el('button', 'mc', this.loginBox, 'Enter as Warden');
     this.requestToggle = this.el('div', 'muted-note login-request-toggle', this.loginBox,
       'want a proper invite? <u>request one</u> (adult shared moor only)');
     this.requestBox = this.el('div', 'request-box hidden', this.loginBox);
@@ -1041,6 +1044,12 @@ export class UI {
     if (auth.guest) {
       this.whoBox.innerHTML = 'Passing through as <b>a rambler</b> &mdash; <u id="swap-user">got an invite?</u>';
       document.getElementById('swap-user').onclick = () => this.game.logout();
+      return;
+    }
+    if (auth.warden) {
+      this.whoBox.innerHTML = 'Logged in as <b>Warden</b> — <u id="swap-user">log out</u>';
+      const swap = this.whoBox.querySelector('#swap-user');
+      if (swap) swap.addEventListener('click', () => this.game.logout());
       return;
     }
     const roster = (this.game.loadAccounts ? this.game.loadAccounts() : []).filter(a => a.acct !== auth.acct);
