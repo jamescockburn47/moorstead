@@ -646,6 +646,104 @@ const TILE_PAINTERS = {
       p.px(bx,     by,     '#ff6060'); // specular highlight
     }
   },
+  [TILE.CEP](p) {
+    p.clear();
+    // a fat pale stalk wi' a rounded brown cap — porcini-style cep
+    for (let i = 0; i < 2; i++) {
+      const x = 4 + ((p.rng() * 8) | 0);
+      // stalk: fat pale column
+      const sh = 5 + ((p.rng() * 3) | 0);
+      for (let y = T - 1; y > T - 1 - sh; y--) {
+        p.px(x - 1, y, shade(0xd4c8a0, 0.85 + p.rng() * 0.2));
+        p.px(x,     y, shade(0xe0d4b0, 0.85 + p.rng() * 0.2));
+        p.px(x + 1, y, shade(0xc8bc94, 0.85 + p.rng() * 0.2));
+      }
+      // cap: rounded dome in warm brown, wider than the stalk
+      const cy = T - 1 - sh;
+      const cw = 4 + ((p.rng() * 2) | 0);
+      for (let dy = 0; dy < 5; dy++) {
+        const hw = Math.round(cw * Math.sqrt(1 - (dy / 5) * (dy / 5)));
+        for (let dx = -hw; dx <= hw; dx++) {
+          p.px(x + dx, cy - dy, shade(dy < 2 ? 0x6b4218 : 0x8a5a28, 0.8 + p.rng() * 0.35));
+        }
+      }
+      // paler underside rim
+      for (let dx = -cw; dx <= cw; dx++) p.px(x + dx, cy, shade(0xc8a870, 0.9));
+    }
+  },
+  [TILE.CHANTERELLE](p) {
+    p.clear();
+    // golden/yellow funnel-shaped mushroom — wavy cap edge, hollow centre
+    for (let i = 0; i < 2; i++) {
+      const x = 4 + ((p.rng() * 8) | 0);
+      const sh = 5 + ((p.rng() * 3) | 0);
+      // stalk: slender golden
+      for (let y = T - 1; y > T - 1 - sh; y--) {
+        p.px(x, y, shade(0xd4a820, 0.85 + p.rng() * 0.25));
+        if (p.rng() < 0.5) p.px(x - 1, y, shade(0xbc9418, 0.8 + p.rng() * 0.2));
+      }
+      // funnel cap: wide at top, curled-down edges, bright golden-yellow
+      const cy = T - 1 - sh;
+      const cw = 4 + ((p.rng() * 2) | 0);
+      for (let dy = 0; dy < 4; dy++) {
+        const hw = cw - dy + (dy === 3 ? 1 : 0); // flares at tip for wavy edge
+        for (let dx = -hw; dx <= hw; dx++) {
+          const atEdge = Math.abs(dx) >= hw - 1;
+          p.px(x + dx, cy - dy, shade(atEdge ? 0xf0c830 : 0xe8b018, 0.8 + p.rng() * 0.35));
+        }
+      }
+      // pale gill ridges on underside of cap
+      for (let dx = -cw + 1; dx < cw; dx += 2) p.px(x + dx, cy, shade(0xf8e090, 0.9));
+    }
+  },
+  [TILE.WILD_GARLIC](p) {
+    p.clear();
+    // broad green leaves wi' a few tiny white star flowers
+    // leaves: broad, upright, slightly arching
+    for (let i = 0; i < 5; i++) {
+      const x = 2 + ((p.rng() * 12) | 0);
+      const h = 9 + ((p.rng() * 5) | 0);
+      const lean = (p.rng() - 0.5) * 0.5;
+      for (let y = 0; y < h; y++) {
+        const yy = T - 1 - y;
+        const sx = Math.round(x + lean * y);
+        const w = 1 + (y < h * 0.7 ? 1 : 0); // broad in the lower half
+        for (let dx = -w; dx <= w; dx++) {
+          p.px(sx + dx, yy, shade(0x3a6a2c, 0.8 + p.rng() * 0.4));
+        }
+      }
+    }
+    // white star flowers — 5-point, scattered near top
+    for (let i = 0; i < 4; i++) {
+      const fx = 3 + ((p.rng() * 10) | 0), fy = 2 + ((p.rng() * 5) | 0);
+      p.px(fx,     fy,     '#f4f4f8');
+      p.px(fx - 1, fy,     '#e8e8f0');
+      p.px(fx + 1, fy,     '#e8e8f0');
+      p.px(fx,     fy - 1, '#f0f0f8');
+      p.px(fx,     fy + 1, '#e0e0ea');
+      p.px(fx,     fy,     '#f8e840'); // tiny yellow centre
+    }
+  },
+  [TILE.SORREL](p) {
+    p.clear();
+    // a clump of slim upright green leaves — arrow-shaped, slightly reddish tips
+    for (let i = 0; i < 6; i++) {
+      const x = 2 + ((p.rng() * 12) | 0);
+      const h = 7 + ((p.rng() * 6) | 0);
+      const lean = (p.rng() - 0.5) * 0.4;
+      for (let y = 0; y < h; y++) {
+        const yy = T - 1 - y;
+        const sx = Math.round(x + lean * y);
+        const atTip = y > h * 0.75;
+        // slim: 1px wide; reddish-green at tips
+        p.px(sx, yy, shade(atTip ? 0x8a5a3a : 0x4a7830, 0.8 + p.rng() * 0.4));
+        // slight leaf width in mid-section
+        if (y > 1 && y < h * 0.5 && p.rng() < 0.5) {
+          p.px(sx + (p.rng() < 0.5 ? -1 : 1), yy, shade(0x3e6428, 0.75 + p.rng() * 0.35));
+        }
+      }
+    }
+  },
 };
 
 let atlasCanvas = null;   // the LIVE atlas (may be season-tinted)
@@ -934,6 +1032,53 @@ const ITEM_ICON_PAINTERS = {
     ctx.fillStyle = shadow; ctx.fillRect(23, 10, 6, 2); ctx.fillRect(23, 19, 6, 2);
     // two buttons
     ctx.fillStyle = dark; ctx.fillRect(13, 14, 2, 2); ctx.fillRect(13, 19, 2, 2);
+  },
+  [I.CEP](ctx) {
+    // draw tile frae atlas scaled up — matches the world tile
+    const tile = TILE.CEP;
+    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
+  },
+  [I.CHANTERELLE](ctx) {
+    const tile = TILE.CHANTERELLE;
+    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
+  },
+  [I.COOKED_MUSHROOMS](ctx) {
+    // mushrooms sizzling in a cast-iron frying pan
+    // pan body
+    ctx.fillStyle = '#2a2a2e'; ctx.beginPath(); ctx.ellipse(17, 22, 12, 7, 0, 0, Math.PI * 2); ctx.fill();
+    // pan rim highlight
+    ctx.strokeStyle = '#3e3e44'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(17, 22, 12, 7, 0, 0, Math.PI * 2); ctx.stroke();
+    // handle
+    ctx.fillStyle = '#3a3028'; ctx.fillRect(26, 20, 5, 3);
+    ctx.fillStyle = '#2a221e'; ctx.fillRect(27, 21, 3, 1);
+    // golden-brown mushroom caps sizzling in butter
+    ctx.fillStyle = '#c87830';
+    ctx.beginPath(); ctx.ellipse(13, 20, 5, 3, -0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(21, 19, 4, 2.5, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(17, 23, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    // highlights on caps
+    ctx.fillStyle = '#e8a050';
+    ctx.fillRect(10, 18, 2, 1); ctx.fillRect(19, 17, 2, 1); ctx.fillRect(15, 21, 2, 1);
+    // butter sheen
+    ctx.fillStyle = 'rgba(240,200,80,0.25)';
+    ctx.beginPath(); ctx.ellipse(17, 22, 10, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+    // steam wisps
+    ctx.strokeStyle = 'rgba(220,220,220,0.5)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(12, 14); ctx.quadraticCurveTo(10, 10, 12, 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(17, 12); ctx.quadraticCurveTo(19, 8, 17, 5); ctx.stroke();
+  },
+  [I.WILD_GARLIC](ctx) {
+    const tile = TILE.WILD_GARLIC;
+    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
+  },
+  [I.SORREL](ctx) {
+    const tile = TILE.SORREL;
+    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
 };
 

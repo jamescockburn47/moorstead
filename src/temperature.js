@@ -4,6 +4,7 @@ import { I } from './defs.js';
 // Cooked/hot foods give a warmth burst when eaten.
 export const HOT_FOODS = new Set([
   I.COOKED_MUTTON, I.COOKED_GROUSE, I.COOKED_BEEF, I.COOKED_PORK, I.COOKED_FISH, I.FISH_CHIPS,
+  I.COOKED_MUSHROOMS,
 ]);
 
 // The temperature [0..20] the player drifts toward, given the season + environment.

@@ -21,6 +21,7 @@ export const TILE = {
   BRAMBLE: 55, SNOWDROP: 56, DAFFODIL: 57, WILDFLOWER: 58, BRAMBLE_FLOWER: 59,
   BLACKBERRY: 60, BILBERRY_FRUIT: 61, HOLLY: 62, HOLLY_BERRY: 63,
   ICE: 64,
+  CEP: 65, CHANTERELLE: 66, WILD_GARLIC: 67, SORREL: 68,
 };
 
 // ---- Block ids ----
@@ -70,6 +71,7 @@ export const I = {
   RAW_BEEF: 104, COOKED_BEEF: 105,
   RAW_PORK: 106, COOKED_PORK: 107,
   WOOL_COAT: 108,
+  CEP: 109, CHANTERELLE: 110, COOKED_MUSHROOMS: 111, WILD_GARLIC: 112, SORREL: 113,
 };
 
 // Parish wardens: SHA-256 o' t' dash account id, never t' id itsen —
@@ -187,6 +189,7 @@ export const ITEM_NAMES = {
   [I.HOLY_STAKE]: 'Holy Water Stake',
   [I.DRACULA_JOURNAL]: 'Captain\u2019s Log (Dracula)',
   [I.WOOL_COAT]: 'Wool Coat',
+  [I.CEP]: 'Cep', [I.CHANTERELLE]: 'Chanterelle', [I.COOKED_MUSHROOMS]: 'Fried Mushrooms', [I.WILD_GARLIC]: 'Wild Garlic', [I.SORREL]: 'Sorrel',
 };
 
 export function itemName(id) {
@@ -226,6 +229,7 @@ export const FOODS = {
   [I.SEA_FISH]: 2,
   [I.COOKED_FISH]: 8,
   [I.FISH_CHIPS]: 10, // best scran on t' moors — worth t' trip to Whitby
+  [I.CEP]: 2, [I.CHANTERELLE]: 2, [I.COOKED_MUSHROOMS]: 6, [I.WILD_GARLIC]: 1, [I.SORREL]: 1,
 };
 
 export const STACK_SIZE = 64;
@@ -278,6 +282,8 @@ export const SMELTS = [
   { in: I.RAW_PORK, out: I.COOKED_PORK, label: 'Roast pork' },
   { in: I.RAW_TROUT, out: I.COOKED_FISH, label: 'Cook t’ trout' },
   { in: I.SEA_FISH, out: I.COOKED_FISH, label: 'Fry t’ sea fish' },
+  { in: I.CEP, out: I.COOKED_MUSHROOMS, label: "Fry t’ mushrooms" },
+  { in: I.CHANTERELLE, out: I.COOKED_MUSHROOMS, label: "Fry t’ mushrooms" },
 ];
 export const FUELS = { [I.COAL_LUMP]: 4, [B.PEAT]: 1 };
 
