@@ -5,6 +5,7 @@ dist/
 
 # local-only — never commit: python bytecode, live keys, and training scratch
 __pycache__/
+deploy/world/parity-ref.json
 moorstead keys.md
 finetune/
 **/handout.txt
