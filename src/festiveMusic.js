@@ -1,130 +1,43 @@
-// festiveMusic.js — Yorkshire brass-band rendition of "In the Bleak Midwinter"
-// (Holst's "Cranham" melody, 1906, public domain).
-// Shares the game's existing AudioContext (pass this.audio.ctx from AudioEngine).
-// Master gain maxes at ~0.12 so it sits under t' ambient bed without swamping it.
+// festiveMusic.js — plays a recording of "In the Bleak Midwinter" (Holst's
+// "Cranham", organ, 5 verses) softly near a town in winter. Streams the MP3 via an
+// HTML5 Audio element, loops it, and fades the volume by proximity to the village.
+//
+// The track lives at /music/in-the-bleak-midwinter.mp3 (served from public/). It's
+// lazy-loaded (preload 'none') so the ~12 MB file is only fetched when the carol
+// actually starts near a winter village, never on a bare page load.
 
-// Cranham melody (Holst, 1906), in F major — from Hymnary's published tune incipit
-// "34532 12326 23453" (scale degrees, 1 = F). midi: F4 = 65, the lone 6 drops to the
-// low D for "made moan". [midiNote | null, durationInBeats]; null = rest.
-export const CRANHAM = [
-  [69,1],[70,1],[72,1],[69,1], [67,2],[null,1],   // 3 4 5 3 2  — "In the bleak midwinter"
-  [65,1],[67,1],[69,1],[67,1], [62,2],[null,1],   // 1 2 3 2 6̱  — "frosty wind made moan"
-  [67,1],[69,1],[70,1],[72,1], [69,2],[null,1],   // 2 3 4 5 3  — "earth stood hard as iron"
-];
-
-const BPM       = 66;
-const BEAT_SEC  = 60 / BPM;
-const LOOKAHEAD = 0.3;   // seconds ahead to schedule notes
-const POLL_MS   = 100;   // scheduler interval
-
-function midiToFreq(midi) {
-  return 440 * Math.pow(2, (midi - 69) / 12);
-}
+const TRACK_URL = '/music/in-the-bleak-midwinter.mp3';
 
 export class FestiveMusic {
-  constructor(ctx) {
-    this.ctx    = ctx;
-    this.master = ctx.createGain();
-    this.master.gain.value = 0;
-    this.master.connect(ctx.destination);
-
-    this._running      = false;
-    this._cursor       = 0;          // index into CRANHAM
-    this._nextNoteTime = 0;          // audio-clock time for the next note
-    this._intervalId   = null;
+  // `_ctx` kept for call-site compatibility (constructed with the game's AudioContext);
+  // HTML5 Audio handles its own playback, so the context isn't needed here.
+  constructor(_ctx) {
+    this.el = new Audio(TRACK_URL);
+    this.el.loop = true;
+    this.el.preload = 'none';   // don't fetch the 12 MB file until it's first played
+    this.el.volume = 0;
+    this._running = false;
+    this._starting = false;
   }
 
-  // Schedule a single brass note: two oscillators (sawtooth + detuned square)
-  // through a lowpass filter and a per-note gain with soft ADSR.
-  _playNote(freq, startTime, durBeats) {
-    const ctx  = this.ctx;
-    const dur  = durBeats * BEAT_SEC;
-    const atk  = 0.04;
-    const rel  = 0.15;
-    const sus  = 0.50;     // sustain level relative to peak
-
-    // per-note gain (ADSR envelope)
-    const env = ctx.createGain();
-    env.gain.setValueAtTime(0, startTime);
-    env.gain.linearRampToValueAtTime(1.0, startTime + atk);
-    env.gain.linearRampToValueAtTime(sus, startTime + atk + 0.05);
-    env.gain.setValueAtTime(sus, startTime + dur - rel);
-    env.gain.linearRampToValueAtTime(0, startTime + dur);
-
-    // lowpass: brass warmth, kill harsh aliases
-    const lp = ctx.createBiquadFilter();
-    lp.type            = 'lowpass';
-    lp.frequency.value = 1600;
-    lp.Q.value         = 0.7;
-
-    env.connect(lp).connect(this.master);
-
-    // primary oscillator: sawtooth (rich harmonics)
-    const osc1 = ctx.createOscillator();
-    osc1.type          = 'sawtooth';
-    osc1.frequency.value = freq;
-    osc1.connect(env);
-    osc1.start(startTime);
-    osc1.stop(startTime + dur + 0.05);
-
-    // second oscillator: detuned square for body, slightly brighter
-    const osc2 = ctx.createOscillator();
-    osc2.type          = 'square';
-    osc2.frequency.value = freq * 1.003;   // ~5 cents sharp — band-in-unison wobble
-    osc2.connect(env);
-    osc2.start(startTime);
-    osc2.stop(startTime + dur + 0.05);
-  }
-
-  _tick() {
-    if (!this._running) return;
-    const now = this.ctx.currentTime;
-    const horizon = now + LOOKAHEAD;
-
-    while (this._nextNoteTime < horizon) {
-      const entry = CRANHAM[this._cursor];
-      const [midi, beats] = entry;
-
-      if (midi !== null) {
-        this._playNote(midiToFreq(midi), this._nextNoteTime, beats);
-      }
-      this._nextNoteTime += beats * BEAT_SEC;
-
-      this._cursor++;
-      if (this._cursor >= CRANHAM.length) {
-        this._cursor = 0;
-        // 2-beat rest between repeats
-        this._nextNoteTime += 2 * BEAT_SEC;
-      }
-    }
-  }
-
-  // Idempotent: safe to call every frame when vol > 0.
+  // Idempotent: safe to call every frame while the carol should be audible.
   start() {
-    if (this._running) return;
-    this._running      = true;
-    this._nextNoteTime = Math.max(this.ctx.currentTime, this._nextNoteTime);
-    // Resume if browser suspended the context (belt-and-braces — gesture has
-    // already been handled by AudioEngine.init(), but belts don't hurt).
-    if (this.ctx.state === 'suspended') this.ctx.resume();
-    this._intervalId = setInterval(() => this._tick(), POLL_MS);
-    // Fire once immediately so notes start without a POLL_MS delay.
-    this._tick();
+    if (this._running || this._starting) return;
+    this._starting = true;
+    Promise.resolve(this.el.play())
+      .then(() => { this._running = true; this._starting = false; })
+      .catch(() => { this._starting = false; }); // e.g. before a user gesture — retried next frame
   }
 
   stop() {
+    this._starting = false;
     if (!this._running) return;
     this._running = false;
-    clearInterval(this._intervalId);
-    this._intervalId = null;
-    // Silence the master gain quickly.
-    const t = this.ctx.currentTime;
-    this.master.gain.setTargetAtTime(0, t, 0.05);
+    this.el.pause();
   }
 
-  // Smooth volume ramp — call every frame with the computed distance-based vol.
+  // Distance/season-gated volume in [0,1]. Called every frame from the game loop.
   setVolume(v) {
-    const t = this.ctx.currentTime;
-    this.master.gain.setTargetAtTime(v, t, 0.4);
+    this.el.volume = v < 0 ? 0 : v > 1 ? 1 : v;
   }
 }

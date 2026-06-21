@@ -3589,9 +3589,11 @@ class Game {
           if (d < nearestVillageDist) nearestVillageDist = d;
         }
       }
-      // muted: the synth tune wasn't right — awaiting a real brass-band audio asset
-      // to replace the synth. Distance/season gating kept here for when it's wired.
-      const festVol = 0; // festiveActive(this.season) ? Math.max(0, 1 - nearestVillageDist / 60) * 0.12 : 0;
+      // the carol (recording of "In the Bleak Midwinter") fades up as you near a
+      // village in winter, full within ~village, silent beyond ~60 blocks / outside winter.
+      const festVol = festiveActive(this.season)
+        ? Math.max(0, 1 - nearestVillageDist / 60) * 0.55
+        : 0;
       if (festVol > 0) {
         this.festiveMusic.start();
       } else {
