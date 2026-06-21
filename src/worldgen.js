@@ -1,14 +1,19 @@
 // Terrain generation for t' North York Moors.
 import { B, BLOCKS, CHUNK, HEIGHT, WATER_LEVEL } from './defs.js';
-import { fbm2, fbm3, noise3, hash2i, hash3i, mulberry32 } from './noise.js';
+import { fbm2, fbm3, noise3, hash2i, hash3i, mulberry32, strSeed } from './noise.js';
 import { Geography, ROSEBERRY, WAINSTONES, KILNS, CASTLE } from './geography.js';
+import { MoorsGeography } from './moorsgeo.js';
+
+// The real-Moors world id — the seed string main.js uses for the solo world + the shared room
+export const MOORS_SEED = strSeed('t-moors-1900');
+export function isMoorsSeed(seed) { return (seed | 0) === (MOORS_SEED | 0); }
 
 const IDX = (x, y, z) => x + z * CHUNK + y * CHUNK * CHUNK;
 
 export class Gen {
   constructor(seed) {
     this.seed = seed | 0;
-    this.geo = new Geography(seed);
+    this.geo = isMoorsSeed(seed) ? new MoorsGeography(seed) : new Geography(seed);
   }
 
   height(x, z) { return this.geo.height(x, z); }
