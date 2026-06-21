@@ -25,6 +25,7 @@ import { escHtml } from './escape.js';
 import { buildTrain } from './train.js';
 import { Rails } from './rails.js';
 import { FloraLayer } from './floraLayer.js';
+import { FestiveLayer } from './festiveLayer.js';
 import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase } from './season.js';
 import { activeForageables, hostForageFor, fruitSpeciesAt, fruitTreeRipe } from './forage.js';
@@ -303,6 +304,8 @@ class Game {
     this.rails = new Rails(this.scene, this.world.gen.geo); // t' permanent way, drawn proper
     if (this.floraLayer) this.floraLayer.clear();
     this.floraLayer = new FloraLayer(this.scene, this.world);
+    if (this.festiveLayer) this.festiveLayer.clear();
+    this.festiveLayer = new FestiveLayer(this.scene, this.world);
     if (this.footprints) this.footprints.clear();
     this.footprints = new Footprints(this.scene, this.world);
     // seed snow cover to the season so a world loaded in winter is snowy at once
@@ -343,6 +346,7 @@ class Game {
   teardownWorld() {
     if (this.rails) { this.rails.dispose(); this.rails = null; }
     if (this.floraLayer) { this.floraLayer.clear(); this.floraLayer = null; }
+    if (this.festiveLayer) { this.festiveLayer.clear(); this.festiveLayer = null; }
     if (this.footprints) { this.footprints.clear(); this.footprints = null; }
     this.entities.clear();
     for (const c of this.world.chunks.values()) {
@@ -3285,6 +3289,7 @@ class Game {
       // sky & weather (season already computed + cached above for player ice physics)
       const season = this.season;
       if (this.floraLayer) this.floraLayer.update(dt, this.player.pos, season);
+      if (this.festiveLayer) this.festiveLayer.update(dt, this.player.pos, season, this.snowAccum);
       if (this.footprints && this.snowAccum > 0.1) {
         const fpNow = performance.now() / 1000;
         const walkers = [{ x: this.player.pos.x, z: this.player.pos.z }];
