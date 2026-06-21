@@ -34,5 +34,17 @@ const autumn = seasonStateAtPhase(0.66), spring = seasonStateAtPhase(0.12), wint
   (a === b ? ok : bad)('forage placement is deterministic');
 }
 
+// forageLedger: record -> isForaged true; expires (regrows) after FORAGE_LIFESPAN days
+{
+  const { World } = await import('../src/world.js');
+  // World(scene, seed, savedChunks) — pass a null-ish scene; constructor never touches it directly.
+  const w = new World(null, 1234);
+  w.recordForage(5, 41, 9, 10);
+  (w.isForaged(5, 41, 9)  ? ok : bad)('a picked cell reads as foraged');
+  (!w.isForaged(6, 41, 9) ? ok : bad)('an unpicked cell reads as not foraged');
+  w.expireForage(10 + FORAGE_LIFESPAN);
+  (!w.isForaged(5, 41, 9) ? ok : bad)('forage regrows after its lifespan');
+}
+
 console.log('\nRESULT: ' + (failed ? 'FAIL' : 'PASS'));
 process.exit(failed ? 1 : 0);

@@ -1,6 +1,7 @@
 // Chunk storage, streaming, and block access.
 import { B, BLOCKS, CHUNK, HEIGHT, isLiquid, isSolid } from './defs.js';
 import { categoryOf, isExpired, LIFESPAN } from './editledger.js';
+import { FORAGE_LIFESPAN } from './forage.js';
 import { Gen } from './worldgen.js';
 import { buildChunkMeshes, disposeChunkMeshes } from './mesher.js';
 import { tileColor } from './textures.js';
@@ -15,6 +16,7 @@ export class World {
     this.chunks = new Map();
     this.savedChunks = savedChunks || new Map(); // "cx,cz" -> Uint8Array
     this.editLedger = new Map(); // "x,y,z" -> { cat, day, by, was } — harvest edits awaiting regrowth
+    this.forageLedger = new Map(); // "x,y,z" -> pickedDay — picked forage cells awaiting regrowth
     this.treeRegrowth = new Map(); // "x,y,z" (stump) -> felledDay — a sapling sprouts here in time
     this.saplings = new Map(); // "x,y,z" -> sproutedDay — a young tree growing toward full
     this.deeds = [
@@ -148,6 +150,14 @@ export class World {
       n++;
     }
     return n;
+  }
+
+  // Record a forage pick so t' cell reads as spent; expires (regrows) after FORAGE_LIFESPAN days.
+  recordForage(x, y, z, day) { this.forageLedger.set(`${x},${y},${z}`, day); }
+  isForaged(x, y, z) { return this.forageLedger.has(`${x},${y},${z}`); }
+  expireForage(nowDay) {
+    for (const [k, day] of this.forageLedger)
+      if (nowDay - day >= FORAGE_LIFESPAN) this.forageLedger.delete(k);
   }
 
   // Gradual tree regrowth: a felled stump sprouts a sapling after the tree lifespan, and a sapling
