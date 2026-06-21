@@ -23,6 +23,7 @@ export const TILE = {
   ICE: 64,
   CEP: 65, CHANTERELLE: 66, WILD_GARLIC: 67, SORREL: 68,
   ROSEHIP: 69, SLOE: 70, ELDERBERRY: 71, HAZELNUT: 72, BLACKTHORN: 73, HAZEL: 74,
+  ORCHARD_LEAVES: 75, APPLE: 76, PEAR: 77, PLUM: 78,
 };
 
 // ---- Block ids ----
@@ -47,6 +48,7 @@ export const B = {
   ROCK_SALT: 53,
   BRAMBLE: 54, HOLLY: 55,
   BLACKTHORN: 56, HAZEL: 57,
+  ORCHARD_LEAVES: 58,
 };
 
 // ---- Item ids (blocks double as items; pure items start at 64) ----
@@ -75,6 +77,7 @@ export const I = {
   WOOL_COAT: 108,
   CEP: 109, CHANTERELLE: 110, COOKED_MUSHROOMS: 111, WILD_GARLIC: 112, SORREL: 113,
   BLACKBERRY: 114, ROSEHIP: 115, SLOE: 116, ELDERBERRY: 117, HAZELNUT: 118,
+  APPLE: 119, PEAR: 120, PLUM: 121,
 };
 
 // Parish wardens: SHA-256 o' t' dash account id, never t' id itsen —
@@ -131,6 +134,7 @@ D[B.FOXGLOVE] = { name: 'Foxglove', kind: 'cutout', tex: { t: TILE.FOXGLOVE, s: 
 D[B.DOG_ROSE] = { name: 'Dog Rose', kind: 'cutout', tex: { t: TILE.DOG_ROSE, s: TILE.DOG_ROSE, b: TILE.DOG_ROSE }, hard: 0.05, tool: null, drop: B.DOG_ROSE };
 D[B.ELDER] = { name: 'Elder Bush', kind: 'cutout', tex: { t: TILE.ELDER, s: TILE.ELDER, b: TILE.ELDER }, hard: 0.1, tool: null, drop: B.ELDER };
 D[B.MONKEY_LEAVES] = { name: 'Monkey Puzzle', kind: 'solid', tex: { t: TILE.MONKEY_LEAVES, s: TILE.MONKEY_LEAVES, b: TILE.MONKEY_LEAVES }, hard: 0.3, tool: null, drop: null };
+D[B.ORCHARD_LEAVES] = { name: 'Orchard Leaves', kind: 'solid', tex: { t: TILE.ORCHARD_LEAVES, s: TILE.ORCHARD_LEAVES, b: TILE.ORCHARD_LEAVES }, hard: 0.2, tool: null, drop: null };
 // railway fabric: slate roofs, NER cream/Indian-red station boarding, red brick
 D[B.SLATE] = { name: 'Slate', kind: 'solid', tex: { t: TILE.SLATE, s: TILE.SLATE, b: TILE.SLATE }, hard: 1.8, tool: 'pick', needsPick: true, drop: B.SLATE };
 D[B.ST_CREAM] = { name: 'Station Boarding (Cream)', kind: 'solid', tex: { t: TILE.ST_CREAM, s: TILE.ST_CREAM, b: TILE.ST_CREAM }, hard: 2.0, tool: 'axe', drop: B.ST_CREAM };
@@ -196,6 +200,7 @@ export const ITEM_NAMES = {
   [I.WOOL_COAT]: 'Wool Coat',
   [I.CEP]: 'Cep', [I.CHANTERELLE]: 'Chanterelle', [I.COOKED_MUSHROOMS]: 'Fried Mushrooms', [I.WILD_GARLIC]: 'Wild Garlic', [I.SORREL]: 'Sorrel',
   [I.BLACKBERRY]: 'Blackberries', [I.ROSEHIP]: 'Rosehips', [I.SLOE]: 'Sloes', [I.ELDERBERRY]: 'Elderberries', [I.HAZELNUT]: 'Hazelnuts',
+  [I.APPLE]: 'Apple', [I.PEAR]: 'Pear', [I.PLUM]: 'Plum',
 };
 
 export function itemName(id) {
@@ -237,6 +242,7 @@ export const FOODS = {
   [I.FISH_CHIPS]: 10, // best scran on t' moors — worth t' trip to Whitby
   [I.CEP]: 2, [I.CHANTERELLE]: 2, [I.COOKED_MUSHROOMS]: 6, [I.WILD_GARLIC]: 1, [I.SORREL]: 1,
   [I.BLACKBERRY]: 3, [I.ROSEHIP]: 2, [I.SLOE]: 1, [I.ELDERBERRY]: 2, [I.HAZELNUT]: 3,
+  [I.APPLE]: 4, [I.PEAR]: 4, [I.PLUM]: 3,
 };
 
 export const STACK_SIZE = 64;

@@ -876,6 +876,50 @@ const TILE_PAINTERS = {
     // brighter leaf highlights to distinguish from elder
     p.dots(0x5a7a38, 14); p.dots(0x2e4a1e, 10);
   },
+  [TILE.ORCHARD_LEAVES](p) {
+    // lush rounded orchard canopy — softer, lighter green than oak TILE.LEAVES
+    p.speckle(0x4e6e2e, 0.22);
+    p.dots(0x62863c, 28); p.dots(0x3a5420, 18); p.dots(0x7aa050, 12);
+  },
+  [TILE.APPLE](p) {
+    // orchard canopy wi' clusters o' red-and-green apples
+    TILE_PAINTERS[TILE.ORCHARD_LEAVES](p);
+    for (let i = 0; i < 6; i++) {
+      const ax = 2 + ((p.rng() * 12) | 0), ay = 2 + ((p.rng() * 10) | 0);
+      const bright = p.rng() < 0.6;
+      p.px(ax,     ay,     bright ? '#d03020' : '#b02010');
+      p.px(ax + 1, ay,     bright ? '#e04030' : '#c02818');
+      p.px(ax,     ay + 1, bright ? '#c02818' : '#a01808');
+      p.px(ax + 1, ay + 1, '#b02010');
+      p.px(ax,     ay,     '#ff6050'); // specular
+      // green cheek on one side
+      p.px(ax - 1, ay,     shade(0x5a8830, 0.9 + p.rng() * 0.2));
+    }
+  },
+  [TILE.PEAR](p) {
+    // orchard canopy wi' yellow-green pears
+    TILE_PAINTERS[TILE.ORCHARD_LEAVES](p);
+    for (let i = 0; i < 6; i++) {
+      const px2 = 2 + ((p.rng() * 12) | 0), py = 2 + ((p.rng() * 10) | 0);
+      p.px(px2,     py,     '#c8d040');
+      p.px(px2 + 1, py,     '#d8e050');
+      p.px(px2,     py + 1, '#b0bc30');
+      p.px(px2 + 1, py + 1, '#c0cc38');
+      p.px(px2,     py,     '#eef870'); // specular
+    }
+  },
+  [TILE.PLUM](p) {
+    // orchard canopy wi' deep purple plums, pale dusty bloom
+    TILE_PAINTERS[TILE.ORCHARD_LEAVES](p);
+    for (let i = 0; i < 6; i++) {
+      const plx = 2 + ((p.rng() * 12) | 0), ply = 2 + ((p.rng() * 10) | 0);
+      p.px(plx,     ply,     '#4a1860');
+      p.px(plx + 1, ply,     '#5e2278');
+      p.px(plx,     ply + 1, '#3c1250');
+      p.px(plx + 1, ply + 1, '#4a1860');
+      p.px(plx,     ply,     '#9a80b8'); // dusty bloom highlight
+    }
+  },
 };
 
 let atlasCanvas = null;   // the LIVE atlas (may be season-tinted)
@@ -906,7 +950,7 @@ export function buildAtlas() {
 }
 
 // ---- seasonal re-tint o' t' growing things (re-paints tiles in place; no chunk re-mesh) ----
-const SEASON_TILES = [TILE.GRASS_TOP, TILE.GRASS_SIDE, TILE.HEATHER, TILE.BRACKEN, TILE.FERN, TILE.BILBERRY, TILE.GORSE, TILE.LEAVES, TILE.MONKEY_LEAVES, TILE.BRAMBLE];
+const SEASON_TILES = [TILE.GRASS_TOP, TILE.GRASS_SIDE, TILE.HEATHER, TILE.BRACKEN, TILE.FERN, TILE.BILBERRY, TILE.GORSE, TILE.LEAVES, TILE.MONKEY_LEAVES, TILE.BRAMBLE, TILE.ORCHARD_LEAVES];
 function blendPx(d, i, r, g, b, amt) {
   d[i] += (r - d[i]) * amt; d[i + 1] += (g - d[i + 1]) * amt; d[i + 2] += (b - d[i + 2]) * amt;
 }
@@ -930,6 +974,10 @@ export function seasonShiftPx(tile, d, i, s) {
   } else if (tile === TILE.BILBERRY) {
     blendPx(d, i, 150, 80, 50, s.autumn * 0.35); desatPx(d, i, winter * 0.4);
   } else if (tile === TILE.LEAVES) {
+    blendPx(d, i, 96, 150, 60, s.greenness * 0.20);      // spring/summer flush
+    blendPx(d, i, 178, 116, 38, s.autumn * 0.6);         // autumn gold -> rust
+    desatPx(d, i, winter * 0.45); blendPx(d, i, 120, 100, 74, winter * 0.4); // winter: brown, bare-looking
+  } else if (tile === TILE.ORCHARD_LEAVES) {
     blendPx(d, i, 96, 150, 60, s.greenness * 0.20);      // spring/summer flush
     blendPx(d, i, 178, 116, 38, s.autumn * 0.6);         // autumn gold -> rust
     desatPx(d, i, winter * 0.45); blendPx(d, i, 120, 100, 74, winter * 0.4); // winter: brown, bare-looking
@@ -1234,6 +1282,21 @@ const ITEM_ICON_PAINTERS = {
   },
   [I.HAZELNUT](ctx) {
     const tile = TILE.HAZELNUT;
+    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
+  },
+  [I.APPLE](ctx) {
+    const tile = TILE.APPLE;
+    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
+  },
+  [I.PEAR](ctx) {
+    const tile = TILE.PEAR;
+    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
+  },
+  [I.PLUM](ctx) {
+    const tile = TILE.PLUM;
     const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
