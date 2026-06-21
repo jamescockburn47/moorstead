@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { tileUV } from './textures.js';
 import { getMaterials } from './mesher.js';
 import { activeScatter, activeAdornments } from './flora-season.js';
+import { activeForageables } from './forage.js';
 import { cellInstances } from './flora-placement.js';
 import { hash2i } from './noise.js';
 import { B } from './defs.js';
@@ -14,7 +15,7 @@ import { B } from './defs.js';
 const RADIUS = 40;
 const REBUILD_MOVE = 8;
 
-function crossGeom(tile) {
+function crossGeom(tile, glint = 0) {
   const [u0, v0, u1, v1] = tileUV(tile);
   const g = new THREE.BufferGeometry();
   const h = 1, w = 0.5;
@@ -25,6 +26,7 @@ function crossGeom(tile) {
   // white per-vertex colour: the shared cutout material has vertexColors:true, so a
   // geometry with no colour attribute renders BLACK (texture * 0). White = texture as-is.
   g.setAttribute('color', new THREE.Float32BufferAttribute(new Array(24).fill(1), 3));
+  g.setAttribute('aGlint', new THREE.Float32BufferAttribute(new Array(8).fill(glint), 1));
   g.setIndex([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]);
   g.computeVertexNormals();
   return g;
@@ -61,7 +63,9 @@ export class FloraLayer {
     this.clear();
     const scatter = activeScatter(season);
     const adorn = activeAdornments(season);
-    if (!scatter.length && !adorn.length) return;
+    const forage = activeForageables(season);
+    const glintTiles = new Set(forage.map(f => f.tile));
+    if (!scatter.length && !adorn.length && !forage.length) return;
     const gen = this.world.gen;
     const seed = gen.seed >>> 0;
     const byTile = new Map();
@@ -90,12 +94,18 @@ export class FloraLayer {
             for (const inst of cellInstances(seed, x, z, mode, sp.tile))
               add(sp.tile, x + inst.dx, surfY + 1, z + inst.dz, inst.yaw, inst.scale);
         }
+        if (forage.length && top === B.AIR && surf === B.GRASS && !gen.geo.inVillage(x, z, 1)
+            && !this.world.isForaged(x, surfY + 1, z)) {
+          for (const f of forage)
+            for (const inst of cellInstances(seed, x, z, 'forage', f.tile))
+              add(f.tile, x + inst.dx, surfY + 1, z + inst.dz, inst.yaw, inst.scale);
+        }
       }
     }
     const mat = getMaterials().cutout;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
     for (const [tile, places] of byTile) {
-      const mesh = new THREE.InstancedMesh(crossGeom(tile), mat, places.length);
+      const mesh = new THREE.InstancedMesh(crossGeom(tile, glintTiles.has(tile) ? 1 : 0), mat, places.length);
       mesh.frustumCulled = false;
       for (let i = 0; i < places.length; i++) {
         const [px, py, pz, yaw, sc] = places[i];
