@@ -1283,14 +1283,21 @@ export class UI {
 
   buildBigMap(player, world) {
     const geo = world.gen.geo;
-    let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
-    const note = (x, z) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); };
-    for (const v of geo.villages) note(v.x, v.z);
-    for (const s of geo.railway()) note(s.x, s.z);
-    for (const [x, z] of [[-700, -880], [540, 680], [-380, -620], [-260, 380], [CASTLE.x, CASTLE.z]]) note(x, z);
-    note(player.pos.x, player.pos.z);
-    // North is +x (up). The North Sea lies off +x, so pad there (the top).
-    minX -= 140; maxX += 200; minZ -= 140; maxZ += 140;
+    let minX, maxX, minZ, maxZ;
+    if (geo.realWorld && geo.worldBounds) {
+      // a real-OS world: fit the map exactly to the data extent so terrain never
+      // gets extruded past the edge into strips, and skip the stylised landmarks
+      ({ minX, maxX, minZ, maxZ } = geo.worldBounds());
+    } else {
+      minX = 1e9; maxX = -1e9; minZ = 1e9; maxZ = -1e9;
+      const note = (x, z) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); };
+      for (const v of geo.villages) note(v.x, v.z);
+      for (const s of geo.railway()) note(s.x, s.z);
+      for (const [x, z] of [[-700, -880], [540, 680], [-380, -620], [-260, 380], [CASTLE.x, CASTLE.z]]) note(x, z);
+      note(player.pos.x, player.pos.z);
+      // North is +x (up). The North Sea lies off +x, so pad there (the top).
+      minX -= 140; maxX += 200; minZ -= 140; maxZ += 140;
+    }
     const C = this.bigMap, W = C.width, H = C.height;
     const wwX = maxX - minX, wwZ = maxZ - minZ; // height spans world-x (N-S), width spans world-z (E-W)
     const sc = Math.min(W / wwZ, H / wwX);
@@ -1339,7 +1346,10 @@ export class UI {
       b.fillStyle = 'rgba(255,176,64,0.55)'; b.beginPath(); b.arc(X, Y, 2.5, 0, 7); b.fill();
     }
     b.fillStyle = '#a59c8c'; b.font = 'italic 11px sans-serif';         // landmarks
-    for (const [label, x, z] of [['Roseberry Topping', -700, -880], ['Hole of Horcum', 540, 680], ['Wainstones', -380, -620], ['Rosedale Kilns', -260, 380], ['Whitby Abbey', geo.abbeySite().x, geo.abbeySite().z], ["Merlin's Keep", CASTLE.x, CASTLE.z]]) {
+    const lms = (geo.realWorld && geo.data && geo.data.landmarks)
+      ? geo.data.landmarks.map(l => [l.name, l.x, l.z])
+      : [['Roseberry Topping', -700, -880], ['Hole of Horcum', 540, 680], ['Wainstones', -380, -620], ['Rosedale Kilns', -260, 380], ['Whitby Abbey', geo.abbeySite().x, geo.abbeySite().z], ["Merlin's Keep", CASTLE.x, CASTLE.z]];
+    for (const [label, x, z] of lms) {
       b.fillText('▲ ' + label, w2x(x, z) + 4, w2y(x, z));
     }
     b.fillStyle = '#d8b95a'; b.font = 'bold 16px sans-serif'; b.textAlign = 'center'; b.fillText('N ↑', W - 34, 26);

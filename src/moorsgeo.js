@@ -37,6 +37,13 @@ export class MoorsGeography {
   }
   coastX() { return 1e6; }   // no single coast-x with a real DEM; off-map for the few callers (ore/quest)
 
+  // exact block-extent of the data, so the map fits itself to the real world
+  // (no sampling past the edge, which would extrude the edge row into strips)
+  worldBounds() {
+    const t = this.data.transform, mpb = t.metresPerBlock;
+    return { minX: 0, maxX: (t.maxN - t.minN) / mpb, minZ: 0, maxZ: (t.maxE - t.minE) / mpb };
+  }
+
   // ---------- height ----------
   heightRaw(x, z) {
     let h = this._baseMetresToBlock(x, z);
