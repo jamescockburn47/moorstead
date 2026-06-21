@@ -59,16 +59,18 @@ def parse_asc(path):
 def build_elevation():
     cols = round((MAX_E - MIN_E) / STEP) + 1
     rows = round((MAX_N - MIN_N) / STEP) + 1
-    acc = [[None] * cols for _ in range(rows)]   # row 0 = north
-    tiles = sorted((WORK / "tiles").glob("*.asc"))
-    for asc in tiles:
+    ssum = [[0.0] * cols for _ in range(rows)]   # row 0 = north
+    scnt = [[0] * cols for _ in range(rows)]
+    for asc in sorted((WORK / "tiles").glob("*.asc")):
         for E, N, m in parse_asc(asc):
             if not in_bounds(E, N):
                 continue
             c = round((E - MIN_E) / STEP)
             r = round((MAX_N - N) / STEP)
             if 0 <= c < cols and 0 <= r < rows:
-                acc[r][c] = m   # nearest post wins (subsample)
+                ssum[r][c] += m; scnt[r][c] += 1
+    # MEAN of the 50 m posts in each cell — smoother than nearest-post, far fewer specks
+    acc = [[(ssum[r][c] / scnt[r][c]) if scnt[r][c] else None for c in range(cols)] for r in range(rows)]
     # Flood-fill the sea from the map edges: a cell is sea if it is <= 1 m (or has no
     # Terrain 50 data) AND connects to the edge through other such cells. Terrain 50
     # gives the open sea as a flat ~0 m sheet, so a height test alone can't tell sea
@@ -76,7 +78,7 @@ def build_elevation():
     # get a deep sentinel so they read clearly sub-waterline (proper deep water + a
     # real shoreline, not a sheet sitting exactly at the waterline).
     from collections import deque
-    cand = lambda r, c: acc[r][c] is None or acc[r][c] <= 1.0
+    cand = lambda r, c: acc[r][c] is None or acc[r][c] <= 2.0
     sea = [[False] * cols for _ in range(rows)]
     dq = deque()
     for r in range(rows):
@@ -91,16 +93,32 @@ def build_elevation():
             nr, nc = r + dr, c + dc
             if 0 <= nr < rows and 0 <= nc < cols and not sea[nr][nc] and cand(nr, nc):
                 sea[nr][nc] = True; dq.append((nr, nc))
+    # de-speckle: absorb tiny land specks adrift in the sea (>= 3 of 4 neighbours sea)
+    for _ in range(2):
+        for r in range(rows):
+            for c in range(cols):
+                if not sea[r][c] and sum(
+                        1 for dr, dc in ((1, 0), (-1, 0), (0, 1), (0, -1))
+                        if 0 <= r + dr < rows and 0 <= c + dc < cols and sea[r + dr][c + dc]) >= 3:
+                    sea[r][c] = True
+    # fill inland data gaps by neighbour averaging, so a missing-tile cell is never a lake
+    for _ in range(4):
+        for r in range(rows):
+            for c in range(cols):
+                if acc[r][c] is None and not sea[r][c]:
+                    vals = [acc[r + dr][c + dc] for dr, dc in ((1, 0), (-1, 0), (0, 1), (0, -1))
+                            if 0 <= r + dr < rows and 0 <= c + dc < cols and acc[r + dr][c + dc] is not None]
+                    if vals: acc[r][c] = sum(vals) / len(vals)
     flat = []
     for r in range(rows):
         for c in range(cols):
             if sea[r][c]:
-                flat.append(-120)               # connected open sea
+                flat.append(-120)                       # connected open sea
             elif acc[r][c] is None:
-                flat.append(0)                  # rare inland gap
+                flat.append(0)                          # truly enclosed gap (rare)
             else:
-                flat.append(round(acc[r][c]))
-    print(f"sea cells (flood-filled from edges): {sum(row.count(True) for row in sea)}")
+                flat.append(max(0, round(acc[r][c])))   # clamp land >= 0 m -> nothing inland floods
+    print(f"sea cells: {sum(row.count(True) for row in sea)}")
     return {"cols": cols, "rows": rows, "metres": flat}, acc
 
 # ---------------------------------------------------------------- coast
