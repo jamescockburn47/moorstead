@@ -202,7 +202,54 @@ export class FestiveLayer {
     }
 
     this.dressFir(g);
+    this.buildPresents(g);
     return g;
+  }
+
+  // Add ~5 wrapped present boxes around the trunk base (y≈0), as children of
+  // the fir Group so clear()'s traverse disposes them automatically.
+  // Each present: a BoxGeometry cube + two thin ribbon strips crossing over it.
+  buildPresents(g) {
+    // Present box colours (festive palette)
+    const boxColors    = [0xb23b3b, 0x2f6e4f, 0xc9a13b, 0x7a4da8, 0xe8e0c8];
+    // Ribbon colours: contrasting per box colour
+    const ribbonColors = [0xc9a13b, 0xe8e0c8, 0xb23b3b, 0xe8e0c8, 0x7a4da8];
+
+    // Deterministic scatter around trunk: (x offset, z offset, size, yaw)
+    const presents = [
+      { dx:  0.65, dz:  0.40, s: 0.45, yaw: 0.25 },
+      { dx: -0.60, dz:  0.30, s: 0.55, yaw: -0.4 },
+      { dx:  0.30, dz: -0.65, s: 0.40, yaw: 0.90 },
+      { dx: -0.35, dz: -0.55, s: 0.50, yaw: -0.2 },
+      { dx:  0.10, dz:  0.80, s: 0.42, yaw: 1.30 },
+    ];
+
+    for (let i = 0; i < presents.length; i++) {
+      const { dx, dz, s, yaw } = presents[i];
+      const matBox    = new THREE.MeshLambertMaterial({ color: boxColors[i] });
+      const matRibbon = new THREE.MeshLambertMaterial({ color: ribbonColors[i] });
+
+      // Box — sits on the ground (y = s/2 so base is at y=0)
+      const box = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), matBox);
+      box.position.set(dx, s * 0.5, dz);
+      box.rotation.y = yaw;
+      g.add(box);
+
+      // Ribbon band 1: runs front-to-back over the lid (thin strip across top + sides)
+      const r = 0.06; // ribbon half-thickness
+      const ribbonGeo1 = new THREE.BoxGeometry(r, s + r * 2, s + r * 2);
+      const rb1 = new THREE.Mesh(ribbonGeo1, matRibbon);
+      rb1.position.set(dx, s * 0.5, dz);
+      rb1.rotation.y = yaw;
+      g.add(rb1);
+
+      // Ribbon band 2: runs side-to-side (perpendicular cross)
+      const ribbonGeo2 = new THREE.BoxGeometry(s + r * 2, s + r * 2, r);
+      const rb2 = new THREE.Mesh(ribbonGeo2, matRibbon);
+      rb2.position.set(dx, s * 0.5, dz);
+      rb2.rotation.y = yaw;
+      g.add(rb2);
+    }
   }
 
   // Dress the fir with Victorian ornaments: real candles (MeshBasicMaterial,
