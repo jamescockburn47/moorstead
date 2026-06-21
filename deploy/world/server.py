@@ -30,6 +30,9 @@ except Exception as e:
     print("Warning: could not load geography_noise:", e)
     geo = None
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from epoch_gate import may_persist
+
 TREES = {6, 7, 36}
 ORES = {13, 14, 15, 51, 52, 53}
 PEAT = 3
@@ -114,16 +117,18 @@ def room(rid):
         f = DATA / f"{rid}.json"
         edits = {}
         deeds = []
+        epoch = 0
         try:
             data = json.loads(f.read_text())
             if isinstance(data, dict) and ("edits" in data or "deeds" in data):
                 edits = data.get("edits", {})
                 deeds = data.get("deeds", [])
+                epoch = int(data.get("epoch", 0) or 0)  # bumped by a warden factory-reset
             else:
                 edits = data
         except Exception:
             pass
-        rooms[rid] = {"clients": {}, "players": {}, "edits": edits, "deeds": deeds, "dirty": False, "file": f}
+        rooms[rid] = {"clients": {}, "players": {}, "edits": edits, "deeds": deeds, "epoch": epoch, "dirty": False, "file": f}
     return rooms[rid]
 
 
@@ -222,6 +227,10 @@ async def ws_endpoint(ws: WebSocket):
     pid = re.sub(r"[^a-z0-9-]", "", (ws.query_params.get("pid") or ""))[:40]
     name = NAME_RE.sub("", (ws.query_params.get("name") or "rambler"))[:24] or "rambler"
     token = str(ws.query_params.get("token") or "")[:80]
+    try:
+        client_epoch = int(ws.query_params.get("epoch") or 0)  # the room epoch this client last synced
+    except (TypeError, ValueError):
+        client_epoch = 0
     if not pid:
         await ws.close()
         return
@@ -255,7 +264,11 @@ async def ws_endpoint(ws: WebSocket):
     save = None
     save_f = DATA / "saves" / f"{pid}.json"
     try:
-        save = json.loads(save_f.read_text())
+        saved = json.loads(save_f.read_text())
+        # a pocket from before the room's current epoch (a warden reset bumps it) is
+        # stale — withhold it so a factory-reset clears materials authoritatively too
+        if isinstance(saved, dict) and may_persist(saved.get("_epoch", 0), r["epoch"]):
+            save = saved
     except Exception:
         pass
     client_edits = []
@@ -270,6 +283,7 @@ async def ws_endpoint(ws: WebSocket):
         "type": "init", "seed": "t-shared-moor", "time": world_time(),
         "edits": client_edits,
         "deeds": r["deeds"],
+        "epoch": r["epoch"],
         "players": {k: v for k, v in r["players"].items() if k != pid},
         "save": save,
     }))
@@ -285,11 +299,22 @@ async def ws_endpoint(ws: WebSocket):
             except Exception:
                 continue
             t = m.get("type")
+            if t == "epochack":
+                # the client reporting which epoch it has synced; until it catches up
+                # to the room's epoch it stays stale and its writes are refused (below)
+                try:
+                    client_epoch = max(client_epoch, int(m.get("epoch", client_epoch)))
+                except (TypeError, ValueError):
+                    pass
+                continue
             if t != "save" and len(raw) > 600:
                 continue
             if t == "save":
+                if not may_persist(client_epoch, r["epoch"]):
+                    continue  # a stale client must not re-seed a freshly reset world
                 data = m.get("data")
                 if isinstance(data, dict):
+                    data["_epoch"] = r["epoch"]  # stamp so a later reset invalidates this pocket
                     (DATA / "saves").mkdir(exist_ok=True)
                     (DATA / "saves" / f"{pid}.json").write_text(json.dumps(data))
                 continue
@@ -301,6 +326,8 @@ async def ws_endpoint(ws: WebSocket):
                 await broadcast(r, {"type": "pos", "pid": pid, "x": p["x"], "y": p["y"], "z": p["z"], "yaw": p["yaw"]},
                                 skip=pid, near=(p["x"], p["z"]), rng=POS_RANGE)
             elif t == "edit":
+                if not may_persist(client_epoch, r["epoch"]):
+                    continue  # stale client — ignore its block edits after a reset
                 x, y, z, bid = int(m["x"]), int(m["y"]), int(m["z"]), int(m["id"])
                 if not (0 <= y < 64 and 0 <= bid < 64 and abs(x) < 100000 and abs(z) < 100000):
                     continue
@@ -322,6 +349,8 @@ async def ws_endpoint(ws: WebSocket):
                 r["dirty"] = True
                 await broadcast(r, {"type": "edit", "x": x, "y": y, "z": z, "id": bid}, skip=pid)
             elif t == "deeds":
+                if not may_persist(client_epoch, r["epoch"]):
+                    continue  # stale client — ignore deed changes after a reset
                 new_deeds = m.get("deeds")
                 if isinstance(new_deeds, list):
                     r["deeds"] = new_deeds
@@ -372,7 +401,8 @@ async def saver_and_pruner():
                 if r["dirty"]:
                     r["file"].write_text(json.dumps({
                         "edits": r["edits"],
-                        "deeds": r["deeds"]
+                        "deeds": r["deeds"],
+                        "epoch": r["epoch"]
                     }))
                     r["dirty"] = False
                     

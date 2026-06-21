@@ -392,6 +392,7 @@ class Game {
 
   async saveNow(toast = true) {
     if (!this.world) return;
+    if (this.epochWiping) return; // a warden reset is reloading us — never re-seed the wiped relay
     if (this.netActive) {
       // shared moor: pockets an' ventures live on t' server, keyed to thi account
       if (this.net && this.net.connected) {

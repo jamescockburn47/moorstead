@@ -1,4 +1,5 @@
 import { escHtml } from './escape.js';
+import { epochDecision } from './epoch.js';
 
 // T' Shared Moor: one world for everyone, relayed through t' EVO.
 // Terrain is deterministic frae t' shared seed; t' server keeps block edits,
@@ -96,6 +97,11 @@ export class Net {
     return new Promise((resolve, reject) => {
       let url = `${WS_BASE}/ws?room=${encodeURIComponent(room)}&pid=${encodeURIComponent(pid)}&name=${encodeURIComponent(name || 'rambler')}`;
       if (token) url += `&token=${encodeURIComponent(token)}`;
+      // tell the relay which world-epoch we last synced, so a stale session (one that
+      // rode through a warden reset) can't re-seed the wiped world — see epoch.js
+      let seenEpoch = 0;
+      try { seenEpoch = +(localStorage.getItem('moorcraft-epoch-' + room) || 0) || 0; } catch { /* private mode */ }
+      url += `&epoch=${seenEpoch}`;
       let settled = false;
       this.ws = new WebSocket(url);
       this.ws.onopen = () => {
@@ -170,6 +176,23 @@ export class Net {
 
   onInit(m) {
     const g = this.game;
+    // ---- world-epoch gate ----
+    // A warden factory-reset bumps the room's epoch. If the relay's epoch is newer
+    // than the one this browser last synced, our local shared state is stale.
+    const room = this.diag.room || 'moor';
+    let seen = 0;
+    try { seen = +(localStorage.getItem('moorcraft-epoch-' + room) || 0) || 0; } catch { /* private mode */ }
+    const dec = epochDecision(seen, m.epoch, this.diag.connects > 1);
+    try { localStorage.setItem('moorcraft-epoch-' + room, String(dec.synced)); } catch { /* private mode */ }
+    this.send({ type: 'epochack', epoch: dec.synced }); // so the relay accepts our writes
+    if (dec.wipe) {
+      // a live session that rode through the reset still holds the old world + pocket
+      // in memory; the safest drop is a reload into a clean, empty join.
+      g.epochWiping = true; // gag autosave + beforeunload so we can't re-seed on the way out
+      g.ui?.toast('T’ warden’s started this world afresh — reloading for thee…', 6000);
+      setTimeout(() => { try { location.reload(); } catch { /* nowt to do */ } }, 1500);
+      return; // don't apply the (now-empty) init — we're going down for a reload
+    }
     this.savedState = m.save || null;
     g.world.netEdits = g.world.netEdits || new Map();
     for (const [x, y, z, id] of m.edits) {
