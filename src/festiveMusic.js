@@ -3,13 +3,13 @@
 // Shares the game's existing AudioContext (pass this.audio.ctx from AudioEngine).
 // Master gain maxes at ~0.12 so it sits under t' ambient bed without swamping it.
 
-// Cranham melody, verse 1 (transposed to C major; midi 60 = C4).
-// Each entry: [midiNote | null, durationInBeats].  null = rest.
+// Cranham melody (Holst, 1906), in F major — from Hymnary's published tune incipit
+// "34532 12326 23453" (scale degrees, 1 = F). midi: F4 = 65, the lone 6 drops to the
+// low D for "made moan". [midiNote | null, durationInBeats]; null = rest.
 export const CRANHAM = [
-  [67,1],[67,1],[69,1],[67,1], [72,2],[71,2],
-  [67,1],[67,1],[69,1],[67,1], [74,2],[72,2],
-  [67,1],[67,1],[76,1],[74,1], [72,2],[71,2],
-  [69,1],[69,1],[71,1],[69,1], [67,3],[null,1],
+  [69,1],[70,1],[72,1],[69,1], [67,2],[null,1],   // 3 4 5 3 2  — "In the bleak midwinter"
+  [65,1],[67,1],[69,1],[67,1], [62,2],[null,1],   // 1 2 3 2 6̱  — "frosty wind made moan"
+  [67,1],[69,1],[70,1],[72,1], [69,2],[null,1],   // 2 3 4 5 3  — "earth stood hard as iron"
 ];
 
 const BPM       = 66;
