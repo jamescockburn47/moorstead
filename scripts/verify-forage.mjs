@@ -46,5 +46,17 @@ const autumn = seasonStateAtPhase(0.66), spring = seasonStateAtPhase(0.12), wint
   (!w.isForaged(5, 41, 9) ? ok : bad)('forage regrows after its lifespan');
 }
 
+// host-borne fruit: active in season, maps bush -> item
+{
+  const { HOST_FORAGE, activeHostForage, hostForageFor } = await import('../src/forage.js');
+  const { B } = await import('../src/defs.js');
+  const lateSummer = seasonStateAtPhase(0.45), aut = seasonStateAtPhase(0.66), win = seasonStateAtPhase(0.9);
+  (hostForageFor(B.BILBERRY_BUSH, lateSummer) ? ok : bad)('bilberries ripe in late summer');
+  (hostForageFor(B.HAZEL, aut)?.item != null ? ok : bad)('hazelnuts ripe in autumn');
+  (hostForageFor(B.BLACKTHORN, win)?.item != null ? ok : bad)('sloes hang on after frost');
+  (!hostForageFor(B.BILBERRY_BUSH, win) ? ok : bad)('no bilberries in deep winter');
+  (HOST_FORAGE.every(h => h.bush != null && h.item != null && h.tile != null) ? ok : bad)('every host-forage entry has bush+item+tile');
+}
+
 console.log('\nRESULT: ' + (failed ? 'FAIL' : 'PASS'));
 process.exit(failed ? 1 : 0);
