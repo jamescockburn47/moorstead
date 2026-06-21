@@ -311,8 +311,10 @@ class Game {
     this.festiveLayer = new FestiveLayer(this.scene, this.world);
     if (this.footprints) this.footprints.clear();
     this.footprints = new Footprints(this.scene, this.world);
-    // seed snow cover to the season so a world loaded in winter is snowy at once
-    this.snowAccum = accumulationTarget((this.seasonOverride != null) ? seasonStateAtPhase(this.seasonOverride) : seasonState());
+    // seed snow cover + season so a world loaded in winter is snowy at once and
+    // Merlin spawns as Father Christmas straight off (no one-frame wizard flash)
+    this.season = (this.seasonOverride != null) ? seasonStateAtPhase(this.seasonOverride) : seasonState();
+    this.snowAccum = accumulationTarget(this.season);
     this.entities.game = this;
     this.entities.onKill = mob => { this.quests.onMobKilled(mob); this.milestones.onKill(mob.type); };
     window.moorstead = window.moorcraft = this; // a handle for t' dev console

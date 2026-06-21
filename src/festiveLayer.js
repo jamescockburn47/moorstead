@@ -622,6 +622,7 @@ export class FestiveLayer {
       transparent: true,
       opacity: 0.82,
       depthWrite: false,
+      side: THREE.DoubleSide, // visible from outside whichever wall it sits on
     });
     const geo = new THREE.PlaneGeometry(0.7, 0.75);
     const mesh = new THREE.Mesh(geo, mat);
