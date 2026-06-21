@@ -40,8 +40,8 @@ export class FloraLayer {
     this.center = null;
     this.windowKey = null;
     this.timer = 0;
-    // forage sibling spec sets this to (x,z,bush)=>bool to hide picked fruit; null = show all
-    this.fruitPicked = null;
+    // a foraged bush's fruit is hidden until it regrows; the adornment sits at the bush cell (surfY+1)
+    this.fruitPicked = (x, z, bush) => this.world.isForaged(x, this.world.gen.height(x, z) + 1, z);
   }
 
   update(dt, playerPos, season) {
