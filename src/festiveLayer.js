@@ -18,9 +18,19 @@ export class FestiveLayer {
     this.key = null;
     this.timer = 0;
     this._builtOnce = false;
+    this._lit = [];
+    this._t = 0;
   }
 
   update(dt, playerPos, season, snowAccum) {
+    // Flicker runs every frame, before the rebuild early-out
+    this._t += dt;
+    for (let i = 0; i < this._lit.length; i++) {
+      const m = this._lit[i];
+      const k = 0.82 + 0.18 * Math.sin(this._t * 6 + i * 1.7); // candlelight breathing
+      m.scale.setScalar(k);
+    }
+
     this.timer -= dt;
     if (this.timer > 0) return;
     this.timer = 0.4;
@@ -39,6 +49,7 @@ export class FestiveLayer {
   }
 
   build(cx, cz, season, snowAccum) {
+    this._lit = [];
     this.clear();
     if (!festiveActive(season)) return;
     const gen = this.world.gen;
@@ -51,6 +62,7 @@ export class FestiveLayer {
         g.position.set(fp.x + 0.5, gen.height(fp.x, fp.z) + 1, fp.z + 0.5);
         this.scene.add(g);
         this.objects.push(g);
+        g.traverse(c => { if (c.isMesh && c.userData.flicker) this._lit.push(c); });
       }
     }
     // Auto-snowmen on village greens — only when snow is at its deepest
@@ -453,5 +465,6 @@ export class FestiveLayer {
       o.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); });
     }
     this.objects.length = 0;
+    this._lit = [];
   }
 }
