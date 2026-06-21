@@ -11,12 +11,14 @@ let materials = null;
 // material, gated to up-facing faces above a snow-line. Driven each frame frae
 // season.snowiness via setSnowLevel; no chunk re-mesh needed.
 const snowUniforms = { uSnowLine: { value: 64 }, uSnowAmt: { value: 0 } };
+const glintUniform = { uGlintTime: { value: 0 } };
+export function setGlintTime(t) { glintUniform.uGlintTime.value = t; }
 export function setSnowLevel(snowiness) {
   const s = snowiness < 0 ? 0 : snowiness > 1 ? 1 : snowiness;
   snowUniforms.uSnowAmt.value = s;
   snowUniforms.uSnowLine.value = snowLineFor(s); // t' snow-line creeps down as winter deepens
 }
-function addSnow(mat, key = 'terrain-snow') {
+function addSnow(mat, key = 'terrain-snow', glint = false) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uSnowLine = snowUniforms.uSnowLine;
     shader.uniforms.uSnowAmt = snowUniforms.uSnowAmt;
@@ -26,6 +28,15 @@ function addSnow(mat, key = 'terrain-snow') {
     shader.fragmentShader = 'uniform float uSnowLine;\nuniform float uSnowAmt;\nvarying float vSnowExp;\nvarying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\n' + shader.fragmentShader
       .replace('#include <color_fragment>',
         '#include <color_fragment>\n  float drift = 0.6 + 0.4 * sin(vSnowWX * 0.15) * cos(vSnowWZ * 0.15);\n  float snow = uSnowAmt * drift * vSnowExp * smoothstep(uSnowLine, uSnowLine + 10.0, vSnowY) * smoothstep(0.2, 0.75, vSnowUp);\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.96, 1.0), snow);');
+    if (glint) {
+      shader.uniforms.uGlintTime = glintUniform.uGlintTime;
+      shader.vertexShader = 'attribute float aGlint;\nvarying float vGlint;\nvarying float vGlintH;\n' + shader.vertexShader
+        .replace('#include <begin_vertex>',
+          '#include <begin_vertex>\n  vGlint = aGlint;\n  vGlintH = transformed.x * 1.7 + transformed.z * 2.3;');
+      shader.fragmentShader = 'uniform float uGlintTime;\nvarying float vGlint;\nvarying float vGlintH;\n' + shader.fragmentShader
+        .replace('#include <color_fragment>',
+          '#include <color_fragment>\n  float gl = vGlint * 0.12 * (0.5 + 0.5 * sin(uGlintTime * 2.0 + vGlintH));\n  diffuseColor.rgb += gl;');
+    }
   };
   mat.customProgramCacheKey = () => key;
   return mat;
@@ -49,7 +60,7 @@ export function initMaterials() {
   const atlas = buildAtlas();
   materials = {
     opaque: addSnow(new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true }), 'snow-opaque'),
-    cutout: addSnow(new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }), 'snow-cutout'),
+    cutout: addSnow(new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }), 'snow-cutout-glint', true),
     liquid: addIce(new THREE.MeshLambertMaterial({
       map: atlas, vertexColors: true, transparent: true, opacity: 0.78,
       depthWrite: false, side: THREE.DoubleSide,
