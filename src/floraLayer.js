@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { tileUV } from './textures.js';
 import { getMaterials } from './mesher.js';
 import { activeScatter, activeAdornments } from './flora-season.js';
-import { activeForageables } from './forage.js';
+import { activeForageables, fruitSpeciesAt, fruitTreeRipe, FRUIT_SPECIES } from './forage.js';
 import { cellInstances } from './flora-placement.js';
 import { hash2i } from './noise.js';
 import { B } from './defs.js';
@@ -51,7 +51,9 @@ export class FloraLayer {
     if (!season) return;
     const cx = Math.floor(playerPos.x), cz = Math.floor(playerPos.z);
     const key = activeScatter(season).map(s => s.tile).join(',') + '|' +
-                activeAdornments(season).map(a => a.tile).join(',');
+                activeAdornments(season).map(a => a.tile).join(',') + '|' +
+                activeForageables(season).map(f => f.tile).join(',') + '|' +
+                (fruitTreeRipe(season) ? 'F' : '');
     if (this.center && Math.abs(cx - this.center[0]) < REBUILD_MOVE &&
         Math.abs(cz - this.center[1]) < REBUILD_MOVE && key === this.windowKey && this.meshes.length) return;
     this.build(cx, cz, season);
@@ -64,8 +66,12 @@ export class FloraLayer {
     const scatter = activeScatter(season);
     const adorn = activeAdornments(season);
     const forage = activeForageables(season);
-    const glintTiles = new Set(forage.map(f => f.tile));
-    if (!scatter.length && !adorn.length && !forage.length) return;
+    const fruitRipe = fruitTreeRipe(season);
+    const glintTiles = new Set([
+      ...forage.map(f => f.tile),
+      ...FRUIT_SPECIES.map(s => s.tile),
+    ]);
+    if (!scatter.length && !adorn.length && !forage.length && !fruitRipe) return;
     const gen = this.world.gen;
     const seed = gen.seed >>> 0;
     const byTile = new Map();
@@ -85,6 +91,17 @@ export class FloraLayer {
             if (this.fruitPicked && this.fruitPicked(x, z, a.bush)) continue; // forage suppression
             const yaw = hash2i(x, z, seed ^ (a.tile << 6)) * Math.PI * 2;
             add(a.tile, x + 0.5, surfY + 1, z + 0.5, yaw, 1);
+          }
+        }
+        if (fruitRipe) {
+          for (let dy = 2; dy <= 8; dy++) {
+            if (this.world.getBlock(x, surfY + dy, z) === B.ORCHARD_LEAVES) {
+              if (!this.world.isForaged(x, surfY + dy, z) && hash2i(x, z, seed ^ 0x0f18) < 0.6) {
+                const sp = fruitSpeciesAt(seed, x, z);
+                add(sp.tile, x + 0.5, surfY + dy, z + 0.5, hash2i(x, z, seed ^ (sp.tile << 6)) * Math.PI * 2, 1);
+              }
+              break;  // fruit only on the lowest (reachable) canopy block of the column
+            }
           }
         }
         // scatter only on open, natural moor grass — never in villages, on paths, sand or roofs
