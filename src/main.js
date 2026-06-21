@@ -27,7 +27,7 @@ import { Rails } from './rails.js';
 import { FloraLayer } from './floraLayer.js';
 import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase } from './season.js';
-import { activeForageables, hostForageFor } from './forage.js';
+import { activeForageables, hostForageFor, fruitSpeciesAt, fruitTreeRipe } from './forage.js';
 import { cellInstances } from './flora-placement.js';
 import { startLiveWeather } from './weather-live.js';
 import { temperatureTarget, stepTemperature } from './temperature.js';
@@ -2831,6 +2831,24 @@ class Game {
         this.ui.invDirty = true;
         if (this.floraLayer) this.floraLayer.center = null;
         this.ui.toast(`Picked ${itemName(h.item)}.`);
+        return;
+      }
+    }
+
+    // Orchard fruit: right-click an orchard canopy to pick the fruit; the tree stays.
+    if (hit && hit.id === B.ORCHARD_LEAVES && fruitTreeRipe(this.season) && (!_fh || !isPlaceable(_fh.id))) {
+      const surfY = this.world.gen.height(hit.x, hit.z);
+      let fy = null;
+      for (let dy = 2; dy <= 8; dy++) {
+        if (this.world.getBlock(hit.x, surfY + dy, hit.z) === B.ORCHARD_LEAVES) { fy = surfY + dy; break; }
+      }
+      if (fy != null && !this.world.isForaged(hit.x, fy, hit.z)) {
+        const sp = fruitSpeciesAt(this.world.gen.seed >>> 0, hit.x, hit.z);
+        this.world.recordForage(hit.x, fy, hit.z, this.sky.day);
+        this.player.addItem(sp.item, 1);
+        this.ui.invDirty = true;
+        if (this.floraLayer) this.floraLayer.center = null;
+        this.ui.toast(`Picked ${itemName(sp.item)}.`);
         return;
       }
     }
