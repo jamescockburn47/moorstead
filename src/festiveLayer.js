@@ -119,6 +119,7 @@ export class FestiveLayer {
     }
 
     // -- Door wreaths on cottages (whole festive season, no deep-snow gate) --
+    let windowGlowCount = 0;
     for (const v of (gen.geo.villages || [])) {
       if (Math.abs(v.x - cx) > RADIUS || Math.abs(v.z - cz) > RADIUS) continue;
       for (const b of (v.buildings || [])) {
@@ -130,8 +131,56 @@ export class FestiveLayer {
         const doorY = gen.height(midX, doorZ) + 2; // head height above ground
         // Place wreath just in front of the door, facing south (outward)
         this.addBillboard(TILE.WREATH, doorX, doorY, doorZ - 0.15, 0);
+
+        // -- Candlelit window glow (Victorian: unlit warm MeshBasicMaterial) --
+        // Mirror the worldgen window rule from stampBuildingColumn:
+        //   perimeter cells, not corner, not doorway, (x+z)%3===0 → B.WINDOW at g+2
+        // Each qualifying cell gets a warm quad facing outward from the wall.
+        const g = gen.height(midX, Math.floor((b.z0 + b.z1) / 2));
+        const glowY = g + 2.5; // centred on the window block (g+2, height 1)
+        for (let wx = b.x0; wx <= b.x1; wx++) {
+          for (let wz = b.z0; wz <= b.z1; wz++) {
+            const onPerim = wx === b.x0 || wx === b.x1 || wz === b.z0 || wz === b.z1;
+            if (!onPerim) continue;
+            const corner = (wx === b.x0 || wx === b.x1) && (wz === b.z0 || wz === b.z1);
+            if (corner) continue;
+            // doorway: south wall (z===b.z0), centre x
+            const isDoor = (wz === b.z0) && (wx === midX);
+            if (isDoor) continue;
+            if ((wx + wz) % 3 !== 0) continue;
+
+            // Determine which wall this perimeter cell is on → outward yaw + offset
+            // yaw=0 faces south (-z), yaw=π faces north (+z),
+            // yaw=π/2 faces west (-x), yaw=-π/2 / 3π/2 faces east (+x)
+            let glowX, glowZ, yaw;
+            if (wz === b.z0) {
+              // south wall — face outward (south = -z direction, yaw=0)
+              glowX = wx + 0.5;
+              glowZ = wz - 0.05;
+              yaw   = 0;
+            } else if (wz === b.z1) {
+              // north wall — face outward (north = +z direction, yaw=π)
+              glowX = wx + 0.5;
+              glowZ = wz + 1.05;
+              yaw   = Math.PI;
+            } else if (wx === b.x0) {
+              // west wall — face outward (west = -x direction, yaw=π/2)
+              glowX = wx - 0.05;
+              glowZ = wz + 0.5;
+              yaw   = Math.PI / 2;
+            } else {
+              // east wall — face outward (east = +x direction, yaw=-π/2)
+              glowX = wx + 1.05;
+              glowZ = wz + 0.5;
+              yaw   = -Math.PI / 2;
+            }
+            this.addWindowGlow(glowX, glowY, glowZ, yaw);
+            windowGlowCount++;
+          }
+        }
       }
     }
+    this._windowGlowCount = windowGlowCount;
 
     // -- Robins & holly sprigs on village greens (whole festive season) --
     for (const v of (gen.geo.villages || [])) {
@@ -562,6 +611,27 @@ export class FestiveLayer {
     // cfg.hat === 'none' — nothing
 
     return g;
+  }
+
+  // Place a warm candlelight glow quad over a window cell, facing outward.
+  // Uses a NEW per-mesh MeshBasicMaterial (unlit, warm amber) sized to cover one
+  // window pane. The material is NOT flagged sharedMaterial, so clear() disposes it.
+  addWindowGlow(x, y, z, yaw) {
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xffce6b,
+      transparent: true,
+      opacity: 0.82,
+      depthWrite: false,
+    });
+    const geo = new THREE.PlaneGeometry(0.7, 0.75);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.y = yaw;
+    mesh.position.set(x, y, z);
+    mesh.frustumCulled = false;
+    mesh.userData.ownGeometry = true;
+    // Do NOT set sharedMaterial — this material is per-mesh and must be disposed.
+    this.scene.add(mesh);
+    this.objects.push(mesh);
   }
 
   // Build a flat cutout quad for TILE tile and add it to the scene + this.objects.
