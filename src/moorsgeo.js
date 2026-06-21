@@ -107,6 +107,31 @@ export class MoorsGeography {
   npcHome() { return null; }          // ditto
   npcSpot(name, v = this.village) { return [v.x, v.z]; }
 
+  // ---------- surface character (noise; drives block choice, NOT height/parity) ----------
+  bogginess(x, z) { return fbm2(x * 0.007 + 503.7, z * 0.007 + 211.3, 3, this.seed ^ 0xb09); }
+  heatheriness(x, z) { return fbm2(x * 0.012 + 91.2, z * 0.012 + 37.8, 2, this.seed ^ 0x4ea); }
+  daleness(x, z) { const dn = fbm2(x * 0.0036 + 811.1, z * 0.0036 + 413.9, 3, this.seed ^ 0xda1e); return Math.max(0, 1 - Math.abs(dn) * 3.4); }
+
+  // ---------- Whitby helpers ----------
+  inWhitby(x, z, pad = 0) { const w = this.villages.find(v => v.name === 'Whitby'); return !!w && Math.hypot(x - w.x, z - w.z) < (w.radius + pad); }
+  isMuseumBoard() { return false; }
+
+  // Building/landmark sites are kept OFF-MAP in slice 0, so no stylised structures
+  // (abbey, pier, museum) intrude on the real-terrain preview — they return for real
+  // when the towns get their morphology in slices 2-3.
+  abbeySite() { return { x: 1e6, z: 1e6 }; }
+  abbeyFont() { return { x: 1e6, z: 1e6 }; }
+  museumSite() { return { x: 1e6, z: 1e6 }; }
+  pierHead() { return { x: 1e6, z: 1e6 }; }
+
+  // Moor furniture (crosses, shooting huts, signposts, the Roman road) — none in
+  // slice 0; placed deterministically in a later slice.
+  crossAt() { return null; }
+  shelterAt() { return null; }
+  signAt() { return null; }
+  nearestShelter() { return null; }
+  onRoad() { return false; }
+
   // ---------- naming ----------
   locationName(x, z) {
     for (const lm of this.data.landmarks) if (Math.hypot(x - lm.x, z - lm.z) < 36) return lm.name;

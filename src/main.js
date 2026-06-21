@@ -282,9 +282,8 @@ class Game {
   async startMoorsWorld() {
     if (this.net) { this.net.disconnect(); this.net = null; }
     this.netActive = false;
-    const { clearSave } = await import('./save.js');
-    await clearSave();
     this.startWorld(strSeed('t-moors-1900'), null, new Map());
+    this.moorsPreview = true; // a transient explore world: never persisted, never clobbers the solo save
   }
 
   async continueGame() {
@@ -300,6 +299,7 @@ class Game {
   startWorld(seed, meta, chunks) {
     if (this.world) this.teardownWorld();
     this.titlePreview = false; // a real world supersedes the title backdrop
+    this.moorsPreview = false; // cleared for normal worlds; set by startMoorsWorld()
     this.seed = seed;
     this.world = new World(this.scene, seed, chunks);
     this.player = new Player(this.world);
@@ -403,6 +403,7 @@ class Game {
   async saveNow(toast = true) {
     if (!this.world) return;
     if (this.epochWiping) return; // a warden reset is reloading us — never re-seed the wiped relay
+    if (this.moorsPreview) return; // the real-Moors preview is transient — don't persist/clobber the solo save
     if (this.netActive) {
       // shared moor: pockets an' ventures live on t' server, keyed to thi account
       if (this.net && this.net.connected) {
@@ -482,6 +483,7 @@ class Game {
       } else if (e.code === 'Escape') this.closeNetChat();
     });
     ui.btnContinue.addEventListener('click', () => { this.audio.init(); this.continueGame(); });
+    ui.btnMoors.addEventListener('click', () => { this.audio.init(); this.startMoorsWorld(); });
     ui.btnHow.addEventListener('click', () => { this.howReturn = 'titleScreen'; ui.show('howScreen'); });
     ui.btnHow2.addEventListener('click', () => { this.howReturn = 'pauseScreen'; ui.show('howScreen'); });
     ui.btnHowClose.addEventListener('click', () => ui.show(this.howReturn || 'titleScreen'));

@@ -193,6 +193,12 @@ export class UI {
     this.btnShared = this.el('button', 'mc', this.titleScreen, 'T&rsquo; Shared Moor: Play Wi&rsquo; Others');
     this.btnContinue = this.el('button', 'mc', this.titleScreen, 'Carry On Where Tha Left Off');
     this.btnHow = this.el('button', 'mc', this.titleScreen, 'Ow Ter Play');
+    // A section of its own: the real-Moors world (c.1900), built to scale frae
+    // Ordnance Survey data, grown stage by stage.
+    this.moorsBox = this.el('div', 'moors-preview hidden', this.titleScreen);
+    this.el('div', 'moors-h', this.moorsBox, '&#x1F689; T&rsquo; Real North York Moors &mdash; 1900');
+    this.btnMoors = this.el('button', 'mc moors-btn', this.moorsBox, 'Explore t&rsquo; Real Moors');
+    this.el('div', 'moors-note', this.moorsBox, 'Built to scale frae real <b>Ordnance Survey</b> maps &mdash; t&rsquo; actual moors, dales, rivers an&rsquo; coast. A work in progress, grown stage by stage: reet now tha can roam t&rsquo; true landscape; villages, railways an&rsquo; folk are on their way.');
     this.el('div', 'muted-note', this.titleScreen, 'New to t&rsquo; moor? <b>Give &lsquo;Ow Ter Play&rsquo; a read</b>: learn how to build, ride, drive, and stay alive.');
     this.el('div', 'muted-note', this.titleScreen, 'Watch thissen at neet: t&rsquo; barghest walks when t&rsquo; sun goes down.');
     this.el('div', 'title-foot', this.titleScreen, 'Created purely with AI by a non-coder &middot; procedurally generated, not a single asset file &middot; villagers, jobs an&rsquo; adventures run on large local AI models &middot; <a href="/about.html?tab=security" style="color:#d8b95a">Security &amp; privacy</a>');
@@ -1039,6 +1045,7 @@ export class UI {
     this.btnNew.classList.toggle('hidden', !loggedIn);
     this.btnShared.classList.toggle('hidden', !loggedIn);
     this.btnContinue.classList.toggle('hidden', !loggedIn);
+    this.moorsBox.classList.toggle('hidden', !loggedIn);
     this.whoBox.classList.toggle('hidden', !loggedIn);
     if (!loggedIn) return;
     if (auth.guest) {
