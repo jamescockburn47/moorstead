@@ -180,7 +180,7 @@ export class FestiveLayer {
   clear() {
     for (const o of this.objects) {
       this.scene.remove(o);
-      o.traverse(c => { if (c.geometry) c.geometry.dispose(); });
+      o.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); });
     }
     this.objects.length = 0;
   }

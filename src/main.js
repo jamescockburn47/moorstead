@@ -29,7 +29,7 @@ import { FestiveLayer } from './festiveLayer.js';
 import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase } from './season.js';
 import { activeForageables, hostForageFor, fruitSpeciesAt, fruitTreeRipe } from './forage.js';
-import { deepSnow } from './festive.js';
+import { deepSnow, festiveActive } from './festive.js';
 import { DEFAULT_SNOWMAN, cycleSnowman } from './snowman.js';
 import { cellInstances } from './flora-placement.js';
 import { startLiveWeather } from './weather-live.js';
@@ -2915,7 +2915,7 @@ class Game {
       }
 
       // (b) Scoop a snowball: bare/non-placeable hand, deep snow, top cell is AIR
-      if (!sm && (!_fh || !isPlaceable(_fh.id)) && deepSnow(this.snowAccum)) {
+      if (!sm && (!_fh || !isPlaceable(_fh.id)) && deepSnow(this.snowAccum) && festiveActive(this.season)) {
         const top = this.world.getBlock(sx, sy, sz);
         if (top === B.AIR) {
           this.player.addItem(I.SNOWBALL, 1); this.ui.invDirty = true;
