@@ -22,5 +22,17 @@ const winter = seasonStateAtPhase(0.875), summer = seasonStateAtPhase(0.375), sp
   (cycleSnowman(c, 'scarf') !== c ? ok : bad)('cycle returns a new object (no mutation)');
 }
 
+// snowmanLedger: record -> get; melts in the spring thaw
+{
+  const { World } = await import('../src/world.js');
+  const w = new World(null, 1234);
+  w.recordSnowman(3, 28, 7, { ...DEFAULT_SNOWMAN, scarf: 2 }, 800);
+  (w.getSnowman(3, 28, 7)?.cfg.scarf === 2 ? ok : bad)('a built snowman is remembered');
+  w.meltSnowmen(seasonStateAtPhase(0.875));
+  (w.getSnowman(3, 28, 7) ? ok : bad)('snowmen survive mid-winter');
+  w.meltSnowmen(seasonStateAtPhase(0.18));
+  (!w.getSnowman(3, 28, 7) ? ok : bad)('snowmen melt in spring');
+}
+
 console.log('\nRESULT: ' + (failed ? 'FAIL' : 'PASS'));
 process.exit(failed ? 1 : 0);

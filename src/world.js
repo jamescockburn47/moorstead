@@ -2,6 +2,7 @@
 import { B, BLOCKS, CHUNK, HEIGHT, isLiquid, isSolid } from './defs.js';
 import { categoryOf, isExpired, LIFESPAN } from './editledger.js';
 import { FORAGE_LIFESPAN } from './forage.js';
+import { snowmanMelted } from './festive.js';
 import { Gen } from './worldgen.js';
 import { buildChunkMeshes, disposeChunkMeshes } from './mesher.js';
 import { tileColor } from './textures.js';
@@ -17,6 +18,7 @@ export class World {
     this.savedChunks = savedChunks || new Map(); // "cx,cz" -> Uint8Array
     this.editLedger = new Map(); // "x,y,z" -> { cat, day, by, was } — harvest edits awaiting regrowth
     this.forageLedger = new Map(); // "x,y,z" -> pickedDay — picked forage cells awaiting regrowth
+    this.snowmanLedger = new Map(); // "x,y,z" -> { cfg, day } — player-built snowmen; melt in the spring thaw
     this.treeRegrowth = new Map(); // "x,y,z" (stump) -> felledDay — a sapling sprouts here in time
     this.saplings = new Map(); // "x,y,z" -> sproutedDay — a young tree growing toward full
     this.fruitStumps = new Set(); // "x,y,z" keys whose sapling should regrow as a fruit tree
@@ -160,6 +162,12 @@ export class World {
     for (const [k, day] of this.forageLedger)
       if (nowDay - day >= FORAGE_LIFESPAN) this.forageLedger.delete(k);
   }
+
+  // Player-built snowmen: persist across saves; melt when the season leaves the festive window.
+  recordSnowman(x, y, z, cfg, day) { this.snowmanLedger.set(`${x},${y},${z}`, { cfg, day }); }
+  getSnowman(x, y, z) { return this.snowmanLedger.get(`${x},${y},${z}`) || null; }
+  removeSnowman(x, y, z) { this.snowmanLedger.delete(`${x},${y},${z}`); }
+  meltSnowmen(season) { if (snowmanMelted(season)) this.snowmanLedger.clear(); }
 
   // Gradual tree regrowth: a felled stump sprouts a sapling after the tree lifespan, and a sapling
   // matures into a full tree after more days — so clear-felling leaves saplings (let woods recover).

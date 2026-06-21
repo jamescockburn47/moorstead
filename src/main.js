@@ -317,8 +317,9 @@ class Game {
       this.entities.restorePets(this.player.pets, this.player); // thi kept beasts come back to heel
       this.sky.deserialize(meta.sky);
       this.quests.deserialize(meta.quests);
-      this.world.editLedger   = new Map(meta.editLedger   || []); // regrowth picks up where it left off
-      this.world.forageLedger = new Map(meta.forageLedger || []); // picked forage cells awaiting regrowth
+      this.world.editLedger    = new Map(meta.editLedger    || []); // regrowth picks up where it left off
+      this.world.forageLedger  = new Map(meta.forageLedger  || []); // picked forage cells awaiting regrowth
+      this.world.snowmanLedger = new Map(meta.snowmanLedger || []); // player-built snowmen awaiting the thaw
       this.world.treeRegrowth = new Map(meta.treeRegrowth || []); this.world.saplings = new Map(meta.saplings || []);
       this.world.fruitStumps = new Set(meta.fruitStumps || []); // which stumps regrow as fruit trees
       this.world.deeds = meta.deeds || [];
@@ -399,8 +400,9 @@ class Game {
       player: this.player.serialize(),
       sky: this.sky.serialize(),
       quests: this.quests.serialize(),
-      editLedger:   [...this.world.editLedger],   // harvest edits awaiting regrowth — so the moor heals across reloads
-      forageLedger: [...this.world.forageLedger], // picked forage cells awaiting regrowth
+      editLedger:    [...this.world.editLedger],    // harvest edits awaiting regrowth — so the moor heals across reloads
+      forageLedger:  [...this.world.forageLedger],  // picked forage cells awaiting regrowth
+      snowmanLedger: [...this.world.snowmanLedger], // player-built snowmen awaiting the thaw
       treeRegrowth: [...this.world.treeRegrowth], saplings: [...this.world.saplings], // tree regrowth in progress
       fruitStumps: [...this.world.fruitStumps], // stumps that regrow as fruit trees, not oaks
       deeds: this.world.deeds, // staked deeds (claims + mine licences)
