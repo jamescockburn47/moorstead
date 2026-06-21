@@ -6,7 +6,7 @@
 // lazy-loaded (preload 'none') so the ~12 MB file is only fetched when the carol
 // actually starts near a winter village, never on a bare page load.
 
-const TRACK_URL = '/music/in-the-bleak-midwinter.mp3';
+const TRACK_URL = '/music/in-the-bleak-midwinter.ogg';
 
 export class FestiveMusic {
   // `_ctx` kept for call-site compatibility (constructed with the game's AudioContext);

@@ -83,6 +83,7 @@ export class AudioEngine {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     this.dread = dread;
+    this._wintry = season ? season.warmth < -0.35 : false; // curlews/lambs/frogs fall silent in deep winter
     // gusts — dread stills t' wind a touch
     const gust = (0.045 + windiness * 0.06 + Math.sin(t * 0.37) * 0.02 + Math.sin(t * 0.13 + 2) * 0.018) * (1 - dread * 0.35);
     this.windGain.gain.setTargetAtTime(Math.max(0.02, gust), t, 0.5);
@@ -131,10 +132,10 @@ export class AudioEngine {
       if (Math.random() < winterHush * 0.3) {
         // deep winter: t' moor's quieter, but for t' wind
       } else if (!isNight) {
-        if (nearSheep && r < 0.42) this.baa(0.34);            // a flock about? tha'll hear 'em
-        else if (r < 0.64) this.curlew(0.18);                 // t' moor's signature call
-        else if (r < 0.84) this.grouseCall(0.24);
-        else this.crow(0.16);
+        if (nearSheep && r < 0.42 && !this._wintry) this.baa(0.34);  // lambs/flock — hushed in winter
+        else if (r < 0.64 && !this._wintry) this.curlew(0.18);       // curlews migrate off for winter
+        else if (r < 0.84) this.grouseCall(0.24);                    // red grouse are resident year-round
+        else this.crow(0.16);                                        // crows tough out the winter moor
       } else {
         if (r < 0.5) this.owl(0.14);
         else if (r < 0.74) this.crow(0.12);
@@ -485,12 +486,12 @@ export class AudioEngine {
     else if (type === 'boggart') this.boggartChitter(vol * 0.6);
     else if (type === 'cow') this.moo(vol);
     else if (type === 'bull') this.bullSnort(vol);
-    else if (type === 'curlew') this.curlew(vol * 0.7);
+    else if (type === 'curlew' && !this._wintry) this.curlew(vol * 0.7); // migratory — gone in winter
     else if (type === 'pheasant') this.pheasant(vol * 0.8);
     else if (type === 'owl') this.owl(vol * 0.9);
     else if (type === 'crow') this.crow(vol * 0.7);
     else if (type === 'seagull') this.gull(vol * 0.8);
-    else if (type === 'frog') this.frogCroak(vol * 0.8);
+    else if (type === 'frog' && !this._wintry) this.frogCroak(vol * 0.8); // frogs hibernate in winter
   }
   growl(vol = 0.25) {
     if (!this.ctx) return;
