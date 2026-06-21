@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_HASHES } from './defs.js';
 import { strSeed } from './noise.js';
 import { protectedAt } from './landmarks.js';
-import { initMaterials, setSnowLevel, setFrozen } from './mesher.js';
+import { initMaterials, setSnowLevel, setFrozen, setGlintTime } from './mesher.js';
 import { stepAccumulation, isFrozen } from './snow.js';
 import { getIconURL, retintAtlasForSeason } from './textures.js';
 import { World } from './world.js';
@@ -2804,7 +2804,9 @@ class Game {
     }
 
     // Forage pick: right-click on a grass surface to gather in-season scatter forage
-    if (hit && hit.face[1] === 1 && this.season) {
+    // Gate: skip when the player is holding a placeable block (let the block-place path run instead)
+    const _fh = this.player.heldItem();
+    if (hit && hit.face[1] === 1 && this.season && (!_fh || !isPlaceable(_fh.id))) {
       const cx = hit.x, cz = hit.z, spriteY = hit.y + 1;
       const seed = this.world.gen.seed >>> 0;
       const active = activeForageables(this.season);
@@ -3222,6 +3224,7 @@ class Game {
       this.snowAccum = stepAccumulation(this.snowAccum, season, dt);
       setSnowLevel(this.snowAccum); // height-gated snow on the tops (cheap uniform)
       setFrozen(isFrozen(season));
+      this._glintT = (this._glintT || 0) + dt; setGlintTime(this._glintT); // drive forage glint animation
       const sbk = Math.floor(season.yearPhase * 40);
       if (sbk !== this._seasonBucket) { this._seasonBucket = sbk; retintAtlasForSeason(season); } // heather purple, bracken rust…
       // is there a roof overhead? (stops rain fallin' through ceilings + drives wetness)
