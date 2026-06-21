@@ -93,6 +93,19 @@ export class Gen {
     return 3 + ((hash2i(x, z, this.seed ^ 0x7ef) * 2) | 0);
   }
 
+  // fruit trees — apple, pear an' plum orchards in t' ring just outside villages.
+  // Returns true if this column should carry a fruit tree.
+  fruitTreeAt(x, z) {
+    const h = this.geo.height(x, z);
+    if (h <= WATER_LEVEL || h > 38) return false;
+    if (this.geo.coastT(x, z) > 0) return false;
+    if (this.geo.inVillage(x, z, 2)) return false;        // not in t' village itself
+    if (!this.geo.inVillage(x, z, 16)) return false;       // only t' ring just outside it
+    const clump = fbm2(x * 0.06, z * 0.06, 1, (this.seed ^ 0x0ac2) >>> 0);
+    if (clump < 0.3) return false;                         // one or two orchard patches, not a full ring
+    return hash2i(x, z, this.seed ^ 0x0ac1) < 0.10;        // fruit trees within t' patch
+  }
+
   // gritstone breaks up t' empty stretches — most a lone stone, some a middlin'
   // cluster, t' odd proud tor up on t' tops. Returns 0 | 1 (stone) | 2 (cluster) | 3 (tor).
   boulderAt(x, z) {
@@ -396,14 +409,16 @@ export class Gen {
     for (let lz = -2; lz < CHUNK + 2; lz++) {
       for (let lx = -2; lx < CHUNK + 2; lx++) {
         const x = x0 + lx, z = z0 + lz;
-        const th = this.treeAt(x, z);
-        const size = th ? 0 : this.boulderAt(x, z);
-        const mh = (th || size) ? 0 : this.monkeyPuzzleAt(x, z);
-        if (!th && !size && !mh) continue;
+        const fruit = this.fruitTreeAt(x, z);
+        const th = fruit ? 0 : this.treeAt(x, z);
+        const size = (fruit || th) ? 0 : this.boulderAt(x, z);
+        const mh = (fruit || th || size) ? 0 : this.monkeyPuzzleAt(x, z);
+        if (!fruit && !th && !size && !mh) continue;
         const tri = geo.railInfo(x, z);
         if (tri && tri.d < 4) continue; // a cleared verge — nowt grows in t' four-foot
         const gh = this.geo.height(x, z);
-        if (th) this.stampTree(data, lx, gh + 1, lz, th);
+        if (fruit) this.stampTree(data, lx, gh + 1, lz, 4, true);
+        else if (th) this.stampTree(data, lx, gh + 1, lz, th);
         else if (size) this.stampBoulder(data, lx, gh, lz, size, x, z);
         else this.stampMonkeyPuzzle(data, lx, gh + 1, lz, mh);
       }
@@ -1111,7 +1126,8 @@ export class Gen {
     }
   }
 
-  stampTree(data, lx, base, lz, th) {
+  stampTree(data, lx, base, lz, th, fruit = false) {
+    const canopy = fruit ? B.ORCHARD_LEAVES : B.LEAVES;
     const put = (x, y, z, id, keep) => {
       if (x < 0 || x >= CHUNK || z < 0 || z >= CHUNK || y < 1 || y >= HEIGHT) return;
       const i = IDX(x, y, z);
@@ -1123,10 +1139,10 @@ export class Gen {
       for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
         if (dx === 0 && dz === 0 && dy === 0) continue;
         if (Math.abs(dx) === 1 && Math.abs(dz) === 1 && hash3i(lx + dx, base + dy, lz + dz, 77) < 0.4) continue;
-        put(lx + dx, base + th - 1 + dy, lz + dz, B.LEAVES, true);
+        put(lx + dx, base + th - 1 + dy, lz + dz, canopy, true);
       }
     }
-    put(lx, base + th + 1, lz, B.LEAVES, true);
+    put(lx, base + th + 1, lz, canopy, true);
   }
 
   // a boulder/cluster/tor sat on t' ground at (lx,lz). Seeded frae t' world
