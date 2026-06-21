@@ -24,6 +24,7 @@ export const TILE = {
   CEP: 65, CHANTERELLE: 66, WILD_GARLIC: 67, SORREL: 68,
   ROSEHIP: 69, SLOE: 70, ELDERBERRY: 71, HAZELNUT: 72, BLACKTHORN: 73, HAZEL: 74,
   ORCHARD_LEAVES: 75, APPLE: 76, PEAR: 77, PLUM: 78,
+  SNOWBALL: 79,
 };
 
 // ---- Block ids ----
@@ -78,6 +79,7 @@ export const I = {
   CEP: 109, CHANTERELLE: 110, COOKED_MUSHROOMS: 111, WILD_GARLIC: 112, SORREL: 113,
   BLACKBERRY: 114, ROSEHIP: 115, SLOE: 116, ELDERBERRY: 117, HAZELNUT: 118,
   APPLE: 119, PEAR: 120, PLUM: 121,
+  SNOWBALL: 122,
 };
 
 // Parish wardens: SHA-256 o' t' dash account id, never t' id itsen —
@@ -202,6 +204,7 @@ export const ITEM_NAMES = {
   [I.CEP]: 'Cep', [I.CHANTERELLE]: 'Chanterelle', [I.COOKED_MUSHROOMS]: 'Fried Mushrooms', [I.WILD_GARLIC]: 'Wild Garlic', [I.SORREL]: 'Sorrel',
   [I.BLACKBERRY]: 'Blackberries', [I.ROSEHIP]: 'Rosehips', [I.SLOE]: 'Sloes', [I.ELDERBERRY]: 'Elderberries', [I.HAZELNUT]: 'Hazelnuts',
   [I.APPLE]: 'Apple', [I.PEAR]: 'Pear', [I.PLUM]: 'Plum',
+  [I.SNOWBALL]: 'Snowball',
 };
 
 export function itemName(id) {

@@ -920,6 +920,23 @@ const TILE_PAINTERS = {
       p.px(plx,     ply,     '#9a80b8'); // dusty bloom highlight
     }
   },
+  [TILE.SNOWBALL](p) {
+    p.clear();
+    // round white snowball — blue-grey shadow lower-right, bright highlight top-left
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+      const dx = x - 8, dy = y - 8;
+      if (dx * dx + dy * dy < 44) {
+        // soft grey-blue shading: stronger bottom-right, lighter top-left
+        const shade_amt = 0.72 + (dx + dy) * 0.022;
+        const f = Math.min(1, Math.max(0.58, shade_amt));
+        const r = Math.round(220 * f), g = Math.round(228 * f), b = Math.round(240 * f);
+        p.px(x, y, `rgb(${r},${g},${b})`);
+      }
+    }
+    // top-left specular highlight
+    p.px(5, 4, '#ffffff'); p.px(6, 4, '#f8faff');
+    p.px(4, 5, '#f8faff'); p.px(5, 5, '#ffffff');
+  },
 };
 
 let atlasCanvas = null;   // the LIVE atlas (may be season-tinted)
@@ -1297,6 +1314,11 @@ const ITEM_ICON_PAINTERS = {
   },
   [I.PLUM](ctx) {
     const tile = TILE.PLUM;
+    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
+  },
+  [I.SNOWBALL](ctx) {
+    const tile = TILE.SNOWBALL;
     const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
