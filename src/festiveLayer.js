@@ -21,6 +21,7 @@ export class FestiveLayer {
     this.timer = 0;
     this._builtOnce = false;
     this._lit = [];
+    this._robins = [];
     this._t = 0;
   }
 
@@ -31,6 +32,16 @@ export class FestiveLayer {
       const m = this._lit[i];
       const k = 0.82 + 0.18 * Math.sin(this._t * 6 + i * 1.7); // candlelight breathing
       m.scale.setScalar(k);
+    }
+
+    // Robin hop animation — tiny vertical bob on a per-bird phase offset
+    for (let i = 0; i < this._robins.length; i++) {
+      const r = this._robins[i];
+      const phase = r.userData.hopPhase || 0;
+      // Bob: gentle sine wave at ~2Hz, amplitude 0.06 blocks
+      r.position.y = r.userData.groundY + 0.06 * Math.abs(Math.sin(this._t * 2.1 + phase));
+      // Occasional side-to-side tilt to sell the hop feel
+      r.rotation.z = 0.08 * Math.sin(this._t * 2.1 + phase);
     }
 
     this.timer -= dt;
@@ -52,6 +63,7 @@ export class FestiveLayer {
 
   build(cx, cz, season, snowAccum) {
     this._lit = [];
+    this._robins = [];
     this.clear();
     if (!festiveActive(season)) return;
     const gen = this.world.gen;
@@ -90,20 +102,26 @@ export class FestiveLayer {
         }
       }
     }
-    // Auto-snowmen on village greens — only when snow is at its deepest
+    // Auto-snowmen on village greens — only when snow is at its deepest.
+    // Spread across the whole village (wider radius 4-28), exclude within 6
+    // blocks of the fir so none cluster under the tree. Place 4-6 per village.
     if (deepSnow(snowAccum)) {
       for (const v of (gen.geo.villages || [])) {
         if (Math.abs(v.x - cx) > RADIUS || Math.abs(v.z - cz) > RADIUS) continue;
+        const fp = this.firPlacement(v);
         let placed = 0;
-        for (let r = 3; r < 14 && placed < 4; r++) {
-          for (let a = 0; a < 8 && placed < 4; a++) {
-            const x = v.x + Math.round(r * Math.cos(a));
-            const z = v.z + Math.round(r * Math.sin(a));
+        for (let r = 4; r < 28 && placed < 5; r++) {
+          for (let a = 0; a < 16 && placed < 5; a++) {
+            const angle = (a / 16) * Math.PI * 2;
+            const x = v.x + Math.round(r * Math.cos(angle));
+            const z = v.z + Math.round(r * Math.sin(angle));
+            // Exclude cells within 6 blocks of the fir tree
+            if (fp && Math.hypot(x - fp.x, z - fp.z) < 6) continue;
             const col = gen.geo.villageColumn(x, z);
             if (!col || (col.kind !== 'green' && col.kind !== 'closes')) continue;
             const sy = gen.height(x, z);
             if (this.world.getBlock(x, sy + 1, z) !== B.AIR) continue;
-            if (hash2i(x, z, gen.geo.seed ^ 0x5107) > 0.5) continue; // sparse
+            if (hash2i(x, z, gen.geo.seed ^ 0x5107) > 0.45) continue; // sparse
             const yaw = hash2i(x, z, 7) * Math.PI * 2;
             this.addSnowman(x + 0.5, sy + 1, z + 0.5, DEFAULT_SNOWMAN, yaw);
             placed++;
@@ -185,10 +203,11 @@ export class FestiveLayer {
     this._windowGlowCount = windowGlowCount;
 
     // -- Robins & holly sprigs on village greens (whole festive season) --
+    // Robins are now 3D hopping bird groups (not billboards). Holly stays billboard.
     for (const v of (gen.geo.villages || [])) {
       if (Math.abs(v.x - cx) > RADIUS || Math.abs(v.z - cz) > RADIUS) continue;
       let hollyCount = 0, robinCount = 0;
-      for (let r = 2; r < 16 && (hollyCount < 5 || robinCount < 2); r++) {
+      for (let r = 2; r < 16 && (hollyCount < 5 || robinCount < 4); r++) {
         for (let a = 0; a < 12; a++) {
           const x = v.x + Math.round(r * Math.cos((a / 12) * Math.PI * 2));
           const z = v.z + Math.round(r * Math.sin((a / 12) * Math.PI * 2));
@@ -202,9 +221,17 @@ export class FestiveLayer {
             const yaw = hash2i(x, z, 0x4f3a) * Math.PI * 2;
             this.addBillboard(TILE.HOLLY_SPRIG, x + 0.5, sy + 1, z + 0.5, yaw);
             hollyCount++;
-          } else if (robinCount < 2 && hval > 0.78 && hval < 0.88) {
+          } else if (robinCount < 4 && hval > 0.78 && hval < 0.92) {
             const yaw = hash2i(x, z, 0x9e2b) * Math.PI * 2;
-            this.addBillboard(TILE.ROBIN, x + 0.5, sy + 1.0, z + 0.5, yaw);
+            const groundY = sy + 1;
+            const robin = this.buildRobin();
+            robin.rotation.y = yaw;
+            robin.position.set(x + 0.5, groundY, z + 0.5);
+            robin.userData.groundY = groundY;
+            robin.userData.hopPhase = robinCount * 1.3 + r * 0.4; // vary per bird
+            this.scene.add(robin);
+            this.objects.push(robin);
+            this._robins.push(robin);
             robinCount++;
           }
         }
@@ -295,6 +322,37 @@ export class FestiveLayer {
     brim.position.y = 0.82;
     g.add(brim);
 
+    return g;
+  }
+
+  // Build a tiny robin, feet at y=0, ~0.3 tall — a wee 3D bird that hops on the
+  // ground (animated in update()). Brown body, orange-red breast, beak, legs.
+  buildRobin() {
+    const g = new THREE.Group();
+    const matBody   = new THREE.MeshLambertMaterial({ color: 0x6b4a2f }); // brown
+    const matBreast = new THREE.MeshLambertMaterial({ color: 0xc4502a }); // robin red-breast
+    const matBeak   = new THREE.MeshLambertMaterial({ color: 0x2a2118 });
+    const matLeg    = new THREE.MeshLambertMaterial({ color: 0x3a2a1a });
+
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), matBody);
+    body.scale.set(1, 0.9, 1.2); body.position.y = 0.16; g.add(body);
+
+    const breast = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), matBreast);
+    breast.position.set(0, 0.14, 0.08); g.add(breast);
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), matBody);
+    head.position.set(0, 0.27, 0.08); g.add(head);
+
+    const beak = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.08, 6), matBeak);
+    beak.rotation.x = Math.PI / 2; beak.position.set(0, 0.27, 0.17); g.add(beak);
+
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.11), matBody);
+    tail.position.set(0, 0.17, -0.13); tail.rotation.x = -0.4; g.add(tail);
+
+    for (const dx of [-0.04, 0.04]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.08, 0.015), matLeg);
+      leg.position.set(dx, 0.04, 0.02); g.add(leg);
+    }
     return g;
   }
 

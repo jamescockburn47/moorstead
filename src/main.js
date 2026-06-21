@@ -3589,9 +3589,9 @@ class Game {
           if (d < nearestVillageDist) nearestVillageDist = d;
         }
       }
-      const festVol = festiveActive(this.season)
-        ? Math.max(0, 1 - nearestVillageDist / 60) * 0.12
-        : 0;
+      // muted: the synth tune wasn't right — awaiting a real brass-band audio asset
+      // to replace the synth. Distance/season gating kept here for when it's wired.
+      const festVol = 0; // festiveActive(this.season) ? Math.max(0, 1 - nearestVillageDist / 60) * 0.12 : 0;
       if (festVol > 0) {
         this.festiveMusic.start();
       } else {
