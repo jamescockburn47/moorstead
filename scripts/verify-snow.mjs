@@ -1,6 +1,6 @@
 // Snow maths — run wi': node scripts/verify-snow.mjs
 import { TrampleBuffer } from '../src/footprints.js';
-import { stepAccumulation, snowfallIntensity, showerOscillation, snowLineFor } from '../src/snow.js';
+import { stepAccumulation, accumulationTarget, snowfallIntensity, showerOscillation, snowLineFor } from '../src/snow.js';
 import { seasonStateAtPhase, YEAR, ANCHOR_SEC, ANCHOR_PHASE } from '../src/season.js';
 
 let failed = false;
@@ -19,6 +19,15 @@ const nowAtPhase = p => (ANCHOR_SEC + (p - ANCHOR_PHASE) * YEAR) * 1000 + 1;
   (melt < 0.15 ? ok : bad)('snow thaws in spring (' + melt.toFixed(2) + ')');
   (stepAccumulation(0.5, winter, 1) > 0.5 ? ok : bad)('accumulation rises while it snows and is cold');
   (stepAccumulation(0.5, spring, 1) < 0.5 ? ok : bad)('accumulation falls when it warms');
+}
+// accumulation target tracks the season — the seed value used on world-load and
+// on a season flip, so winter is snowy at once (not after game-days of creep).
+{
+  const winter = seasonStateAtPhase(0.875), summer = seasonStateAtPhase(0.375);
+  (accumulationTarget(winter) > 0.9 ? ok : bad)('deep winter wants near-full cover (' + accumulationTarget(winter).toFixed(2) + ')');
+  (accumulationTarget(summer) === 0 ? ok : bad)('summer wants no snow');
+  (accumulationTarget({ frost: 0.5, warmth: -0.2 }) === Math.min(1, 0.5 * 0.6 + 0.2) ? ok : bad)('partial cover for a mild cold snap (' + accumulationTarget({ frost: 0.5, warmth: -0.2 }).toFixed(2) + ')');
+  (Math.abs(stepAccumulation(accumulationTarget(winter), winter, 1) - accumulationTarget(winter)) < 0.01 ? ok : bad)('accum seeded to target stays put');
 }
 // deterministic snowfall: reliably present through winter, ~0 in summer
 {

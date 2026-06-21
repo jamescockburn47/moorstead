@@ -6,7 +6,7 @@ import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, H
 import { strSeed } from './noise.js';
 import { protectedAt } from './landmarks.js';
 import { initMaterials, setSnowLevel, setFrozen, setGlintTime } from './mesher.js';
-import { stepAccumulation, isFrozen } from './snow.js';
+import { stepAccumulation, accumulationTarget, isFrozen } from './snow.js';
 import { getIconURL, retintAtlasForSeason } from './textures.js';
 import { World } from './world.js';
 import { Player } from './player.js';
@@ -256,6 +256,8 @@ class Game {
       // winter), or null to resume real wall-clock time.
       setSeason(p) {
         G.seasonOverride = (p == null ? null : Math.max(0, Math.min(0.999, p)));
+        // snap the lying snow to the new season so a flip shows snow at once
+        G.snowAccum = accumulationTarget(G.seasonOverride != null ? seasonStateAtPhase(G.seasonOverride) : seasonState());
         return G.seasonOverride;
       },
     };
@@ -303,7 +305,8 @@ class Game {
     this.floraLayer = new FloraLayer(this.scene, this.world);
     if (this.footprints) this.footprints.clear();
     this.footprints = new Footprints(this.scene, this.world);
-    this.snowAccum = 0;
+    // seed snow cover to the season so a world loaded in winter is snowy at once
+    this.snowAccum = accumulationTarget((this.seasonOverride != null) ? seasonStateAtPhase(this.seasonOverride) : seasonState());
     this.entities.game = this;
     this.entities.onKill = mob => { this.quests.onMobKilled(mob); this.milestones.onKill(mob.type); };
     window.moorstead = window.moorcraft = this; // a handle for t' dev console

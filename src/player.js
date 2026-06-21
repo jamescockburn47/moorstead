@@ -77,6 +77,9 @@ export class Player {
     const inBog = this.feetBlock() === B.BOG || this.headBlock() === B.BOG;
     const inLiquid = inWater || inBog;
     const onFrozen = this.onFrozenSurface(season);
+    // ice keeps thee sliding a moment after tha steps off, so even a narrow beck feels slape
+    if (onFrozen) this.iceSlip = 0.25; else this.iceSlip = Math.max(0, (this.iceSlip || 0) - dt);
+    const slippery = onFrozen || this.iceSlip > 0;
     // treading deep water tires thee — tha can't keep thi head up forever, so the open
     // sea is a real danger to swim (make for shore, the shallows, or a coble). Standing
     // on a shallow bottom (onGround) is wading, not treading, so it doesn't tire thee.
@@ -106,7 +109,7 @@ export class Player {
     const wishX = (-sin * fwd + cos * strafe) * speed;
     const wishZ = (-cos * fwd - sin * strafe) * speed;
 
-    const accel = onFrozen ? 3 : (this.onGround || this.flying ? 18 : 5);
+    const accel = slippery ? 1.5 : (this.onGround || this.flying ? 18 : 5);
     this.vel.x += (wishX - this.vel.x) * Math.min(1, accel * dt);
     this.vel.z += (wishZ - this.vel.z) * Math.min(1, accel * dt);
 

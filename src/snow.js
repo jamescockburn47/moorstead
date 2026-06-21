@@ -3,12 +3,20 @@
 // and its showers are a function of the shared wall-clock so every client agrees.
 import { noise2 } from './noise.js';
 
-// New accumulation [0,1] after `dt` GAME-seconds, given the current season state.
-// Builds toward 1 while it's snowing and cold; melts toward 0 as it warms.
-export function stepAccumulation(accum, season, dt) {
+// How deep snow wants to lie [0,1] for a season — the steady-state cover. Used
+// both as the accumulation goal and as the seed when a world loads (or the warden
+// flips the season), so winter is snowy at once rather than after game-days of creep.
+export function accumulationTarget(season) {
   const snowing = season.frost;                           // 0..1, winter half-year (= max(0,-warmth))
   const cold = season.warmth < 0 ? -season.warmth : 0;    // 0..1
-  const target = Math.min(1, snowing * 0.6 + cold);       // how deep it wants to lie
+  return Math.min(1, snowing * 0.6 + cold);
+}
+
+// New accumulation [0,1] after `dt` GAME-seconds, given the current season state.
+// Builds toward the target while it's snowing and cold; melts toward 0 as it warms.
+export function stepAccumulation(accum, season, dt) {
+  const cold = season.warmth < 0 ? -season.warmth : 0;    // 0..1
+  const target = accumulationTarget(season);              // how deep it wants to lie
   const rate = (target > accum) ? 0.0016 * cold            // accrues slowly, only when cold
                                 : 0.003 * (0.4 + (season.warmth > 0 ? season.warmth : 0));  // melts faster when warm
   const next = accum + Math.sign(target - accum) * rate * dt;
