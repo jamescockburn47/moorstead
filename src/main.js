@@ -27,6 +27,8 @@ import { Rails } from './rails.js';
 import { FloraLayer } from './floraLayer.js';
 import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase, bilberryInSeason } from './season.js';
+import { forageYield, activeForageables } from './forage.js';
+import { cellInstances } from './flora-placement.js';
 import { startLiveWeather } from './weather-live.js';
 import { temperatureTarget, stepTemperature } from './temperature.js';
 import { boardingFolk } from './trainfolk.js';
@@ -312,7 +314,8 @@ class Game {
       this.entities.restorePets(this.player.pets, this.player); // thi kept beasts come back to heel
       this.sky.deserialize(meta.sky);
       this.quests.deserialize(meta.quests);
-      this.world.editLedger = new Map(meta.editLedger || []); // regrowth picks up where it left off
+      this.world.editLedger   = new Map(meta.editLedger   || []); // regrowth picks up where it left off
+      this.world.forageLedger = new Map(meta.forageLedger || []); // picked forage cells awaiting regrowth
       this.world.treeRegrowth = new Map(meta.treeRegrowth || []); this.world.saplings = new Map(meta.saplings || []);
       this.world.deeds = meta.deeds || [];
       if (!this.world.deeds.some(d => d.by === 'parish' && d.kind === 'quarry')) {
@@ -392,7 +395,8 @@ class Game {
       player: this.player.serialize(),
       sky: this.sky.serialize(),
       quests: this.quests.serialize(),
-      editLedger: [...this.world.editLedger], // harvest edits awaiting regrowth — so the moor heals across reloads
+      editLedger:   [...this.world.editLedger],   // harvest edits awaiting regrowth — so the moor heals across reloads
+      forageLedger: [...this.world.forageLedger], // picked forage cells awaiting regrowth
       treeRegrowth: [...this.world.treeRegrowth], saplings: [...this.world.saplings], // tree regrowth in progress
       deeds: this.world.deeds, // staked deeds (claims + mine licences)
       savedAt: Date.now(),
@@ -2799,6 +2803,24 @@ class Game {
       }
     }
 
+    // Forage pick: right-click on a grass surface to gather in-season scatter forage
+    if (hit && hit.face[1] === 1 && this.season) {
+      const cx = hit.x, cz = hit.z, spriteY = hit.y + 1;
+      const seed = this.world.gen.seed >>> 0;
+      const active = activeForageables(this.season);
+      for (const { tile, item } of active) {
+        if (cellInstances(seed, cx, cz, 'forage', tile).length &&
+            !this.world.isForaged(cx, spriteY, cz)) {
+          this.world.recordForage(cx, spriteY, cz, this.sky.day);
+          this.player.addItem(item, 1);
+          this.ui.invDirty = true;
+          if (this.floraLayer) this.floraLayer.center = null; // force visual rebuild
+          this.ui.toast(`Picked up ${itemName(item)}.`);
+          return;
+        }
+      }
+    }
+
     const held = this.player.heldItem();
     if (!held) return;
 
@@ -3182,6 +3204,7 @@ class Game {
         this._lastExpireDay = regenDay;
         const decayScale = this.bairnLocked() ? 2 : 1;
         this.world.expireEdits(this.sky.day, decayScale);
+        this.world.expireForage(this.sky.day);
         this.world.growTrees(this.sky.day);
         this.deedTick();
       }
