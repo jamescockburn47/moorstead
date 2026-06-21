@@ -66,13 +66,15 @@ export class FestiveLayer {
         this.objects.push(g);
         g.traverse(c => { if (c.isMesh && c.userData.flicker) this._lit.push(c); });
 
-        // -- carol singers: 4 children in a semicircle facing the fir -------
-        // Fixed offsets keep positions deterministic per village.
+        // -- carol singers: 4 children clustered tightly to one side of the
+        // fir, clear of the foliage footprint (base tier hw=3, so ≥4 blocks
+        // off trunk). Cluster centre is at dz=+4.5 (south side), singers
+        // spaced ~0.7 blocks apart in a tight 2×2 bunch, all facing the tree.
         const carolOffsets = [
-          { dx:  2.5, dz:  0.0 },
-          { dx:  1.8, dz:  2.0 },
-          { dx: -1.8, dz:  2.0 },
-          { dx: -2.5, dz:  0.0 },
+          { dx: -0.35, dz: 4.2 },
+          { dx:  0.35, dz: 4.2 },
+          { dx: -0.35, dz: 4.9 },
+          { dx:  0.35, dz: 4.9 },
         ];
         for (let ci = 0; ci < carolOffsets.length; ci++) {
           const { dx, dz } = carolOffsets[ci];
@@ -297,16 +299,18 @@ export class FestiveLayer {
   }
 
   // Build a blocky 3D conifer Group, feet at y=0, total height ≈11.
-  // Three shared materials (brown trunk, green foliage, snow cap) so
-  // clear()'s traverse+dispose is O(meshes) not O(1) — each mesh.material
-  // points to the same object; dispose() on repeated refs is a no-op.
+  // Slab approach: one solid BoxGeometry per tier (sized to the tier width),
+  // stacked and tapering bottom→top. No unit-cube loops — 7 meshes total for
+  // the whole tree shape, so it's cheap and guaranteed solid (no see-through).
+  // Tier half-widths: 3,3,2,2,1,1 then a pointed snow cap — reads as a chunky
+  // solid Christmas tree.
   buildFir() {
     const g = new THREE.Group();
     const matTrunk  = new THREE.MeshLambertMaterial({ color: 0x5a4326 });
     const matLeaf   = new THREE.MeshLambertMaterial({ color: 0x2f5d3a });
     const matSnow   = new THREE.MeshLambertMaterial({ color: 0xdfeaf2 });
 
-    // ---- trunk: two 0.6×1 brown cubes at y=0..2 ----
+    // ---- trunk: two 0.6×1 brown slabs at y=0..2 ----
     const trunkGeo = new THREE.BoxGeometry(0.6, 1, 0.6);
     const t0 = new THREE.Mesh(trunkGeo, matTrunk);
     t0.position.y = 0.5;
@@ -315,56 +319,28 @@ export class FestiveLayer {
     t1.position.y = 1.5;
     g.add(t1);
 
-    // ---- foliage: 5 square tiers, stacked bottom→top ----
-    // Tier layout (y base, half-width in blocks):
-    //   tier 0: y=2, hw=3  → 7×7 fill = 49 cubes — too many; use ring hw=3 fill
-    //   We budget ~40 leaf cubes total by mixing ring fills and solid small tiers.
-    //
-    // Chosen layout (each tier = filled square of unit cubes, hw = half-width):
-    //   tier 0 (base): y=2..3,  hw=3  → (2*3+1)^2 = 49 — too dense; use hw=2 solid
-    //   Keep total reasonable: hw 2,2,1,1,0 → 25+25+9+9+1 = 69 — still high.
-    //   Final: widths [2,2,1,1,0] but only border ring for wide tiers saves cubes.
-    //
-    // Simpler & cleaner: 5 tiers, using RING for hw≥2, SOLID for hw≤1:
-    //   Tier 0: hw=3, ring  → perimeter = (7^2 - 5^2) = 49-25 = 24
-    //   Tier 1: hw=2, ring  → (5^2 - 3^2)             = 25- 9 = 16
-    //   Tier 2: hw=2, solid → 5×5                             = 25
-    //   Tier 3: hw=1, solid → 3×3                             =  9
-    //   Tier 4: hw=0, solid → 1×1 (snow cap)                  =  1
-    //   Total foliage: 24+16+25+9+1 = 75 — still on the high side.
-    //
-    // Back to the brief: "a few dozen meshes". Let's use RING for all tiers
-    // (just outer shell, no interior fill) — realistic conifer silhouette + ~35:
-    //   Tier 0: hw=3 ring → 24
-    //   Tier 1: hw=2 ring → 16
-    //   Tier 2: hw=1 ring → 8
-    //   Tier 3: hw=1 solid → 9
-    //   Tier 4 (snow): hw=0 → 1
-    //   Total: 58 — close to brief. Use solid fills for hw≤1 (corners matter at small
-    //   sizes) and ring for hw≥2. Grand total ≈ 58 meshes + 2 trunk = 60.
-
-    // Tier definitions: [yBottom, halfWidth, ring, snow]
+    // ---- foliage: solid-slab tiers, each one BoxGeometry covering the full
+    // tier width — no hollow rings, no unit-cube loops.
+    // [yBottom, height, halfWidth, useSnow]
+    // Total foliage: 7 slab meshes (not counting trunk or snow cap).
+    // hw tapering: 3,3,2,2,1,1 → snow cap at top
     const tiers = [
-      { yb: 2, hw: 3, ring: true,  snow: false },
-      { yb: 4, hw: 2, ring: true,  snow: false },
-      { yb: 6, hw: 1, ring: false, snow: false },
-      { yb: 8, hw: 1, ring: false, snow: false },
-      { yb: 10, hw: 0, ring: false, snow: true  },
+      { yb: 2,  h: 2, hw: 3, snow: false },  // tier 0: 7×7 slab
+      { yb: 4,  h: 2, hw: 3, snow: false },  // tier 1: 7×7 slab (overlap gives density)
+      { yb: 5,  h: 2, hw: 2, snow: false },  // tier 2: 5×5 slab (starts 1 above tier 1)
+      { yb: 7,  h: 2, hw: 2, snow: false },  // tier 3: 5×5 slab
+      { yb: 8,  h: 2, hw: 1, snow: false },  // tier 4: 3×3 slab
+      { yb: 10, h: 1, hw: 1, snow: false },  // tier 5: 3×3 slab near top
+      { yb: 11, h: 1, hw: 0, snow: true  },  // snow cap: 1×1
     ];
-    const leafGeo = new THREE.BoxGeometry(1, 1, 1);
 
     for (const tier of tiers) {
       const mat = tier.snow ? matSnow : matLeaf;
-      const { yb, hw, ring } = tier;
-      const cy = yb + 0.5; // centre y of this tier's cubes
-      for (let dx = -hw; dx <= hw; dx++) {
-        for (let dz = -hw; dz <= hw; dz++) {
-          if (ring && Math.abs(dx) < hw && Math.abs(dz) < hw) continue; // hollow interior
-          const m = new THREE.Mesh(leafGeo, mat);
-          m.position.set(dx, cy, dz);
-          g.add(m);
-        }
-      }
+      const side = tier.hw * 2 + 1; // full width = 2*hw+1 (minimum 1)
+      const geo  = new THREE.BoxGeometry(side, tier.h, side);
+      const m    = new THREE.Mesh(geo, mat);
+      m.position.set(0, tier.yb + tier.h * 0.5, 0);
+      g.add(m);
     }
 
     this.dressFir(g);
@@ -372,28 +348,40 @@ export class FestiveLayer {
     return g;
   }
 
-  // Add ~5 wrapped present boxes around the trunk base (y≈0), as children of
-  // the fir Group so clear()'s traverse disposes them automatically.
+  // Add ~11 wrapped present boxes in a ring around the trunk base (y≈0),
+  // as children of the fir Group so clear()'s traverse disposes them automatically.
+  // Presents sit outside the trunk (trunk hw=0.3) and inside the base slab
+  // footprint (hw=3) — placed at radii 0.7–2.5 in a ring around the trunk.
   // Each present: a BoxGeometry cube + two thin ribbon strips crossing over it.
   buildPresents(g) {
-    // Present box colours (festive palette)
-    const boxColors    = [0xb23b3b, 0x2f6e4f, 0xc9a13b, 0x7a4da8, 0xe8e0c8];
+    // Present box colours (festive palette, cycles)
+    const boxColors    = [0xb23b3b, 0x2f6e4f, 0xc9a13b, 0x7a4da8, 0xe8e0c8, 0xc25c2a];
     // Ribbon colours: contrasting per box colour
-    const ribbonColors = [0xc9a13b, 0xe8e0c8, 0xb23b3b, 0xe8e0c8, 0x7a4da8];
+    const ribbonColors = [0xc9a13b, 0xe8e0c8, 0xb23b3b, 0xe8e0c8, 0x7a4da8, 0xc9a13b];
 
-    // Deterministic scatter around trunk: (x offset, z offset, size, yaw)
+    // 11 presents in a ring around the trunk base — deterministic positions.
+    // Two rings: inner ring r≈1.0 (4 presents) + outer ring r≈2.0 (7 presents).
     const presents = [
-      { dx:  0.65, dz:  0.40, s: 0.45, yaw: 0.25 },
-      { dx: -0.60, dz:  0.30, s: 0.55, yaw: -0.4 },
-      { dx:  0.30, dz: -0.65, s: 0.40, yaw: 0.90 },
-      { dx: -0.35, dz: -0.55, s: 0.50, yaw: -0.2 },
-      { dx:  0.10, dz:  0.80, s: 0.42, yaw: 1.30 },
+      // inner ring (r~1.0)
+      { dx:  0.90, dz:  0.40, s: 0.45, yaw: 0.25 },
+      { dx: -0.80, dz:  0.55, s: 0.50, yaw: -0.4 },
+      { dx:  0.45, dz: -0.85, s: 0.40, yaw: 0.90 },
+      { dx: -0.50, dz: -0.75, s: 0.42, yaw: -0.2 },
+      // outer ring (r~1.8-2.2)
+      { dx:  1.90, dz:  0.60, s: 0.55, yaw: 0.60 },
+      { dx:  1.40, dz: -1.65, s: 0.48, yaw: 1.10 },
+      { dx: -1.75, dz:  1.00, s: 0.52, yaw: -0.5 },
+      { dx: -1.60, dz: -1.45, s: 0.44, yaw: 0.80 },
+      { dx:  0.20, dz:  2.10, s: 0.46, yaw: 1.30 },
+      { dx: -0.30, dz: -2.20, s: 0.50, yaw: -0.9 },
+      { dx:  2.10, dz: -0.40, s: 0.43, yaw: 0.35 },
     ];
 
     for (let i = 0; i < presents.length; i++) {
       const { dx, dz, s, yaw } = presents[i];
-      const matBox    = new THREE.MeshLambertMaterial({ color: boxColors[i] });
-      const matRibbon = new THREE.MeshLambertMaterial({ color: ribbonColors[i] });
+      const ci = i % boxColors.length;
+      const matBox    = new THREE.MeshLambertMaterial({ color: boxColors[ci] });
+      const matRibbon = new THREE.MeshLambertMaterial({ color: ribbonColors[ci] });
 
       // Box — sits on the ground (y = s/2 so base is at y=0)
       const box = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), matBox);
@@ -441,26 +429,28 @@ export class FestiveLayer {
     const garlandGeo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
     const starGeo    = new THREE.OctahedronGeometry(0.4);
 
-    // --- candles: 10, spread across the 5 tier heights -------------------
-    // Each tier: [y-centre, cone-surface-radius]. Candle sits just inside the
-    // branch surface so the flame tip pokes up above.
+    // --- candles + baubles: placed on the OUTER SURFACE of each slab tier --
+    // Tier outer half-widths match buildFir slab sizes. Ornaments are placed at
+    // radius = half-width + 0.6 so they sit proud of the slab face, clearly
+    // visible from outside. Tiers indexed to match buildFir slab definitions:
+    //   slab hw 3 (y 2-4), hw 3 (y 4-6), hw 2 (y 5-7), hw 2 (y 7-9),
+    //   hw 1 (y 8-10), hw 1 (y 10-11)
+    // We decorate the 5 outer tiers (skip the topmost 3×3 cap tier).
     const candleTiers = [
-      { cy: 2.5, r: 2.4 },
-      { cy: 4.5, r: 1.4 },
-      { cy: 6.5, r: 0.9 },
-      { cy: 7.5, r: 0.7 },
-      { cy: 9.0, r: 0.4 },
+      { cy: 3.0, r: 3.6, n: 4 }, // slab hw=3, outer surface at 3.0+0.5 → r=3.6
+      { cy: 5.0, r: 3.6, n: 3 }, // slab hw=3
+      { cy: 6.0, r: 2.6, n: 3 }, // slab hw=2
+      { cy: 8.0, r: 2.6, n: 2 }, // slab hw=2
+      { cy: 9.5, r: 1.6, n: 1 }, // slab hw=1
     ];
-    const candlesPerTier = [3, 2, 2, 2, 1]; // total = 10
     for (let ti = 0; ti < candleTiers.length; ti++) {
-      const { cy, r } = candleTiers[ti];
-      const n = candlesPerTier[ti];
+      const { cy, r, n } = candleTiers[ti];
       for (let i = 0; i < n; i++) {
         const angle = (i / n) * Math.PI * 2 + ti * 0.7; // stagger between tiers
         const m = new THREE.Mesh(candleGeo, matCandle);
         m.position.set(
           Math.cos(angle) * r,
-          cy + 0.3, // sit above branch surface
+          cy + 0.3, // sit above the slab surface
           Math.sin(angle) * r
         );
         m.userData.flicker = true;
@@ -468,14 +458,16 @@ export class FestiveLayer {
       }
     }
 
-    // --- baubles: 10, spread across lower four tiers ----------------------
-    const baublesPerTier = [3, 3, 2, 2]; // total = 10
-    const baubleYs       = [2.8, 4.8, 6.8, 8.8];
-    const baubleRadii    = [2.0, 1.2, 0.7, 0.5];
-    for (let ti = 0; ti < baublesPerTier.length; ti++) {
-      const n = baublesPerTier[ti];
-      const r = baubleRadii[ti];
-      const cy = baubleYs[ti];
+    // --- baubles: on outer perimeter of tiers, offset one step from candles --
+    // Same outer radii as candle tiers so they're on the surface, not inside.
+    const baubleSpecs = [
+      { cy: 3.5, r: 3.6, n: 3 },
+      { cy: 5.5, r: 3.6, n: 3 },
+      { cy: 6.5, r: 2.6, n: 2 },
+      { cy: 8.5, r: 2.6, n: 2 },
+    ];
+    for (let ti = 0; ti < baubleSpecs.length; ti++) {
+      const { cy, r, n } = baubleSpecs[ti];
       for (let i = 0; i < n; i++) {
         const angle = (i / n) * Math.PI * 2 + ti * 1.1 + 0.4;
         const m = new THREE.Mesh(baubleGeo, matBaubles[(ti + i) % matBaubles.length]);
@@ -489,14 +481,14 @@ export class FestiveLayer {
     }
 
     // --- garland: 16 small dark-green cubes in a descending helix --------
-    // Helix descends from y≈9 to y≈2.5; radius widens from top to base to
-    // follow the cone profile.
+    // Helix descends from y≈11 to y≈3; radius follows outer slab edge profile
+    // (hw 1→3 from top to base) so it drapes around the outside.
     const GARLAND_N = 16;
     for (let i = 0; i < GARLAND_N; i++) {
       const t = i / (GARLAND_N - 1);          // 0..1, top→bottom
       const angle = t * Math.PI * 4.5;         // ~2.25 full turns
-      const y     = 9.0 - t * 6.5;            // y: 9 → 2.5
-      const r     = 0.4 + t * 2.0;            // radius: 0.4 → 2.4 (follows cone)
+      const y     = 11.0 - t * 8.0;           // y: 11 → 3
+      const r     = 1.6 + t * 2.2;            // radius: 1.6 → 3.8 (outer slab edge)
       const m = new THREE.Mesh(garlandGeo, matGarland);
       m.position.set(Math.cos(angle) * r, y, Math.sin(angle) * r);
       g.add(m);
@@ -504,7 +496,7 @@ export class FestiveLayer {
 
     // --- star: glowing octahedron at the very top, tagged for twinkle ----
     const star = new THREE.Mesh(starGeo, matStar);
-    star.position.set(0, 10.5, 0);
+    star.position.set(0, 12.2, 0);
     star.userData.flicker = true;
     g.add(star);
   }
