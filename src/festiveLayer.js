@@ -42,6 +42,17 @@ export class FestiveLayer {
     this.clear();
     if (!festiveActive(season)) return;
     const gen = this.world.gen;
+    // Winter firs — one per village, whole festive season (no deep-snow gate)
+    for (const v of (gen.geo.villages || [])) {
+      if (Math.abs(v.x - cx) > RADIUS || Math.abs(v.z - cz) > RADIUS) continue;
+      const fp = this.firPlacement(v);
+      if (fp) {
+        const g = this.buildFir();
+        g.position.set(fp.x + 0.5, gen.height(fp.x, fp.z) + 1, fp.z + 0.5);
+        this.scene.add(g);
+        this.objects.push(g);
+      }
+    }
     // Auto-snowmen on village greens — only when snow is at its deepest
     if (deepSnow(snowAccum)) {
       for (const v of (gen.geo.villages || [])) {
@@ -71,6 +82,120 @@ export class FestiveLayer {
       const yaw = hash2i(wx, wz, 0xbeef) * Math.PI * 2;
       this.addSnowman(wx + 0.5, wy, wz + 0.5, entry.cfg || DEFAULT_SNOWMAN, yaw);
     }
+  }
+
+  // Return a deterministic green/closes cell near village centre for the fir.
+  // Scans rings r=2..6 with 16 angle steps; skips (v.x,v.z) itself (the cross).
+  firPlacement(v) {
+    const gen = this.world.gen;
+    const seed = gen.geo.seed;
+    // Shuffle candidate offsets deterministically via hash so the first clear
+    // cell is stable but not always the same compass direction.
+    for (let r = 2; r <= 6; r++) {
+      for (let ai = 0; ai < 16; ai++) {
+        const angle = (ai / 16) * Math.PI * 2;
+        const x = v.x + Math.round(r * Math.cos(angle));
+        const z = v.z + Math.round(r * Math.sin(angle));
+        if (x === v.x && z === v.z) continue; // skip the cross
+        const col = gen.geo.villageColumn(x, z);
+        if (!col || (col.kind !== 'green' && col.kind !== 'closes')) continue;
+        const sy = gen.height(x, z);
+        if (this.world.getBlock(x, sy + 1, z) !== B.AIR) continue;
+        // Use a hash to choose among valid candidates rather than always the
+        // first one we find — deterministic but varies across villages / seeds.
+        if (hash2i(x, z, seed ^ 0xf12c) > 0.35) continue;
+        return { x, z };
+      }
+    }
+    // Fallback: return first clear green/closes we find without the hash filter
+    for (let r = 2; r <= 6; r++) {
+      for (let ai = 0; ai < 16; ai++) {
+        const angle = (ai / 16) * Math.PI * 2;
+        const x = v.x + Math.round(r * Math.cos(angle));
+        const z = v.z + Math.round(r * Math.sin(angle));
+        if (x === v.x && z === v.z) continue;
+        const col = gen.geo.villageColumn(x, z);
+        if (!col || (col.kind !== 'green' && col.kind !== 'closes')) continue;
+        const sy = gen.height(x, z);
+        if (this.world.getBlock(x, sy + 1, z) !== B.AIR) continue;
+        return { x, z };
+      }
+    }
+    return null;
+  }
+
+  // Build a blocky 3D conifer Group, feet at y=0, total height ≈11.
+  // Three shared materials (brown trunk, green foliage, snow cap) so
+  // clear()'s traverse+dispose is O(meshes) not O(1) — each mesh.material
+  // points to the same object; dispose() on repeated refs is a no-op.
+  buildFir() {
+    const g = new THREE.Group();
+    const matTrunk  = new THREE.MeshLambertMaterial({ color: 0x5a4326 });
+    const matLeaf   = new THREE.MeshLambertMaterial({ color: 0x2f5d3a });
+    const matSnow   = new THREE.MeshLambertMaterial({ color: 0xdfeaf2 });
+
+    // ---- trunk: two 0.6×1 brown cubes at y=0..2 ----
+    const trunkGeo = new THREE.BoxGeometry(0.6, 1, 0.6);
+    const t0 = new THREE.Mesh(trunkGeo, matTrunk);
+    t0.position.y = 0.5;
+    g.add(t0);
+    const t1 = new THREE.Mesh(trunkGeo, matTrunk);
+    t1.position.y = 1.5;
+    g.add(t1);
+
+    // ---- foliage: 5 square tiers, stacked bottom→top ----
+    // Tier layout (y base, half-width in blocks):
+    //   tier 0: y=2, hw=3  → 7×7 fill = 49 cubes — too many; use ring hw=3 fill
+    //   We budget ~40 leaf cubes total by mixing ring fills and solid small tiers.
+    //
+    // Chosen layout (each tier = filled square of unit cubes, hw = half-width):
+    //   tier 0 (base): y=2..3,  hw=3  → (2*3+1)^2 = 49 — too dense; use hw=2 solid
+    //   Keep total reasonable: hw 2,2,1,1,0 → 25+25+9+9+1 = 69 — still high.
+    //   Final: widths [2,2,1,1,0] but only border ring for wide tiers saves cubes.
+    //
+    // Simpler & cleaner: 5 tiers, using RING for hw≥2, SOLID for hw≤1:
+    //   Tier 0: hw=3, ring  → perimeter = (7^2 - 5^2) = 49-25 = 24
+    //   Tier 1: hw=2, ring  → (5^2 - 3^2)             = 25- 9 = 16
+    //   Tier 2: hw=2, solid → 5×5                             = 25
+    //   Tier 3: hw=1, solid → 3×3                             =  9
+    //   Tier 4: hw=0, solid → 1×1 (snow cap)                  =  1
+    //   Total foliage: 24+16+25+9+1 = 75 — still on the high side.
+    //
+    // Back to the brief: "a few dozen meshes". Let's use RING for all tiers
+    // (just outer shell, no interior fill) — realistic conifer silhouette + ~35:
+    //   Tier 0: hw=3 ring → 24
+    //   Tier 1: hw=2 ring → 16
+    //   Tier 2: hw=1 ring → 8
+    //   Tier 3: hw=1 solid → 9
+    //   Tier 4 (snow): hw=0 → 1
+    //   Total: 58 — close to brief. Use solid fills for hw≤1 (corners matter at small
+    //   sizes) and ring for hw≥2. Grand total ≈ 58 meshes + 2 trunk = 60.
+
+    // Tier definitions: [yBottom, halfWidth, ring, snow]
+    const tiers = [
+      { yb: 2, hw: 3, ring: true,  snow: false },
+      { yb: 4, hw: 2, ring: true,  snow: false },
+      { yb: 6, hw: 1, ring: false, snow: false },
+      { yb: 8, hw: 1, ring: false, snow: false },
+      { yb: 10, hw: 0, ring: false, snow: true  },
+    ];
+    const leafGeo = new THREE.BoxGeometry(1, 1, 1);
+
+    for (const tier of tiers) {
+      const mat = tier.snow ? matSnow : matLeaf;
+      const { yb, hw, ring } = tier;
+      const cy = yb + 0.5; // centre y of this tier's cubes
+      for (let dx = -hw; dx <= hw; dx++) {
+        for (let dz = -hw; dz <= hw; dz++) {
+          if (ring && Math.abs(dx) < hw && Math.abs(dz) < hw) continue; // hollow interior
+          const m = new THREE.Mesh(leafGeo, mat);
+          m.position.set(dx, cy, dz);
+          g.add(m);
+        }
+      }
+    }
+
+    return g;
   }
 
   addSnowman(x, y, z, cfg, yaw) {
