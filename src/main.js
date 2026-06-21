@@ -277,6 +277,16 @@ class Game {
     this.startWorld(seed, null, new Map());
   }
 
+  // The real-Moors world (c.1900), solo. Reachable via window.game.startMoorsWorld()
+  // for now; a title-screen entry comes with the slice-1 build-out.
+  async startMoorsWorld() {
+    if (this.net) { this.net.disconnect(); this.net = null; }
+    this.netActive = false;
+    const { clearSave } = await import('./save.js');
+    await clearSave();
+    this.startWorld(strSeed('t-moors-1900'), null, new Map());
+  }
+
   async continueGame() {
     const { loadGame } = await import('./save.js');
     const saved = await loadGame();
@@ -1548,7 +1558,10 @@ class Game {
     // t' warden may walk onto any world — bairns or adults, not just their own
     if (this.isAdmin()) room = (await this.ui.pickWorld(room)) || room;
     this.netRoom = room;
-    this.startWorld(ss(room === 'moor' ? 't-shared-moor' : 't-shared-moor:' + room), null, new Map());
+    const seedStr = room === 'moor' ? 't-shared-moor'
+      : room === 'moors1900' ? 't-moors-1900'
+      : 't-shared-moor:' + room;
+    this.startWorld(ss(seedStr), null, new Map());
     // folk wake spread across t' villages, same one each visit
     const who = (this.auth && this.auth.acct) || this.devicePid();
     const idx = Math.floor(hash2i(ss(who), 7, 99) * this.world.gen.geo.villages.length);
