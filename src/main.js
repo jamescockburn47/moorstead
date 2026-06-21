@@ -26,8 +26,8 @@ import { buildTrain } from './train.js';
 import { Rails } from './rails.js';
 import { FloraLayer } from './floraLayer.js';
 import { Footprints } from './footprints.js';
-import { seasonState, seasonStateAtPhase, bilberryInSeason } from './season.js';
-import { activeForageables } from './forage.js';
+import { seasonState, seasonStateAtPhase } from './season.js';
+import { activeForageables, hostForageFor } from './forage.js';
 import { cellInstances } from './flora-placement.js';
 import { startLiveWeather } from './weather-live.js';
 import { temperatureTarget, stepTemperature } from './temperature.js';
@@ -2687,43 +2687,37 @@ class Game {
     this.entities.blockBurst(hit.x, hit.y, hit.z, hit.id);
     this.audio.breakBlock();
     if (!this.player.creative && !noDrop && def.drop !== null && def.drop !== undefined) {
-      const inSeason = this.season ? this.season.heatherBloom > 0.4 : bilberryInSeason();
-      const bareBilberry = hit.id === B.BILBERRY_BUSH && !inSeason;
-      if (bareBilberry) {
-        this.ui.toast('Nobbut bare twigs — bilberries aren’t out yet. Coom back i’ late summer.', 2500);
-      } else {
-        // Prospecting skill gate check
-        let dropId = def.drop;
-        const xp = this.player.miningSkill || 0;
-        const level = Math.floor(Math.sqrt(xp / 10));
-        let tooGreen = false;
+      // Prospecting skill gate check
+      let dropId = def.drop;
+      const xp = this.player.miningSkill || 0;
+      const level = Math.floor(Math.sqrt(xp / 10));
+      let tooGreen = false;
 
-        if (hit.id === B.JET_ORE && level < 3) {
-          dropId = B.COBBLE;
-          tooGreen = true;
-          this.ui.toast("Tha's too green to read t' seam — got bare stone (requires Prospecting level 3).", 4000);
-        } else if (hit.id === B.POLYHALITE && level < 6) {
-          dropId = B.COBBLE;
-          tooGreen = true;
-          this.ui.toast("Tha's too green to read t' seam — got bare stone (requires Prospecting level 6).", 4000);
-        }
+      if (hit.id === B.JET_ORE && level < 3) {
+        dropId = B.COBBLE;
+        tooGreen = true;
+        this.ui.toast("Tha’s too green to read t’ seam — got bare stone (requires Prospecting level 3).", 4000);
+      } else if (hit.id === B.POLYHALITE && level < 6) {
+        dropId = B.COBBLE;
+        tooGreen = true;
+        this.ui.toast("Tha’s too green to read t’ seam — got bare stone (requires Prospecting level 6).", 4000);
+      }
 
-        this.entities.spawnDrop(hit.x + 0.5, hit.y + 0.4, hit.z + 0.5, dropId, 1);
-        
-        // Award XP
-        let xpGained = 0;
-        if (hit.id === B.COAL_ORE) xpGained = 1;
-        else if (hit.id === B.IRON_ORE || hit.id === B.ALUM_SHALE) xpGained = 2;
-        else if (hit.id === B.ROCK_SALT) xpGained = 3;
-        else if (hit.id === B.JET_ORE && !tooGreen) xpGained = 5;
-        else if (hit.id === B.POLYHALITE && !tooGreen) xpGained = 10;
+      this.entities.spawnDrop(hit.x + 0.5, hit.y + 0.4, hit.z + 0.5, dropId, 1);
 
-        if (xpGained > 0) {
-          this.player.miningSkill = (this.player.miningSkill || 0) + xpGained;
-          const newLvl = Math.floor(Math.sqrt(this.player.miningSkill / 10));
-          if (newLvl > level) {
-            this.ui.toast("🎉 <b>Prospecting level up!</b> Tha's now level " + newLvl + ".", 5000);
-          }
+      // Award XP
+      let xpGained = 0;
+      if (hit.id === B.COAL_ORE) xpGained = 1;
+      else if (hit.id === B.IRON_ORE || hit.id === B.ALUM_SHALE) xpGained = 2;
+      else if (hit.id === B.ROCK_SALT) xpGained = 3;
+      else if (hit.id === B.JET_ORE && !tooGreen) xpGained = 5;
+      else if (hit.id === B.POLYHALITE && !tooGreen) xpGained = 10;
+
+      if (xpGained > 0) {
+        this.player.miningSkill = (this.player.miningSkill || 0) + xpGained;
+        const newLvl = Math.floor(Math.sqrt(this.player.miningSkill / 10));
+        if (newLvl > level) {
+          this.ui.toast("🎉 <b>Prospecting level up!</b> Tha’s now level " + newLvl + ".", 5000);
         }
       }
     }
@@ -2825,6 +2819,19 @@ class Game {
           this.ui.toast(`Picked up ${itemName(item)}.`);
           return;
         }
+      }
+    }
+
+    // Host-bush forage: right-click a berried bush to pick the fruit; the bush stays.
+    if (hit && this.season && (!_fh || !isPlaceable(_fh.id))) {
+      const h = hostForageFor(hit.id, this.season);
+      if (h && !this.world.isForaged(hit.x, hit.y, hit.z)) {
+        this.world.recordForage(hit.x, hit.y, hit.z, this.sky.day);
+        this.player.addItem(h.item, 1);
+        this.ui.invDirty = true;
+        if (this.floraLayer) this.floraLayer.center = null;
+        this.ui.toast(`Picked ${itemName(h.item)}.`);
+        return;
       }
     }
 
