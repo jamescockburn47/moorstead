@@ -7,8 +7,13 @@ const S_COUNT = 0x2b1d, S_POS = 0x71c3, S_VAR = 0x53a7, S_CLUMP = 0x9e10;
 export function cellInstances(seed, cx, cz, mode, tile) {
   const r = (salt, n = 0) => hash2i(cx * 2 + n, cz * 2 + (salt & 1), seed ^ salt ^ (tile << 4));
   let count;
-  if (mode === 'lineside') {
-    count = 3 + Math.floor(r(S_COUNT) * 4);                 // 3..6
+  if (mode === 'forage') {
+    const clump = noise2(cx * 0.08, cz * 0.08, seed ^ S_CLUMP ^ (tile << 4));
+    if (clump < 0.6) return [];
+    if (r(S_COUNT) < 0.7) return [];
+    count = 1;
+  } else if (mode === 'lineside') {
+    count = 3 + Math.floor(r(S_COUNT) * 4);
   } else {
     const clump = noise2(cx * 0.10, cz * 0.10, seed ^ S_CLUMP ^ (tile << 4)); // [-1,1]
     if (clump < 0.5) return [];                             // tighter, well-separated patches
