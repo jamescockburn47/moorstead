@@ -1047,9 +1047,8 @@ export class UI {
       return;
     }
     if (auth.warden) {
-      this.whoBox.innerHTML = 'Logged in as <b>Warden</b> — <u id="swap-user">log out</u>';
-      const swap = this.whoBox.querySelector('#swap-user');
-      if (swap) swap.addEventListener('click', () => this.game.logout());
+      this.whoBox.innerHTML = 'Logged in as <b>Warden</b> &mdash; <u id="swap-user">log out</u>';
+      document.getElementById('swap-user').onclick = () => this.game.logout();
       return;
     }
     const roster = (this.game.loadAccounts ? this.game.loadAccounts() : []).filter(a => a.acct !== auth.acct);
