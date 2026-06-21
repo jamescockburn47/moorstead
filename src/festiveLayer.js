@@ -4,7 +4,9 @@ import * as THREE from 'three';
 import { festiveActive, deepSnow } from './festive.js';
 import { SCARF_COLORS, DEFAULT_SNOWMAN } from './snowman.js';
 import { hash2i } from './noise.js';
-import { B } from './defs.js';
+import { B, TILE } from './defs.js';
+import { tileUV } from './textures.js';
+import { getMaterials } from './mesher.js';
 
 const RADIUS = 48;
 const REBUILD_MOVE = 8;
@@ -114,6 +116,48 @@ export class FestiveLayer {
       if (Math.abs(wx - cx) > RADIUS || Math.abs(wz - cz) > RADIUS) continue;
       const yaw = hash2i(wx, wz, 0xbeef) * Math.PI * 2;
       this.addSnowman(wx + 0.5, wy, wz + 0.5, entry.cfg || DEFAULT_SNOWMAN, yaw);
+    }
+
+    // -- Door wreaths on cottages (whole festive season, no deep-snow gate) --
+    for (const v of (gen.geo.villages || [])) {
+      if (Math.abs(v.x - cx) > RADIUS || Math.abs(v.z - cz) > RADIUS) continue;
+      for (const b of (v.buildings || [])) {
+        if (b.type !== 'cottage' && b.type !== 'shop' && b.type !== 'pub') continue;
+        // Door: south wall (lowest z = b.z0), centred on x
+        const midX = Math.floor((b.x0 + b.x1) / 2);
+        const doorX = midX + 0.5;
+        const doorZ = b.z0;           // south face of building
+        const doorY = gen.height(midX, doorZ) + 2; // head height above ground
+        // Place wreath just in front of the door, facing south (outward)
+        this.addBillboard(TILE.WREATH, doorX, doorY, doorZ - 0.15, 0);
+      }
+    }
+
+    // -- Robins & holly sprigs on village greens (whole festive season) --
+    for (const v of (gen.geo.villages || [])) {
+      if (Math.abs(v.x - cx) > RADIUS || Math.abs(v.z - cz) > RADIUS) continue;
+      let hollyCount = 0, robinCount = 0;
+      for (let r = 2; r < 16 && (hollyCount < 5 || robinCount < 2); r++) {
+        for (let a = 0; a < 12; a++) {
+          const x = v.x + Math.round(r * Math.cos((a / 12) * Math.PI * 2));
+          const z = v.z + Math.round(r * Math.sin((a / 12) * Math.PI * 2));
+          const col = gen.geo.villageColumn(x, z);
+          if (!col || (col.kind !== 'green' && col.kind !== 'closes')) continue;
+          const sy = gen.height(x, z);
+          if (this.world.getBlock(x, sy + 1, z) !== B.AIR) continue;
+          // deterministic sparse gate — different offsets for holly vs robin
+          const hval = hash2i(x, z, gen.geo.seed ^ 0xb4c7);
+          if (hollyCount < 5 && hval < 0.22) {
+            const yaw = hash2i(x, z, 0x4f3a) * Math.PI * 2;
+            this.addBillboard(TILE.HOLLY_SPRIG, x + 0.5, sy + 1, z + 0.5, yaw);
+            hollyCount++;
+          } else if (robinCount < 2 && hval > 0.78 && hval < 0.88) {
+            const yaw = hash2i(x, z, 0x9e2b) * Math.PI * 2;
+            this.addBillboard(TILE.ROBIN, x + 0.5, sy + 1.0, z + 0.5, yaw);
+            robinCount++;
+          }
+        }
+      }
     }
   }
 
@@ -520,10 +564,39 @@ export class FestiveLayer {
     return g;
   }
 
+  // Build a flat cutout quad for TILE tile and add it to the scene + this.objects.
+  // Reuses floraLayer's crossGeom approach: two crossed quads with the atlas UV,
+  // the shared cutout material, and white vertex colours so the texture shows as-is.
+  addBillboard(tile, x, y, z, yaw) {
+    const [u0, v0, u1, v1] = tileUV(tile);
+    const h = 1, w = 0.5;
+    const pos = [-w, 0, 0, w, 0, 0, w, h, 0, -w, h, 0, 0, 0, -w, 0, 0, w, 0, h, w, 0, h, -w];
+    const uv  = [u0, v0, u1, v0, u1, v1, u0, v1, u0, v0, u1, v0, u1, v1, u0, v1];
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv',       new THREE.Float32BufferAttribute(uv, 2));
+    geo.setAttribute('color',    new THREE.Float32BufferAttribute(new Array(24).fill(1), 3));
+    geo.setAttribute('aGlint',   new THREE.Float32BufferAttribute(new Array(8).fill(0), 1));
+    geo.setIndex([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]);
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, getMaterials().cutout);
+    mesh.frustumCulled = false;
+    mesh.rotation.y = yaw;
+    mesh.position.set(x, y, z);
+    mesh.userData.ownGeometry = true;
+    mesh.userData.sharedMaterial = true; // cutout material is shared — don't dispose it
+    this.scene.add(mesh);
+    this.objects.push(mesh);
+  }
+
   clear() {
     for (const o of this.objects) {
       this.scene.remove(o);
-      o.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); });
+      o.traverse(c => {
+        if (c.geometry) c.geometry.dispose();
+        // Only dispose materials that the object owns (not the shared cutout material)
+        if (c.material && !c.userData.sharedMaterial) c.material.dispose();
+      });
     }
     this.objects.length = 0;
     this._lit = [];

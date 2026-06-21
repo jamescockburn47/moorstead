@@ -937,6 +937,116 @@ const TILE_PAINTERS = {
     p.px(5, 4, '#ffffff'); p.px(6, 4, '#f8faff');
     p.px(4, 5, '#f8faff'); p.px(5, 5, '#ffffff');
   },
+  [TILE.WREATH](p) {
+    p.clear();
+    // holly wreath: a green ring wi' red berries an' a red bow at t' bottom
+    const cx = 8, cy = 7, ro = 6, ri = 3;
+    for (let y = 0; y < 14; y++) for (let x = 0; x < T; x++) {
+      const dx = x - cx, dy = y - cy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= ri * ri && d2 <= ro * ro) {
+        p.px(x, y, shade(0x1e5218, 0.8 + p.rng() * 0.35));
+      }
+    }
+    // jagged leaf tips round the ring
+    for (let a = 0; a < 24; a++) {
+      const ang = (a / 24) * Math.PI * 2;
+      const r = ro - 1;
+      const lx = Math.round(cx + Math.cos(ang) * r);
+      const ly = Math.round(cy + Math.sin(ang) * r);
+      if (lx >= 0 && lx < T && ly >= 0 && ly < 14) {
+        p.px(lx, ly, shade(a % 3 === 0 ? 0x0e3a0e : 0x2a6828, 1));
+      }
+    }
+    // red berries: a cluster of 7 round the ring
+    const berryAngles = [0.3, 1.1, 1.9, 2.7, 3.5, 4.3, 5.1];
+    for (const ang of berryAngles) {
+      const r = (ro + ri) / 2;
+      const bx = Math.round(cx + Math.cos(ang) * r);
+      const by = Math.round(cy + Math.sin(ang) * r);
+      if (bx >= 0 && bx < T && by >= 0 && by < 14) {
+        p.px(bx, by, '#d42020');
+        if (bx + 1 < T) p.px(bx + 1, by, '#e83030');
+        p.px(bx, by, '#ff5050'); // specular
+      }
+    }
+    // red bow at the bottom: two loops + a knot
+    p.rect(5, 13, 3, 2, '#c01818'); // left loop
+    p.rect(9, 13, 3, 2, '#c01818'); // right loop
+    p.rect(7, 13, 2, 2, '#e03030'); // knot
+    p.px(8, 12, '#b01010');         // ribbon tail up
+  },
+  [TILE.ROBIN](p) {
+    p.clear();
+    // small robin: brown body wi' a bright orange-red breast, dark wing, pale belly
+    // body: fat rounded silhouette, centred
+    for (let y = 4; y < 13; y++) for (let x = 3; x < 13; x++) {
+      const dx = x - 8, dy = y - 8;
+      if (dx * dx * 1.2 + dy * dy < 16) {
+        // brown back upper half, orange breast lower front
+        const breast = dx < 1 && dy > -1;
+        p.px(x, y, shade(breast ? 0xd05010 : 0x5a3a18, 0.8 + p.rng() * 0.3));
+      }
+    }
+    // wing: slightly darker brown patch on the right side
+    for (let y = 6; y < 12; y++) for (let x = 9; x < 13; x++) {
+      const dx = x - 11, dy = y - 9;
+      if (dx * dx + dy * dy < 8 && p.rng() < 0.75) {
+        p.px(x, y, shade(0x3a2410, 0.85 + p.rng() * 0.25));
+      }
+    }
+    // head: small rounded dark cap
+    for (let y = 2; y < 7; y++) for (let x = 5; x < 12; x++) {
+      const dx = x - 8, dy = y - 4;
+      if (dx * dx + dy * dy < 10 && p.rng() < 0.85) {
+        p.px(x, y, shade(0x4a2e10, 0.8 + p.rng() * 0.3));
+      }
+    }
+    // beak: tiny dark yellow point
+    p.px(12, 4, shade(0x9a7a18, 1));
+    p.px(13, 4, shade(0x7a5a10, 1));
+    // eye: single bright pixel
+    p.px(10, 3, '#111111');
+    p.px(10, 3, '#333333'); // highlight nearby
+    p.px(11, 3, '#cccccc');
+    // tail: short dark wedge
+    p.rect(3, 10, 3, 2, shade(0x3a2410, 1));
+    p.px(2, 11, shade(0x2a1a08, 1));
+    // legs: two thin dark lines
+    p.px(7, 13, '#2a2010'); p.px(7, 14, '#2a2010');
+    p.px(9, 13, '#2a2010'); p.px(9, 14, '#2a2010');
+    p.px(6, 15, '#2a2010'); p.px(10, 15, '#2a2010'); // claws
+  },
+  [TILE.HOLLY_SPRIG](p) {
+    p.clear();
+    // a cluster o' dark-green holly leaves wi' red berries — denser than TILE.HOLLY
+    // two large leaves, crossing
+    for (let i = 0; i < 3; i++) {
+      const lx = 3 + i * 4, ly = 4 + ((i % 2) * 3);
+      const lw = 3 + (i % 2), lh = 5 + (i % 2);
+      for (let dy = 0; dy < lh; dy++) for (let dx = -lw; dx <= lw; dx++) {
+        const inside = Math.abs(dx) <= lw - Math.abs(dy - lh / 2) * 0.7;
+        if (inside && p.rng() < 0.9) {
+          p.px(lx + dx, ly + dy, shade(0x1a4a18, 0.78 + p.rng() * 0.38));
+        }
+      }
+      // midrib
+      for (let dy = 0; dy < lh; dy++) p.px(lx, ly + dy, shade(0x2a6828, 0.88));
+      // jagged spine tips
+      p.px(lx - lw, ly + 1, shade(0x0d2e0d, 1));
+      p.px(lx + lw, ly + lh - 2, shade(0x0d2e0d, 1));
+    }
+    // stem
+    p.rect(7, 11, 2, 5, shade(0x3a5220, 1));
+    // bright red berries: cluster of 5 near the centre
+    const bpos = [[7, 8], [9, 7], [8, 9], [10, 9], [6, 10]];
+    for (const [bx, by] of bpos) {
+      p.px(bx,     by,     '#d42020');
+      p.px(bx + 1, by,     '#e83030');
+      p.px(bx,     by + 1, '#b01818');
+      p.px(bx,     by,     '#ff5050'); // specular
+    }
+  },
 };
 
 let atlasCanvas = null;   // the LIVE atlas (may be season-tinted)
