@@ -748,6 +748,18 @@ class Game {
       if (Number.isFinite(x) && Number.isFinite(z)) this.adminTeleport(x, z, `${x}, ${z}`);
     });
 
+    // ---- season switch (solo world only — shared moor uses the shared clock) ----
+    if (!this.netActive) {
+      ui.el('div', 'r-needs', panel, 'Season:');
+      const srow = ui.el('div', 'admin-btns', panel);
+      for (const [label, phase] of [['Spring', 0.125], ['Summer', 0.375], ['Autumn', 0.625], ['Winter', 0.875]]) {
+        const b = ui.el('button', 'mc', srow, label);
+        b.addEventListener('click', () => { this.debug.setSeason(phase); });
+      }
+      const real = ui.el('button', 'mc', srow, 'Real time');
+      real.addEventListener('click', () => { this.debug.setSeason(null); });
+    }
+
     // ---- shared-moor connection health (so the dropped-thread gremlin is visible) ----
     if (this.netActive && this.net) {
       ui.el('div', 'r-needs', panel, 'Shared Moor — connection:');

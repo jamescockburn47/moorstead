@@ -1115,17 +1115,19 @@ export class UI {
 
     const px = Math.floor(player.pos.x), py = Math.floor(player.pos.y), pz = Math.floor(player.pos.z);
     // t' Great Fog takes thi bearings wi' it: no place name, no coordinates
+    const _s = this.game && this.game.season && this.game.season.season;
+    const _seasonStr = _s ? ' · ' + _s.charAt(0).toUpperCase() + _s.slice(1) : '';
     if (sky.moorFog > 0.6) {
       this.mapInfo.innerHTML =
         `<span style="color:#9aa0a8">Lost in t&rsquo; fog</span><br>` +
-        `?, ?, ?<br>Day ${sky.day} &mdash; ${sky.timeName()}` +
+        `?, ?, ?<br>Day ${sky.day} &mdash; ${sky.timeName()}${_seasonStr}` +
         (player.creative ? '<br><span style="color:#d8b95a">Creative</span>' : '');
       return;
     }
     const loc = this.game.world ? this.game.world.gen.geo.locationName(px, pz) : '';
     this.mapInfo.innerHTML =
       `<span style="color:#d8b95a">${loc}</span><br>` +
-      `${px}, ${py}, ${pz}<br>Day ${sky.day} &mdash; ${sky.timeName()}` +
+      `${px}, ${py}, ${pz}<br>Day ${sky.day} &mdash; ${sky.timeName()}${_seasonStr}` +
       (this.game.standing ? `<br>Standing: <span style="color:#9ec27a">${this.game.standing}</span>` : '') +
       (player.creative ? '<br><span style="color:#d8b95a">Creative</span>' : '');
   }
