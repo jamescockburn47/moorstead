@@ -307,12 +307,14 @@ export class Gen {
             // holly an' bracken; t' four-foot stays clean beyond ri.d < 4
             const v = hash2i(x, z, this.seed ^ 0x5a1e);
             let plant = 0;
-            if (v < 0.22) plant = B.BRAMBLE;        // brambles
-            else if (v < 0.46) plant = B.FERN;      // thick ferns
-            else if (v < 0.62) plant = B.FOXGLOVE;  // foxglove spikes
-            else if (v < 0.74) plant = B.HOLLY;     // evergreen winter anchor
-            else if (v < 0.84) plant = B.BRACKEN;   // bracken
-            if (plant) data[IDX(lx, h + 1, lz)] = plant;   // ~16% left bare
+            if (v < 0.22) plant = B.BRAMBLE;            // brambles
+            else if (v < 0.46) plant = B.FERN;          // thick ferns
+            else if (v < 0.62) plant = B.FOXGLOVE;      // foxglove spikes
+            else if (v < 0.74) plant = B.HOLLY;         // evergreen winter anchor
+            else if (v < 0.84) plant = B.BRACKEN;       // bracken
+            else if (v < 0.90) plant = B.BLACKTHORN;    // sloes in autumn
+            else if (v < 0.96) plant = B.HAZEL;         // hazelnuts in autumn
+            if (plant) data[IDX(lx, h + 1, lz)] = plant;   // ~4% left bare
           } else if (surf === B.GRASS) {
             // patches o' colour on an open moor: heather drifts (purple),
             // gorse banks (yellow), woods — wi' bare ground between
@@ -344,6 +346,8 @@ export class Gen {
               else if (r < 0.062) data[IDX(lx, h + 1, lz)] = B.BILBERRY_BUSH;
               else if (r < 0.072) data[IDX(lx, h + 1, lz)] = B.DOG_ROSE;
               else if (r < 0.078) data[IDX(lx, h + 1, lz)] = B.ELDER;
+              else if (r < 0.088) data[IDX(lx, h + 1, lz)] = B.BLACKTHORN;
+              else if (r < 0.092) data[IDX(lx, h + 1, lz)] = B.HAZEL;
             }
           } else if (surf === B.PEAT) {
             if (r < 0.14) data[IDX(lx, h + 1, lz)] = B.TUSSOCK;
