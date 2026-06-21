@@ -58,5 +58,18 @@ const autumn = seasonStateAtPhase(0.66), spring = seasonStateAtPhase(0.12), wint
   (HOST_FORAGE.every(h => h.bush != null && h.item != null && h.tile != null) ? ok : bad)('every host-forage entry has bush+item+tile');
 }
 
+// fruit trees: species deterministic by region; ripe in autumn
+{
+  const { FRUIT_SPECIES, fruitSpeciesAt, fruitTreeRipe } = await import('../src/forage.js');
+  const a = fruitSpeciesAt(1234, 100, 100), b = fruitSpeciesAt(1234, 100, 100);
+  (a.item === b.item ? ok : bad)('fruit species is deterministic per cell');
+  (FRUIT_SPECIES.some(s => fruitSpeciesAt(1234, 100, 100).item === s.item) ? ok : bad)('species is one of the three');
+  const items = new Set();
+  for (let x = 0; x < 6; x++) for (let z = 0; z < 6; z++) items.add(fruitSpeciesAt(1234, 200 + x, 200 + z).item);
+  (items.size <= 2 ? ok : bad)('a small orchard patch is mostly one species (' + items.size + ' spp)');
+  (fruitTreeRipe(seasonStateAtPhase(0.66)) ? ok : bad)('fruit ripe in autumn');
+  (!fruitTreeRipe(seasonStateAtPhase(0.1)) ? ok : bad)('no fruit in spring');
+}
+
 console.log('\nRESULT: ' + (failed ? 'FAIL' : 'PASS'));
 process.exit(failed ? 1 : 0);

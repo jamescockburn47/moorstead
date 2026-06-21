@@ -1,6 +1,7 @@
 // forage.js — pure forageable tables. No DOM, no three.js.
 //   Scattered ground forage: standalone plants picked off open ground (no host bush).
 import { TILE, I, B } from './defs.js';
+import { noise2 } from './noise.js';
 
 export const SCATTER_FORAGE = [
   { tile: TILE.CEP,         item: I.CEP,         scalar: 'seedhead',    threshold: 0.3, habitat: 'wood' },
@@ -36,3 +37,16 @@ export function forageYield(tile) {
   const s = SCATTER_FORAGE.find(f => f.tile === tile);
   return s ? s.item : null;
 }
+
+export const FRUIT_SPECIES = [
+  { tile: TILE.APPLE, item: I.APPLE },
+  { tile: TILE.PEAR,  item: I.PEAR },
+  { tile: TILE.PLUM,  item: I.PLUM },
+];
+// Species varies slowly across the land, so an orchard tends to one fruit.
+export function fruitSpeciesAt(seed, x, z) {
+  const n = noise2(x * 0.02, z * 0.02, (seed ^ 0xf20a7) >>> 0); // [-1,1]
+  const idx = n < -0.2 ? 0 : n < 0.2 ? 1 : 2;
+  return FRUIT_SPECIES[idx];
+}
+export function fruitTreeRipe(season) { return (season.seedhead || 0) > 0.25; } // late summer -> autumn
