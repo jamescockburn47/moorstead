@@ -27,7 +27,7 @@ import { Rails } from './rails.js';
 import { FloraLayer } from './floraLayer.js';
 import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase, bilberryInSeason } from './season.js';
-import { forageYield, activeForageables } from './forage.js';
+import { activeForageables } from './forage.js';
 import { cellInstances } from './flora-placement.js';
 import { startLiveWeather } from './weather-live.js';
 import { temperatureTarget, stepTemperature } from './temperature.js';
@@ -2808,10 +2808,15 @@ class Game {
     const _fh = this.player.heldItem();
     if (hit && hit.face[1] === 1 && this.season && (!_fh || !isPlaceable(_fh.id))) {
       const cx = hit.x, cz = hit.z, spriteY = hit.y + 1;
+      const onForageGround =
+        this.world.getBlock(cx, hit.y, cz) === B.GRASS &&
+        this.world.getBlock(cx, spriteY, cz) === B.AIR &&
+        !this.world.gen.geo.inVillage(cx, cz, 1);
       const seed = this.world.gen.seed >>> 0;
       const active = activeForageables(this.season);
       for (const { tile, item } of active) {
-        if (cellInstances(seed, cx, cz, 'forage', tile).length &&
+        if (onForageGround &&
+            cellInstances(seed, cx, cz, 'forage', tile).length &&
             !this.world.isForaged(cx, spriteY, cz)) {
           this.world.recordForage(cx, spriteY, cz, this.sky.day);
           this.player.addItem(item, 1);
