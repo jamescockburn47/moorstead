@@ -37,9 +37,9 @@ export function pointToPolyline(px, pz, pts) {
 // block coords -> grid coords, given the data transform
 export function blockToGrid(transform, grid, bx, bz) {
   const { minE, minN, maxE, maxN, metresPerBlock } = transform;
-  const E = minE + bx * metresPerBlock;
-  const N = maxN - bz * metresPerBlock;
-  const gx = (E - minE) / (maxE - minE) * (grid.cols - 1);
-  const gz = (maxN - N) / (maxN - minN) * (grid.rows - 1);
+  const E = minE + bz * metresPerBlock;   // +z = east
+  const N = minN + bx * metresPerBlock;   // +x = north
+  const gx = (E - minE) / (maxE - minE) * (grid.cols - 1);   // grid col = easting
+  const gz = (maxN - N) / (maxN - minN) * (grid.rows - 1);   // grid row = northing (row 0 = north)
   return [gx, gz];
 }

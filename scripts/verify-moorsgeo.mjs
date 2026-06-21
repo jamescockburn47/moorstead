@@ -17,23 +17,28 @@ const geo = new MoorsGeography();
   const st = geo.railway();
   (st.length >= 2 && st[0].name === 'Pickering' && st.some(s => s.name === 'Whitby') ? ok : bad)('moors line: Pickering-first, Whitby present');
 }
-// Whitby sits on the coast: sea to its east, dry land to its west
+// orientation: +x = north, +z = east (matches the engine's map). Whitby is north of
+// Pickering and on the east coast; Osmotherley is west.
 {
   const wh = geo.villages.find(v => v.name === 'Whitby');
-  (geo.coastT(wh.x + 280, wh.z) > 0.5 ? ok : bad)('open sea east of Whitby (coastT > 0.5)');
-  (geo.coastT(wh.x - 160, wh.z) === 0 ? ok : bad)('dry land west of Whitby (coastT 0)');
+  const pk = geo.villages.find(v => v.name === 'Pickering');
+  (wh.x > pk.x ? ok : bad)('Whitby is north of Pickering (+x = north)');
+  const os = geo.villages.find(v => v.name === 'Osmotherley');
+  (!os || os.z < wh.z ? ok : bad)('Osmotherley is west of Whitby (+z = east)');
   (Number.isInteger(geo.height(wh.x, wh.z)) ? ok : bad)('height returns an integer block-Y');
 }
-// real landform: high moor well above sea, sea present
+// real landform: high moor well above sea, and open sea present
 {
-  let max = -Infinity, min = Infinity;
-  for (let x = 200; x < 3600; x += 200)
-    for (let z = 200; z < 2400; z += 200) {
+  let max = -Infinity, min = Infinity, anySea = false;
+  for (let x = 100; x < 2400; x += 150)
+    for (let z = 100; z < 3700; z += 150) {
       const h = geo.heightRaw(x, z);
       if (h > max) max = h; if (h < min) min = h;
+      if (geo.coastT(x, z) > 0.6) anySea = true;
     }
   (max > WATER_LEVEL + 15 ? ok : bad)(`high moor stands well above sea (max block ${Math.round(max)})`);
-  (min <= WATER_LEVEL ? ok : bad)(`sea present at/below water level (min block ${Math.round(min)})`);
+  (anySea ? ok : bad)('open sea present (coastT > 0.6 somewhere)');
+  (min <= WATER_LEVEL ? ok : bad)(`sea floor below water level (min block ${Math.round(min)})`);
 }
 // landmark naming + a railPath that runs through every station
 {

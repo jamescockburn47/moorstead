@@ -4,7 +4,7 @@
 import data from '../data/moors-data.json' with { type: 'json' };
 import { HEIGHT, WATER_LEVEL } from './defs.js';
 import { fbm2 } from './noise.js';
-import { bilinear, blockToGrid, pointToPolyline } from './geo-grid.js';
+import { bilinear, blockToGrid } from './geo-grid.js';
 import { buildRailPath, samplePos as rpSample, railInfo as rpInfo } from './railpath.js';
 
 function smoothstep(t) { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); }
@@ -28,26 +28,13 @@ export class MoorsGeography {
     return Math.floor(WATER_LEVEL + m / this.data.transform.metresPerBlock);
   }
 
-  // ---------- coast ----------
-  coastDist(x, z) { return pointToPolyline(x, z, this.data.coast); }
-  _coastXAt(z) {
-    // interpolate the coast polyline's x at this z
-    const c = this.data.coast;
-    for (let i = 0; i < c.length - 1; i++) {
-      const [x0, z0] = c[i], [x1, z1] = c[i + 1];
-      if ((z >= z0 && z <= z1) || (z >= z1 && z <= z0)) {
-        const t = (z - z0) / ((z1 - z0) || 1);
-        return x0 + (x1 - x0) * t;
-      }
-    }
-    return c[c.length - 1][0];
-  }
-  coastX(z) { return this._coastXAt(z); }
-  // 0 inland .. 1 open sea (east of the coastline)
+  // ---------- coast (DEM-driven: the sea is wherever the real ground sits below the waterline) ----------
   coastT(x, z) {
-    if (x <= this._coastXAt(z)) return 0;
-    return smoothstep(this.coastDist(x, z) / 64);
+    const base = this._baseMetresToBlock(x, z);
+    if (base >= WATER_LEVEL) return 0;            // land
+    return smoothstep((WATER_LEVEL - base) / 8);  // 0 at the shore, 1 out at sea
   }
+  coastX() { return 1e6; }   // no single coast-x with a real DEM; off-map for the few callers (ore/quest)
 
   // ---------- height ----------
   heightRaw(x, z) {

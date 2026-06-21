@@ -33,8 +33,8 @@ def point_to_polyline(px, pz, pts):
 
 
 def block_to_grid(tr, grid, bx, bz):
-    E = tr["minE"] + bx * tr["metresPerBlock"]
-    N = tr["maxN"] - bz * tr["metresPerBlock"]
+    E = tr["minE"] + bz * tr["metresPerBlock"]   # +z = east
+    N = tr["minN"] + bx * tr["metresPerBlock"]   # +x = north
     gx = (E - tr["minE"]) / (tr["maxE"] - tr["minE"]) * (grid["cols"] - 1)
     gz = (tr["maxN"] - N) / (tr["maxN"] - tr["minN"]) * (grid["rows"] - 1)
     return gx, gz

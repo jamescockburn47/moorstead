@@ -5,7 +5,7 @@ import json
 import math
 from pathlib import Path
 
-from geo_grid import bilinear, block_to_grid, point_to_polyline
+from geo_grid import bilinear, block_to_grid
 
 DATA = json.loads((Path(__file__).resolve().parents[2] / "data" / "moors-data.json").read_text())
 WATER_LEVEL = 26
@@ -23,20 +23,11 @@ def _base(x, z):
     return math.floor(WATER_LEVEL + m / DATA["transform"]["metresPerBlock"])
 
 
-def _coast_x_at(z):
-    c = DATA["coast"]
-    for i in range(len(c) - 1):
-        x0, z0 = c[i]; x1, z1 = c[i + 1]
-        if (z0 <= z <= z1) or (z1 <= z <= z0):
-            t = (z - z0) / ((z1 - z0) or 1)
-            return x0 + (x1 - x0) * t
-    return c[-1][0]
-
-
 def coast_t(x, z):
-    if x <= _coast_x_at(z):
+    base = _base(x, z)
+    if base >= WATER_LEVEL:
         return 0.0
-    return _smoothstep(point_to_polyline(x, z, DATA["coast"]) / 64)
+    return _smoothstep((WATER_LEVEL - base) / 8)
 
 
 def height_raw(x, z):

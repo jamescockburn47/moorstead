@@ -23,7 +23,9 @@ MPB = 15
 STEP = 200  # output elevation-grid resolution in metres (downsampled from 50 m)
 
 def to_block(E, N):
-    return round((E - MIN_E) / MPB), round((MAX_N - N) / MPB)
+    # The engine's map convention is +x = NORTH (up), +z = EAST (right) — see ui.js
+    # buildBigMap. Match it so the real Moors render the right way up.
+    return round((N - MIN_N) / MPB), round((E - MIN_E) / MPB)
 
 def in_bounds(E, N):
     return MIN_E <= E <= MAX_E and MIN_N <= N <= MAX_N
@@ -67,11 +69,38 @@ def build_elevation():
             r = round((MAX_N - N) / STEP)
             if 0 <= c < cols and 0 <= r < rows:
                 acc[r][c] = m   # nearest post wins (subsample)
-    # fill gaps (sea / missing) with 0 m = sea level
+    # Flood-fill the sea from the map edges: a cell is sea if it is <= 1 m (or has no
+    # Terrain 50 data) AND connects to the edge through other such cells. Terrain 50
+    # gives the open sea as a flat ~0 m sheet, so a height test alone can't tell sea
+    # from low coastal land; connectivity can. Inland low spots stay land. Sea cells
+    # get a deep sentinel so they read clearly sub-waterline (proper deep water + a
+    # real shoreline, not a sheet sitting exactly at the waterline).
+    from collections import deque
+    cand = lambda r, c: acc[r][c] is None or acc[r][c] <= 1.0
+    sea = [[False] * cols for _ in range(rows)]
+    dq = deque()
+    for r in range(rows):
+        for c in (0, cols - 1):
+            if cand(r, c) and not sea[r][c]: sea[r][c] = True; dq.append((r, c))
+    for c in range(cols):
+        for r in (0, rows - 1):
+            if cand(r, c) and not sea[r][c]: sea[r][c] = True; dq.append((r, c))
+    while dq:
+        r, c = dq.popleft()
+        for dr, dc in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < rows and 0 <= nc < cols and not sea[nr][nc] and cand(nr, nc):
+                sea[nr][nc] = True; dq.append((nr, nc))
     flat = []
     for r in range(rows):
         for c in range(cols):
-            flat.append(round(acc[r][c]) if acc[r][c] is not None else 0)
+            if sea[r][c]:
+                flat.append(-120)               # connected open sea
+            elif acc[r][c] is None:
+                flat.append(0)                  # rare inland gap
+            else:
+                flat.append(round(acc[r][c]))
+    print(f"sea cells (flood-filled from edges): {sum(row.count(True) for row in sea)}")
     return {"cols": cols, "rows": rows, "metres": flat}, acc
 
 # ---------------------------------------------------------------- coast
@@ -211,7 +240,7 @@ def build_landmarks(found):
 # ---------------------------------------------------------------- assemble
 def main():
     elev, acc = build_elevation()
-    coast = build_coast(acc)
+    coast = []   # coast is DEM-driven now (MoorsGeography.coastT reads the elevation), no polyline needed
     towns, found = build_towns()
     stations = build_stations(found)
     rivers = build_rivers()
