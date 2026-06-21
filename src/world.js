@@ -168,7 +168,7 @@ export class World {
       if (nowDay - felledDay < LIFESPAN.tree) continue;
       const [x, y, z] = k.split(',').map(Number);
       if (!this.isLoaded(x, z)) continue;
-      if (this.getBlock(x, y, z) !== B.AIR || !isSolid(this.getBlock(x, y - 1, z))) { this.treeRegrowth.delete(k); continue; }
+      if (this.getBlock(x, y, z) !== B.AIR || !isSolid(this.getBlock(x, y - 1, z))) { this.treeRegrowth.delete(k); this.fruitStumps.delete(k); continue; }
       const fruit = this.fruitStumps.has(k);
       this.setBlock(x, y, z, B.LOG); this.setBlock(x, y + 1, z, fruit ? B.ORCHARD_LEAVES : B.LEAVES); // a wee sapling
       this.saplings.set(k, nowDay);
