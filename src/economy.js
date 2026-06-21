@@ -24,6 +24,7 @@ export const PRICES = {
   [I.COAL_LUMP]: 3, [I.RAW_IRON]: 5, [I.IRON_INGOT]: 14, [I.JET_GEM]: 40,
   [B.WOOL]: 6, [B.HEATHER]: 1, [B.BRACKEN]: 1, [B.PEAT]: 1,
   [I.BILBERRIES]: 1,
+  [I.CEP]: 3, [I.CHANTERELLE]: 3, [I.COOKED_MUSHROOMS]: 7, [I.WILD_GARLIC]: 2, [I.SORREL]: 2,
   [B.ALUM_SHALE]: 8, [B.ROCK_SALT]: 10, [B.POLYHALITE]: 60,
   [I.RAW_MUTTON]: 4, [I.COOKED_MUTTON]: 9,
   [I.RAW_GROUSE]: 3, [I.COOKED_GROUSE]: 8,
@@ -177,7 +178,7 @@ export function bestMarket(itemId, fromVillage, villages, standingIdx = 0) {
 // name, so "Owd Tom" matches "tom". Roles shape the stock; "mag" is the general dealer.
 // Data, not code — the roster and stock grow over time without touching the engine.
 export const VENDORS = {
-  james:  { sells: [B.WOOL, I.COOKED_MUTTON],            buys: [I.BILBERRIES, B.WOOL, B.HEATHER] },
+  james:  { sells: [B.WOOL, I.COOKED_MUTTON],            buys: [I.BILBERRIES, B.WOOL, B.HEATHER, I.CEP, I.CHANTERELLE, I.WILD_GARLIC, I.SORREL, I.COOKED_MUSHROOMS] },
   glinda: { sells: [B.WOOL, B.LANTERN],                  buys: [B.HEATHER, I.AMMONITE] },
   harry:  { sells: [I.BILBERRIES],                       buys: [I.AMMONITE, I.GRYPHAEA, I.RAW_GROUSE] },
   martha: { sells: [I.COOKED_MUTTON, I.COOKED_GROUSE, I.FISH_CHIPS], buys: [I.RAW_MUTTON, I.RAW_GROUSE] },
