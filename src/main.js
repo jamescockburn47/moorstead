@@ -29,6 +29,8 @@ import { FestiveLayer } from './festiveLayer.js';
 import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase } from './season.js';
 import { activeForageables, hostForageFor, fruitSpeciesAt, fruitTreeRipe } from './forage.js';
+import { deepSnow } from './festive.js';
+import { DEFAULT_SNOWMAN, cycleSnowman } from './snowman.js';
 import { cellInstances } from './flora-placement.js';
 import { startLiveWeather } from './weather-live.js';
 import { temperatureTarget, stepTemperature } from './temperature.js';
@@ -2898,6 +2900,43 @@ class Game {
       }
     }
 
+    // Snowman: customise / scoop snowball / build — all gated on festive season
+    if (hit && this.season) {
+      const sx = hit.x, sz = hit.z, sy = this.world.gen.height(sx, sz) + 1;
+      const sm = this.world.getSnowman(sx, sy, sz);
+
+      // (a) Customise: right-click a player snowman with bare or non-placeable hand
+      if (sm && (!_fh || !isPlaceable(_fh.id))) {
+        const parts = ['scarf', 'hat', 'nose', 'arms', 'smile'];
+        this._smPart = ((this._smPart || 0) + 1) % parts.length;
+        this.world.recordSnowman(sx, sy, sz, cycleSnowman(sm.cfg, parts[this._smPart]), sm.day);
+        if (this.festiveLayer) this.festiveLayer.center = null;
+        this.ui.toast('Dressed t’ snowman.'); return;
+      }
+
+      // (b) Scoop a snowball: bare/non-placeable hand, deep snow, top cell is AIR
+      if (!sm && (!_fh || !isPlaceable(_fh.id)) && deepSnow(this.snowAccum)) {
+        const top = this.world.getBlock(sx, sy, sz);
+        if (top === B.AIR) {
+          this.player.addItem(I.SNOWBALL, 1); this.ui.invDirty = true;
+          this.ui.toast('Scooped a snowball.'); return;
+        }
+      }
+    }
+
+    // (c) Build a snowman: holding ≥3 snowballs, right-click ground, top cell AIR, no snowman there yet
+    if (_fh && _fh.id === I.SNOWBALL && hit && this.season) {
+      const sx = hit.x, sz = hit.z, sy = this.world.gen.height(sx, sz) + 1;
+      if (this.player.countItem(I.SNOWBALL) >= 3 &&
+          !this.world.getSnowman(sx, sy, sz) &&
+          this.world.getBlock(sx, sy, sz) === B.AIR) {
+        this.player.removeItem(I.SNOWBALL, 3);
+        this.world.recordSnowman(sx, sy, sz, { ...DEFAULT_SNOWMAN }, this.sky.day);
+        if (this.festiveLayer) this.festiveLayer.center = null;
+        this.ui.toast('Built a snowman — right-click to dress it.'); return;
+      }
+    }
+
     const held = this.player.heldItem();
     if (!held) return;
 
@@ -3284,6 +3323,9 @@ class Game {
         this.world.expireForage(this.sky.day);
         this.world.growTrees(this.sky.day);
         this.deedTick();
+        const beforeMelt = this.world.snowmanLedger.size;
+        this.world.meltSnowmen(this.season);
+        if (this.world.snowmanLedger.size < beforeMelt && this.festiveLayer) this.festiveLayer.center = null;
       }
 
       // sky & weather (season already computed + cached above for player ice physics)
