@@ -4258,7 +4258,7 @@ class Game {
     }
 
     // hold Tab to peek at t' whole-moor map (only while actually playing)
-    const wantMap = this.state === 'playing' && !!this.keys['Tab'];
+    const wantMap = this.state === 'playing' && (!!this.keys['Tab'] || this.touchMapOpen);
     if (wantMap && !this.peekingMap) { this.peekingMap = true; this.ui.showBigMap(this.player, this.world); }
     else if (!wantMap && this.peekingMap) { this.peekingMap = false; this.ui.hideBigMap(); }
     else if (this.peekingMap) this.ui.drawBigMapDots(this.player, this.net);

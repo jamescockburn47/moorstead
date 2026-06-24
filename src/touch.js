@@ -89,6 +89,7 @@ export class TouchControls {
     this._buildTop?.();
     this._buildContext?.();
     this._buildMore?.();
+    this._buildMap?.();
     this.setState?.(this.game.state);
   }
 
@@ -96,6 +97,15 @@ export class TouchControls {
     this.active = false;
     document.documentElement.classList.remove('touch');
     if (this._hbEl && this._hbTap) { this._hbEl.removeEventListener('touchstart', this._hbTap); this._hbEl = null; this._hbTap = null; }
+    if (this._mapBox) {                                        // map listeners live on #minimap-box / #big-map (outside the root)
+      this._mapBox.removeEventListener('touchstart', this._mapDown);
+      this._mapBox.removeEventListener('touchmove', this._mapMove);
+      this._mapBox.removeEventListener('touchend', this._mapCancel);
+      this._mapBox.removeEventListener('touchcancel', this._mapCancel);
+      this._mapBox = null;
+    }
+    if (this._mapOverlay) { this._mapOverlay.removeEventListener('touchstart', this._mapClose); this._mapOverlay.style.pointerEvents = 'none'; this._mapOverlay = null; }
+    this.game.touchMapOpen = false;
     if (this.root) { this.root.remove(); this.root = null; }   // root's own children (buttons/zones/pills/more) detach with it
     this.zones = {}; this.btns = {};
     this.game.clearKeys?.();   // don't leave any synthesised key stuck
@@ -219,6 +229,31 @@ export class TouchControls {
   }
 
   _toggleMore() { if (this._more) this._more.classList.toggle('open'); }
+
+  // Long-press the minimap to open the whole-moor map (the desktop "hold Tab to peek"); tap to close.
+  // The map overlay (#big-map) is normally pointer-events:none (a peek); we make it tappable only
+  // while opened by touch, then restore it, so the desktop peek is unchanged.
+  _buildMap() {
+    const g = this.game;
+    const box = document.getElementById('minimap-box');
+    const overlay = g.ui && g.ui.mapOverlay;
+    if (!box || !overlay) return;
+    let timer = null, sx = 0, sy = 0;
+    this._mapBox = box; this._mapOverlay = overlay;
+    this._mapCancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    this._mapDown = e => {
+      if (g.state !== 'playing') return;
+      const t = e.changedTouches[0]; sx = t.clientX; sy = t.clientY; this._mapCancel();
+      timer = setTimeout(() => { timer = null; g.touchMapOpen = true; overlay.style.pointerEvents = 'auto'; }, 450);
+    };
+    this._mapMove = e => { const t = e.changedTouches[0]; if (Math.hypot(t.clientX - sx, t.clientY - sy) > 12) this._mapCancel(); };
+    this._mapClose = e => { e.preventDefault(); g.touchMapOpen = false; overlay.style.pointerEvents = 'none'; };
+    box.addEventListener('touchstart', this._mapDown, { passive: true });
+    box.addEventListener('touchmove', this._mapMove, { passive: true });
+    box.addEventListener('touchend', this._mapCancel);
+    box.addEventListener('touchcancel', this._mapCancel);
+    overlay.addEventListener('touchstart', this._mapClose, { passive: false });
+  }
 
   _buildContext() {
     const g = this.game;
