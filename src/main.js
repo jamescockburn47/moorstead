@@ -2506,8 +2506,12 @@ class Game {
     // platform during the dwell — turns clean about an' sets off the other way — rather
     // than sweeping a 180° arc through the station buildings. cc = lead chainage.
     const nSt = st.length;
-    const atTerminus = !driving && s.mode === 'dwell' && (s.i === 0 || s.i === nSt - 1);
-    const poseFwd = atTerminus ? -fwd : fwd; // face the way she'll DEPART while she stands
+    // Turn about ONCE at the terminus this journey ENDS at (dir 0 ends at n-1, dir 1 ends at 0),
+    // facing the return. Do NOT flip at the journey's START station — she already faces the way
+    // she'll run. (Flipping at BOTH terminus stations made her spin about twice at the buffers.)
+    const endStation = fwd === 1 ? nSt - 1 : 0;
+    const atEnd = !driving && s.mode === 'dwell' && s.i === endStation;
+    const poseFwd = atEnd ? -fwd : fwd; // at the end she's turned about, facing the way she'll depart
     const RAKE = 11.2, len = geo.railPath().length;
     const cc = Math.max(RAKE, Math.min(len - RAKE, s.s - RAKE * poseFwd));
     const csp = geo.samplePos(cc);
@@ -2654,8 +2658,9 @@ class Game {
       const s = this.trainScheduleFor(bt.path, bt.stations);
       const fwd = s.dir === 0 ? 1 : -1;
       const nSt = bt.path.stationS.length;
-      const atTerminus = s.mode === 'dwell' && (s.i === 0 || s.i === nSt - 1);
-      const poseFwd = atTerminus ? -fwd : fwd;
+      const endStation = fwd === 1 ? nSt - 1 : 0;   // turn about once, at the journey's END station only
+      const atEnd = s.mode === 'dwell' && s.i === endStation;
+      const poseFwd = atEnd ? -fwd : fwd;
       const len = bt.path.length;
       const cc = Math.max(RAKE, Math.min(len - RAKE, s.s - RAKE * poseFwd));
       const csp = geo.samplePosOn(bt.path, cc);
