@@ -118,4 +118,65 @@ export class TouchControls {
     this.btns[name] = b;
     return b;
   }
+
+  _buildMove() {
+    const z = document.createElement('div');
+    z.className = 'touch-zone touch-move';
+    this.root.appendChild(z);
+    this.zones.move = z;
+    const knob = document.createElement('div');
+    knob.className = 'touch-knob';
+    z.appendChild(knob);
+    let id = null, ox = 0, oy = 0;
+    const RADIUS = 56;   // px the knob can travel
+    const setKeys = (k) => { const g = this.game; for (const key of ['KeyW','KeyA','KeyS','KeyD','KeyZ']) g.keys[key] = !!k[key]; };
+    const clear = () => { id = null; knob.style.transform = 'translate(0,0)'; setKeys({}); };
+    z.addEventListener('touchstart', e => {
+      if (id !== null || this.game.state !== 'playing') return;
+      const t = e.changedTouches[0]; id = t.identifier; ox = t.clientX; oy = t.clientY;
+      e.preventDefault();
+    }, { passive: false });
+    z.addEventListener('touchmove', e => {
+      for (const t of e.changedTouches) {
+        if (t.identifier !== id) continue;
+        let dx = t.clientX - ox, dy = t.clientY - oy;
+        const m = Math.hypot(dx, dy); if (m > RADIUS) { dx *= RADIUS / m; dy *= RADIUS / m; }
+        knob.style.transform = `translate(${dx}px,${dy}px)`;
+        setKeys(joystickToKeys(dx, dy, RADIUS));
+        e.preventDefault();
+      }
+    }, { passive: false });
+    const end = e => { for (const t of e.changedTouches) if (t.identifier === id) clear(); };
+    z.addEventListener('touchend', end);
+    z.addEventListener('touchcancel', end);
+  }
+
+  _buildLook() {
+    const z = document.createElement('div');
+    z.className = 'touch-zone touch-look';
+    this.root.appendChild(z);
+    this.zones.look = z;
+    let id = null, lx = 0, ly = 0;
+    const feeding = () => ['playing', 'riding', 'driving'].includes(this.game.state);
+    z.addEventListener('touchstart', e => {
+      if (id !== null || !feeding()) return;
+      const t = e.changedTouches[0]; id = t.identifier; lx = t.clientX; ly = t.clientY;
+      e.preventDefault();
+    }, { passive: false });
+    z.addEventListener('touchmove', e => {
+      for (const t of e.changedTouches) {
+        if (t.identifier !== id) continue;
+        const { dYaw, dPitch } = lookDelta(t.clientX - lx, t.clientY - ly);
+        lx = t.clientX; ly = t.clientY;
+        const p = this.game.player;
+        p.yaw -= dYaw;
+        p.pitch -= dPitch;
+        p.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, p.pitch));
+        e.preventDefault();
+      }
+    }, { passive: false });
+    const end = e => { for (const t of e.changedTouches) if (t.identifier === id) id = null; };
+    z.addEventListener('touchend', end);
+    z.addEventListener('touchcancel', end);
+  }
 }
