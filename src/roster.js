@@ -147,10 +147,14 @@ export function npcActivity(d, ride) {
   const st = (d && d.state) || {};
   const intent = ((d && d.intent) || '').trim();
   const home = (d && d.home) || st.place || '';
-  const riding = ride && ride.phase && ride.phase !== 'done';
+  const aboard = ride && ride.phase === 'aboard';
+  const waiting = ride && ride.phase === 'wait';
   let where, short;
-  if (riding) {
+  if (aboard) {
     where = `on the train to ${ride.to}`;
+    short = `→ ${ride.to} (train)`;
+  } else if (waiting) {
+    where = `waiting for the train to ${ride.to}`;
     short = `→ ${ride.to} (train)`;
   } else if (st.kind === 'rail') {
     where = `taking the ${st.line} train to ${st.toStn}`;
@@ -348,6 +352,7 @@ export class RosterClient {
   // and alights into the destination town. A 720s timeout resolves a stuck ride gracefully.
   _driveRail(e, m, dt, rankMap) {
     const ride = e.ride;
+    if (ride._phase !== ride.phase) { ride._phase = ride.phase; ride.t = 0; }   // each phase gets its own clock
     ride.t += dt;
     const grp = m.model && m.model.group;
     const vt = this._visibleTrain(ride.line);
@@ -357,8 +362,10 @@ export class RosterClient {
       if (ride.phase === 'wait' && vt.station === ride.from && this._atPlatform(m, ride)) ride.phase = 'aboard';
       else if (ride.phase === 'aboard' && vt.station === ride.to) ride.phase = 'done';
     }
-    // safety net: never wait forever (sparse timetable ~ minutes; 720s ~ 1.6 cycles)
-    if (ride.t > 720 && ride.phase !== 'aboard') { this._resolveToBrain(e, m); return; }
+    // safety net: never wait OR ride forever — each phase resolves within ~1.6 train cycles, so a
+    // train that never dwells at `from` (couldn't board) OR never reaches `to` (stuck aboard) both
+    // fall back gracefully. The short 'done' walk clears the ride long before its clock runs out.
+    if (ride.t > 720) { this._resolveToBrain(e, m); return; }
 
     if (ride.phase === 'aboard') {
       // ride VISIBLY as a passenger in the coaches: sit on the rail deck behind the loco.
@@ -395,7 +402,11 @@ export class RosterClient {
     const due = this._nextTrainCall(ride.line, ride.from);
     const group = (rankMap && rankMap.get(ride.line + '|' + ride.from)) || [e.data.id];
     const mode = waitMode(due, waiterRank(e.data.id, group));
-    if (mode === 'potter') { this._potterAt(m, a, this._nowEff(), dt); return; }
+    if (mode === 'potter') {                                // wait in town, dispersed like resting folk (not clumped on the marker)
+      const sp = _spread(e.data.id);
+      this._potterAt(m, { x: a.x + sp.dx, z: a.z + sp.dz }, this._nowEff(), dt);
+      return;
+    }
     this._walkTo(m, platformPoint(this.world, this.geo, ride.line, ride.from) || a, dt);   // approach the platform
   }
 
@@ -443,12 +454,6 @@ export class RosterClient {
     m.pos.y += (surfaceHeight(this.world, this.geo, m.pos.x, m.pos.z) - m.pos.y) * k;
     const ddx = tx - m.pos.x, ddz = tz - m.pos.z;
     if (ddx * ddx + ddz * ddz > 0.02) m.yaw = Math.atan2(ddx, ddz);
-  }
-
-  _lerpTo(m, tx, tz, k, face) {
-    const ty = surfaceHeight(this.world, this.geo, tx, tz);
-    m.pos.x += (tx - m.pos.x) * k; m.pos.y += (ty - m.pos.y) * k; m.pos.z += (tz - m.pos.z) * k;
-    if (face) { const ddx = tx - m.pos.x, ddz = tz - m.pos.z; if (ddx * ddx + ddz * ddz > 0.04) m.yaw = Math.atan2(ddx, ddz); }
   }
 
   // Seconds until the VISIBLE train next calls (dwells) at `stationName` on `lineName`, or null.

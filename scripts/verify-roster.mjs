@@ -80,6 +80,11 @@ const rideAct = npcActivity({ home: 'Grosmont', state: { kind: 'at', place: 'Gro
   { phase: 'aboard', to: 'Whitby' });
 ok(rideAct.short === '→ Whitby (train)' && rideAct.full.includes('on the train to Whitby'), 'activity: a committed ride overrides the brain state');
 
+// a WAITING rider (pottering in town until the train's due) is NOT on the train yet — say so honestly
+const waitAct = npcActivity({ home: 'Grosmont', state: { kind: 'at', place: 'Grosmont' } },
+  { phase: 'wait', to: 'Whitby' });
+ok(waitAct.short === '→ Whitby (train)' && waitAct.full.includes('waiting for the train to Whitby'), 'activity: a waiting rider is waiting for the train, not aboard it');
+
 // --- surfaceHeight: stand ON the top built block, fall back to DEM when unloaded -------------
 const stubWorld = (blocks) => ({ getBlock: (x, y, z) => (blocks[`${x},${y},${z}`] ?? B.AIR) });
 __resetSurfCache();
