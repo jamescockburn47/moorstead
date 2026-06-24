@@ -131,4 +131,13 @@ __resetSurfCache();
   ok(platformPoint(w, geo, line, 'Nowhere') === null, 'unknown station -> null (safe)');
 }
 
+// --- platform cap contract: at most PLATFORM_CAP approachers per (line,from) ------------------
+{
+  const ids = Array.from({ length: 9 }, (_, i) => `pop-cap-${i}`);
+  const approaching = ids.filter(id => waitMode(5, waiterRank(id, ids)) === 'approach');
+  ok(approaching.length === PLATFORM_CAP, `at most ${PLATFORM_CAP} approach a busy platform (got ${approaching.length})`);
+  const overflow = ids.filter(id => waiterRank(id, ids) >= PLATFORM_CAP);
+  ok(overflow.every(id => waitMode(5, waiterRank(id, ids)) === 'potter'), 'overflow folk potter in town instead');
+}
+
 console.log(`verify-roster: ${n} assertions OK`);
