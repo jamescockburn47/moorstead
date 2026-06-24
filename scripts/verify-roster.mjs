@@ -3,7 +3,7 @@
 import assert from 'node:assert';
 import { Gen, MOORS_SEED } from '../src/worldgen.js';
 import { B } from '../src/defs.js';
-import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity, surfaceHeight, __resetSurfCache, idHash, waiterRank, waitMode, PLATFORM_CAP, WAIT_LEAD } from '../src/roster.js';
+import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity, surfaceHeight, __resetSurfCache, idHash, waiterRank, waitMode, PLATFORM_CAP, WAIT_LEAD, platformPoint } from '../src/roster.js';
 
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
 const geo = new Gen(MOORS_SEED).geo;
@@ -108,6 +108,27 @@ __resetSurfCache();
   ok(waitMode(10, 0) === 'approach', 'ranked and due-soon -> approach the platform');
   ok(waitMode(WAIT_LEAD + 50, 0) === 'potter', 'ranked but train far off -> potter in town');
   ok(waitMode(null, 0) === 'potter', 'no timetable answer -> potter (never crowd early)');
+}
+
+// --- platformPoint: resolve the station and stand on the plank deck beside the rail ----------
+{
+  const line = 'Whitby & Pickering';
+  const lp = geo.railPaths().find(l => l.name === line);
+  const ln = geo.railLines().find(l => l.name === line);
+  ok(lp && ln, 'main line resolves in railPaths + railLines');
+  const station = ln.stops[Math.floor(ln.stops.length / 2)].name;   // a mid-line stop
+  const p = geo.samplePosOn(lp.path, lp.path.stationS[ln.stops.findIndex(t => t.name === station)]);
+  const deck = Math.round(p.deck);
+  // build a plank deck 3 blocks to the +normal side of the rail, level with the deck
+  const PLAT = 3;
+  const sx = Math.round(p.x + (-p.tz) * PLAT), sz = Math.round(p.z + (p.tx) * PLAT);
+  __resetSurfCache();
+  const w = stubWorld({ [`${sx},${deck},${sz}`]: B.PLANKS });
+  const pt = platformPoint(w, geo, line, station);
+  ok(pt && Math.hypot(pt.x - sx, pt.z - sz) < 1.5, 'platformPoint picks the planked side');
+  ok(pt.y === deck + 1, 'platformPoint stands one above the plank deck');
+  ok(platformPoint(w, geo, 'No Such Line', station) === null, 'unknown line -> null (safe)');
+  ok(platformPoint(w, geo, line, 'Nowhere') === null, 'unknown station -> null (safe)');
 }
 
 console.log(`verify-roster: ${n} assertions OK`);

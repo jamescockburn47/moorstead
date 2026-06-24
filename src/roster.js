@@ -29,6 +29,34 @@ export function surfaceHeight(world, geo, x, z) {
   return h;
 }
 
+const PLATFORM_OFFSET = 3;        // planks sit 2..4 blocks off the rail centre (worldgen stampStations)
+const _platCache = new Map();
+export function __resetPlatCache() { _platCache.clear(); }   // test hook
+// A standing point ON the station platform for (line, station): step out from the rail to the
+// planked side and ground on the deck. The platform may be on either (or both) sides, so probe
+// both and stand on whichever reads as a built surface nearest the rail deck. null if unresolved.
+export function platformPoint(world, geo, line, station) {
+  const key = line + '|' + station;
+  const c = _platCache.get(key); if (c) return c;
+  const lp = geo.railPaths().find(l => l.name === line);
+  const ln = geo.railLines().find(l => l.name === line);
+  if (!lp || !ln) return null;
+  const idx = ln.stops.findIndex(t => t.name === station);
+  if (idx < 0) return null;
+  const p = geo.samplePosOn(lp.path, lp.path.stationS[idx]);   // {x,z,deck,tx,tz}
+  let best = null;
+  for (const s of [1, -1]) {
+    const px = p.x + (-p.tz) * PLATFORM_OFFSET * s;
+    const pz = p.z + (p.tx) * PLATFORM_OFFSET * s;
+    const y = surfaceHeight(world, geo, px, pz);
+    const dDeck = Math.abs((y - 1) - p.deck);                  // plank side reads ~deck; open side reads ground
+    if (!best || dDeck < best.dDeck) best = { x: px, y, z: pz, dDeck };
+  }
+  const out = { x: best.x, y: best.y, z: best.z };
+  _platCache.set(key, out);
+  return out;
+}
+
 // the town's anchor: its marker coordinate + standing height. null if the name is unknown.
 export function townAnchor(name, geo) {
   const v = geo.villages.find(t => t.name === name);
