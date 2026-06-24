@@ -37,6 +37,7 @@ import { temperatureTarget, stepTemperature } from './temperature.js';
 import { boardingFolk } from './trainfolk.js';
 import { FestiveMusic } from './festiveMusic.js';
 import { RosterClient } from './roster.js';
+import { TouchControls } from './touch.js';
 
 const RAIL_VMAX = 11;  // blocks a second flat out — t' pace of a heritage steamer
 const RAIL_ACC = 0.18; // gentle acceleration: she works up to speed an' brakes early
@@ -662,7 +663,7 @@ class Game {
     const canvas = this.renderer.domElement;
     canvas.addEventListener('mousedown', e => {
       if (this.state !== 'playing') return;
-      if (document.pointerLockElement !== canvas) { this.lockPointer(); return; }
+      if (document.pointerLockElement !== canvas) { if (!this.touch?.active) this.lockPointer(); return; }
       this.mouseDown[e.button] = true;
       if (e.button === 2) { this.placeRepeat = 0.4; this.useItem(); }
       if (e.button === 0) { this.breakProgress = 0; this.attackOrMine(true); }
@@ -685,7 +686,7 @@ class Game {
     });
 
     document.addEventListener('pointerlockchange', () => {
-      if (document.pointerLockElement !== canvas && this.state === 'playing') {
+      if (document.pointerLockElement !== canvas && this.state === 'playing' && !this.touch?.active) {
         this.pause();
       }
     });
@@ -701,6 +702,9 @@ class Game {
     });
 
     this.input = { keys: this.keys, jumpTapped: false };
+    this.touch = new TouchControls(this);
+    this.touch.sync();
+    window.addEventListener('resize', () => this.touch.sync());
   }
 
   clearKeys() {
@@ -3961,6 +3965,7 @@ class Game {
       }
 
       // mining / repeat placing / fishing
+      if (this.touch) this.touch.tick();
       this.updateMining(dt);
       this.updateFishing(dt);
       const repHeld = this.player.heldItem();
