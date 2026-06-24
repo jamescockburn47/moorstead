@@ -198,20 +198,21 @@ export class UI {
 
     this.whoBox = this.el('div', 'login-who hidden', this.titleScreen, '');
 
-    this.seedInput = this.el('input', 'seed', this.titleScreen);
-    this.seedInput.placeholder = "World seed (leave blank for t' fates to decide)";
-    this.btnNew = this.el('button', 'mc', this.titleScreen, 'New World: Gerron Wi&rsquo; It');
-    this.btnShared = this.el('button', 'mc', this.titleScreen, 'T&rsquo; Shared Moor: Play Wi&rsquo; Others');
+    // v2 is the main game: the real North York Moors, c.1900. "New Game" starts it
+    // (newWorld('') → the moors world, persistent).
+    this.btnNew = this.el('button', 'mc', this.titleScreen, '&#x1F689; Enter t&rsquo; Moors &mdash; New Game');
     this.btnContinue = this.el('button', 'mc', this.titleScreen, 'Carry On Where Tha Left Off');
+    this.btnShared = this.el('button', 'mc', this.titleScreen, 'T&rsquo; Shared Moor: Play Wi&rsquo; Others');
     this.btnHow = this.el('button', 'mc', this.titleScreen, 'Ow Ter Play');
-    // A section of its own: the real-Moors world (c.1900), built to scale frae
-    // Ordnance Survey data, grown stage by stage.
-    this.moorsBox = this.el('div', 'moors-preview hidden', this.titleScreen);
-    this.el('div', 'moors-h', this.moorsBox, '&#x1F689; T&rsquo; Real North York Moors &mdash; 1900');
-    this.btnMoors = this.el('button', 'mc moors-btn', this.moorsBox, 'Explore t&rsquo; Real Moors');
-    this.el('div', 'moors-note', this.moorsBox, 'Built to scale frae real <b>Ordnance Survey</b> maps &mdash; t&rsquo; actual moors, dales, rivers an&rsquo; coast. A work in progress, grown stage by stage: reet now tha can roam t&rsquo; true landscape; villages, railways an&rsquo; folk are on their way.');
+    this.el('div', 'moors-note', this.titleScreen, 'T&rsquo; real North York Moors, built to scale frae <b>Ordnance Survey</b> maps &mdash; t&rsquo; true landscape, dales, rivers an&rsquo; coast, t&rsquo; 1900 railways, livin&rsquo; folk an&rsquo; their tales (an&rsquo; mind t&rsquo; Count up on t&rsquo; East Cliff of a stormy neet).');
     this.el('div', 'muted-note', this.titleScreen, 'New to t&rsquo; moor? <b>Give &lsquo;Ow Ter Play&rsquo; a read</b>: learn how to build, ride, drive, and stay alive.');
     this.el('div', 'muted-note', this.titleScreen, 'Watch thissen at neet: t&rsquo; barghest walks when t&rsquo; sun goes down.');
+    // The original stylised game, kept as a legacy option at the foot.
+    this.legacyBox = this.el('div', 'title-legacy hidden', this.titleScreen);
+    this.el('div', 'muted-note', this.legacyBox, 'Or play t&rsquo; original <b>stylised</b> Moorstead (one solo save at a time &mdash; starting a world begins fresh):');
+    this.seedInput = this.el('input', 'seed', this.legacyBox);
+    this.seedInput.placeholder = "Custom seed (optional)";
+    this.btnLegacy = this.el('button', 'mc legacy-btn', this.legacyBox, 'Play t&rsquo; Original (Stylised) Moorstead');
     this.el('div', 'title-foot', this.titleScreen, 'Created purely with AI by a non-coder &middot; procedurally generated, not a single asset file &middot; villagers, jobs an&rsquo; adventures run on large local AI models &middot; <a href="/about.html?tab=security" style="color:#d8b95a">Security &amp; privacy</a>');
 
     // ---------- pause ----------
@@ -1086,11 +1087,10 @@ export class UI {
   setLoggedIn(auth) {
     const loggedIn = !!auth;
     this.loginBox.classList.toggle('hidden', loggedIn);
-    this.seedInput.classList.toggle('hidden', !loggedIn);
     this.btnNew.classList.toggle('hidden', !loggedIn);
     this.btnShared.classList.toggle('hidden', !loggedIn);
     this.btnContinue.classList.toggle('hidden', !loggedIn);
-    this.moorsBox.classList.toggle('hidden', !loggedIn);
+    this.legacyBox.classList.toggle('hidden', !loggedIn);   // contains the seed input + legacy button
     this.whoBox.classList.toggle('hidden', !loggedIn);
     if (!loggedIn) return;
     if (auth.guest) {

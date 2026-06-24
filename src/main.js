@@ -290,6 +290,12 @@ class Game {
     this.moorsPreview = true; // a transient explore world: never persisted, never clobbers the solo save
   }
 
+  // The original stylised Moorstead, kept as a legacy option (any NON-moors seed; blank →
+  // a fixed classic seed). Shares the single solo save slot, so it starts fresh like New World.
+  async startLegacyWorld(seedStr) {
+    return this.newWorld((seedStr && seedStr.trim()) ? seedStr.trim() : 'moorstead-classic');
+  }
+
   async continueGame() {
     const { loadGame } = await import('./save.js');
     const saved = await loadGame();
@@ -479,7 +485,7 @@ class Game {
     ui.feedbackBtn.addEventListener('click', () => this.openFeedback('title'));
     ui.btnFeedbackClose.addEventListener('click', () => ui.show(this.feedbackReturn || 'titleScreen'));
     ui.btnFeedbackSend.addEventListener('click', () => this.sendFeedback());
-    ui.btnNew.addEventListener('click', () => { this.audio.init(); this.newWorld(ui.seedInput.value.trim()); });
+    ui.btnNew.addEventListener('click', () => { this.audio.init(); this.newWorld(''); }); // blank → the real moors (v2, the main game)
     ui.btnShared.addEventListener('click', () => { this.audio.init(); this.joinShared(); });
     ui.netChatInput.addEventListener('keydown', e => {
       e.stopPropagation();
@@ -493,7 +499,7 @@ class Game {
       } else if (e.code === 'Escape') this.closeNetChat();
     });
     ui.btnContinue.addEventListener('click', () => { this.audio.init(); this.continueGame(); });
-    ui.btnMoors.addEventListener('click', () => { this.audio.init(); this.startMoorsWorld(); });
+    ui.btnLegacy.addEventListener('click', () => { this.audio.init(); this.startLegacyWorld(ui.seedInput.value.trim()); });
     ui.btnHow.addEventListener('click', () => { this.howReturn = 'titleScreen'; ui.show('howScreen'); });
     ui.btnHow2.addEventListener('click', () => { this.howReturn = 'pauseScreen'; ui.show('howScreen'); });
     ui.btnHowClose.addEventListener('click', () => ui.show(this.howReturn || 'titleScreen'));

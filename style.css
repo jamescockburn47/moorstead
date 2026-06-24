@@ -346,6 +346,11 @@ input.seed {
 .moors-h { color: var(--gold); font-weight: 700; font-size: 14px; letter-spacing: 0.3px; margin-bottom: 8px; text-align: center; }
 .moors-preview .moors-btn { width: 100%; margin: 0; }
 .moors-note { font-size: 11.5px; color: #c6c0b0; line-height: 1.4; margin-top: 8px; text-align: center; }
+/* the legacy (original stylised) game — a quiet option at the foot of the title screen */
+.title-legacy { max-width: 360px; margin: 18px auto 8px; padding: 12px 13px 8px; border-top: 1px solid rgba(255,255,255,0.12); opacity: 0.78; }
+.title-legacy .seed { margin: 6px auto; }
+.title-legacy .muted-note { text-align: center; }
+.legacy-btn { width: 100%; margin: 0; font-size: 0.85em; padding: 7px 12px; filter: saturate(0.6); }
 
 /* ---------- villager chat ---------- */
 .chat-panel { width: 560px; }
