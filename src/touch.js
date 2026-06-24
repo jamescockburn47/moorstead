@@ -255,4 +255,23 @@ export class TouchControls {
     if (this.btns.talk) this.btns.talk.hidden = !g.villagerInView();
     if (this.btns.mount) this.btns.mount.hidden = !(g.boat || g.mount);
   }
+
+  _buildMore() {
+    const g = this.game;
+    const panel = document.createElement('div');
+    panel.className = 'touch-more'; panel.dataset.touch = 'morePanel';
+    this.root.appendChild(panel); this._more = panel;
+    const item = (label, fn) => { const b = document.createElement('button'); b.className = 'touch-more-item'; b.innerHTML = label; b.addEventListener('touchstart', e => { e.preventDefault(); fn(); panel.classList.remove('open'); }, { passive: false }); panel.appendChild(b); return b; };
+    item('<i class="ti ti-volume"></i> Mute', () => { g.audio.setMuted(!g.audio.muted); g.ui.toast(g.audio.muted ? 'Sound off.' : 'Sound on.'); });
+    item('<i class="ti ti-bell"></i> Muster flock', () => g.musterFlock());
+    item('<i class="ti ti-clipboard-list"></i> Departures board', () => g.openBoard(false));
+    item('<i class="ti ti-zzz"></i> Sleep', () => g.trySleep());
+    // sheepdog whistles: set g.herdCmd like the arrow-key path
+    const whistles = [['Come bye', 'come-bye'], ['Away', 'away'], ['Walk on', 'walk-on'], ['Lie down', 'lie-down'], ['Heel', 'heel']];
+    const row = document.createElement('div'); row.className = 'touch-whistles';
+    for (const [label, cmd] of whistles) { const b = document.createElement('button'); b.className = 'touch-more-item'; b.textContent = label; b.addEventListener('touchstart', e => { e.preventDefault(); g.herdCmd = cmd; }, { passive: false }); row.appendChild(b); }
+    panel.appendChild(row);
+    item('<i class="ti ti-device-floppy"></i> Save', () => g.saveNow());
+    item('<i class="ti ti-door-exit"></i> Pause menu', () => g.pause());
+  }
 }
