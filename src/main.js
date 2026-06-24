@@ -436,6 +436,29 @@ class Game {
     }
   }
 
+  // Title backdrop only: keep the WATCHED train lively. Live rail traffic is spread thin across the
+  // three lines and ~100 folk, so any one train carries 1-2 — too sparse for a showcase. When the
+  // watched train dwells at a station, send a few of THAT station's own folk aboard for a hop to the
+  // next stop (they alight there, then drift home off-camera), so boarding + alighting is on show.
+  _titlePopulateTrain(br) {
+    const rc = this.rosterClient; if (!rc || !this.titlePreview || !this.world) return;
+    const geo = this.world.gen.geo;
+    const lineName = br ? br.name : (geo.railPaths().find(l => l.path === geo.railPath()) || {}).name;
+    const vt = rc._visibleTrain(lineName); if (!vt || !vt.dwelling || !vt.station) return;
+    const stations = br ? br.stations : geo.railway();
+    const i = stations.findIndex(s => s.name === vt.station); if (i < 0) return;
+    const dir = vt.dir === 0 ? 1 : -1;
+    let ni = i + dir; if (ni < 0 || ni >= stations.length) ni = i - dir;   // bounce off a terminus
+    const dest = stations[ni] && stations[ni].name; if (!dest || dest === vt.station) return;
+    let riding = 0; for (const [, e] of rc.npcs) if (e.ride && e.ride.titleForced && e.ride.line === lineName) riding++;
+    for (const [, e] of rc.npcs) {
+      if (riding >= 6) break;
+      if (e.ride || !e.data.state || e.data.state.kind !== 'at' || e.data.home !== vt.station || !e.mob) continue;
+      e.ride = { line: lineName, from: vt.station, to: dest, phase: 'wait', t: 0, titleForced: true };
+      riding++;
+    }
+  }
+
   async saveNow(toast = true) {
     if (!this.world) return;
     if (this.epochWiping) return; // a warden reset is reloading us — never re-seed the wiped relay
@@ -3670,7 +3693,7 @@ class Game {
         if (this._seasonBucket !== 90 + this._titleSceneIdx) { this._seasonBucket = 90 + this._titleSceneIdx; retintAtlasForSeason(lightSeason); }
         this.sky.update(dt, this.player.pos, lightSeason, false);
         if (this.rails) this.rails.update(dt, { x: ax, z: az });
-        if (this.rosterClient) this.rosterClient.update(dt); // drive the living roster — folk board, ride and alight the train
+        if (this.rosterClient) { this.rosterClient.update(dt); this._titlePopulateTrain(br); } // drive the roster + keep the watched train busy with boarders
         this.entities.update(dt, this.player, false, this.audio, () => {});
         const orbitCam = () => {
           // a slow aerial orbit, following the steam train across the scene

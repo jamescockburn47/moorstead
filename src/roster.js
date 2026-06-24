@@ -220,9 +220,14 @@ export class RosterClient {
         }
         continue;
       }
-      // A committed rail journey overrides the brain state until she's delivered — so she actually
-      // waits for, BOARDS, rides and ALIGHTS the VISIBLE train, rather than gliding the bare rails
-      // alone (the brain's rail timing never lined up with the real train's schedule).
+      // A committed rail journey overrides the brain state until she's delivered. The brain's rail
+      // leg finishes faster than the slow visible train reaches her exact stop, so when the brain
+      // says the leg is done, ALIGHT at the destination (else 'done' rarely fired and folk rode on
+      // forever, never getting off).
+      if (e.ride && e.ride.phase !== 'done' && !e.ride.titleForced) {
+        const brainRail = e.data.state && e.data.state.kind === 'rail';
+        if (!brainRail) { if (e.ride.phase === 'aboard') e.ride.phase = 'done'; else e.ride = null; }
+      }
       if (e.ride && e.ride.phase !== 'done') { this._driveRail(e, m, dt); continue; }
       const s = e.data.state;
       if (s && s.kind === 'rail') {
