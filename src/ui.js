@@ -1535,6 +1535,10 @@ export class UI {
   // ============ inventory & crafting ============
   openInventory(player, nearBench) {
     this.invPanel.innerHTML = '';
+    // A visible close — the only keyboard-free way off this screen, so touch players aren't trapped
+    // (desktop still has E/Esc). Other screens (board, museum, chat) already carry their own close.
+    const close = this.el('button', 'mc inv-close', this.invPanel, 'Done');
+    close.addEventListener('click', () => this.game.closeScreens());
     const flex = this.el('div', 'inv-flex', this.invPanel);
 
     const left = this.el('div', '', flex);

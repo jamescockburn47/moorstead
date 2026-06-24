@@ -522,6 +522,7 @@ html.touch .game { touch-action: none; }
 .touch-more.open { display: flex; }
 .touch-more-item { min-height: 44px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; }
 .touch-whistles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.inv-close { display: block; margin: 0 0 10px auto; padding: 6px 16px; }   /* top-right Done in the inventory */
 
 @media (max-width: 820px), (pointer: coarse) {
   .overlay .panel { width: min(92vw, 460px); max-height: 86vh; overflow: auto; }
