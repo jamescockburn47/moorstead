@@ -3,7 +3,7 @@
 import assert from 'node:assert';
 import { Gen, MOORS_SEED } from '../src/worldgen.js';
 import { B } from '../src/defs.js';
-import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity } from '../src/roster.js';
+import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity, surfaceHeight, __resetSurfCache } from '../src/roster.js';
 
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
 const geo = new Gen(MOORS_SEED).geo;
@@ -79,5 +79,20 @@ ok(railAct.full.includes('train to Pickering') && railAct.short === '→ Pickeri
 const rideAct = npcActivity({ home: 'Grosmont', state: { kind: 'at', place: 'Grosmont' } },
   { phase: 'aboard', to: 'Whitby' });
 ok(rideAct.short === '→ Whitby (train)' && rideAct.full.includes('on the train to Whitby'), 'activity: a committed ride overrides the brain state');
+
+// --- surfaceHeight: stand ON the top built block, fall back to DEM when unloaded -------------
+const stubWorld = (blocks) => ({ getBlock: (x, y, z) => (blocks[`${x},${y},${z}`] ?? B.AIR) });
+__resetSurfCache();
+{
+  const g0 = geo.height(300, 300);                 // a real column's DEM height
+  // a plank deck two blocks above the DEM, with air above it
+  const w = stubWorld({ [`300,${g0 + 2},300`]: B.PLANKS });
+  ok(surfaceHeight(w, geo, 300, 300) === g0 + 3, 'surfaceHeight stands on the built deck (DEM+2 block -> +3)');
+  // empty column (chunk effectively unloaded) -> DEM + 1
+  ok(surfaceHeight(stubWorld({}), geo, 305, 305) === geo.height(305, 305) + 1, 'surfaceHeight falls back to DEM+1 when no blocks');
+  // water is not a standing surface -> falls through to DEM
+  __resetSurfCache();
+  ok(surfaceHeight(stubWorld({ [`310,${geo.height(310, 310) + 1},310`]: B.WATER }), geo, 310, 310) === geo.height(310, 310) + 1, 'surfaceHeight ignores water');
+}
 
 console.log(`verify-roster: ${n} assertions OK`);

@@ -5,6 +5,30 @@ import { B } from './defs.js';
 
 const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
 
+// The true voxel surface at (x,z): one block ABOVE the top non-air/non-water block, so a body
+// stands ON the platform deck / building floor rather than sunk into it. geo.height is DEM-only
+// and blind to built blocks (platforms, walls), which is why folk clip. Falls back to the DEM
+// when the column has no blocks (chunk not loaded) so an unloaded column never pops a body to y~0.
+// Cached per column — built geometry is effectively static.
+const _surfCache = new Map();
+export function __resetSurfCache() { _surfCache.clear(); }   // test hook: stub worlds reuse columns
+export function surfaceHeight(world, geo, x, z) {
+  const rx = Math.round(x), rz = Math.round(z);
+  const key = rx + ',' + rz;
+  const c = _surfCache.get(key);
+  if (c !== undefined) return c;
+  const dem = geo.height(rx, rz);
+  let top = null;
+  for (let y = dem + 6; y >= dem - 8 && y > 0; y--) {        // built things sit at/above the DEM
+    const b = world.getBlock(rx, y, rz);
+    if (b !== B.AIR && b !== B.WATER) { top = y; break; }
+  }
+  const h = (top != null ? top : dem) + 1;
+  if (_surfCache.size > 60000) _surfCache.clear();
+  _surfCache.set(key, h);
+  return h;
+}
+
 // the town's anchor: its marker coordinate + standing height. null if the name is unknown.
 export function townAnchor(name, geo) {
   const v = geo.villages.find(t => t.name === name);
