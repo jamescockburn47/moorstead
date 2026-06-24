@@ -236,7 +236,7 @@ export class RosterClient {
       if (ride.phase === 'wait' && vt.station === ride.from) ride.phase = 'aboard';
       else if (ride.phase === 'aboard' && vt.station === ride.to) ride.phase = 'done';
     }
-    if (ride.t > 240) ride.phase = 'done';                  // never wait forever — give up if no train comes
+    if (ride.t > 720) ride.phase = 'done';                  // safety net: never wait forever (sparse timetable ~ minutes)
     const grp = m.model && m.model.group;
     if (ride.phase === 'aboard') {
       if (grp && grp.visible) grp.visible = false;          // she's inside the carriage now
@@ -244,11 +244,53 @@ export class RosterClient {
       return;
     }
     if (grp && !grp.visible) grp.visible = true;
-    const stn = ride.phase === 'done' ? ride.to : ride.from; // alighted at the destination, or waiting at the origin
-    const a = townAnchor(stn, this.geo); if (!a) return;
+    if (ride.phase === 'done') {                            // alighted — stand on the destination platform
+      const a = townAnchor(ride.to, this.geo); if (!a) return;
+      const sp = _spread(e.data.id);
+      this._lerpTo(m, a.x + sp.dx, a.z + sp.dz, Math.min(1, dt * 6), true);
+      return;
+    }
+    // waiting at the origin — she KNOWS the timetable: mills about nearby until the train is
+    // nearly due, then converges on the platform to board. So the platform fills as the train
+    // approaches instead of folk standing frozen there for ages.
+    const a = townAnchor(ride.from, this.geo); if (!a) return;
+    const due = this._nextTrainCall(ride.line, ride.from);
+    const soon = due != null && due <= 40;
     const sp = _spread(e.data.id);
-    const tx = a.x + sp.dx, tz = a.z + sp.dz, ty = this.geo.height(Math.round(tx), Math.round(tz)) + 1;
-    const k = Math.min(1, dt * 6);
+    const fx = soon ? 0.25 : 1;                             // tight on the platform when due; dispersed/milling otherwise
+    this._lerpTo(m, a.x + sp.dx * fx, a.z + sp.dz * fx, Math.min(1, dt * (soon ? 3.5 : 1.5)), true);
+  }
+
+  _lerpTo(m, tx, tz, k, face) {
+    const ty = this.geo.height(Math.round(tx), Math.round(tz)) + 1;
     m.pos.x += (tx - m.pos.x) * k; m.pos.y += (ty - m.pos.y) * k; m.pos.z += (tz - m.pos.z) * k;
+    if (face) { const ddx = tx - m.pos.x, ddz = tz - m.pos.z; if (ddx * ddx + ddz * ddz > 0.04) m.yaw = Math.atan2(ddx, ddz); }
+  }
+
+  // Seconds until the VISIBLE train next calls (dwells) at `stationName` on `lineName`, or null.
+  // Computed from the deterministic schedule (same the train runs on) and cached ~3s per stop so
+  // ~100 folk checking the timetable each frame stays cheap.
+  _nextTrainCall(lineName, stationName) {
+    this._callCache = this._callCache || new Map();
+    const key = lineName + '|' + stationName;
+    const nowMs = performance.now();
+    const c = this._callCache.get(key);
+    if (c && nowMs - c.at < 3000) return c.due == null ? null : Math.max(0, c.due - (nowMs - c.at) / 1000);
+    const g = this.game, geo = this.geo;
+    const mainName = (geo.railPaths().find(l => l.path === geo.railPath()) || {}).name;
+    let schedFn, stops;
+    if (lineName === mainName) { schedFn = t => g.trainSchedule(t); stops = geo.railway(); }
+    else {
+      const bt = (g.branchTrains || []).find(b => b.name === lineName);
+      if (!bt) { this._callCache.set(key, { at: nowMs, due: null }); return null; }
+      schedFn = t => g.trainScheduleFor(bt.path, bt.stations, t); stops = bt.stations;
+    }
+    const idx = stops.findIndex(s => s.name === stationName);
+    if (idx < 0) { this._callCache.set(key, { at: nowMs, due: null }); return null; }
+    const now = Date.now() / 1000;
+    let due = null;
+    for (let dt = 0; dt < 900; dt += 3) { const s = schedFn(now + dt); if (s.mode === 'dwell' && s.i === idx) { due = dt; break; } }
+    this._callCache.set(key, { at: nowMs, due });
+    return due;
   }
 }
