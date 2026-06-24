@@ -401,10 +401,12 @@ export class MoorsGeography {
         let i0 = nearestIdx(stops[0]), i1 = nearestIdx(stops[stops.length - 1]);
         if (i0 > i1) { const t = i0; i0 = i1; i1 = t; }
         pts = pts.slice(i0, i1 + 1);
-        // resample to even spacing + a LIGHT centred moving average. Smoothing harder backfires —
-        // a heavy average cuts the corners, tightening the bays into SHARPER turns (and shifting the
-        // route). So the jerky ride is cured by easing the TRAIN'S rotation through the curves (see
-        // the rotation.y lerp in updateTrainWorld / updateBranchTrains), not by over-smoothing here.
+        // resample to even spacing, then CHAIKIN-round the corners. Chaikin cuts each corner toward
+        // its own chord (staying inside the polyline's hull), so it rounds the hand-flown jitter and
+        // sharp bends into sweeping curves — WITHOUT the moving-average's failure mode, where a heavy
+        // window tightens tight bays into sharper turns and drifts the route off-line. The named
+        // stations are snapped back onto the smoothed line just below, and verify-coast confirms the
+        // rounded route never strays into the sea.
         pts = this._smoothPoly(this._resamplePoly(pts, 8), 2, 2);
         route = pts.map(p => ({ x: Math.round(p[0]), z: Math.round(p[1]), via: true }));
         const named = [];
@@ -457,7 +459,7 @@ export class MoorsGeography {
     // markers, so the procedural village-avoidance only fights the routes — kinking them into loops
     // around blobs with nothing to avoid. Skip it for ALL moors lines; buildings (added later) are
     // kept clear of the rails at stamp time instead.
-    this._paths = this.railLines().map(l => ({ name: l.name, kind: l.kind, path: buildRailPath(l.route, hf, [], true, rf) }));
+    this._paths = this.railLines().map(l => ({ name: l.name, kind: l.kind, path: buildRailPath(l.route, hf, [], true, rf, 9) }));
     return this._paths;
   }
   // the MAIN line's spline (single-path consumers: trains, schedules, ride camera)

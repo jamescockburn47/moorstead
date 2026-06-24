@@ -18,7 +18,7 @@ export function stationOrient(tx, tz) {
   return { along, across };
 }
 
-export function buildRailPath(stations, heightFn, villages, cardinalStations = false, riverFn = null) {
+export function buildRailPath(stations, heightFn, villages, cardinalStations = false, riverFn = null, smoothPasses = 0) {
   const st = stations;
   // route-waypoints (flagged `via`) shape the curve along the coast but are NOT platform
   // stations — they get no straight run, no deck-levelling and no stationS entry.
@@ -158,6 +158,18 @@ export function buildRailPath(stations, heightFn, villages, cardinalStations = f
         pts[i].x = (pts[i - 1].x + pts[i].x * 2 + pts[i + 1].x) / 4;
         pts[i].z = (pts[i - 1].z + pts[i].z * 2 + pts[i + 1].z) / 4;
       }
+    }
+  }
+  // The real-Moors lines disable building-avoidance (villages=[]), so the smoothing INSIDE that loop
+  // never runs — yet the raw Catmull-Rom still corners at every control (worst on the hand-flown
+  // coast line, ~40° kinks that jerk the train + the front-of-train camera). Sweep the whole route
+  // here regardless, with the stations PINNED so platforms stay dead straight and on their mark, so
+  // the ride glides while the route holds its shape and place. `smoothPasses` sets the strength.
+  for (let r = 0; r < smoothPasses; r++) {
+    for (let i = 1; i < pts.length - 1; i++) {
+      if (pinned[i]) continue;
+      pts[i].x = (pts[i - 1].x + pts[i].x * 2 + pts[i + 1].x) / 4;
+      pts[i].z = (pts[i - 1].z + pts[i].z * 2 + pts[i + 1].z) / 4;
     }
   }
   // strike any kinks t' shoving left behind (near-duplicate or doubling-back samples)
