@@ -222,6 +222,7 @@ export class UI {
     this.btnResume = this.el('button', 'mc', pp, 'Back to t&rsquo; Moor');
     this.btnSave = this.el('button', 'mc', pp, 'Save T&rsquo; World');
     this.btnCreative = this.el('button', 'mc', pp, 'Toggle Creative Mode');
+    this.btnTouch = this.el('button', 'mc', pp, 'Touch controls: Auto');
     this.adminPanel = this.el('div', 'admin-panel hidden', pp); // filled by t' game for parish wardens
     this.btnHow2 = this.el('button', 'mc', pp, 'Ow Ter Play');
     this.btnQuit = this.el('button', 'mc', pp, 'Give Up &amp; Go Home (Save &amp; Quit)');

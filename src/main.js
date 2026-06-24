@@ -549,6 +549,10 @@ class Game {
     ui.btnHowClose.addEventListener('click', () => ui.show(this.howReturn || 'titleScreen'));
     ui.btnResume.addEventListener('click', () => this.resume());
     ui.btnSave.addEventListener('click', () => this.saveNow());
+    ui.btnTouch.addEventListener('click', () => {
+      const mode = this.touch.cycleMode();
+      ui.btnTouch.innerHTML = 'Touch controls: ' + mode.charAt(0).toUpperCase() + mode.slice(1);
+    });
     ui.btnCreative.addEventListener('click', () => {
       if (this.bairnLocked()) { ui.toast('Tha’s on t’ bairns’ world — it’s survival here. Tha has to earn thi blocks an’ tools!', 4000); return; }
       this.player.creative = !this.player.creative;
