@@ -205,7 +205,7 @@ export function steerWalk(mob, from, to, started, eta, now, world, geo, dt) {
   const step = speed * dt;
   const nx = mob.pos.x + Math.sin(best) * step, nz = mob.pos.z + Math.cos(best) * step;
   mob.pos.x = nx; mob.pos.z = nz;
-  mob.pos.y = geo.height(Math.round(nx), Math.round(nz)) + 1;        // follow the ground
+  mob.pos.y = surfaceHeight(world, geo, nx, nz);                     // follow the built surface, not just DEM
   mob.yaw = best;
 }
 
@@ -412,8 +412,28 @@ export class RosterClient {
     this._lerpTo(m, a.x + sp.dx * fx, a.z + sp.dz * fx, Math.min(1, dt * (soon ? 3.5 : 1.5)), true);
   }
 
+  // Potter gently about a patch so a town looks alive, not frozen: a slow wander around `anchor`
+  // (+ obstacle check), re-aimed every 5–13s. Used by resting 'at' folk AND by rail travellers
+  // who are waiting for a train that isn't due yet (so they wait in town, not on the platform).
+  _potterAt(m, anchor, nowEff, dt) {
+    if (m._ambleT == null || nowEff > m._ambleT) {
+      m._ambleT = nowEff + 5 + Math.random() * 8;
+      const r = Math.random() * 2.2, ang = Math.random() * Math.PI * 2;
+      const cx = anchor.x + Math.cos(ang) * r, cz = anchor.z + Math.sin(ang) * r;
+      const fromG = this.geo.height(Math.round(anchor.x), Math.round(anchor.z));
+      if (walkableStep(this.world, this.geo, cx, cz, fromG)) { m._ambleDX = Math.cos(ang) * r; m._ambleDZ = Math.sin(ang) * r; }
+      else { m._ambleDX = 0; m._ambleDZ = 0; }
+    }
+    const tx = anchor.x + (m._ambleDX || 0), tz = anchor.z + (m._ambleDZ || 0);
+    const k = Math.min(1, dt * 1.6);
+    m.pos.x += (tx - m.pos.x) * k; m.pos.z += (tz - m.pos.z) * k;
+    m.pos.y += (surfaceHeight(this.world, this.geo, m.pos.x, m.pos.z) - m.pos.y) * k;
+    const ddx = tx - m.pos.x, ddz = tz - m.pos.z;
+    if (ddx * ddx + ddz * ddz > 0.02) m.yaw = Math.atan2(ddx, ddz);
+  }
+
   _lerpTo(m, tx, tz, k, face) {
-    const ty = this.geo.height(Math.round(tx), Math.round(tz)) + 1;
+    const ty = surfaceHeight(this.world, this.geo, tx, tz);
     m.pos.x += (tx - m.pos.x) * k; m.pos.y += (ty - m.pos.y) * k; m.pos.z += (tz - m.pos.z) * k;
     if (face) { const ddx = tx - m.pos.x, ddz = tz - m.pos.z; if (ddx * ddx + ddz * ddz > 0.04) m.yaw = Math.atan2(ddx, ddz); }
   }
