@@ -209,6 +209,9 @@ export class RosterClient {
       const act = npcActivity(e.data, e.ride);
       m.activity = act.full; m.activityShort = act.short;
       if (!m.village) m.village = e.data.home || (e.data.state && e.data.state.place) || null;
+      // Stop to chat: while a player has her in conversation, freeze her where she stands so she
+      // doesn't walk off mid-natter. Her errand resumes (ride timer included) when the chat closes.
+      if (m.chatting) continue;
       // A committed rail journey overrides the brain state until she's delivered — so she actually
       // waits for, BOARDS, rides and ALIGHTS the VISIBLE train, rather than gliding the bare rails
       // alone (the brain's rail timing never lined up with the real train's schedule).
@@ -228,12 +231,21 @@ export class RosterClient {
         const from = townAnchor(s.from, this.geo), to = townAnchor(s.to, this.geo);
         if (from && to) steerWalk(m, from, to, s.started, s.eta, nowEff, this.world, this.geo, dt);
       } else {
-        const p = npcVoxelPos(e.data, nowEff, this.geo);   // 'at' anchor
+        // 'at': potter gently about her patch so the town looks alive, not frozen — a slow wander
+        // around her anchor (+ per-id spread), re-aimed every few seconds within a small radius.
+        const p = npcVoxelPos(e.data, nowEff, this.geo);   // 'at' anchor + per-id spread
         if (!p) continue;
-        const k = Math.min(1, dt * 6);                     // lerp idiom (as multiplayer remotes)
-        m.pos.x += (p.x - m.pos.x) * k; m.pos.y += (p.y - m.pos.y) * k; m.pos.z += (p.z - m.pos.z) * k;
-        const ddx = p.x - m.pos.x, ddz = p.z - m.pos.z;
-        if (ddx * ddx + ddz * ddz > 0.01) m.yaw = Math.atan2(ddx, ddz);
+        if (m._ambleT == null || nowEff > m._ambleT) {
+          m._ambleT = nowEff + 5 + Math.random() * 8;      // re-aim every 5–13s (a few steps, then a pause)
+          const r = Math.random() * 2.2, ang = Math.random() * Math.PI * 2;
+          m._ambleDX = Math.cos(ang) * r; m._ambleDZ = Math.sin(ang) * r;
+        }
+        const tx = p.x + (m._ambleDX || 0), tz = p.z + (m._ambleDZ || 0);
+        const k = Math.min(1, dt * 1.6);                   // amble slowly so the leg-swing reads as walking, not gliding
+        m.pos.x += (tx - m.pos.x) * k; m.pos.z += (tz - m.pos.z) * k;
+        m.pos.y += (this.geo.height(Math.round(m.pos.x), Math.round(m.pos.z)) + 1 - m.pos.y) * k;
+        const ddx = tx - m.pos.x, ddz = tz - m.pos.z;
+        if (ddx * ddx + ddz * ddz > 0.02) m.yaw = Math.atan2(ddx, ddz);
       }
     }
   }
