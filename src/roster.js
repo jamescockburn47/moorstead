@@ -364,23 +364,26 @@ export class RosterClient {
              path: bt.path, chainage: bt.state.s.s, dir: bt.state.s.dir };
   }
 
-  // Drive a committed rail journey (e.ride) against the visible train: wait on the origin platform;
-  // board when the train dwells there; ride VISIBLY in the coaches (on the rail deck behind the
-  // loco); alight (reappear on the platform) at the destination when the train dwells there. A
-  // timeout stops her waiting forever if the two schedules never line up.
-  _driveRail(e, m, dt) {
+  // Drive a committed rail journey (e.ride) against the VISIBLE train. The ride is authoritative
+  // and persists past the brain's faster logical arrival: she waits in town, walks onto the
+  // platform as the train nears (capped per platform), boards when it dwells, rides in the coaches,
+  // and alights into the destination town. A 720s timeout resolves a stuck ride gracefully.
+  _driveRail(e, m, dt, rankMap) {
     const ride = e.ride;
     ride.t += dt;
+    const grp = m.model && m.model.group;
     const vt = this._visibleTrain(ride.line);
+
+    // board / alight transitions, read off the visible train's dwell
     if (vt && vt.dwelling) {
-      if (ride.phase === 'wait' && vt.station === ride.from) ride.phase = 'aboard';
+      if (ride.phase === 'wait' && vt.station === ride.from && this._atPlatform(m, ride)) ride.phase = 'aboard';
       else if (ride.phase === 'aboard' && vt.station === ride.to) ride.phase = 'done';
     }
-    if (ride.t > 720) ride.phase = 'done';                  // safety net: never wait forever (sparse timetable ~ minutes)
-    const grp = m.model && m.model.group;
+    // safety net: never wait forever (sparse timetable ~ minutes; 720s ~ 1.6 cycles)
+    if (ride.t > 720 && ride.phase !== 'aboard') { this._resolveToBrain(e, m); return; }
+
     if (ride.phase === 'aboard') {
-      // Ride VISIBLY, as a passenger in the coaches: sit on the rail deck behind the loco (the
-      // carriage zone), so folk are actually seen aboard the moving train rather than vanishing.
+      // ride VISIBLY as a passenger in the coaches: sit on the rail deck behind the loco.
       if (grp && !grp.visible) grp.visible = true;
       if (vt && vt.path && vt.chainage != null) {
         const poseFwd = vt.dir === 0 ? 1 : -1;
@@ -394,22 +397,54 @@ export class RosterClient {
       }
       return;
     }
+
     if (grp && !grp.visible) grp.visible = true;
-    if (ride.phase === 'done') {                            // alighted — stand on the destination platform
-      const a = townAnchor(ride.to, this.geo); if (!a) return;
-      const sp = _spread(e.data.id);
-      this._lerpTo(m, a.x + sp.dx, a.z + sp.dz, Math.min(1, dt * 6), true);
+
+    if (ride.phase === 'done') {                            // alighted — walk off the platform into town
+      const town = townAnchor(ride.to, this.geo);
+      if (!town) { e.ride = null; return; }
+      if ((m.pos.x - town.x) ** 2 + (m.pos.z - town.z) ** 2 < 9) { e.ride = null; return; }  // home in town -> resync
+      this._walkTo(m, town, dt);
       return;
     }
-    // waiting at the origin — she KNOWS the timetable: mills about nearby until the train is
-    // nearly due, then converges on the platform to board. So the platform fills as the train
-    // approaches instead of folk standing frozen there for ages.
+
+    // phase 'wait'
     const a = townAnchor(ride.from, this.geo); if (!a) return;
+    if (ride.titleForced) {                                 // title preview: converge straight on to board the watched train
+      this._walkTo(m, platformPoint(this.world, this.geo, ride.line, ride.from) || a, dt);
+      return;
+    }
     const due = this._nextTrainCall(ride.line, ride.from);
-    const soon = due != null && due <= 40;
-    const sp = _spread(e.data.id);
-    const fx = soon ? 0.25 : 1;                             // tight on the platform when due; dispersed/milling otherwise
-    this._lerpTo(m, a.x + sp.dx * fx, a.z + sp.dz * fx, Math.min(1, dt * (soon ? 3.5 : 1.5)), true);
+    const group = (rankMap && rankMap.get(ride.line + '|' + ride.from)) || [e.data.id];
+    const mode = waitMode(due, waiterRank(e.data.id, group));
+    if (mode === 'potter') { this._potterAt(m, a, this._nowEff(), dt); return; }
+    this._walkTo(m, platformPoint(this.world, this.geo, ride.line, ride.from) || a, dt);   // approach the platform
+  }
+
+  // Walk a streamed mob toward a point at a steady pace, grounded on the built surface.
+  _walkTo(m, to, dt, pace = 2.2) {
+    const ty = surfaceHeight(this.world, this.geo, to.x, to.z);
+    const dist = Math.hypot(to.x - m.pos.x, to.z - m.pos.z);
+    steerWalk(m, null, { x: to.x, y: ty, z: to.z }, 0, Math.max(1, dist / pace), 0, this.world, this.geo, dt);
+  }
+
+  // Has she reached the boarding spot for this ride's origin platform? (true if unresolved, so a
+  // missing platform never blocks boarding).
+  _atPlatform(m, ride) {
+    const pp = platformPoint(this.world, this.geo, ride.line, ride.from);
+    if (!pp) return true;
+    return (m.pos.x - pp.x) ** 2 + (m.pos.z - pp.z) ** 2 < 6;
+  }
+
+  // The visible ride couldn't be delivered (720s stuck): drop the ride and place her at whatever
+  // the brain now says, instantly (no slide across the map / through scenery). The next frame's
+  // state branch then drives her normally from there.
+  _resolveToBrain(e, m) {
+    const p = npcVoxelPos(e.data, this._nowEff(), this.geo);
+    e.ride = null;
+    if (!p) return;
+    m.pos.x = p.x; m.pos.z = p.z; m.pos.y = surfaceHeight(this.world, this.geo, p.x, p.z);
+    const grp = m.model && m.model.group; if (grp) grp.visible = true;
   }
 
   // Potter gently about a patch so a town looks alive, not frozen: a slow wander around `anchor`
