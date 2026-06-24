@@ -411,6 +411,12 @@ export class Geography {
     return this._path || (this._path = buildRailPath(this.railway(), (x, z) => this.height(x, z), this.villages));
   }
 
+  // the stylised world is single-line; expose the same multi-line shape the moors world uses
+  // so the shared worldgen/rails code can iterate uniformly.
+  railLines() { return [{ name: 'main', kind: 'passenger', stops: this.railway() }]; }
+  railPaths() { return [{ name: 'main', kind: 'passenger', path: this.railPath() }]; }
+  samplePosOn(path, s) { return rpSample(path, s); }
+
   // position, heading an' deck height at chainage s along t' line
   samplePos(s) {
     return rpSample(this.railPath(), s);

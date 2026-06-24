@@ -1,0 +1,59 @@
+// Headless: the logical->voxel mapping yields valid positions, and every name a sim
+// state can carry resolves in moorsgeo. Mirrors the verify-*.mjs pattern.
+import assert from 'node:assert';
+import { Gen, MOORS_SEED } from '../src/worldgen.js';
+import { B } from '../src/defs.js';
+import { npcVoxelPos, townAnchor, steerWalk, walkableStep } from '../src/roster.js';
+
+let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
+const geo = new Gen(MOORS_SEED).geo;
+
+// 'at' -> the village coordinate
+const wh = geo.villages.find(v => v.name === 'Whitby');
+const atP = npcVoxelPos({ state: { kind: 'at', place: 'Whitby' } }, 100, geo);
+ok(Math.abs(atP.x - wh.x) < 1 && Math.abs(atP.z - wh.z) < 1, "'at' maps to the town anchor");
+
+// 'walk' -> between the two anchors at the right fraction
+const a = townAnchor('Whitby', geo), b = townAnchor('Sleights', geo);
+const midT = 100, walk = { state: { kind: 'walk', from: 'Whitby', to: 'Sleights', started: midT, eta: midT + 200 } };
+const wP = npcVoxelPos(walk, midT + 100, geo); // halfway
+ok(Math.abs(wP.x - (a.x + b.x) / 2) < 2 && Math.abs(wP.z - (a.z + b.z) / 2) < 2, "'walk' interpolates to the midpoint");
+
+// 'rail' -> a point on the named line's spline, in-bounds, between the stations
+const rail = { state: { kind: 'rail', line: 'Whitby & Pickering', fromStn: 'Grosmont', toStn: 'Pickering', started: 0, eta: 120 } };
+const rP = npcVoxelPos(rail, 60, geo);
+ok(rP && isFinite(rP.x) && isFinite(rP.z), "'rail' returns a finite position on the line");
+const bnd = geo.worldBounds();
+ok(rP.x >= bnd.minX && rP.x <= bnd.maxX && rP.z >= bnd.minZ && rP.z <= bnd.maxZ, "'rail' position is in-world");
+
+// name-resolution contract: an unknown place returns null (caller skips it, never crashes)
+ok(npcVoxelPos({ state: { kind: 'at', place: 'Nowhere-on-Sea' } }, 0, geo) === null, 'unknown place -> null (safe)');
+
+// population spread: two folk standing in the SAME town with DIFFERENT ids fan out to
+// DIFFERENT positions, each within ~10 blocks of the anchor (so a crowd doesn't stack).
+const anchorWh = townAnchor('Whitby', geo);
+const p1 = npcVoxelPos({ id: 'pop-whitby-0', state: { kind: 'at', place: 'Whitby' } }, 0, geo);
+const p2 = npcVoxelPos({ id: 'pop-whitby-1', state: { kind: 'at', place: 'Whitby' } }, 0, geo);
+ok(Math.hypot(p1.x - p2.x, p1.z - p2.z) > 0.5, 'same-town folk with different ids spread apart');
+ok(Math.hypot(p1.x - anchorWh.x, p1.z - anchorWh.z) < 10, 'spread folk stay near the town anchor');
+ok(Math.hypot(p2.x - anchorWh.x, p2.z - anchorWh.z) < 10, 'spread folk stay near the town anchor (2)');
+// back-compat: an 'at' state with no id still maps exactly to the anchor
+const noId = npcVoxelPos({ state: { kind: 'at', place: 'Whitby' } }, 0, geo);
+ok(noId.x === anchorWh.x && noId.z === anchorWh.z, 'no-id at-state maps exactly to the anchor (back-compat)');
+
+// --- naturalistic walking: skirts obstacles, makes progress on open ground ---
+const openWorld = { getBlock: () => B.AIR };                         // nothing in the way
+const startA = townAnchor('Whitby', geo), goalB = townAnchor('Sleights', geo);
+const mob = { pos: { x: startA.x, y: startA.y, z: startA.z }, yaw: 0 };
+const d0 = Math.hypot(goalB.x - mob.pos.x, goalB.z - mob.pos.z);
+for (let i = 0; i < 80; i++) steerWalk(mob, startA, goalB, 0, 10000, i * 0.5, openWorld, geo, 0.5);
+ok(Math.hypot(goalB.x - mob.pos.x, goalB.z - mob.pos.z) < d0 - 5, 'steerWalk makes progress toward the goal');
+
+// a 2-high solid column (building / wall / tree) is NOT standable; open ground IS
+const gAt = (x, z) => geo.height(Math.round(x), Math.round(z));
+const solidWorld = { getBlock: (x, y, z) => (y > gAt(x, z) ? B.COBBLE : B.GRASS) };
+const fg = gAt(startA.x, startA.z);
+ok(!walkableStep(solidWorld, geo, startA.x + 4, startA.z, fg), 'walkableStep rejects a 2-high solid (no walking through buildings/trees)');
+ok(walkableStep(openWorld, geo, startA.x + 4, startA.z, fg), 'walkableStep accepts open walkable ground');
+
+console.log(`verify-roster: ${n} assertions OK`);

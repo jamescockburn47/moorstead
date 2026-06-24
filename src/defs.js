@@ -25,7 +25,7 @@ export const TILE = {
   ROSEHIP: 69, SLOE: 70, ELDERBERRY: 71, HAZELNUT: 72, BLACKTHORN: 73, HAZEL: 74,
   ORCHARD_LEAVES: 75, APPLE: 76, PEAR: 77, PLUM: 78,
   SNOWBALL: 79,
-  WREATH: 80, ROBIN: 81, HOLLY_SPRIG: 82,
+  WREATH: 80, ROBIN: 81, HOLLY_SPRIG: 82, COTTONGRASS: 83,
 };
 
 // ---- Block ids ----
@@ -51,6 +51,7 @@ export const B = {
   BRAMBLE: 54, HOLLY: 55,
   BLACKTHORN: 56, HAZEL: 57,
   ORCHARD_LEAVES: 58,
+  COTTONGRASS: 59, // white-tufted sedge of the wet moor flushes
 };
 
 // ---- Item ids (blocks double as items; pure items start at 64) ----
@@ -81,6 +82,13 @@ export const I = {
   BLACKBERRY: 114, ROSEHIP: 115, SLOE: 116, ELDERBERRY: 117, HAZELNUT: 118,
   APPLE: 119, PEAR: 120, PLUM: 121,
   SNOWBALL: 122,
+  // ironstone value chain (Moors industry): RAW_IRON (raw) -> calcined -> pig iron
+  CALCINED_IRONSTONE: 123, PIG_IRON: 124,
+  // jet value chain: JET_GEM (raw) -> carved jet (mourning jewellery)
+  CARVED_JET: 125,
+  // Dracula flagship (Slice 1): moor-gathered defences against the night-walker.
+  // Item-only, like HOLY_WATER — no placeable block, no atlas tile.
+  WOLFSBANE: 126, SILVER_TOKEN: 127, GRAVE_EARTH: 128,
 };
 
 // Parish wardens: SHA-256 o' t' dash account id, never t' id itsen —
@@ -120,6 +128,7 @@ D[B.STONEBRICK] = { name: 'Dressed Stone', kind: 'solid', tex: { t: TILE.STONEBR
 D[B.BENCH] = { name: "Joiner's Bench", kind: 'solid', tex: { t: TILE.BENCH_TOP, s: TILE.BENCH_SIDE, b: TILE.PLANKS }, hard: 2.0, tool: 'axe', drop: B.BENCH };
 D[B.LANTERN] = { name: 'Lantern', kind: 'solid', tex: { t: TILE.LANTERN, s: TILE.LANTERN, b: TILE.LANTERN }, hard: 0.4, tool: 'pick', drop: B.LANTERN, light: true };
 D[B.TUSSOCK] = { name: 'Tussock Grass', kind: 'cutout', tex: { t: TILE.TUSSOCK, s: TILE.TUSSOCK, b: TILE.TUSSOCK }, hard: 0.05, tool: null, drop: null };
+D[B.COTTONGRASS] = { name: 'Cotton-grass', kind: 'cutout', tex: { t: TILE.COTTONGRASS, s: TILE.COTTONGRASS, b: TILE.COTTONGRASS }, hard: 0.05, tool: null, drop: null };
 D[B.WOOL] = { name: 'Swaledale Wool', kind: 'solid', tex: { t: TILE.WOOL, s: TILE.WOOL, b: TILE.WOOL }, hard: 0.9, tool: null, drop: B.WOOL };
 D[B.BILBERRY_BUSH] = { name: 'Bilberry Bush', kind: 'cutout', tex: { t: TILE.BILBERRY, s: TILE.BILBERRY, b: TILE.BILBERRY }, hard: 0.05, tool: null, drop: null };
 D[B.RANGE] = { name: "T' Range", kind: 'solid', tex: { t: TILE.STONEBRICK, s: TILE.RANGE_SIDE, b: TILE.STONEBRICK }, sFront: TILE.RANGE_FRONT, hard: 2.5, tool: 'pick', needsPick: true, drop: B.RANGE };
@@ -180,6 +189,8 @@ export const ITEM_NAMES = {
   [I.S_PICK]: 'Gritstone Pick', [I.S_AXE]: 'Gritstone Axe', [I.S_SHOVEL]: 'Gritstone Spade', [I.S_SWORD]: 'Gritstone Sword',
   [I.I_PICK]: 'Iron Pick', [I.I_AXE]: 'Iron Axe', [I.I_SHOVEL]: 'Iron Spade', [I.I_SWORD]: 'Iron Sword',
   [I.COAL_LUMP]: 'Coal', [I.RAW_IRON]: 'Raw Ironstone', [I.IRON_INGOT]: 'Iron Ingot', [I.JET_GEM]: 'Whitby Jet',
+  [I.CALCINED_IRONSTONE]: 'Calcined Ironstone', [I.PIG_IRON]: 'Pig Iron',
+  [I.CARVED_JET]: 'Carved Jet',
   [I.RAW_MUTTON]: 'Raw Mutton', [I.COOKED_MUTTON]: 'Roast Mutton',
   [I.RAW_GROUSE]: 'Raw Grouse', [I.COOKED_GROUSE]: 'Roast Grouse',
   [I.RAW_BEEF]: 'Raw Beef', [I.COOKED_BEEF]: 'Roast Beef',
@@ -201,6 +212,9 @@ export const ITEM_NAMES = {
   [I.WOODEN_STAKE]: 'Wooden Stake',
   [I.HOLY_STAKE]: 'Holy Water Stake',
   [I.DRACULA_JOURNAL]: 'Captain\u2019s Log (Dracula)',
+  [I.WOLFSBANE]: 'Wolfsbane',
+  [I.SILVER_TOKEN]: 'Blessed Silver Token',
+  [I.GRAVE_EARTH]: 'Consecrated Earth',
   [I.WOOL_COAT]: 'Wool Coat',
   [I.CEP]: 'Cep', [I.CHANTERELLE]: 'Chanterelle', [I.COOKED_MUSHROOMS]: 'Fried Mushrooms', [I.WILD_GARLIC]: 'Wild Garlic', [I.SORREL]: 'Sorrel',
   [I.BLACKBERRY]: 'Blackberries', [I.ROSEHIP]: 'Rosehips', [I.SLOE]: 'Sloes', [I.ELDERBERRY]: 'Elderberries', [I.HAZELNUT]: 'Hazelnuts',
@@ -331,9 +345,10 @@ export const CREATIVE_ITEMS = [
   B.MINE_ENTRANCE, B.PIT_PROPS, B.SAFETY_LAMP, B.WINCH, B.ALUM_SHALE, B.POLYHALITE, B.ROCK_SALT,
   I.W_PICK, I.S_PICK, I.I_PICK, I.W_AXE, I.S_AXE, I.I_AXE,
   I.W_SHOVEL, I.S_SHOVEL, I.I_SHOVEL, I.W_SWORD, I.S_SWORD, I.I_SWORD,
-  I.STICK, I.COAL_LUMP, I.RAW_IRON, I.IRON_INGOT, I.JET_GEM,
+  I.STICK, I.COAL_LUMP, I.RAW_IRON, I.CALCINED_IRONSTONE, I.PIG_IRON, I.IRON_INGOT, I.JET_GEM, I.CARVED_JET,
   I.RAW_MUTTON, I.COOKED_MUTTON, I.RAW_GROUSE, I.COOKED_GROUSE,
   I.RAW_BEEF, I.COOKED_BEEF, I.RAW_PORK, I.COOKED_PORK, I.BILBERRIES,
   I.FISHING_ROD, I.RAW_TROUT, I.SEA_FISH, I.COOKED_FISH,
   I.HOLY_WATER, I.WOODEN_STAKE, I.HOLY_STAKE, I.DRACULA_JOURNAL,
+  I.WOLFSBANE, I.SILVER_TOKEN, I.GRAVE_EARTH,
 ];

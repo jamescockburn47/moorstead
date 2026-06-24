@@ -11,8 +11,8 @@ import { getIconURL, retintAtlasForSeason } from './textures.js';
 import { World } from './world.js';
 import { Player } from './player.js';
 import * as npc from './npc.js';
-import { Quests } from './quests.js';
-import { Economy, bestMarket, FREIGHT_ALLOWANCE, farmRegisterCheck, CHARTER_FEE, livestockPrice, droveValue } from './economy.js';
+import { Quests, wantGiants, wantWreck, wantHound } from './quests.js';
+import { Economy, bestMarket, FREIGHT_ALLOWANCE, farmRegisterCheck, CHARTER_FEE, livestockPrice, droveValue, convertAt, marketTownName } from './economy.js';
 import { deedFee, weeklyUpkeep, isLapsed, DEED, findActiveDeed, findLapsedDeed, inDeed } from './deeds.js';
 import { gatherContext, submitFeedback } from './feedback.js';
 import { miningDigGuide } from './mining-guide.js';
@@ -36,6 +36,7 @@ import { startLiveWeather } from './weather-live.js';
 import { temperatureTarget, stepTemperature } from './temperature.js';
 import { boardingFolk } from './trainfolk.js';
 import { FestiveMusic } from './festiveMusic.js';
+import { RosterClient } from './roster.js';
 
 const RAIL_VMAX = 11;  // blocks a second flat out — t' pace of a heritage steamer
 const RAIL_ACC = 0.18; // gentle acceleration: she works up to speed an' brakes early
@@ -76,6 +77,7 @@ import { Entities, MOB_TYPES } from './entities.js';
 import { PET_BENEFIT, PET_KINDS, TAME_GOAL } from './pets.js';
 import { EXTRA_FOLK, moodWord } from './villagerlife.js';
 import { Sky } from './sky.js';
+import { Storm } from './storm.js';
 import { AudioEngine } from './audio.js';
 import { UI } from './ui.js';
 import { raycast, boxCollides } from './physics.js';
@@ -273,7 +275,9 @@ class Game {
     this.netActive = false;
     const { clearSave } = await import('./save.js');
     await clearSave();
-    const seed = strSeed(seedStr || ('' + Math.random()));
+    // v2: the real-Moors 1900 world is the main world. A blank "New World" starts it
+    // (persistent, saved); a typed seed still makes a custom stylised world to explore.
+    const seed = seedStr ? strSeed(seedStr) : strSeed('t-moors-1900');
     this.startWorld(seed, null, new Map());
   }
 
@@ -304,7 +308,12 @@ class Game {
     this.world = new World(this.scene, seed, chunks);
     this.player = new Player(this.world);
     this.entities = new Entities(this.scene, this.world);
+    if (this.world.gen.geo.realWorld) {
+      this.rosterClient = new RosterClient(this);   // distinct from this.roster (the personas list)
+      this.rosterClient.start();
+    }
     this.sky = new Sky(this.scene, this.camera);
+    this.storm = new Storm(this); // the Dracula boss-battle storm (scoped to the fight)
     this.spawn = this.world.gen.findSpawn();
     this.player.pos = { ...this.spawn };
     this.villagersSpawned = false;
@@ -359,6 +368,7 @@ class Game {
   }
 
   teardownWorld() {
+    if (this.rosterClient) { this.rosterClient.stop(); this.rosterClient = null; }
     if (this.rails) { this.rails.dispose(); this.rails = null; }
     if (this.floraLayer) { this.floraLayer.clear(); this.floraLayer = null; }
     if (this.festiveLayer) { this.festiveLayer.clear(); this.festiveLayer = null; }
@@ -542,6 +552,26 @@ class Game {
         if (e.code === 'KeyN') this.trySleep();
         if (e.code === 'KeyM') { this.audio.setMuted(!this.audio.muted); this.ui.toast(this.audio.muted ? 'Sound off.' : 'Sound on.'); }
         if (e.code === 'KeyG') { this.musterFlock(); return; }
+        // --- rail SURVEY tool (creative): peg out a line by flying it, then export the pegs ---
+        if (this.player.creative && (e.code === 'KeyP' || e.code === 'KeyO' || e.code === 'KeyU')) {
+          this.survey = this.survey || [];
+          const gx = Math.round(this.player.pos.x), gz = Math.round(this.player.pos.z);
+          if (e.code === 'KeyP') {
+            this.survey.push([gx, gz]);
+            const gy = this.world.gen.geo.height(gx, gz);          // a glowing stake on the ground, so the route shows
+            for (let y = gy + 1; y <= gy + 4 && y < HEIGHT; y++) this.world.setBlock(gx, y, gz, B.LANTERN);
+            this.ui.toast(`\u{1F4CD} Peg ${this.survey.length}: ${gx}, ${gz}`, 1400);
+          } else if (e.code === 'KeyU' && this.survey.length) {
+            this.survey.pop();
+            this.ui.toast(`Peg pulled — ${this.survey.length} left.`, 1400);
+          } else if (e.code === 'KeyO') {
+            const json = JSON.stringify(this.survey);
+            console.log('SURVEY PEGS:', json);
+            if (navigator.clipboard) navigator.clipboard.writeText(json).catch(() => {});
+            this.ui.toast(`${this.survey.length} pegs copied — paste them to Claude.`, 5000);
+          }
+          return;
+        }
         // sheepdog whistles (arrow keys) — work a flock wi' thi dog; H brings her to heel
         const whistle = commandFromKey(e.code);
         if (whistle || e.code === 'KeyH') {
@@ -565,6 +595,9 @@ class Game {
         if (e.code === 'KeyN' || e.code === 'Escape') this.cancelSleep('Up an’ about again, then.');
       } else if (this.state === 'riding') {
         if (e.code === 'Escape' && this.ride && this.ride.warden) this.wardenLeaveTrain();
+        else if (e.code === 'Digit1') this.setRideView('seat');
+        else if (e.code === 'Digit2') this.setRideView('driver');
+        else if (e.code === 'Digit3') this.setRideView('overhead');
       } else if (this.state === 'driving') {
         if (e.code === 'KeyE' || e.code === 'Escape') this.leaveDrive();
         else if (e.code === 'KeyR' && this.drive) { this.drive.reverser *= -1; this.ui.toast(this.drive.reverser > 0 ? 'Reverser set forrard.' : 'Reverser set back.', 1500); }
@@ -718,8 +751,14 @@ class Game {
       ui.toast('Kitted out proper.');
     });
     const tRow = ui.el('div', 'admin-btns', panel);
-    const train = ui.el('button', 'mc', tRow, 'Board t’ Train (ride owt, Esc to step off)');
-    train.addEventListener('click', () => this.wardenBoardTrain());
+    const tLines = (this.world.gen.geo.realWorld && this.world.gen.geo.railPaths) ? this.world.gen.geo.railPaths() : [];
+    if (tLines.length > 1) {
+      ui.el('div', 'r-needs', panel, 'Board any line’s train (Esc to step off):');
+      for (const l of tLines) { const b = ui.el('button', 'mc', tRow, `🚂 ${l.name}`); b.addEventListener('click', () => this.wardenBoardTrain(l.name)); }
+    } else {
+      const train = ui.el('button', 'mc', tRow, 'Board t’ Train (ride owt, Esc to step off)');
+      train.addEventListener('click', () => this.wardenBoardTrain());
+    }
     const pony = ui.el('button', 'mc', tRow, 'Find a Pony (drop by t’ nearest)');
     pony.addEventListener('click', () => this.wardenToPony());
     ui.el('div', 'r-needs', panel, 'Whisk thissen anywhere:');
@@ -868,29 +907,44 @@ class Game {
   // platform. We land on her chainage first so t' chunk loads an' t' carriage
   // shows, then t' ride machinery seats us. An open-ended ride (no destIdx), so
   // she runs forever till t' warden steps off.
-  wardenBoardTrain() {
+  wardenBoardTrain(lineName) {
     if (!this.isAdmin()) return;
-    if (!this.trainState) { this.ui.toast('T’ train’s not running just now.'); return; }
-    const ts = this.trainState, p = this.player;
-    const gy = this.world.gen.height(Math.floor(ts.x), Math.floor(ts.z));
-    p.pos = { x: ts.x, y: Math.min(HEIGHT - 2, gy + 3), z: ts.z }; // so updateTrainWorld loads + shows her
+    const geo = this.world.gen.geo, p = this.player;
+    const mainName = geo.railPaths ? (geo.railPaths().find(l => l.path === geo.railPath()) || {}).name : null;
+    let bt = null, x, z;
+    if (lineName && lineName !== mainName) {
+      this._ensureBranchTrains();
+      bt = (this.branchTrains || []).find(b => b.name === lineName);
+      if (!bt) { this.ui.toast('No train on that line just now.'); return; }
+      const s = this.trainScheduleFor(bt.path, bt.stations);
+      const sp = geo.samplePosOn(bt.path, s.s);
+      bt.state = { x: sp.x, z: sp.z, s };  // seed so the ride has the train at once
+      x = sp.x; z = sp.z;
+    } else {
+      if (!this.trainState) { this.ui.toast('T’ train’s not running just now.'); return; }
+      x = this.trainState.x; z = this.trainState.z;
+    }
+    const gy = this.world.gen.height(Math.floor(x), Math.floor(z));
+    p.pos = { x, y: Math.min(HEIGHT - 2, gy + 3), z }; // so the train-world loads + shows her
     if (p.vel) { p.vel.x = 0; p.vel.y = 0; p.vel.z = 0; }
     p.fallStart = null;
     p.flying = false;
     this.seatOffset = [0.55, -0.7];   // a window seat in t' middle bay
-    this.ride = { warden: true };     // no destIdx → never auto-disembarks
-    this.rideYawSet = false;
+    this.ride = { warden: true, bt };  // bt = the branch train (null = the main); no destIdx → never auto-disembarks
+    this.startRideView();
     this.state = 'riding';
     this.ui.show(null);
     this.lockPointer();
-    this.ui.toast('Aboard t’ train. Press <b>Esc</b> to step off.', 4500);
+    this.ui.toast(`Aboard t’ ${lineName || mainName || 'train'}. Press <b>Esc</b> to step off.`, 4500);
   }
 
   // Warden steps off mid-line — set down beside t' rails where t' train is.
   wardenLeaveTrain() {
-    const ts = this.trainState, p = this.player;
+    const bt = this.ride && this.ride.bt;
+    const ts = bt ? bt.state : this.trainState, p = this.player;
     this.ride = null;
     this.rideYawSet = false;
+    this.ui.hideRideViewMenu();
     if (ts) {
       const gy = this.world.gen.height(Math.floor(ts.x + 1.5), Math.floor(ts.z + 1.5));
       p.pos = { x: ts.x + 1.5, y: gy + 2, z: ts.z + 1.5 };
@@ -1667,6 +1721,49 @@ class Game {
     return { mode: 'dwell', i: idx(n - 1), dwellLeft: 1, dir, s: geo.railPath().stationS[idx(n - 1)] };
   }
 
+  // legs for ANY line's spline (the main line uses the cached railLegs above)
+  railLegsFor(path) {
+    const legs = [];
+    for (let i = 0; i < path.stationS.length - 1; i++) {
+      const len = path.stationS[i + 1] - path.stationS[i];
+      legs.push({ len, t: legTime(len), s0: path.stationS[i], s1: path.stationS[i + 1] });
+    }
+    return legs;
+  }
+
+  // the schedule for ANY line (path + its station stops) — same trapezoid profile + shared clock,
+  // so every branch train runs forever in step too. (The main line keeps trainSchedule above.)
+  trainScheduleFor(path, stations, nowSec) {
+    const geo = this.world.gen.geo;
+    const legs = this.railLegsFor(path);
+    const n = stations.length;
+    if (n < 2 || !legs.length) return { mode: 'dwell', i: 0, dwellLeft: 1, dir: 0, s: path.stationS[0] || 0 };
+    const oneway = legs.reduce((a, l) => a + l.t, 0) + n * DWELL_T;
+    const now = nowSec !== undefined ? nowSec : Date.now() / 1000;
+    const dir = Math.floor(now / oneway) % 2;
+    const idx = k => (dir === 0 ? k : n - 1 - k);
+    const leg = k => legs[dir === 0 ? k : n - 2 - k];
+    let tt = now % oneway;
+    for (let k = 0; k < n; k++) {
+      if (tt < DWELL_T) {
+        const sAt = path.stationS[idx(k)]; const sp = geo.samplePosOn(path, sAt);
+        return { mode: 'dwell', i: idx(k), dwellLeft: DWELL_T - tt, dir, s: sAt, x: sp.x, z: sp.z };
+      }
+      tt -= DWELL_T;
+      if (k < n - 1) {
+        const L = leg(k);
+        if (tt < L.t) {
+          const run = runProfile(L.len, tt);
+          const s = dir === 0 ? L.s0 + run.dist : L.s1 - run.dist;
+          const sp = geo.samplePosOn(path, s);
+          return { mode: 'run', from: idx(k), to: idx(k + 1), frac: run.dist / L.len, dir, s, x: sp.x, z: sp.z, speed: run.v + 0.05 };
+        }
+        tt -= L.t;
+      }
+    }
+    return { mode: 'dwell', i: idx(n - 1), dwellLeft: 1, dir, s: path.stationS[idx(n - 1)] };
+  }
+
   // seconds till t' train next calls at station i
   nextCallAt(i) {
     const now = Date.now() / 1000;
@@ -1679,6 +1776,59 @@ class Game {
 
   fmtMins(s) {
     return s >= 60 ? `${Math.floor(s / 60)}m ${Math.round(s % 60)}s` : `${Math.round(s)}s`;
+  }
+
+  // A works (calcining kiln / blast furnace): convert held raw up the chain for a toll, then ship
+  // the processed good down the line to the market that pays best (Teesside for calcined ore).
+  openWorks(w) {
+    this.state = 'board';
+    this.clearKeys();
+    this.mouseDown = [false, false, false];
+    document.exitPointerLock?.();
+    const ui = this.ui, p = this.player, eco = this.economy;
+    ui.boardPanel.innerHTML = '';
+    ui.el('div', 'inv-title', ui.boardPanel, w.name);
+    const verb = { kiln: 'Calcine', furnace: 'Smelt', jetshop: 'Carve' }[w.kind] || 'Work';
+    ui.el('div', 'r-needs', ui.boardPanel, {
+      kiln: 'Roast raw ironstone in t’ kilns — she draws off lighter an’ worth more, ready for t’ furnace or t’ Teesside train.',
+      furnace: 'Smelt calcined ore in t’ blast furnace — she runs out as pig iron for t’ market towns.',
+      jetshop: 'Carve raw Whitby jet at t’ bench into mournin’ jewellery — worth a deal more than t’ rough stone.',
+    }[w.kind] || '');
+    const list = ui.el('div', 'recipes board-list', ui.boardPanel);
+    const r = convertAt(w, p.countItem(w.in), eco.balance);
+    const crow = ui.el('div', 'recipe quest-row', list);
+    if (r.ok) {
+      crow.innerHTML = `<div class="r-name"><b>${verb} ${r.used}× ${itemName(w.in)} → ${r.made}× ${itemName(w.out)}</b><br><span class="r-needs">toll <b>${eco.format(r.toll)}</b></span></div>`;
+      const cb = ui.el('button', 'mc chat-btn trade-btn', crow, verb);
+      cb.addEventListener('click', () => {
+        if (!eco.spend(r.toll)) { ui.toast('Tha’s not the brass for t’ toll.'); return; }
+        p.removeItem(w.in, r.used); p.addItem(w.out, r.made);
+        ui.invDirty = true;
+        ui.toast(`${verb}d <b>${r.made}× ${itemName(w.out)}</b>.`, 4000);
+        this.openWorks(w);
+      });
+    } else {
+      crow.innerHTML = `<div class="r-name"><span class="r-needs">${r.reason === 'short' ? `Tha needs at least ${w.ratio[0]}× ${itemName(w.in)}.` : r.reason === 'poor' ? `T’ toll’s ${eco.format(w.toll)} — tha’s short.` : 'Nowt to work just now.'}</span></div>`;
+    }
+    const haveOut = p.countItem(w.out);
+    if (haveOut > 0) {
+      const names = this.world.gen.geo.villages.map(v => v.name);
+      const best = bestMarket(w.out, w.town, names, eco.standing());
+      if (best) {
+        const shipN = Math.min(haveOut, FREIGHT_ALLOWANCE);
+        const srow = ui.el('div', 'recipe quest-row', list);
+        srow.innerHTML = `<div class="r-name"><b>Ship ${shipN}× ${itemName(w.out)} → ${best.village}</b><br><span class="r-needs">fetches <b>${eco.format(best.perUnit * shipN)}</b> when she lands</span></div>`;
+        const sb = ui.el('button', 'mc chat-btn trade-btn', srow, 'Send it');
+        sb.addEventListener('click', () => {
+          const res = eco.bookShipment([[w.out, shipN]], best.village, w.town, this.sky.day + this.sky.time);
+          if (res.ok) { ui.invDirty = true; ui.toast(`<b>${shipN}× ${itemName(w.out)}</b> away to ${best.village} — <b>${eco.format(res.brass)}</b> when she lands.`, 5000); this.openWorks(w); }
+          else ui.toast(`Couldn’t book that consignment (${res.why}).`);
+        });
+      }
+    }
+    const close = ui.el('button', 'mc', ui.boardPanel, 'Leave the works');
+    close.addEventListener('click', () => this.closeScreens());
+    ui.show('boardScreen');
   }
 
   openStation(st, which = 'departures') {
@@ -1814,17 +1964,19 @@ class Game {
     }).length;
   }
 
-  // Is the player stood at the market town (Moorstead) — where a farm is registered?
+  // Is the player stood at the market town (Moorstead in v1, Pickering in the real moors)?
   atMarketTown() {
     const geo = this.world.gen.geo;
-    const m = geo.villages.find(v => /moorstead/i.test(v.name));
+    const name = marketTownName(geo.realWorld);
+    const m = geo.villages.find(v => v.name.toLowerCase() === name.toLowerCase());
     if (!m) return false;
     const p = this.player.pos;
-    return Math.hypot(m.x - p.x, m.z - p.z) <= 70; // within Moorstead's bounds
+    return Math.hypot(m.x - p.x, m.z - p.z) <= 70;
   }
 
-  // Register the farm: a deliberate, paid choice at the Moorstead board. Returns true on success.
+  // Register the farm: a deliberate, paid choice at the market town board. Returns true on success.
   registerFarm() {
+    const mt = marketTownName(this.world.gen.geo.realWorld);
     const r = farmRegisterCheck({
       head: this.farmHeadCount(),
       registered: this.player.farmStatus.registered,
@@ -1834,14 +1986,14 @@ class Game {
     if (!r.ok) {
       const msg = r.reason === 'already' ? 'Tha&rsquo;s already a registered farmer.'
         : r.reason === 'short' ? `Tha needs <b>${r.need}</b> head penned to register &mdash; tha&rsquo;s ${r.have}.`
-        : r.reason === 'away' ? 'Tha registers a farm at <b>Moorstead</b>&rsquo;s notice board.'
+        : r.reason === 'away' ? `Tha registers a farm at <b>${mt}</b>&rsquo;s notice board.`
         : `T&rsquo; charter&rsquo;s <b>${this.economy.format(r.fee)}</b> &mdash; tha&rsquo;s not got it just yet.`;
       this.ui.toast(msg, 5000);
       return false;
     }
     this.economy.spend(CHARTER_FEE);
     this.player.farmStatus.registered = true;
-    this.ui.toast('🌾 <b>Tha&rsquo;s a registered farmer o&rsquo; Moorstead parish now!</b>', 7000);
+    this.ui.toast(`🌾 <b>Tha&rsquo;s a registered farmer o&rsquo; ${mt} parish now!</b>`, 7000);
     if (this.milestones) this.milestones.fire('farm_registered');
     if (this.saveNow) this.saveNow(false);
     return true;
@@ -1852,8 +2004,9 @@ class Game {
   // needs a working dog to actually drive them. Flips only the LIVE mobs — the saved pets records keep
   // stay+home, so a reload reverts an in-progress drove to penned (safest).
   musterFlock() {
+    const mt = marketTownName(this.world.gen.geo.realWorld);
     if (!this.player.farmStatus.registered) {
-      this.ui.toast('Tha registers a farm at <b>Moorstead</b> first, then tha can drove thi flock.', 5000);
+      this.ui.toast(`Tha registers a farm at <b>${mt}</b> first, then tha can drove thi flock.`, 5000);
       return;
     }
     const dog = this.entities.mobs.find(m => m && !m.dead && m.owner && m.type === 'dog');
@@ -1866,7 +2019,7 @@ class Game {
       m.stay = false; m.droving = true; m.herding = false; n++;
     }
     if (!n) { this.ui.toast('No penned stock close by to muster. Stand by thi fold.', 4000); return; }
-    this.ui.toast(`🌱 <b>Mustered ${n} head o’ stock.</b> Drove ’em to <b>Moorstead’s mart</b> wi’ thi dog, and keep ’em bunched.`, 6000);
+    this.ui.toast(`🌱 <b>Mustered ${n} head o’ stock.</b> Drove ‘em to <b>${mt}’s mart</b> wi’ thi dog, and keep ‘em bunched.`, 6000);
   }
 
   // Droving sheep within the mart yard (near thee). Used by the board to offer the sale.
@@ -1878,7 +2031,8 @@ class Game {
 
   // Sell every droved head in the yard: pays per head, leads them off, drops them from thi stock.
   sellDrove() {
-    if (!this.atMarketTown()) { this.ui.toast('Tha sells a droved flock at <b>Moorstead’s mart</b>.', 4000); return false; }
+    const mt = marketTownName(this.world.gen.geo.realWorld);
+    if (!this.atMarketTown()) { this.ui.toast(`Tha sells a droved flock at <b>${mt}’s mart</b>.`, 4000); return false; }
     const herd = this.droveHeadNear();
     if (!herd.length) { this.ui.toast('Tha’s no flock in t’ yard to sell. Drove ’em in first.', 4000); return false; }
     const pay = droveValue(herd, this.economy.standing());
@@ -1887,7 +2041,7 @@ class Game {
       m.dead = true; this.entities.scene.remove(m.model.group);
     }
     this.economy.earn(pay);
-    this.ui.toast(`💷 <b>Sold ${herd.length} head at Moorstead mart for ${this.economy.format(pay)}.</b>`, 7000);
+    this.ui.toast(`💷 <b>Sold ${herd.length} head at ${mt} mart for ${this.economy.format(pay)}.</b>`, 7000);
     if (this.milestones) this.milestones.fire('first_drove');
     if (this.saveNow) this.saveNow(false);
     return true;
@@ -1895,7 +2049,8 @@ class Game {
 
   // Sell a Saddleback Pig individually (sty stock)
   sellPig(name) {
-    if (!this.atMarketTown()) { this.ui.toast('Tha sells a pig at <b>Moorstead</b>.', 4000); return false; }
+    const mt = marketTownName(this.world.gen.geo.realWorld);
+    if (!this.atMarketTown()) { this.ui.toast(`Tha sells a pig at <b>${mt}</b>.`, 4000); return false; }
     const rec = (this.player.pets || []).find(p => p.name === name && p.kind === 'pig');
     if (!rec) { this.ui.toast('Tha’s no pig o’ that name to sell.', 4000); return false; }
     const mob = this.entities.mobs.find(m => m && !m.dead && m.petName === name && m.type === 'pig');
@@ -2360,6 +2515,9 @@ class Game {
     const near = Math.hypot(x - p.x, z - p.z) < 260;
     const show = (driving || near || this.state === 'riding') && this.world.isLoaded(Math.floor(x), Math.floor(z));
     if (!this.train) this.train = buildTrain();
+    // the smoothed heading (windowed tangent) for the RIDE CAMERA — kept apart from the bodies'
+    // square local heading above, so the camera rides continuous while the carriages sit straight
+    this.train.camYaw = (Math.hypot(csp.stx, csp.stz) > 0.01) ? Math.atan2(csp.stx * poseFwd, csp.stz * poseFwd) : this.trainRot;
     const parts = this.train.parts;
     if (show) {
       for (const part of parts) {
@@ -2374,7 +2532,7 @@ class Game {
         pg.position.z = psp.z;
         const deck = psp.deck + 1;
         pg.position.y = pg.position.y ? pg.position.y + (deck - pg.position.y) * Math.min(1, dt * 6) : deck;
-        pg.rotation.y = (Math.hypot(psp.tx, psp.tz) > 0.01) ? Math.atan2(psp.tx * poseFwd, psp.tz * poseFwd) : pg.rotation.y;
+        if (Math.hypot(psp.tx, psp.tz) > 0.01) pg.rotation.y = Math.atan2(psp.tx * poseFwd, psp.tz * poseFwd); // local — bodies sit square
         const ppitch = -Math.atan(psp.grade * poseFwd);
         pg.rotation.x += (ppitch - pg.rotation.x) * Math.min(1, dt * 4);
         if (moving && part.wheels) {
@@ -2441,38 +2599,170 @@ class Game {
     }
   }
 
-  // riding: thi seat is in t' carriage, wherever she is on t' curve
-  updateRide() {
-    const ts = this.trainState;
-    const cg = this.train && this.train.carriage.group;
+  // lazily set up one branch train per non-main line (shared by the update + the warden boarder)
+  _ensureBranchTrains() {
+    if (this.branchTrains) return;
+    const geo = this.world.gen.geo;
+    if (!geo.realWorld || !geo.railPaths) { this.branchTrains = []; return; }
+    const main = geo.railPath();
+    this.branchTrains = geo.railPaths().filter(l => l.path !== main).map(l => ({
+      name: l.name, path: l.path,
+      stations: (geo.railLines().find(x => x.name === l.name) || {}).stops || [],
+      train: null, rodPhase: 0, state: null,
+    }));
+  }
+
+  // A SOLID sea-plane backdrop so the open sea reaches the horizon from the train. The chunk
+  // water is fogged (fades to sky by ~160) so from a moving/elevated viewpoint the sea melts
+  // into the haze and reads as "drained". This plane carries the sea on regardless: fog OFF so
+  // it stays sea-coloured all the way out, big (1400) so it fills past the view, at the surface,
+  // a backdrop (depthWrite off) so near chunk-water still renders over it with its real seabed.
+  // Moors only — stylised world untouched.
+  _updateSeaPlane() {
+    const geo = this.world.gen.geo;
+    if (!geo.realWorld) { if (this.seaPlane) this.seaPlane.visible = false; return; }
+    if (!this.seaPlane) {
+      const mat = new THREE.MeshBasicMaterial({ color: 0x3a5e7a, fog: false, depthWrite: false });
+      this.seaPlane = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), mat);
+      this.seaPlane.rotation.x = -Math.PI / 2;
+      this.seaPlane.renderOrder = -0.5;     // after the sky dome (-1), before the chunks (0)
+      this.seaPlane.frustumCulled = false;
+      this.scene.add(this.seaPlane);
+    }
+    this.seaPlane.visible = true;
+    this.seaPlane.position.set(this.player.pos.x, WATER_LEVEL + 0.9, this.player.pos.z);
+  }
+
+  // The BRANCH trains: a steam train on every OTHER line (Esk Valley, Coast Line), running its
+  // own spline forever on the shared clock — additive to the main-line train above, so the whole
+  // network's alive. Visual (rake bends + rods + steam); rendered only when near the player.
+  updateBranchTrains(dt) {
+    if (!this.world || this.state === 'loading' || (this.state === 'title' && !this.titlePreview)) return;
+    const geo = this.world.gen.geo;
+    if (!geo.realWorld || !geo.railPaths) return;
+    this._ensureBranchTrains();
+    const pp = this.player.pos, RAKE = 11.2;
+    for (const bt of this.branchTrains) {
+      if (bt.stations.length < 2 || bt.path.stationS.length < 2) continue;
+      const s = this.trainScheduleFor(bt.path, bt.stations);
+      const fwd = s.dir === 0 ? 1 : -1;
+      const nSt = bt.path.stationS.length;
+      const atTerminus = s.mode === 'dwell' && (s.i === 0 || s.i === nSt - 1);
+      const poseFwd = atTerminus ? -fwd : fwd;
+      const len = bt.path.length;
+      const cc = Math.max(RAKE, Math.min(len - RAKE, s.s - RAKE * poseFwd));
+      const csp = geo.samplePosOn(bt.path, cc);
+      bt.state = { x: csp.x, z: csp.z, s }; // kept current so the warden can ride this line
+      bt.camYaw = (Math.hypot(csp.stx, csp.stz) > 0.01) ? Math.atan2(csp.stx * poseFwd, csp.stz * poseFwd) : (bt.camYaw || 0); // smoothed heading for the ride camera
+      const show = Math.hypot(csp.x - pp.x, csp.z - pp.z) < 260 && this.world.isLoaded(Math.floor(csp.x), Math.floor(csp.z));
+      if (!show) { if (bt.train) for (const part of bt.train.parts) if (part.group.parent) this.scene.remove(part.group); continue; }
+      if (!bt.train) bt.train = buildTrain();
+      const moving = s.mode === 'run', speed = moving ? s.speed : 0;
+      for (const part of bt.train.parts) {
+        const pg = part.group;
+        if (!pg.parent) { this.scene.add(pg); pg.rotation.order = 'YXZ'; }
+        const psp = geo.samplePosOn(bt.path, cc + (part.offset + RAKE) * poseFwd);
+        pg.position.x = psp.x; pg.position.z = psp.z;
+        const deck = psp.deck + 1;
+        pg.position.y = pg.position.y ? pg.position.y + (deck - pg.position.y) * Math.min(1, dt * 6) : deck;
+        if (Math.hypot(psp.tx, psp.tz) > 0.01) pg.rotation.y = Math.atan2(psp.tx * poseFwd, psp.tz * poseFwd); // local — bodies sit square
+        pg.rotation.x += (-Math.atan(psp.grade * poseFwd) - pg.rotation.x) * Math.min(1, dt * 4);
+        if (moving && part.wheels) for (const w of part.wheels) w.rotateZ(speed * dt / (w.userData.r || 0.62));
+      }
+      if (moving && bt.train.loco.rods) {
+        bt.rodPhase += speed * dt / 0.62;
+        bt.train.loco.rods.forEach((rod, i) => { const th = bt.rodPhase + i * Math.PI / 2; rod.position.y = 0.62 + Math.sin(th) * 0.32; rod.position.z = 0.2 + Math.cos(th) * 0.32; });
+      }
+      if (moving && Math.hypot(csp.x - pp.x, csp.z - pp.z) < 200) {
+        bt.steamTimer = (bt.steamTimer || 0) - dt;
+        if (bt.steamTimer <= 0) {
+          bt.steamTimer = 0.12;
+          const lg = bt.train.loco.group, rotY = Math.atan2(csp.tx * poseFwd, csp.tz * poseFwd);
+          const fn = bt.train.funnel.clone().applyQuaternion(lg.quaternion).add(lg.position);
+          this.entities.steamPuff(fn.x, fn.y, fn.z, Math.sin(rotY), Math.cos(rotY));
+        }
+      }
+    }
+  }
+
+  // switch the ride camera (1 on board · 2 driver · 3 overhead); re-faces forrard cleanly
+  setRideView(v) {
+    if (this.state !== 'riding' || this.rideView === v) return;
+    this.rideView = v;
+    this.rideYawSet = false;
+    this.ui.setRideViewMenu(v);
+  }
+
+  // a ride begins (warden teleport, or a booked passenger boarding): default to the seat view
+  startRideView() {
+    this.rideView = 'seat';
+    this.rideYawSet = false;
+    this.rideSmoothYaw = undefined;   // re-seed the heading filter for this train
+    this.ui.showRideViewMenu('seat');
+  }
+
+  // riding: the POV rides the train. Pick the view wi' 1/2/3 (on board · driver · overhead).
+  // The carriage heading is low-passed first, so the spline-tangent corners — worst on the
+  // pegged coast line — don't jerk the camera every time her bearing twitches.
+  updateRide(dt) {
+    const bt = this.ride && this.ride.bt;          // a branch train, or null for the main line
+    const ts = bt ? bt.state : this.trainState;
+    const train = bt ? bt.train : this.train;
+    const cg = train && train.carriage.group;
     if (!ts || !cg || !cg.parent) return;
+    const lg = train.loco && train.loco.group;
     // a seat o' thi own, so a full carriage o' players sits apart
     if (this.seatOffset === undefined) {
       const hash = [...this.devicePid()].reduce((a, c) => a + c.charCodeAt(0), 0);
       this.seatOffset = [[0.55, -0.7], [-0.55, -0.7], [0.55, 1.0], [-0.55, 1.0]][hash % 4];
     }
-    const seatLocal = this.train.seat.clone();
-    seatLocal.x = this.seatOffset[0];
-    seatLocal.z += this.seatOffset[1] + 0.7;
-    const seat = seatLocal.applyQuaternion(cg.quaternion).add(cg.position);
-    this.player.pos = { x: seat.x, y: seat.y - this.player.eye, z: seat.z };
-    this.player.vel = { x: 0, y: 0, z: 0 };
-    // pin t' rider to t' carriage: swing their POV by however much she's turned
-    // (a curve, or a reversal at t' terminus) so they allus face t' way o' travel
-    const carYaw = cg.rotation.y;
-    if (!this.rideYawSet) {
-      this.player.yaw = carYaw + Math.PI;
-      this.player.pitch = 0;
-      this.rideBaseYaw = carYaw;
-      this.rideYawSet = true;
+    // the camera follows the SMOOTHED heading (the windowed-tangent camYaw, low-passed so the
+    // terminus about-turn swings rather than snaps), DECOUPLED from the bodies' square local
+    // heading — so the ride runs continuous while the carriages still sit straight on the rail
+    const target = (bt ? bt.camYaw : this.train.camYaw);
+    if (target == null) return;
+    if (this.rideSmoothYaw === undefined) this.rideSmoothYaw = target;
+    let toY = target - this.rideSmoothYaw; while (toY > Math.PI) toY -= Math.PI * 2; while (toY < -Math.PI) toY += Math.PI * 2;
+    this.rideSmoothYaw += toY * Math.min(1, (dt || 0.016) * 5);
+    const sy = this.rideSmoothYaw, fwd = { x: Math.sin(sy), z: Math.cos(sy) };
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sy, 0, 'YXZ'));
+    const view = this.rideView || 'seat';
+
+    if (view === 'overhead') {
+      // a chase cam, up an' behind, pointing forrard an' down over the train
+      this.player.pos = { x: cg.position.x - fwd.x * 21, y: cg.position.y + 15, z: cg.position.z - fwd.z * 21 };
+      this.player.yaw = sy + Math.PI;     // face the way o' travel
+      this.player.pitch = -0.52;          // ...an' down at her
     } else {
-      let dY = carYaw - this.rideBaseYaw;
-      while (dY > Math.PI) dY -= Math.PI * 2;
-      while (dY < -Math.PI) dY += Math.PI * 2;
-      if (Math.abs(dY) > 1e-4) { this.player.yaw += dY; this.rideBaseYaw = carYaw; }
+      // on board / driver: first-person, mouse looks about, the POV swung by the SMOOTHED heading
+      // so they allus face the way o' travel (through a curve, or a reversal at the terminus)
+      if (!this.rideYawSet) {
+        this.player.yaw = sy + Math.PI;
+        this.player.pitch = view === 'driver' ? -0.1 : 0;
+        this.rideBaseYaw = sy;
+        this.rideYawSet = true;
+      } else {
+        let dY = sy - this.rideBaseYaw;
+        while (dY > Math.PI) dY -= Math.PI * 2;
+        while (dY < -Math.PI) dY += Math.PI * 2;
+        if (Math.abs(dY) > 1e-5) { this.player.yaw += dY; this.rideBaseYaw = sy; }
+      }
+      let p;
+      if (view === 'driver' && lg) {
+        p = new THREE.Vector3(0, 2.2, 5.0).applyQuaternion(q).add(lg.position); // just off the very front, looking forrard
+      } else {
+        const seatLocal = train.seat.clone();
+        seatLocal.x = this.seatOffset[0];
+        seatLocal.z += this.seatOffset[1] + 0.7;
+        p = seatLocal.applyQuaternion(q).add(cg.position);
+      }
+      this.player.pos = { x: p.x, y: p.y - this.player.eye, z: p.z };
     }
-    // arrived?
+    this.player.vel = { x: 0, y: 0, z: 0 };
+
+    // arrived? (booked passenger rides only — a warden ride has no destIdx)
     if (ts.s.mode === 'dwell' && ts.s.i === this.ride.destIdx) {
+      this.ui.hideRideViewMenu();
       const end = this.world.gen.geo.railway()[this.ride.destIdx];
       if (this.pendingGoods && this.pendingGoods.dest === this.ride.destIdx) this.deliverPendingParcel();
       const g = this.world.gen.height(Math.floor(end.x), Math.floor(end.z + 2));
@@ -2497,7 +2787,7 @@ class Game {
         this.pendingRide = null;
         this.ride = { destIdx: p.destIdx };
         this.state = 'riding';
-        this.rideYawSet = false;
+        this.startRideView();
         this.player.flying = false;
         this.audio.whistle && this.audio.whistle();
         this.ui.toast(`<b>All aboard for ${st[p.destIdx].name}!</b> Tek thi seat \u2014 mouse to look about as t\u2019 moors roll by.`, 6000);
@@ -2846,6 +3136,8 @@ class Game {
 
     // interactable blocks
     if (hit && !this.keys['ShiftLeft']) {
+      const wgeo = this.world.gen.geo;
+      if (wgeo.worksAt) { const w = wgeo.worksAt(hit.x, hit.z); if (w) { this.openWorks(w); return; } }
       if (hit.id === B.BENCH) { this.openInventory(); return; }
       if (hit.id === B.BOARD) {
         const geo = this.world.gen.geo;
@@ -3174,6 +3466,128 @@ class Game {
     }
   }
 
+  // ---------------- folklore manifestations ----------------
+  // The visible giants (Wade & Bell): while the player is on the Wade quest, near
+  // Wade's Causeway, at dusk/night, two colossal figures stride the far skyline and
+  // fade by day / off-quest / away. Moors-only (early return otherwise — the stylised
+  // world is untouched and pays nothing beyond this guard). The giants are a special
+  // mob (entities.giant) that skips all mob AI; they are spawned, posed and despawned
+  // here, exactly as a coble is driven by the game. The spawn predicate is the pure
+  // wantGiants() (tested in verify-quests.mjs).
+  updateQuestFx(dt) {
+    const geo = this.world.gen.geo;
+    if (!geo.realWorld) return;                                  // moors only
+    const q = this.quests.activeManifestation && this.quests.activeManifestation('giants');
+    const lm = q && this.quests.resolveLandmark(q);             // {x,z} of Wade's Causeway
+    // dusk/night/midnight window: from dusk onset, through the night, into pre-dawn
+    const dusk = !!(this.sky && (this.sky.isNight() || this.sky.time >= 0.74 || this.sky.time < 0.2));
+    const near = !!(lm && Math.hypot(this.player.pos.x - lm.x, this.player.pos.z - lm.z) < 220);
+    // any giant we spawned that's since been cleared (world reset) — forget them
+    if (this._giants && this._giants.some(g => g.dead)) this._giants = null;
+    const want = wantGiants({ realWorld: geo.realWorld, questActive: !!q, dusk, near });
+
+    if (want && !this._giants) {
+      // spawn Wade + Bell on the moor-top skyline, offset so they read as distant figures
+      const seat = (x, z) => geo.height(Math.round(x), Math.round(z)) + 1.0; // feet on the deck
+      const a = this.entities.spawnMob('giant', lm.x + 80, 0, lm.z + 40);
+      const b = this.entities.spawnMob('giant', lm.x + 120, 0, lm.z - 30);
+      a.pos.y = seat(a.pos.x, a.pos.z);
+      b.pos.y = seat(b.pos.x, b.pos.z);
+      // a slow stride path each walks, back and forth along the skyline (yaw follows it)
+      a.stride = { ox: a.pos.x, oz: a.pos.z, t: 0, dir: 0.7 };
+      b.stride = { ox: b.pos.x, oz: b.pos.z, t: Math.PI, dir: -0.5 };
+      this._giants = [a, b];
+    } else if (!want && this._giants) {
+      for (const g of this._giants) { this.entities.scene.remove(g.model.group); g.dead = true; }
+      this._giants = null;
+    }
+
+    if (this._giants) {
+      for (const g of this._giants) {
+        // a slow, ponderous stride: drift along the skyline and bob the legs
+        const s = g.stride;
+        s.t += dt * 0.18;                                        // very slow
+        const along = Math.sin(s.t) * 22;                       // sway ±22 m along the ridge
+        g.pos.x = s.ox + Math.cos(s.dir) * along;
+        g.pos.z = s.oz + Math.sin(s.dir) * along;
+        g.pos.y = geo.height(Math.round(g.pos.x), Math.round(g.pos.z)) + 1.0; // stay seated on terrain
+        g.yaw = s.dir + (Math.cos(s.t) < 0 ? Math.PI : 0);     // face the way it's striding
+        g.walkPhase = (g.walkPhase || 0) + dt * 1.4;            // slow leg swing
+        const swing = Math.sin(g.walkPhase * Math.PI) * 0.45;
+        g.model.legs.forEach((l, i) => { l.rotation.x = (i % 2 === 0 ? swing : -swing); });
+        g.model.group.position.set(g.pos.x, g.pos.y, g.pos.z);
+        g.model.group.rotation.y = g.yaw;
+      }
+    }
+
+    // ---- Slice 3: the Demeter wreck + the black hound (Dracula opening chapters) ----
+    // Both are quest-gated spectacle, moors-only (we already returned if !realWorld).
+    // `onOpening` = the player is on drac1/drac2 (the Whitby opening). The wreck sits aground
+    // on the strand throughout the opening; the hound only bounds up the 199 steps at night.
+    const onOpening = !!(this.quests.draculaOnOpening && this.quests.draculaOnOpening());
+    const night = !!(this.sky && this.sky.isNight());
+    const harbour = geo.whitbyHarbour ? geo.whitbyHarbour() : null;
+    const abbeyLm = geo._abbeyLandmark ? geo._abbeyLandmark() : null;
+
+    // forget a wreck/hound the world reset out from under us
+    if (this._demeter && this._demeter.dead) this._demeter = null;
+    if (this._hound && this._hound.dead) this._hound = null;
+
+    // -- the Demeter wreck: a static, listing prop seated on the strand --
+    const wantWk = wantWreck({ realWorld: geo.realWorld, onOpening }) && !!harbour;
+    if (wantWk && !this._demeter) {
+      // seat her just off the waterline, bow toward the shore, heeled over to port
+      const wx = harbour.x - 6, wz = harbour.z + 2;
+      const wy = geo.height(Math.round(wx), Math.round(wz)) + 0.2;
+      const w = this.entities.spawnMob('wreck', wx, wy, wz);
+      w.yaw = 1.1;                        // lying askew across the strand
+      w.model.group.rotation.set(0.18, w.yaw, 0.32);   // pitched + listing to port
+      w.model.group.position.set(w.pos.x, w.pos.y, w.pos.z);
+      this._demeter = w;
+    } else if (!wantWk && this._demeter) {
+      this.entities.scene.remove(this._demeter.model.group); this._demeter.dead = true; this._demeter = null;
+    }
+    // investigate her (within a few blocks) -> the captain's log, granted exactly once
+    if (this._demeter) {
+      const d = Math.hypot(this.player.pos.x - this._demeter.pos.x, this.player.pos.z - this._demeter.pos.z);
+      if (d < 6) this.quests.grantDraculaLog();
+    }
+
+    // -- the black hound: bounds from the harbour up the East-Cliff line to the abbey, at neet --
+    const wantHd = wantHound({ realWorld: geo.realWorld, onOpening, night }) && !!harbour && !!abbeyLm;
+    if (wantHd && !this._hound) {
+      // a run from the strand (t=0) up toward the abbey on the East Cliff (t=1)
+      const from = { x: harbour.x, z: harbour.z };
+      const to = { x: abbeyLm.x, z: abbeyLm.z };
+      const h = this.entities.spawnMob('houndspectre', from.x, geo.height(Math.round(from.x), Math.round(from.z)) + 1.0, from.z);
+      h.run = { from, to, t: 0 };
+      this._hound = h;
+    } else if (!wantHd && this._hound) {
+      this.entities.scene.remove(this._hound.model.group); this._hound.dead = true; this._hound = null;
+    }
+    if (this._hound) {
+      const r = this._hound.run;
+      r.t += dt * 0.12;                                  // a steady bound up the cliff (~8 s a run)
+      const k = r.t % 1;                                 // loop the ascent, fading near the top
+      const x = r.from.x + (r.to.x - r.from.x) * k;
+      const z = r.from.z + (r.to.z - r.from.z) * k;
+      const y = geo.height(Math.round(x), Math.round(z)) + 1.0;
+      this._hound.pos.x = x; this._hound.pos.z = z; this._hound.pos.y = y;
+      this._hound.yaw = Math.atan2(r.to.z - r.from.z, r.to.x - r.from.x);
+      // a loping stride + a low spring in the bound
+      this._hound.walkPhase = (this._hound.walkPhase || 0) + dt * 7;
+      const swing = Math.sin(this._hound.walkPhase * Math.PI) * 0.6;
+      this._hound.model.legs.forEach((l, i) => { l.rotation.x = (i % 2 === 0 ? swing : -swing); });
+      const bound = Math.abs(Math.sin(this._hound.walkPhase * Math.PI)) * 0.35;
+      // fade out as it nears the top (k>0.7) or the player closes on it — spectral, never reached
+      const distP = Math.hypot(this.player.pos.x - x, this.player.pos.z - z);
+      const fade = Math.max(0, Math.min(1, (1 - Math.max(0, (k - 0.7) / 0.3)) * Math.min(1, (distP - 6) / 10)));
+      this._hound.model.group.traverse(o => { if (o.isMesh && o.material) { o.material.transparent = true; o.material.opacity = 0.35 + fade * 0.45; } });
+      this._hound.model.group.position.set(x, y + bound, z);
+      this._hound.model.group.rotation.y = this._hound.yaw;
+    }
+  }
+
   // ---------------- per-frame ----------------
   frame() {
     const dt = Math.min(0.05, this.clock.getDelta());
@@ -3237,9 +3651,10 @@ class Game {
       if (this.state === 'driving') this.driveTick(dt); // advance the engine afore she's posed
       // t' one true train: always running, visible to all
       this.updateTrainWorld(dt);
+      this.updateBranchTrains(dt); // …an' a train on every other line — the whole network's alive
       if (this.rails) this.rails.update(dt, this.player.pos);
       if (this.state === 'riding' && this.ride) {
-        this.updateRide();
+        this.updateRide(dt);
       } else if (this.state === 'driving') {
         this.driveCam();
       }
@@ -3260,9 +3675,11 @@ class Game {
 
       // streaming
       this.world.update(this.player.pos.x, this.player.pos.z);
+      this._updateSeaPlane(); // keep the open sea reaching the horizon (Moors only)
 
       // entities
       this.entities.day = this.sky.day;
+      if (this.rosterClient) this.rosterClient.update(dt);
       this.entities.update(dt, this.player, this.sky.isNight(), this.audio, (item, n) => {
         this.ui.invDirty = true;
         this.ui.toast(`+${n} ${itemName(item)}`, 1600);
@@ -3421,6 +3838,8 @@ class Game {
 
       // ventures: progress checks, fresh offers each new day
       this.quests.update(dt);
+      // folklore manifestations (the giants): quest/time/place-gated, moors only
+      if (this.quests) this.updateQuestFx(dt);
       if (this.sky.day !== this.lastQuestDay) {
         this.lastQuestDay = this.sky.day;
         this.quests.refreshOffers();
@@ -3507,7 +3926,7 @@ class Game {
       } else if (this.entities && this.entities.mobs.some(m => m && !m.dead && m.droving && m.type === 'sheep')) {
         // mid-drove — keep 'em bunched; the whistles still drive 'em
         this.highlight.visible = false;
-        this.ui.interactHint.textContent = '🐑 Drove thi flock to Moorstead’s mart — keep ’em bunched  (← → ↑ ↓ whistle)';
+        this.ui.interactHint.textContent = `🐑 Drove thi flock to ${marketTownName(this.world.gen.geo.realWorld)}’s mart — keep ‘em bunched  (← → ↑ ↓ whistle)`;
       } else if (this.entities &&
         this.entities.mobs.some(m => m && m.owner && m.type === 'dog') &&
         this.entities.mobs.some(m => m && !m.owner && m.type === 'sheep' && Math.hypot(m.pos.x - this.player.pos.x, m.pos.z - this.player.pos.z) < 20)) {
@@ -3627,6 +4046,11 @@ class Game {
     const dread = this.entities.draculaDread(this.player);
     this.sky.setDread(dread);
     this.ui.setDread(dread);
+
+    // the Dracula boss-battle storm: thunder, lightning, rain (or snow in winter)
+    // while the Count's fight is live; restores the prior weather when he falls or
+    // the player leaves. Self-guarding + scoped to the fight (see storm.js).
+    if (this.storm) this.storm.update(dt);
 
     // place-based ambience signals (beck / coast / inn), refreshed ~3x a second
     this._ambTimer = (this._ambTimer || 0) - dt;

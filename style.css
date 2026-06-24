@@ -451,6 +451,16 @@ button.mc.how-tab.active {
   mix-blend-mode: multiply;
 }
 
+/* lightning flash: a white screen blip; the storm controller spikes opacity on a
+   strike and this transition fades it back out over ~220ms (a quick after-glow) */
+#storm-flash {
+  position: fixed; inset: 0; pointer-events: none; z-index: 3;
+  opacity: 0;
+  background: rgba(232, 238, 255, 0.9);
+  transition: opacity 0.22s ease-out;
+  mix-blend-mode: screen;
+}
+
 /* ---------- Whitby Dracula museum ---------- */
 .museum-panel { width: 640px; max-height: 90vh; overflow-y: auto; }
 .museum-intro { margin-bottom: 12px; line-height: 1.5; }

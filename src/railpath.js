@@ -6,30 +6,58 @@
 // Returns { pts:[{x,z,s,deck}], cells:Map, length, stationS:[] }.
 import { WATER_LEVEL } from './defs.js';
 
-export function buildRailPath(stations, heightFn, villages) {
+// Cardinal basis (n/s or e/w) nearest a rail tangent. A station BUILDING stamped on
+// this basis is a clean world-axis box even where the line runs diagonally — stamping
+// on the raw tangent and rounding is what staircases the walls. Platforms stay
+// rail-parallel; only the building uses this. `along` is the long axis, `across` its
+// left-perpendicular; both are unit cardinals. Ties (45°) favour +x deterministically.
+export function stationOrient(tx, tz) {
+  const along = Math.abs(tx) >= Math.abs(tz) ? [Math.sign(tx) || 1, 0] : [0, Math.sign(tz) || 1];
+  // left-perpendicular; guard the -0 that Math.sign yields so the basis is canonical
+  const across = [along[1], along[0] === 0 ? 0 : -along[0]];
+  return { along, across };
+}
+
+export function buildRailPath(stations, heightFn, villages, cardinalStations = false, riverFn = null) {
   const st = stations;
+  // route-waypoints (flagged `via`) shape the curve along the coast but are NOT platform
+  // stations — they get no straight run, no deck-levelling and no stationS entry.
+  const realSt = st.filter(s => !s.via);
   // Control points: every station gets a STRAIGHT run through t' platform
   // (controls planted ±22 blocks along t' angle bisector), so curves sweep
   // out in open country between stops — not through folk's farmyards.
+  // When cardinalStations is set (the real-Moors world), the run through the two
+  // line ENDS (the termini — Pickering & Whitby, the big trainshed stations) is
+  // snapped to the nearest cardinal (n/s or e/w), so their track, platform,
+  // trainshed an' station house all square up. Intermediate stops keep their
+  // natural alignment, so the through route doesn't bulge between stations.
   const unit = (ax, az) => { const L = Math.hypot(ax, az) || 1; return { x: ax / L, z: az / L }; };
+  const cardOf = (d) => { const o = stationOrient(d.x, d.z).along; return { x: o[0], z: o[1] }; };
   const ctrl = [];
+  let sIdx = 0;   // real-station index (via-waypoints don't count)
   for (let i = 0; i < st.length; i++) {
+    if (st[i].via) { ctrl.push({ x: st[i].x, z: st[i].z }); continue; } // plain spline control — no platform
     if (i === 0) {
-      const w = unit(st[1].x - st[0].x, st[1].z - st[0].z);
-      ctrl.push({ x: st[0].x, z: st[0].z, station: 0, plat: true });
+      let w = unit(st[1].x - st[0].x, st[1].z - st[0].z);
+      if (cardinalStations) w = cardOf(w);
+      ctrl.push({ x: st[0].x, z: st[0].z, station: sIdx, plat: true });
       ctrl.push({ x: st[0].x + w.x * 22, z: st[0].z + w.z * 22, plat: true });
     } else if (i === st.length - 1) {
-      const u = unit(st[i].x - st[i - 1].x, st[i].z - st[i - 1].z);
+      let u = unit(st[i].x - st[i - 1].x, st[i].z - st[i - 1].z);
+      if (cardinalStations) u = cardOf(u);
       ctrl.push({ x: st[i].x - u.x * 22, z: st[i].z - u.z * 22, plat: true });
-      ctrl.push({ x: st[i].x, z: st[i].z, station: i, plat: true });
+      ctrl.push({ x: st[i].x, z: st[i].z, station: sIdx, plat: true });
     } else {
+      // intermediate stops keep their natural alignment — only the line ENDS
+      // (the termini) are kinked to cardinal, so the through route doesn't bulge.
       const u = unit(st[i].x - st[i - 1].x, st[i].z - st[i - 1].z);
       const w = unit(st[i + 1].x - st[i].x, st[i + 1].z - st[i].z);
       const m = unit(u.x + w.x, u.z + w.z);
       ctrl.push({ x: st[i].x - m.x * 22, z: st[i].z - m.z * 22, plat: true });
-      ctrl.push({ x: st[i].x, z: st[i].z, station: i, plat: true });
+      ctrl.push({ x: st[i].x, z: st[i].z, station: sIdx, plat: true });
       ctrl.push({ x: st[i].x + m.x * 22, z: st[i].z + m.z * 22, plat: true });
     }
+    sIdx++;
   }
   // village avoidance: where a leg would pass through a settlement, plant a
   // via point pushed out past its boundary — t' line curves round, not through
@@ -76,8 +104,8 @@ export function buildRailPath(stations, heightFn, villages) {
     { x: 2 * route[route.length - 1].x - route[route.length - 2].x, z: 2 * route[route.length - 1].z - route[route.length - 2].z },
   ];
   const pts = [];                      // {x, z, s}
-  const stationS = new Array(st.length).fill(0);
-  const stationIdx = new Array(st.length).fill(0);
+  const stationS = new Array(realSt.length).fill(0);
+  const stationIdx = new Array(realSt.length).fill(0);
   let s = 0, px = route[0].x, pz = route[0].z;
   pts.push({ x: px, z: pz, s: 0 });
   for (let i = 1; i < P.length - 2; i++) {
@@ -178,8 +206,8 @@ export function buildRailPath(stations, heightFn, villages) {
   }
   // ...then platforms forced dead level wi' their station ground, an' a final clamp
   const fixed = new Array(deck.length).fill(false);
-  for (let si = 0; si < st.length; si++) {
-    const g = heightFn(st[si].x, st[si].z);
+  for (let si = 0; si < realSt.length; si++) {
+    const g = heightFn(realSt[si].x, realSt[si].z);
     for (let i = 0; i < pts.length; i++) {
       const ds = Math.abs(pts[i].s - stationS[si]);
       if (ds < 52) {
@@ -202,6 +230,18 @@ export function buildRailPath(stations, heightFn, villages) {
     deck[i] = Math.max(deck[i], deck[i + 1] - maxg * ds);
   }
   for (let i = 0; i < deck.length; i++) deck[i] = Math.max(deck[i], WATER_LEVEL + 1);
+  // Bridges: lift the deck to clear a river so the line BRIDGES it (not fords it) — away
+  // from stations — then re-ramp the approaches up at 1-in-8 so they stay gentle.
+  if (riverFn) {
+    const nearStn = pts.map(p => stationS.some(ss => Math.abs(p.s - ss) < 30));
+    for (let i = 0; i < deck.length; i++) {
+      if (fixed[i] || nearStn[i]) continue;
+      const wl = riverFn(Math.round(pts[i].x), Math.round(pts[i].z));
+      if (wl != null) deck[i] = Math.max(deck[i], wl + 4); // ~4-block clearance for the arch
+    }
+    for (let i = 1; i < deck.length; i++) { if (fixed[i]) continue; const ds = pts[i].s - pts[i - 1].s; if (deck[i] < deck[i - 1] - maxg * ds) deck[i] = deck[i - 1] - maxg * ds; }
+    for (let i = deck.length - 2; i >= 0; i--) { if (fixed[i]) continue; const ds = pts[i + 1].s - pts[i].s; if (deck[i] < deck[i + 1] - maxg * ds) deck[i] = deck[i + 1] - maxg * ds; }
+  }
   for (let i = 0; i < pts.length; i++) pts[i].deck = deck[i];
 
   // spatial index: 8-block cells -> sample indices (for fast per-column lookup)
@@ -227,11 +267,21 @@ export function samplePos(path, s) {
   const a = pts[lo], b = pts[hi];
   const ds = Math.max(b.s - a.s, 0.001);
   const t = (s - a.s) / ds;
+  // TWO tangents, for two different needs:
+  //  • tx,tz = the LOCAL segment direction — what the train BODIES square up to, so carriages sit
+  //    straight on the rail beneath them and never crab.
+  //  • stx,stz = a CENTRED-window tangent over ~±10 blocks — the path is a dense polyline whose
+  //    per-segment direction steps at every vertex, so the RIDE CAMERA reads this smoothed heading
+  //    instead, and the run feels continuous. Position is the exact lerp either way (rails don't move).
+  const W = 5;
+  const fa = pts[Math.max(0, lo - W)], fb = pts[Math.min(pts.length - 1, hi + W)];
+  const wtx = fb.x - fa.x, wtz = fb.z - fa.z, wl = Math.hypot(wtx, wtz) || 1;
   return {
     x: a.x + (b.x - a.x) * t,
     z: a.z + (b.z - a.z) * t,
     deck: a.deck + (b.deck - a.deck) * t,
-    tx: (b.x - a.x) / ds, tz: (b.z - a.z) / ds,
+    tx: (b.x - a.x) / ds, tz: (b.z - a.z) / ds,   // local — bodies sit square to the rail
+    stx: wtx / wl, stz: wtz / wl,                 // smoothed — the camera's continuous heading
     grade: (b.deck - a.deck) / ds,
   };
 }

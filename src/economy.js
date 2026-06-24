@@ -22,9 +22,15 @@ export function formatBrass(pence) {
 // Base worth of a good, in pence, "at par" (before regional spread and the vendor's cut).
 export const PRICES = {
   [I.COAL_LUMP]: 3, [I.RAW_IRON]: 5, [I.IRON_INGOT]: 14, [I.JET_GEM]: 40,
+  // ironstone value chain: raw 5 -> calcined 9 -> pig iron 35 (smelting adds the real value)
+  [I.CALCINED_IRONSTONE]: 9, [I.PIG_IRON]: 35,
+  // jet value chain: raw jet (JET_GEM 40) -> carved mourning jewellery (the carver's craft is the value)
+  [I.CARVED_JET]: 90,
   [B.WOOL]: 6, [B.HEATHER]: 1, [B.BRACKEN]: 1, [B.PEAT]: 1,
   [I.BILBERRIES]: 1,
   [I.CEP]: 3, [I.CHANTERELLE]: 3, [I.COOKED_MUSHROOMS]: 7, [I.WILD_GARLIC]: 2, [I.SORREL]: 2,
+  // Dracula flagship defences (Slice 1) — a herbwife's herbs an' a parson's token, worth little in brass
+  [I.WOLFSBANE]: 3, [I.SILVER_TOKEN]: 4, [I.GRAVE_EARTH]: 2,
   [I.BLACKBERRY]: 2, [I.ROSEHIP]: 2, [I.SLOE]: 1, [I.ELDERBERRY]: 2, [I.HAZELNUT]: 3,
   [I.APPLE]: 2, [I.PEAR]: 2, [I.PLUM]: 2,
   [B.ALUM_SHALE]: 8, [B.ROCK_SALT]: 10, [B.POLYHALITE]: 60,
@@ -51,6 +57,11 @@ const SPREAD = {
   [B.ALUM_SHALE]:{ whitby: 0.6, staithes: 0.6, rosedale: 1.5, pickering: 1.5 },
   [B.ROCK_SALT]: { staithes: 0.6, rosedale: 1.6, pickering: 1.6 },
   [B.POLYHALITE]:{ staithes: 0.6, rosedale: 1.6, pickering: 1.6, moorstead: 1.6 },
+  // --- ironstone chain, keyed to the real Moors towns (substring match) ---
+  [I.RAW_IRON]:          { rosedale: 0.5, pickering: 1.3, whitby: 1.3 },          // raw ironstone: cheap at the pit-head, seldom railed raw
+  [I.CALCINED_IRONSTONE]:{ rosedale: 0.6 },                                       // cheap where it's calcined; its only buyers are furnaces (Grosmont works) + the Teesside export
+  [I.PIG_IRON]:          { grosmont: 0.7, pickering: 1.6, whitby: 1.6, kirkby: 1.5 }, // cheap at the furnace, dear at the market towns
+  [I.CARVED_JET]:        { whitby: 1.6, pickering: 1.4, kirkby: 1.4 },                // sold dear at the Whitby jet shops + the market towns
 };
 export function regionMult(village, itemId) {
   const v = (village || '').toLowerCase();
@@ -163,8 +174,39 @@ export function shipmentValue(goods, destVillage, standingIdx = 0) {
   return total;
 }
 
-// The dearest market for one good among candidate villages, excluding the origin. Returns
-// { village, perUnit } at the export sell-price, or null if it is tradeable nowhere on offer.
+// --- Slice 1: deep-industry value chains — the WORKS (a real-place processor) ---
+// A works steps a raw good up the chain for a toll. Held as DATA, like the spreads; `town` is
+// resolved to coordinates by the geography. Ironstone first; jet/fish/wool reuse this shape.
+export const WORKS = [
+  { name: 'Rosedale Calcining Kilns', town: 'Rosedale', kind: 'kiln',    in: I.RAW_IRON,           out: I.CALCINED_IRONSTONE, ratio: [3, 2], toll: 4 },
+  { name: 'Grosmont Ironworks',       town: 'Grosmont', kind: 'furnace', in: I.CALCINED_IRONSTONE, out: I.PIG_IRON,           ratio: [2, 1], toll: 9 },
+  { name: 'Whitby Jet Works',         town: 'Whitby',   kind: 'jetshop', in: I.JET_GEM,             out: I.CARVED_JET,         ratio: [1, 1], toll: 10 },
+];
+export function worksAtTown(town) {
+  const t = (town || '').toLowerCase();
+  return WORKS.filter(w => t.includes(w.town.toLowerCase()));
+}
+// Convert held raw at a works: floors to whole ratio-batches, charges the toll per batch.
+// Returns { ok, reason?, batches, used, made, toll, out }.
+export function convertAt(works, heldRaw, brass = Infinity) {
+  if (!works) return { ok: false, reason: 'nowork' };
+  const [inN, outN] = works.ratio;
+  const byInput = Math.floor((heldRaw || 0) / inN);
+  if (byInput < 1) return { ok: false, reason: 'short', need: inN };
+  const byBrass = works.toll > 0 ? Math.floor(brass / works.toll) : byInput;
+  const batches = Math.min(byInput, byBrass);
+  if (batches < 1) return { ok: false, reason: 'poor', need: works.toll };
+  return { ok: true, batches, used: batches * inN, made: batches * outN, toll: batches * works.toll, out: works.out };
+}
+
+// Off-map EXPORT markets reached at the network edge (the Rosedale Railway north to Teesside):
+// a fixed bulk buyer for a specific good — steady and reliable, the historical bulk destination.
+export const EXPORTS = {
+  [I.CALCINED_IRONSTONE]: { market: 'Teesside', perUnit: 13 },
+};
+
+// The dearest market for one good among candidate villages, excluding the origin (and the off-map
+// export, if any). Returns { village, perUnit, export? } at the export sell-price, or null.
 export function bestMarket(itemId, fromVillage, villages, standingIdx = 0) {
   let best = null;
   for (const village of villages) {
@@ -173,7 +215,16 @@ export function bestMarket(itemId, fromVillage, villages, standingIdx = 0) {
     if (perUnit == null) continue;
     if (!best || perUnit > best.perUnit) best = { village, perUnit };
   }
+  const exp = EXPORTS[itemId];
+  if (exp && (!best || exp.perUnit > best.perUnit)) best = { village: exp.market, perUnit: exp.perUnit, export: true };
   return best;
+}
+
+// The market town where droving, farm registration and pig sales happen. The real-Moors
+// (v2) world routes to Pickering, its agricultural market + southern rail terminus; the
+// stylised (v1) world keeps Moorstead.
+export function marketTownName(realWorld) {
+  return realWorld ? 'Pickering' : 'Moorstead';
 }
 
 // What each villager sells (to you) and buys (from you). Keyed by lowercase substring of the

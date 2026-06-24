@@ -156,43 +156,153 @@ function buildArc(geo) {
 function buildDraculaArc(geo) {
   const museum = geo.museumSite();
   const font = geo.abbeyFont();
+  // The moors world has no museum (museumSite() is off-map): the arc opens at the real
+  // Whitby harbour, where the Demeter ran aground, told by a roster fishwife. The stylised
+  // world keeps its museum opening untouched. drac1/drac2 branch on geo.realWorld below,
+  // the same way cross/bess resolve per world. harbour is null only if Whitby is missing.
+  const harbour = (geo.realWorld && geo.whitbyHarbour) ? geo.whitbyHarbour() : null;
+  // The parson's moor cross — a real white moor cross (Lilla/Ralph/Fat Betty in the
+  // real data; the nearest crossAt cross in the stylised world). findFatBetty resolves
+  // in BOTH worlds (it falls back to a village-relative point when crossAt is null), so
+  // dracA degrades gracefully exactly as museum/font do off-map.
+  const cross = findFatBetty(geo);
+  // Bess the herbwife's garden, at Lealholm. Lealholm is a real town in the moors data
+  // (geo.villages by name); the stylised world has no Lealholm, so fall back to a point
+  // just off the home green — keeping the visit-effect satisfiable in both worlds.
+  const lealholm = (geo.villages || []).find(v => v.name === 'Lealholm');
+  const bess = lealholm
+    ? { x: lealholm.x + 6, z: lealholm.z + 6 }
+    : { x: geo.village.x + 18, z: geo.village.z + 18 };
+  // The Count's three boxes of Transylvanian earth, hidden about Whitby (Slice 2, dracC).
+  // MOORS: three real, solid-ground, in-bounds points round the town + abbey churchyard
+  // (probed: all coastT 0, within inWhitby). STYLISED: there is no Whitby town, so spread
+  // three points round the museum site (still finite + reachable) — exactly how the arc's
+  // other locations (cross/bess) degrade per world. Stoker's Carfax boxes, brought to Whitby.
+  const whitbyT = geo.realWorld ? (geo.villages || []).find(v => v.name === 'Whitby') : null;
+  const abbeyLm = (geo.realWorld && geo._abbeyLandmark) ? geo._abbeyLandmark() : null;
+  const boxSites = (whitbyT && abbeyLm)
+    ? [
+        { x: abbeyLm.x - 14, z: abbeyLm.z - 4, name: 't’ abbey churchyard' },   // (1818,3087)
+        { x: whitbyT.x + 30, z: whitbyT.z - 14, name: 't’ harbourside' },       // (1820,3032)
+        { x: whitbyT.x - 20, z: whitbyT.z + 16, name: 't’ edge o’ t’ town' },   // (1770,3062)
+      ]
+    : [
+        { x: museum.x + 14, z: museum.z + 6, name: 't’ kirk yard' },
+        { x: museum.x - 12, z: museum.z + 14, name: 't’ harbourside' },
+        { x: museum.x + 4, z: museum.z - 16, name: 't’ edge o’ t’ town' },
+      ];
   return {
-    drac1: {
+    // drac1/drac2 are dual-world. STYLISED: the museum board opens the arc (visit the
+    // museum, then read the exhibits). MOORS (geo.realWorld): no museum exists, so the arc
+    // opens down at the real Whitby harbour where the Demeter came ashore, told by a roster
+    // fishwife — drac1 visits the harbour, drac2 is a visit (hear her account) instead of
+    // kind:'museum'. The giver is resolved to a live roster NPC at offer time
+    // (refreshDraculaOffer); the static giver:'museum' is only read by the stylised flow.
+    drac1: geo.realWorld ? {
       id: 'drac1', giver: 'museum', minStanding: 0, needs: null,
-      title: 'Where t\u2019 Story Began',
-      desc: 'Visit t\u2019 Dracula Museum in Whitby \u2014 learn how Bram Stoker found his villain in these very cliffs an\u2019 harbours.',
+      title: 'Where t’ Story Began',
+      desc: 'Down to t’ Whitby harbour, where t’ Demeter came ashore in t’ fog — hear how t’ wreck gave Bram Stoker his villain.',
+      offer: 'You keep a stall on the Whitby harbour. You can offer the visitor the beginning of a separate mystery: in the summer of ’90 a Russian schooner, the Demeter, drove ashore here in a great fog, and a Dublin writer lodging in the town took the wreck and the abbey above and made Count Dracula of them. Send them down to the harbour, where the ship came aground, to stand where it began.',
+      steps: [
+        { kind: 'visit', x: harbour ? harbour.x : museum.x, z: harbour ? harbour.z : museum.z, r: 16,
+          objective: 'Go down to t’ Whitby harbour, where t’ Demeter came ashore' },
+      ],
+      turnIn: 'auto',
+      truth: 'The visitor has NOT yet been down to the Whitby harbour. Do not claim they know the story.',
+      doneNote: 'The visitor went down to the Whitby harbour, where the Demeter ran aground, and learned how the wreck and the abbey above gave Stoker his villain.',
+      reward: { items: [[I.DRACULA_JOURNAL, 1]], trust: [], text: 'T’ fishwife presses a copied captain’s log into thi hand. “Read it by t’ abbey, love. Then tha’ll understand what walks at neet.”' },
+      clues: [
+        { holder: 'glinda', holderRole: 'fishwife', text: 'They say a foreign gentleman was seen on t’ abbey steps in t’ summer o’ ninety — same year a Dublin writer lodged i’ t’ town. T’ harbour an’ t’ wreck gave him his villain, an’ some folk swear t’ villain never truly left.' },
+        { holder: 'harry', text: 'A big black dog leapt off a wrecked ship in t’ harbour an’ ran off up t’ abbey steps! Mam says it’s just an old tale. I’m not so sure.' },
+      ],
+    } : {
+      id: 'drac1', giver: 'museum', minStanding: 0, needs: null,
+      title: 'Where t’ Story Began',
+      desc: 'Visit t’ Dracula Museum in Whitby — learn how Bram Stoker found his villain in these very cliffs an’ harbours.',
       offer: 'You are the Dracula Museum in Whitby. You can offer the visitor the beginning of a separate mystery: Bram Stoker stayed here in 1890, walking the abbey steps and the harbour in fog, and from that atmosphere he wrote Count Dracula. Invite them to visit the museum exhibits to understand why the Count still walks these moors in folk memory.',
       steps: [
         { kind: 'visit', x: museum.x, z: museum.z, r: 14,
-          objective: 'Visit t\u2019 Dracula Museum in Whitby' },
+          objective: 'Visit t’ Dracula Museum in Whitby' },
       ],
       turnIn: 'auto',
       truth: 'The visitor has NOT yet been to the museum. Do not claim they know the story.',
-      doneNote: 'The visitor came to the Dracula Museum in Whitby and learned how Stoker\u2019s 1890 visit to the abbey and the harbour gave him his villain.',
-      reward: { items: [[I.DRACULA_JOURNAL, 1]], trust: [], text: 'T\u2019 curator presses a copied captain\u2019s log into thi hand. \u201cRead it by t\u2019 abbey, love. Then tha\u2019ll understand what walks at neet.\u201d' },
+      doneNote: 'The visitor came to the Dracula Museum in Whitby and learned how Stoker’s 1890 visit to the abbey and the harbour gave him his villain.',
+      reward: { items: [[I.DRACULA_JOURNAL, 1]], trust: [], text: 'T’ curator presses a copied captain’s log into thi hand. “Read it by t’ abbey, love. Then tha’ll understand what walks at neet.”' },
       clues: [
-        { holder: 'glinda', text: 'They say a foreign gentleman was seen on t\u2019 abbey steps in t\u2019 summer o\u2019 ninety \u2014 same year a Dublin writer stayed at Mrs Veazey\u2019s. Whitby gave him his villain, an\u2019 some folk swear t\u2019 villain never truly left.' },
-        { holder: 'harry', text: 'There\u2019s a museum in Whitby all about Dracula! Mam says it\u2019s dead spooky but it\u2019s just pictures an\u2019 old books. Honest.' },
+        { holder: 'glinda', text: 'They say a foreign gentleman was seen on t’ abbey steps in t’ summer o’ ninety — same year a Dublin writer stayed at Mrs Veazey’s. Whitby gave him his villain, an’ some folk swear t’ villain never truly left.' },
+        { holder: 'harry', text: 'There’s a museum in Whitby all about Dracula! Mam says it’s dead spooky but it’s just pictures an’ old books. Honest.' },
       ],
     },
-    drac2: {
+    drac2: geo.realWorld ? {
       id: 'drac2', giver: 'museum', minStanding: 0, needs: 'drac1',
-      title: 'T\u2019 Captain\u2019s Log',
-      desc: 'Read t\u2019 museum exhibits in Whitby \u2014 Stoker\u2019s Whitby, t\u2019 Demeter, an\u2019 t\u2019 atmosphere that made a legend.',
+      title: 'T’ Captain’s Log',
+      desc: 'Stop a while at t’ harbour an’ hear t’ fishwife’s account o’ t’ Demeter — t’ fog, t’ dead helmsman lashed to t’ wheel, an’ t’ great black hound that leapt ashore.',
+      offer: 'You can offer the visitor the next step: they should stop a while at the harbour and hear your full account of the Demeter — how she drove in through the fog with her dead helmsman lashed to the wheel, the great black hound that leapt ashore and ran up the 199 steps to the abbey, and why the tale feels so real here.',
+      steps: [
+        { kind: 'visit', x: harbour ? harbour.x : museum.x, z: harbour ? harbour.z : museum.z, r: 16,
+          objective: 'Hear t’ fishwife’s account o’ t’ Demeter at t’ harbour' },
+      ],
+      turnIn: 'auto',
+      truth: 'The visitor has NOT yet heard the full account of the Demeter at the harbour.',
+      doneNote: 'The visitor heard the fishwife’s account of the Demeter at the Whitby harbour and understands how the real town — harbour, abbey, fog, jet — became Dracula’s England.',
+      reward: { items: [[I.BILBERRIES, 4]], trust: [], text: 'Tha’s the picture now: a foggy harbour, a ship driven aground wi’ a dead man at t’ wheel, an abbey on t’ cliff. Summat o’ that darkness lingered.' },
+      clues: [
+        { holder: 'glinda', holderRole: 'fishwife', text: 'When t’ Demeter drove aground i’ t’ harbour, t’ only living thing aboard was a great dog that leapt ashore an’ vanished up t’ 199 Steps. In t’ book, anyway. In t’ stories folk still tell... they’re not so sure it stayed in t’ book.' },
+      ],
+    } : {
+      id: 'drac2', giver: 'museum', minStanding: 0, needs: 'drac1',
+      title: 'T’ Captain’s Log',
+      desc: 'Read t’ museum exhibits in Whitby — Stoker’s Whitby, t’ Demeter, an’ t’ atmosphere that made a legend.',
       offer: 'You can offer the visitor the next step: they should read all the museum exhibits properly — Stoker\'s 1890 visit, the Russian schooner Demeter wrecked below the abbey, the 199 steps, the fog and the jet — and take in why the story feels so real here.',
       steps: [
-        { kind: 'museum', objective: 'Read t\u2019 museum exhibits in Whitby' },
+        { kind: 'museum', objective: 'Read t’ museum exhibits in Whitby' },
       ],
       turnIn: 'auto',
       truth: 'The visitor has NOT finished reading the museum exhibits yet.',
-      doneNote: 'The visitor read the Whitby museum exhibits and understands how the real town — abbey, harbour, fog, jet — became Dracula\u2019s England.',
-      reward: { items: [[I.BILBERRIES, 4]], trust: [], text: 'Tha\u2019s the picture now: a writer, a foggy harbour, a ship driven aground, an abbey on t\u2019 cliff. Summat o\u2019 that darkness lingered.' },
+      doneNote: 'The visitor read the Whitby museum exhibits and understands how the real town — abbey, harbour, fog, jet — became Dracula’s England.',
+      reward: { items: [[I.BILBERRIES, 4]], trust: [], text: 'Tha’s the picture now: a writer, a foggy harbour, a ship driven aground, an abbey on t’ cliff. Summat o’ that darkness lingered.' },
       clues: [
-        { holder: 'glinda', text: 'When t\u2019 Demeter drove aground below t\u2019 abbey, t\u2019 only living thing aboard was a great dog that leapt ashore an\u2019 vanished up t\u2019 199 Steps. In t\u2019 book, anyway. In t\u2019 stories folk still tell... they\u2019re not so sure it stayed in t\u2019 book.' },
+        { holder: 'glinda', text: 'When t’ Demeter drove aground below t’ abbey, t’ only living thing aboard was a great dog that leapt ashore an’ vanished up t’ 199 Steps. In t’ book, anyway. In t’ stories folk still tell... they’re not so sure it stayed in t’ book.' },
+      ],
+    },
+    dracA: {
+      id: 'dracA', giver: 'museum', minStanding: 0, needs: 'drac2',
+      title: 'T’ Parson’s Counsel',
+      desc: 'T’ museum keeper bids thee seek t’ parson out on t’ moor — he knows t’ owd defences, an’ keeps a blessed silver token.',
+      offer: 'You can offer the visitor the next step: ride out across the moor to the parson at his moor cross and hear the old defences against what walks from Whitby — and ask him for a blessed silver token. Knowledge is gathered by travelling and asking.',
+      steps: [
+        { kind: 'visit', x: cross.x, z: cross.z, r: 14, effect: 'dropSilverToken',
+          objective: 'Seek t’ parson at t’ moor cross for his counsel' },
+      ],
+      turnIn: 'auto',
+      truth: 'The visitor has NOT yet sought the parson. Do not claim they carry the silver token or know the defences.',
+      doneNote: 'The visitor sought the parson at the moor cross, heard the old defences, and was given a blessed silver token.',
+      reward: { items: [], trust: [], text: '“Silver an’ the cross,” the parson says, pressing the token into thi hand. “Wolfsbane an’ garlic for the body, holy water for the ground, an’ a stake for the heart. Go careful.”' },
+      clues: [
+        { holder: 'glinda', holderRole: 'parson', text: 'T’ parson at t’ owd cross has read more than t’ Bible. He’ll tell thee what holds t’ Count off — silver, wolfsbane, holy water, an’ a stake steeped true.' },
+        { holder: 'harry', holderRole: 'schoolmistress', text: 'Miss says Whitby folk pinned wolfsbane ower t’ door against t’ neet-walker. I thought it were just an owd tale.' },
+      ],
+    },
+    dracB: {
+      id: 'dracB', giver: 'museum', minStanding: 0, needs: 'dracA',
+      title: 'T’ Herbwife’s Garden',
+      desc: 'Bess t’ herbwife at Lealholm grows wolfsbane an’ garlic. Gather both — t’ body’s defence against him.',
+      offer: 'You can offer the visitor the next step: go to Bess the herbwife at Lealholm, who keeps wolfsbane in her physic garden, and gather a sprig from her — then forage wild garlic too. Both are the old protection worn on the body against the night-walker.',
+      steps: [
+        { kind: 'visit', x: bess.x, z: bess.z, r: 14, effect: 'dropWolfsbane',
+          objective: 'Gather wolfsbane frae Bess’s garden (Lealholm)' },
+        { kind: 'collect', item: I.WILD_GARLIC, n: 2, objective: 'Forage wild garlic (2)' },
+      ],
+      turnIn: 'auto',
+      truth: 'The visitor has NOT yet gathered the wolfsbane and garlic. Do not claim they are protected.',
+      doneNote: 'The visitor gathered wolfsbane from Bess the herbwife at Lealholm and foraged wild garlic.',
+      reward: { items: [], trust: [], text: 'Bess ties t’ wolfsbane in a sprig. “Wear it close,” she says. “It’ll not slay him, but it’ll turn his eye.”' },
+      clues: [
+        { holder: 'glinda', holderRole: 'herbwife', text: 'Bess at Lealholm grows wolfsbane — monkshood, some call it. Deadly to eat, but the owd folk say the neet-walker can’t abide it. Garlic an’ all.' },
       ],
     },
     drac3: {
-      id: 'drac3', giver: 'museum', minStanding: 0, needs: 'drac2',
+      id: 'drac3', giver: 'museum', minStanding: 0, needs: 'dracB',
       title: 'Holy Water',
       desc: 'T\u2019 ruined abbey on t\u2019 cliffs still has a font where pilgrims drew water. Fill a flask frae it \u2014 tha\u2019ll need it.',
       offer: 'You can offer the visitor the next step: the old abbey ruin on the cliffs north of here still has a holy water font in the nave. They must go there and draw water from it. The old stories say consecrated ground and holy water are the first defence against what walks from Whitby out onto the moors.',
@@ -227,15 +337,42 @@ function buildDraculaArc(geo) {
         { holder: 'james', text: 'Neet-walking\u2019s bad enough wi\u2019 barghests. If tha\u2019s hunting summat worse, tha wants a plan, a shelter marked, an\u2019 that stake ready.' },
       ],
     },
+    dracC: {
+      id: 'dracC', giver: 'museum', minStanding: 0, needs: 'drac4',
+      title: 'T’ Boxes o’ Earth',
+      desc: 'T’ Count sleeps by day in boxes o’ his own grave-earth, hidden about Whitby. Find an’ sanctify three — strip away his daytime havens afore tha faces him.',
+      offer: 'You can offer the visitor the next task: like in the old tale, the Count cannot rest save in boxes of his own Transylvanian grave-earth, and three of them lie hidden about Whitby — in the abbey churchyard, on the harbourside, and at the edge of the town. Send the visitor to find each one and sanctify it (holy water laid on the earth breaks its rest). Strip away his daytime havens and he cannot shelter from the dawn.',
+      steps: [
+        { kind: 'visit', x: boxSites[0].x, z: boxSites[0].z, r: 12, effect: 'sanctifyBox',
+          objective: `Find an’ sanctify t’ first box o’ earth (${boxSites[0].name})` },
+        { kind: 'visit', x: boxSites[1].x, z: boxSites[1].z, r: 12, effect: 'sanctifyBox',
+          objective: `Find an’ sanctify t’ second box o’ earth (${boxSites[1].name})` },
+        { kind: 'visit', x: boxSites[2].x, z: boxSites[2].z, r: 12, effect: 'sanctifyBox',
+          objective: `Find an’ sanctify t’ third box o’ earth (${boxSites[2].name})` },
+      ],
+      turnIn: 'auto',
+      truth: 'The visitor has NOT yet found and sanctified all three boxes of grave-earth. The Count can still shelter from the dawn. Do not claim his havens are destroyed.',
+      doneNote: 'The visitor hunted down all three of the Count’s boxes of Transylvanian grave-earth about Whitby and sanctified them. He has no daytime haven left to shelter him from the dawn.',
+      reward: { items: [[I.GRAVE_EARTH, 1]], trust: [], text: 'Three boxes broken an’ blessed. T’ Count’s rest is unmade — he’ll have nowhere to hide frae t’ light o’ dawn now.' },
+      clues: [
+        { holder: 'glinda', holderRole: 'fishwife', text: 'In t’ tale he brought boxes o’ his own grave-earth ower on t’ Demeter — fifty of ’em. He can’t rest save in his own soil. Find his boxes, bless ’em, an’ tha takes away his shelter frae t’ day.' },
+        { holder: 'harry', holderRole: 'sexton', text: 'Sexton says there’s queer long boxes o’ foreign dirt turned up — one in t’ kirk yard, one down t’ harbour, one at t’ town end. Says holy water laid on ’em stops summat sleeping.' },
+      ],
+    },
     drac5: {
-      id: 'drac5', giver: 'museum', minStanding: 0, needs: 'drac4',
+      id: 'drac5', giver: 'museum', minStanding: 0, needs: 'dracC',
+      // The grandest honour in the game — opt-in (finish() reads inst.honour). standing:5
+      // is a meaningful bump (the giants' Wade's Witness gives 1).
+      honour: { title: 'Slayer o’ the Count', standing: 5 },
       title: 'He Walks at Neet',
-      desc: 'Count Dracula walks t\u2019 open moor after dark \u2014 one figure, deadly unless tha\u2019s armed wi\u2019 thi holy stake. Face him on t\u2019 lonely ground north o\u2019 t\u2019 causey, at neet. Moor shelters\u2019ll hide thee; villages are safe.',
-      offer: 'You can offer the visitor the final task: Count Dracula walks the open moor at night — one figure, immensely dangerous unless they carry the holy water stake. They must face him on the lonely ground north of Wade\'s Causeway, AT NIGHT, stake in hand. Stone moor shelters and lit villages are sanctuary. Slaying him will make the moors far safer to explore after dark.',
+      desc: 'Count Dracula walks at neet \u2014 deadly unless tha\u2019s armed wi\u2019 thi holy stake. Face him on t\u2019 East Cliff by t\u2019 abbey, an\u2019 hold him till t\u2019 grey o\u2019 dawn, when his strength fails an\u2019 a staked heart can finish him. Holy water an\u2019 silver turn him; shelters an\u2019 villages are safe.',
+      offer: 'You can offer the visitor the final task: Count Dracula walks at night — immensely dangerous unless they carry the holy water stake. With his three boxes of grave-earth sanctified, he can no longer shelter from the day. They must face him on the East Cliff by the abbey at night, ward him off with holy water or a silver token, and hold him until the grey of dawn — only then, when his strength fails, can a stake through the heart finish him. Stone shelters and lit villages are sanctuary. Slaying him will make the nights far safer.',
       steps: [
         { kind: 'kill', mob: 'dracula', n: 1,
-          spawnAt: { x: DRACULA_MOOR.x, z: DRACULA_MOOR.z, r: DRACULA_MOOR.r, night: true },
-          objective: 'Vanquish Count Dracula on t\u2019 moor at neet (holy stake in hand)' },
+          spawnAt: geo.realWorld
+            ? { x: geo.draculaArena().x, z: geo.draculaArena().z, r: geo.draculaArena().r, night: true }
+            : { x: DRACULA_MOOR.x, z: DRACULA_MOOR.z, r: DRACULA_MOOR.r, night: true },
+          objective: 'Vanquish Count Dracula at neet (stake in hand, hold him till dawn)' },
       ],
       turnIn: 'auto',
       truth: 'Count Dracula STILL walks the moors at night. The visitor has NOT vanquished him yet. Do not celebrate early.',
@@ -251,6 +388,115 @@ function buildDraculaArc(geo) {
       ],
     },
   };
+}
+
+// v2 (moors world) per-chapter givers for the Dracula arc, by role+place \u2014 resolved to a
+// live roster NPC via resolveGiver (exactly like the folklore quests' giver field). The arc
+// opens at the Whitby harbour (a fishwife on the Demeter account), turns to a moor parson
+// for the old defences, then Bess the herbwife at Lealholm. drac3/drac4/drac5 carry no
+// giver: they advance on their own steps (holy water at the abbey font, crafting the stake,
+// the boss) with no hand-in, so no roster NPC is needed to surface them. Place omitted ==
+// any NPC of that role anywhere (the parson roams the moor churches). This map is ONLY read
+// in the moors world (refreshDraculaOffer early-returns otherwise); the stylised world
+// still opens the arc at the museum board via museumOffer().
+const DRACULA_V2_GIVERS = {
+  drac1: { role: 'fishwife', place: 'Whitby' },
+  drac2: { role: 'fishwife', place: 'Whitby' },
+  dracA: { role: 'parson' },
+  dracB: { role: 'herbwife', place: 'Lealholm' },
+  dracC: { role: 'fishwife', place: 'Whitby' },
+};
+
+// ---------------------------------------------------------------------------
+// The v2 folklore-quest library (moors world only). Pure data records, resolved
+// at runtime against the live roster (givers) and the real landmarks. New quests
+// are just new records here. All lore is from the real North York Moors legends —
+// see docs/superpowers/specs/2026-06-23-folklore-quests-design.md. NEVER invent.
+// ---------------------------------------------------------------------------
+export function buildFolkloreQuests(geo) {
+  return [
+    {
+      id: 'folk_wade', title: 'Wade’s Causey', theme: 'myth',
+      giver: { role: 'shepherd', place: 'Goathland' },
+      landmark: 'wades_causeway',                 // resolved to the real Wheeldale moor-top road
+      standingGate: 0,
+      manifestation: 'giants',                    // the visible payoff (a later task spawns it)
+      steps: [
+        { kind: 'visit', landmark: 'wades_causeway', r: 40, time: 'duskOrNight',
+          objective: 'Walk Wade’s Causey at dusk or after dark' },
+      ],
+      clues: [
+        { holderRole: 'shepherd', text: 'Owd folk say t’ straight stone road ower Wheeldale were laid by t’ giant Wade, for his wife Bell to drive her cow across t’ mire. Walk it at gloamin’ an’ tha might see ’em yet.' },
+        { holderRole: 'schoolmistress', text: 'They reckon Wade an’ Bell built Mulgrave an’ Pickering castles atween ’em, lobbin’ t’ same hammer ower t’ moor. T’ big stones out on t’ tops are what they threw.' },
+      ],
+      truth: 'Wade is the legendary giant of these moors. Wade’s Causeway is the old straight stone road over Wheeldale Moor, said to be built by Wade for his wife Bell to drive her giant cow across the bog. Wade and Bell are said to have built Mulgrave and Pickering castles, tossing a single hammer between them, and the great stones and howes on the moor-tops are the stones they hurled. This is folklore the moor folk still tell; do not invent extra details.',
+      loreFacts: [
+        'Wade is the legendary giant of the North York Moors. Wade’s Causeway is the old straight stone road over Wheeldale Moor, said to be built by Wade for his wife Bell.',
+        'Wade and Bell, the giants, are said to have built Mulgrave and Pickering castles by throwing a single hammer between them; the boulders and howes on the moor-tops are stones they threw.',
+      ],
+      reward: { items: [[I.COOKED_MUTTON, 3]], trust: [], text: '“Tha saw ’em, then,” the shepherd says, going quiet. “Not many do. Wade walks for them as walk his causey honest.”' },
+      honour: { title: 'Wade’s Witness', standing: 1 },   // opt-in earned title + standing boost
+    },
+  ];
+}
+
+// Real landmark key -> {x,z}. First looks the key up in the moors data landmarks
+// (so a data-driven marker like Wade's Causeway resolves to its real coordinate);
+// falls back to a curated in-bounds moor-top point keyed to a real place if the
+// data lacks it. Returns null if neither resolves (the quest is then not offered).
+const LANDMARK_DATA_NAMES = {
+  wades_causeway: 'Wade’s Causeway',   // matches data/moors-data.json landmarks (apostrophe)
+};
+export function resolveLandmarkPoint(geo, key) {
+  if (!key) return null;
+  if (typeof key === 'object' && key.x !== undefined && key.z !== undefined) return { x: key.x, z: key.z };
+  const data = geo && geo.data && Array.isArray(geo.data.landmarks) ? geo.data.landmarks : null;
+  if (data) {
+    const wantName = LANDMARK_DATA_NAMES[key] || key;
+    // tolerate either an ASCII or a curly apostrophe in the stored name
+    const norm = s => (s || '').replace(/[’']/g, '’').toLowerCase();
+    const lm = data.find(l => norm(l.name) === norm(wantName));
+    if (lm && lm.x !== undefined && lm.z !== undefined) {
+      // a polyline landmark (the causeway): aim for its mid point on the moor top
+      if (Array.isArray(lm.points) && lm.points.length) {
+        const mid = lm.points[(lm.points.length / 2) | 0];
+        return { x: mid[0], z: mid[1] };
+      }
+      return { x: lm.x, z: lm.z };
+    }
+  }
+  // no data marker: a curated fallback (kept in-bounds by the caller). Wade's
+  // Causeway sits on Wheeldale Moor, roughly W/SW of Goathland.
+  if (key === 'wades_causeway' && geo) {
+    const go = (geo.villages || []).find(v => v.name === 'Goathland');
+    if (go) return { x: go.x - 263, z: go.z - 180 };   // ~ the real Wheeldale moor top
+  }
+  return null;
+}
+
+// The pure spawn predicate for a folklore manifestation (the giants). True ONLY
+// when ALL four gates hold, so the manifestation never leaks into normal play or
+// the stylised world: the moors world is loaded, the quest is active, it is the
+// dusk/night window, and the player is near the landmark. updateQuestFx (main.js)
+// calls this; verify-quests.mjs tests it exhaustively.
+export function wantGiants({ realWorld, questActive, dusk, near }) {
+  return !!(realWorld && questActive && dusk && near);
+}
+
+// Slice 3 — the Demeter wreck spawn predicate. The broken schooner sits aground on the
+// Whitby strand ONLY in the moors world while the player is on the Dracula arc's OPENING
+// chapters (drac1/drac2 active). TRUE only when both hold, so the wreck never leaks into
+// normal play or the stylised world. updateQuestFx (main.js) calls this; verify-dracula
+// tests it exhaustively, mirroring wantGiants.
+export function wantWreck({ realWorld, onOpening }) {
+  return !!(realWorld && onOpening);
+}
+
+// Slice 3 — the black-hound manifestation spawn predicate. The spectral hound bounds up the
+// 199 steps toward the abbey ONLY in the moors world, on the Dracula opening chapters, AT
+// NIGHT (the extra gate vs the wreck). TRUE only when all three hold.
+export function wantHound({ realWorld, onOpening, night }) {
+  return !!(realWorld && onOpening && night);
 }
 
 // ---------------------------------------------------------------------------
@@ -284,8 +530,14 @@ export class Quests {
     this.geo = game.world.gen.geo;
     this.arc = buildArc(this.geo);
     this.dracArc = buildDraculaArc(this.geo);
+    // v2 folklore library — only ever offered in the moors world (see refreshFolkloreOffers)
+    this.folklore = this.geo.realWorld ? buildFolkloreQuests(this.geo) : [];
     this.active = [];
     this.completed = [];
+    this.earnedTitles = [];   // earned period titles (unique, in earned order); opt-in via a quest's honour
+    this.wornTitle = null;    // the title currently worn beside the player's name (must be one earned, or null)
+    this.boxesSanctified = 0; // Dracula Slice 2: boxes of grave-earth blessed (gates the final kill at >=3)
+    this.draculaLogTaken = false; // Dracula Slice 3: the captain's log is prised from the Demeter wreck once
     this.doneLog = [];     // rich record o' finished jobs for villager memory
     this.offers = {};      // giver -> instance
     this.boardOffers = [];
@@ -316,6 +568,35 @@ export class Quests {
     this.game.ui.toast(`${reason} Word o\u2019 that\u2019ll get round t\u2019 village...`, 5000);
   }
 
+  // ---------------- earned titles (honours) ----------------
+  // A quest may opt in by declaring honour:{title,standing}; finish() then earns the
+  // title here and bumps standing. Stylised-world quests declare no honour, so none of
+  // this ever fires for them.
+  earnTitle(t) {
+    if (t && !this.earnedTitles.includes(t)) { this.earnedTitles.push(t); this.wornTitle = t; }   // newest worn by default
+  }
+
+  setWornTitle(t) {
+    if (t === null || this.earnedTitles.includes(t)) this.wornTitle = t;   // only an earned title, or none
+  }
+
+  earnedTitleList() { return this.earnedTitles.slice(); }
+
+  // Raise standing by n the SAME way reward.trust does: a raw trust bump through the
+  // brain (npc.gift with a null item == straight trust bump), then refreshStanding
+  // re-reads total_trust. One bump on one present villager moves total_trust by n,
+  // exactly as a single reward.trust entry [['name', n]] would. Best-effort/offline-safe.
+  async bumpStanding(n) {
+    if (!n) return;
+    for (const m of this.game.entities.mobs) {
+      if (m.type === 'villager' && m.charId) {
+        try { await npc.gift(m.charId, null, this.game.playerId(), n); } catch { /* offline */ }
+        this.game.refreshStanding(true);
+        return;
+      }
+    }
+  }
+
   // ---------------- offers ----------------
   arcNext() {
     for (const id of ['arc1', 'arc2', 'arc3', 'arc4', 'arc5']) {
@@ -329,7 +610,7 @@ export class Quests {
   }
 
   draculaNext() {
-    for (const id of ['drac1', 'drac2', 'drac3', 'drac4', 'drac5']) {
+    for (const id of ['drac1', 'drac2', 'dracA', 'dracB', 'drac3', 'drac4', 'dracC', 'drac5']) {
       if (this.completed.includes(id)) continue;
       if (this.active.some(q => q.id === id)) return null;
       const def = this.dracArc[id];
@@ -345,6 +626,27 @@ export class Quests {
     return this.active.some(q => q.id === 'drac5');
   }
 
+  // Slice 3: the player is on the Dracula arc's OPENING chapters — drac1 or drac2 active.
+  // Gates the Demeter wreck + the black-hound manifestation (both fade once the arc moves on).
+  draculaOnOpening() {
+    return this.active.some(q => q.id === 'drac1' || q.id === 'drac2');
+  }
+
+  // Slice 3: prise the captain's log from the dead helmsman's hand at the Demeter wreck.
+  // Grants I.DRACULA_JOURNAL EXACTLY ONCE (guarded by draculaLogTaken, which persists), so
+  // re-approaching the wreck never re-grants it. Returns true only on the granting call.
+  // (drac1's own reward also grants the log on hand-in; this is the in-world spectacle grant,
+  // and the flag makes the whole thing idempotent regardless of which fires first.)
+  grantDraculaLog() {
+    if (this.draculaLogTaken) return false;
+    this.draculaLogTaken = true;
+    const g = this.game, p = g.player;
+    if (p && p.addItem) { p.addItem(I.DRACULA_JOURNAL, 1); if (g.ui) g.ui.invDirty = true; }
+    if (g.ui) g.ui.toast('Tha prises t’ captain’s log frae t’ dead helmsman’s hand.', 6000);
+    if (g.audio && g.audio.pickup) g.audio.pickup();
+    return true;
+  }
+
   buildDracInstance(def) {
     return {
       id: def.id, title: def.title, desc: def.desc, giver: def.giver,
@@ -352,6 +654,7 @@ export class Quests {
       truth: def.truth, doneNote: def.doneNote,
       steps: def.steps.map(s => ({ ...s, progress: 0 })),
       stepIdx: 0, state: 'offered', turnIn: def.turnIn, reward: def.reward,
+      honour: def.honour || null,   // opt-in: an earned title + standing on finish (future arcs)
       dracArc: true,
     };
   }
@@ -380,6 +683,138 @@ export class Quests {
       }
     }
     return false;
+  }
+
+  // v2 (moors world) Dracula offering. The stylised world opens the arc at the museum board
+  // (museumOffer); the moors world has no museum, so we surface the NEXT available chapter by
+  // binding it to a live roster NPC (role+place via DRACULA_V2_GIVERS, resolved with the same
+  // resolveGiver as the folklore quests), then registering it in this.offers keyed by the
+  // NPC's name. From there the ordinary chat flow (offerFor/accept) just works. Chapters with
+  // no mapped giver (drac3/drac4/drac5) need no NPC to surface — they advance on their own
+  // steps with turnIn:'auto' once accepted — so they are simply not re-offered here. Called
+  // from refreshOffers alongside refreshFolkloreOffers. No-op outside the moors world.
+  refreshDraculaOffer() {
+    if (!this.geo.realWorld) return;
+    if (this.active.some(q => q.dracArc)) return;   // one Dracula chapter on the go at a time
+    const next = this.draculaNext();
+    if (!next) return;
+    const want = DRACULA_V2_GIVERS[next.id];
+    if (!want) return;                               // drac3+ advance on their own steps
+    if (this.standingIndex() < (next.minStanding || 0)) return;
+    const giver = this.resolveGiver({ giver: want });
+    if (!giver) return;                              // no such NPC in the world yet -> skip
+    const key = giver.name.toLowerCase();
+    if (this.offers[key] || this.active.some(a => a.giver === giver.name)) return;
+    // bind the chapter to this roster NPC: giver/turnIn become the live name, so offerFor()
+    // (substring-matches the NPC's display name) surfaces it in chat, exactly like folklore.
+    const inst = this.buildDracInstance(next);
+    inst.giver = giver.name;
+    inst.turnIn = next.turnIn === 'auto' ? 'auto' : giver.name;
+    this.offers[key] = inst;
+  }
+
+  // ---------------- v2 folklore quests (moors only) ----------------
+  // {x,z} of a quest's landmark, from the moors data (or a curated fallback).
+  resolveLandmark(q) {
+    return resolveLandmarkPoint(this.geo, q && q.landmark);
+  }
+
+  // The live roster NPC that should give this quest: one matching the quest's
+  // giver {role, place}; falling back to any roster NPC at that place. Returns
+  // the roster entry's data ({id, name, role, ...}) or null if none — in which
+  // case the quest is simply not offered (never crashes). Reads the live
+  // RosterClient.npcs map (id -> { data, mob }); see src/roster.js.
+  resolveGiver(q) {
+    const rc = this.game.rosterClient;
+    if (!rc || !rc.npcs || !q || !q.giver) return null;
+    const wantRole = (q.giver.role || '').toLowerCase();
+    const wantPlace = (q.giver.place || '').toLowerCase();
+    const placeOf = d => ((d.state && d.state.place) || d.village || d.home || '').toLowerCase();
+    let atPlace = null;
+    for (const [, e] of rc.npcs) {
+      const d = e && e.data;
+      if (!d) continue;
+      if (wantPlace && placeOf(d) !== wantPlace) continue;
+      atPlace = atPlace || d;                                   // remember a fallback at the place
+      const role = (d.role || '').toLowerCase();
+      if (!wantRole || role === wantRole || role.includes(wantRole)) return d;
+    }
+    return atPlace;     // no role match -> any NPC there; null if none at the place
+  }
+
+  // The currently active quest instance whose manifestation === key (else null).
+  // The later manifestation task hooks the visible giant onto this.
+  activeManifestation(key) {
+    return this.active.find(q => q.state === 'active' && q.manifestation === key) || null;
+  }
+
+  // Bind a folklore record to a concrete instance for a resolved giver NPC.
+  buildFolkInstance(q, giverData, lm) {
+    const giverName = giverData.name;
+    const offer = `You can offer the visitor a piece of old moor lore as a venture: ${q.truth} Invite them, if they ask about the moors, old tales, work or where to wander, to ${q.steps[0].objective.toLowerCase()} and see for themselves. Speak as one who half-believes it.`;
+    return {
+      id: q.id, folk: true, title: q.title, theme: q.theme,
+      giver: giverName, turnIn: giverName,
+      desc: q.steps.map(s => s.objective).join('; '),
+      offer,
+      manifestation: q.manifestation || null,
+      landmark: q.landmark,
+      // resolve each visit step's landmark to live coords + map gating to the engine's fields
+      steps: q.steps.map(s => {
+        const out = { ...s, progress: 0 };
+        if (s.landmark) {
+          const pt = resolveLandmarkPoint(this.geo, s.landmark) || lm;
+          if (pt) { out.x = pt.x; out.z = pt.z; }
+        }
+        if (s.time === 'duskOrNight' || s.time === 'night') out.duskOrNight = true;
+        delete out.time;
+        return out;
+      }),
+      stepIdx: 0, state: 'offered',
+      truth: q.truth, loreFacts: q.loreFacts || [],
+      clues: q.clues || [],
+      reward: q.reward,
+      honour: q.honour || null,   // opt-in: an earned title + standing on finish (folklore)
+    };
+  }
+
+  // Offer resolved folklore quests (moors only). Binds each quest's giver/turnIn
+  // to a live roster NPC's name so the existing offer/turn-in flow (offerFor /
+  // turnInFor, which substring-match the villager's name) just works. A quest is
+  // offered only when its giver AND landmark both resolve and the standing gate
+  // is met; otherwise it is silently skipped.
+  refreshFolkloreOffers() {
+    if (!this.geo.realWorld || !this.folklore.length) return;
+    const sIdx = this.standingIndex();
+    for (const q of this.folklore) {
+      if (this.completed.includes(q.id)) continue;
+      if (this.active.some(a => a.id === q.id)) continue;
+      if (sIdx < (q.standingGate || 0)) continue;
+      const lm = this.resolveLandmark(q);
+      if (!lm) continue;                                   // no place to send them -> skip
+      const giver = this.resolveGiver(q);
+      if (!giver) continue;                                // no giver in the world -> skip
+      const key = giver.name.toLowerCase();
+      if (this.offers[key] || this.active.some(a => a.giver === giver.name)) continue;
+      this.offers[key] = this.buildFolkInstance(q, giver, lm);
+    }
+  }
+
+  // A folklore clue this NPC (by role) holds, if any — surfaced in chatContext so
+  // the right roster folk blurt the tale. Only for a quest that is currently
+  // active or on offer (a clue with no live quest is noise). Matches by role.
+  folkClueFor(role) {
+    const r = (role || '').toLowerCase();
+    if (!r || !this.folklore.length) return null;
+    const offeredIds = new Set(Object.values(this.offers).map(o => o && o.id));
+    for (const q of this.folklore) {
+      if (!this.active.some(a => a.id === q.id) && !offeredIds.has(q.id)) continue;
+      for (const c of q.clues || []) {
+        const cr = (c.holderRole || '').toLowerCase();
+        if (cr && (cr === r || r.includes(cr) || cr.includes(r))) return { title: q.title, text: c.text };
+      }
+    }
+    return null;
   }
 
   refreshOffers() {
@@ -428,6 +863,15 @@ export class Quests {
       else if (k === 'hunt') this.boardOffers.push(this.buildHunt(rng));
       else this.boardOffers.push(this.buildTreasure(rng));
     }
+
+    // v2 folklore quests: offered by live roster NPCs in the moors world only.
+    // (No-op in the stylised world, where this.folklore is empty.)
+    this.refreshFolkloreOffers();
+
+    // v2 Dracula arc: opened/advanced by live roster NPCs (a Whitby fishwife, a moor parson,
+    // Bess the herbwife) in the moors world only. No-op in the stylised world, where the
+    // museum board (museumOffer) opens the arc instead.
+    this.refreshDraculaOffer();
   }
 
   buildArcInstance(def) {
@@ -437,6 +881,7 @@ export class Quests {
       truth: def.truth, doneNote: def.doneNote,
       steps: def.steps.map(s => ({ ...s, progress: 0 })),
       stepIdx: 0, state: 'offered', turnIn: def.turnIn, reward: def.reward, arc: true,
+      honour: def.honour || null,   // opt-in: an earned title + standing on finish (future arcs)
     };
   }
 
@@ -626,7 +1071,10 @@ export class Quests {
     inst.state = 'active';
     this.active.push(inst);
     if (fromBoard) this.boardOffers = this.boardOffers.filter(q => q.id !== inst.id);
-    else delete this.offers[inst.giver];
+    // clear the offer slot. Stylised/errand givers key offers by the lowercase giver id
+    // (== inst.giver); roster-bound quests (folklore + v2 Dracula) key by the NPC's
+    // lowercased display name while inst.giver is the cased name — so delete BOTH forms.
+    else { delete this.offers[inst.giver]; delete this.offers[(inst.giver || '').toLowerCase()]; }
     if (inst.grantOnAccept) {
       for (const [id, n] of inst.grantOnAccept) this.game.player.addItem(id, n);
       this.game.ui.invDirty = true;
@@ -649,7 +1097,9 @@ export class Quests {
 
       if (s.kind === 'visit') {
         const d = Math.hypot(p.pos.x - s.x, p.pos.z - s.z);
-        if (d < s.r && (!s.night || g.sky.isNight()) && (s.maxY === undefined || p.pos.y < s.maxY)
+        // dusk-or-night gate: from dusk onset (sky t≥0.74) through the night into pre-dawn
+        const duskOK = !s.duskOrNight || (g.sky.time >= 0.74 || g.sky.time < 0.18);
+        if (d < s.r && (!s.night || g.sky.isNight()) && duskOK && (s.maxY === undefined || p.pos.y < s.maxY)
           && (!s.requireItem || p.countItem(s.requireItem) > 0)) {
           this.stepDone(inst);
         }
@@ -753,6 +1203,24 @@ export class Quests {
       dropAt(I.HOLY_WATER);
       g.ui.toast('T\u2019 abbey font drips cold into thi flask \u2014 <b>holy water</b>, blessed on t\u2019 cliff.', 6000);
       g.audio.pickup();
+    } else if (name === 'dropSilverToken') {
+      dropAt(I.SILVER_TOKEN);
+      g.ui.toast('T\u2019 parson presses a <b>blessed silver token</b> into thi hand, cold an\u2019 bright.', 6000);
+      g.audio.pickup();
+    } else if (name === 'dropWolfsbane') {
+      dropAt(I.WOLFSBANE);
+      g.ui.toast('Bess snips a sprig o\u2019 <b>wolfsbane</b> \u2014 monkshood \u2014 frae her physic garden. \u201cWear it close.\u201d', 6000);
+      g.audio.pickup();
+    } else if (name === 'sanctifyBox') {
+      // Dracula Slice 2: bless a box of the Count's grave-earth. Consumes 1 holy water if
+      // held (the proper rite), but still marks the box for playability if the flask is empty.
+      this.boxesSanctified = (this.boxesSanctified || 0) + 1;
+      const hadWater = p.countItem(I.HOLY_WATER) > 0;
+      if (hadWater) { p.removeItem(I.HOLY_WATER, 1); g.ui.invDirty = true; }
+      g.ui.toast(hadWater
+        ? `Tha pours holy water on t\u2019 grave-earth \u2014 it hisses an\u2019 goes cold. <b>Box ${this.boxesSanctified} o\u2019 3 sanctified.</b>`
+        : `Tha breaks t\u2019 box open \u2014 foreign grave-earth, but no holy water to bless it true. <b>Box ${this.boxesSanctified} o\u2019 3.</b>`, 6000);
+      g.audio.pickup();
     } else if (name === 'deliver') {
       p.removeItem(I.PARCEL, 1);
       g.ui.invDirty = true;
@@ -831,6 +1299,13 @@ export class Quests {
       }
     }
     this.game.refreshStanding(true);
+    // honour (opt-in): only a quest that declares one earns a title + standing boost.
+    // Stylised-world quests declare no honour, so this whole block is skipped for them.
+    if (inst.honour) {
+      if (inst.honour.title) this.earnTitle(inst.honour.title);
+      if (inst.honour.standing) await this.bumpStanding(inst.honour.standing);
+      if (inst.honour.title) this.game.ui.toast(`Tha’s earned t’ name <b>${inst.honour.title}</b>.`, 5000);
+    }
     this.refreshOffers();
     this.game.saveNow(false);
   }
@@ -1006,10 +1481,16 @@ export class Quests {
     // clues they hold for other folk's matters
     for (const inst of this.active) {
       for (const c of inst.clues || []) {
-        if (name.includes(c.holder)) {
+        if (c.holder && name.includes(c.holder)) {
           parts.push(`A clue you know about the matter of "${inst.title}" (share it if the visitor asks about it, about the moors, or seems stuck \u2014 in your own voice): ${c.text}`);
         }
       }
+    }
+
+    // v2 folklore clues are held by ROLE (roster folk), surfaced for a live/offered quest
+    const folkClue = this.folkClueFor(villager.role);
+    if (folkClue) {
+      parts.push(`A piece of old moor lore you know about "${folkClue.title}" (share it if the visitor asks about the moors, old tales, or seems stuck \u2014 in your own voice, never recite): ${folkClue.text}`);
     }
 
     // t' croft \u2014 everyone has an opinion on a neighbour's building work
@@ -1139,6 +1620,10 @@ export class Quests {
     return {
       active: this.active.map(q => ({ ...q, lamb: undefined })),
       completed: this.completed,
+      earnedTitles: this.earnedTitles,
+      wornTitle: this.wornTitle,
+      boxesSanctified: this.boxesSanctified,
+      draculaLogTaken: this.draculaLogTaken,
       doneLog: this.doneLog,
       offers: this.offers,
       boardOffers: this.boardOffers,
@@ -1155,6 +1640,10 @@ export class Quests {
     if (!d) return;
     this.active = d.active || [];
     this.completed = d.completed || [];
+    this.earnedTitles = d.earnedTitles || [];   // default [] for old saves
+    this.wornTitle = d.wornTitle || null;        // default null for old saves
+    this.boxesSanctified = d.boxesSanctified || 0;  // default 0 for old saves (Dracula Slice 2)
+    this.draculaLogTaken = !!d.draculaLogTaken;      // default false for old saves (Dracula Slice 3)
     this.doneLog = d.doneLog || [];
     this.offers = d.offers || {};
     this.boardOffers = d.boardOffers || [];

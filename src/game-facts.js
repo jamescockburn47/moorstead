@@ -113,6 +113,12 @@ export const GAME_FACTS = [
     text: 'Villagers offer jobs in conversation, and the parish notice board (press Q) lists deliveries, bounties and old riddles. Finished work pays in goods, tools and standing.' },
   { topic: 'quests', keywords: ['hound', 'mires', 'mystery', 'dracula', 'vampire', 'whitby', 'story', 'sheep', 'stoker'],
     text: 'Two storylines run across the real landmarks: the Hound of the Mires (something is taking sheep at night: start with Farmer James) and Count Dracula (start at the Whitby Dracula Museum; a holy-water stake fells him).' },
+  { topic: 'wade', keywords: ['wade', 'giant', 'giants', 'causeway', 'causey', 'wheeldale', 'bell', 'mulgrave'],
+    text: 'Wade is the legendary giant of the moors. Wade’s Causeway is the old straight stone road over Wheeldale Moor, built (folk say) by Wade for his wife Bell to drive her giant cow across the bog. Wade and Bell built Mulgrave and Pickering castles, tossing one hammer between them; the moor-top boulders are their throws.' },
+  { topic: 'dracula', keywords: ['dracula', 'count', 'stoker', 'demeter', 'vampire', 'vampyre', '199 steps', 'whitby abbey'],
+    text: 'Bram Stoker wrote much of Dracula while staying in Whitby in 1890, and took the name from a book in the Whitby library. In the novel the Russian schooner Demeter wrecks below the East Cliff in a storm, all hands dead, and a great black hound leaps ashore and bounds up the 199 steps to St Mary’s churchyard by the abbey. Folk here still half-believe the Count walks the moors at night.' },
+  { topic: 'vampire-defences', keywords: ['wolfsbane', 'garlic', 'holy water', 'silver', 'stake', 'crucifix', 'defence', 'protect'],
+    text: 'The old defences against the night-walker: garlic and wolfsbane worn on the body, holy water and consecrated ground, a blessed silver token, and a wooden stake steeped in holy water to finish him.' },
 
   // --- the land ---
   { topic: 'geography', keywords: ['where', 'place', 'village', 'direction', 'map', 'moor', 'dale', 'town'],

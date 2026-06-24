@@ -5,10 +5,10 @@
 import * as THREE from 'three';
 
 const BLACK = 0x16161a, IRON = 0x2a2a30, BRASS = 0xb8923a, RED = 0x7a1f1f,
-  CARMINE = 0x8a2430, CREAM = 0xe8dfc8, ROOF = 0x3a3a40, COAL = 0x111114,
-  STEEL = 0x8a8a92, GLASS = 0xaccadd;
-// carriage fit-out — honey veneer, BR-blue moquette, pale barrel ceiling
-const WOOD = 0x9c6a32, WOODDK = 0x6e4622, MOQUETTE = 0x3f4f9e, MOQDK = 0x313e7a,
+  CARMINE = 0x6b1f24, CREAM = 0xe8dfc8, ROOF = 0x3a3a40, COAL = 0x111114,
+  STEEL = 0x8a8a92, GLASS = 0xaccadd; // CARMINE is now NER crimson lake (single-tone coach livery)
+// carriage fit-out — honey veneer, period crimson cloth seating, pale barrel ceiling
+const WOOD = 0x9c6a32, WOODDK = 0x6e4622, MOQUETTE = 0x5a2a2c, MOQDK = 0x44201f,
   CEIL = 0xeee9da, RACK = 0xa6acb4, CARPET = 0x6b3a46, ENDDOOR = 0x583a1e;
 
 function box(w, h, d, color, group, x, y, z) {
@@ -51,21 +51,21 @@ function driver(r, color, group, x, y, z) {
   return w;
 }
 
-// A North Yorkshire Moors Railway roundel, painted to a canvas an' worn as a
-// badge on t' tender. An original heritage-style emblem in t' game's own hand —
-// place-name lettering, a steam engine an' t' NYMR initials — not t' line's
-// trade-marked artwork. Returns null under Node (t' verify probe has no canvas);
-// t' train still builds, just bare-sided.
-let _nymrMat = null;
-function nymrEmblem() {
+// A North Eastern Railway garter crest, painted to a canvas — the NER (formed
+// 1854) is who worked these lines in 1900, long before the heritage-era NYMR.
+// An original period-style emblem in t' game's own hand (garter, company name,
+// a wee engine, the N·E·R initials) — not the company's trade-marked arms.
+// Returns null under Node (t' verify probe has no canvas); t' train still builds.
+let _nerMat = null;
+function nerEmblem() {
   if (typeof document === 'undefined') return null;
-  if (_nymrMat) return _nymrMat;
+  if (_nerMat) return _nerMat;
   const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
   const x = c.getContext('2d'), cx = S / 2, cy = S / 2;
-  const GREEN = '#13502f', GREEND = '#0c3a22', GOLD = '#c9a94a', CREAM = '#ece3cc';
+  const CRIM = '#6b1f24', CRIMD = '#4a141a', GOLD = '#c9a94a', CREAM = '#ece3cc';
   const disc = (r, col) => { x.fillStyle = col; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill(); };
-  disc(122, GREEND); disc(116, GOLD); disc(110, GREEN); disc(84, CREAM);
-  // curved name round t' green band
+  disc(122, CRIMD); disc(116, GOLD); disc(110, CRIM); disc(84, CREAM);
+  // curved company name round t' crimson garter
   x.fillStyle = CREAM; x.textAlign = 'center'; x.textBaseline = 'middle';
   const arc = (str, r, mid, dir) => {
     x.save(); x.translate(cx, cy); x.font = 'bold 19px Georgia';
@@ -77,10 +77,10 @@ function nymrEmblem() {
     }
     x.restore();
   };
-  arc('NORTH YORKSHIRE', 97, 0, 1);
-  arc('MOORS  RAILWAY', 97, Math.PI, -1);
-  // a wee side-on steam engine
-  x.fillStyle = GREEN;
+  arc('NORTH EASTERN', 97, 0, 1);
+  arc('RAILWAY  1854', 97, Math.PI, -1);
+  // a wee side-on steam engine, in NER crimson
+  x.fillStyle = CRIM;
   const ex = cx - 34, by = cy - 2;
   x.fillRect(ex, by - 13, 50, 13);          // boiler
   x.fillRect(ex + 44, by - 24, 15, 24);     // cab
@@ -88,11 +88,28 @@ function nymrEmblem() {
   const wheel = w => { x.beginPath(); x.arc(w, by + 3, 6, 0, 7); x.fill(); };
   wheel(ex + 12); wheel(ex + 30); wheel(ex + 49);
   x.beginPath(); x.arc(ex + 6, by - 30, 5, 0, 7); x.arc(ex - 2, by - 36, 4, 0, 7); x.arc(ex - 9, by - 40, 3, 0, 7); x.fill(); // smoke
-  // initials
-  x.fillStyle = GREEN; x.font = 'bold 30px Georgia'; x.fillText('NYMR', cx, cy + 50);
+  x.fillStyle = CRIM; x.font = 'bold 30px Georgia'; x.fillText('N·E·R', cx, cy + 50);
   const t = new THREE.CanvasTexture(c); t.anisotropy = 8;
-  _nymrMat = new THREE.MeshBasicMaterial({ map: t, transparent: true, side: THREE.DoubleSide });
-  return _nymrMat;
+  _nerMat = new THREE.MeshBasicMaterial({ map: t, transparent: true, side: THREE.DoubleSide });
+  return _nerMat;
+}
+
+// An oval cast cab/tender numberplate — brass rim an' lettering on a dark ground,
+// "N.E.R." over the running number. (No.1275 is a real NER 0-6-0 of the period.)
+let _nerPlate = null;
+function nerPlate() {
+  if (typeof document === 'undefined') return null;
+  if (_nerPlate) return _nerPlate;
+  const W = 256, H = 128, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  x.fillStyle = '#17171b'; x.beginPath(); x.ellipse(W / 2, H / 2, 122, 60, 0, 0, 7); x.fill();
+  x.strokeStyle = '#b8923a'; x.lineWidth = 7; x.beginPath(); x.ellipse(W / 2, H / 2, 116, 54, 0, 0, 7); x.stroke();
+  x.fillStyle = '#d8b95a'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = 'bold 26px Georgia'; x.fillText('N.E.R.', W / 2, H / 2 - 28);
+  x.font = 'bold 58px Georgia'; x.fillText('1275', W / 2, H / 2 + 16);
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 8;
+  _nerPlate = new THREE.MeshBasicMaterial({ map: t, transparent: true, side: THREE.DoubleSide });
+  return _nerPlate;
 }
 
 function buildLoco() {
@@ -136,12 +153,18 @@ function buildLoco() {
   }
   // lamp on t' beam
   box(0.22, 0.3, 0.22, CREAM, g, 0, 1.25, 3.2);
-  // NYMR roundel on t' smokebox door — t' badge on her face
-  const em = nymrEmblem();
+  // NER crest on t' smokebox door — t' badge on her face
+  const em = nerEmblem();
   if (em) {
     const front = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.84), em);
     front.position.set(0, 1.92, 3.13);
     g.add(front);
+  }
+  // cast numberplate on each cabside
+  const plate = nerPlate();
+  if (plate) for (const s of [-1, 1]) {
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.45), plate);
+    p.position.set(s * 1.07, 2.0, -2.15); p.rotation.y = s * Math.PI / 2; g.add(p);
   }
   return { group: g, wheels, rods, funnel: fn, length: 6.4 };
 }
@@ -151,10 +174,10 @@ function buildTender() {
   box(2.1, 0.4, 3.4, IRON, g, 0, 0.62, 0);
   box(2.1, 1.4, 3.2, BLACK, g, 0, 1.5, 0);
   box(1.7, 0.45, 2.4, COAL, g, 0, 2.3, 0.1);                  // heaped coal
-  // NYMR roundel on each side o' t' tender
-  const em = nymrEmblem();
-  if (em) for (const s of [-1, 1]) {
-    const badge = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 1.15), em);
+  // NER numberplate large on each side o' t' tender
+  const plate = nerPlate();
+  if (plate) for (const s of [-1, 1]) {
+    const badge = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.75), plate);
     badge.position.set(s * 1.06, 1.5, 0);
     badge.rotation.y = s * Math.PI / 2;
     g.add(badge);
@@ -196,7 +219,7 @@ function buildCarriage() {
     box(0.08, 0.62, L, CARMINE, g, wx, 1.41, 0);              // carmine dado (outside)
     box(0.05, 0.58, L, WOOD, g, s * (HALF - 0.07), 1.41, 0);  // wood dado (inside)
     box(0.10, 0.12, L, BRASS, g, wx, 1.74, 0);               // waist beading
-    box(0.08, 0.30, L, CREAM, g, wx, 2.86, 0);               // cream cantrail (outside)
+    box(0.08, 0.30, L, CARMINE, g, wx, 2.86, 0);             // crimson cantrail (NER single-tone)
     box(0.05, 0.26, L, WOOD, g, s * (HALF - 0.06), 2.84, 0); // wood cant rail (inside)
     for (const pz of pillarZ) {                               // pillars: carmine out, wood in
       box(0.09, 1.2, 0.16, CARMINE, g, wx, 2.16, pz);
@@ -276,8 +299,8 @@ function buildCarriage() {
     }
   }
 
-  // NYMR roundel on each side, low on t' carmine waist
-  const em = nymrEmblem();
+  // NER crest on each side, low on t' crimson waist
+  const em = nerEmblem();
   if (em) for (const s of [-1, 1]) {
     const b = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.56), em);
     b.position.set(s * (HALF + 0.02), 1.4, 0);
@@ -289,6 +312,31 @@ function buildCarriage() {
   return { group: g, wheels, seat, length: 7.6 };
 }
 
+// An open 2-axle goods wagon: planked wooden body on iron solebars, carrying a heap
+// of moor mineral wi' a crate or two roped on. Two ride the tail of every rake for
+// the freight traffic (ironstone, jet, coal an' such).
+function buildWagon() {
+  const g = new THREE.Group();
+  const W = 2.2, L = 5.0, PLANK = 0x6e4622, CAP = 0x8a5e30, ORE = 0x4a3a2e, CRATE = 0x7a5e40;
+  box(W, 0.34, L, IRON, g, 0, 0.6, 0);                              // iron solebars / underframe
+  box(W, 0.92, 0.14, PLANK, g, 0, 1.18, L / 2 - 0.07);             // end walls
+  box(W, 0.92, 0.14, PLANK, g, 0, 1.18, -(L / 2 - 0.07));
+  box(0.14, 0.92, L, PLANK, g, W / 2 - 0.07, 1.18, 0);            // side walls
+  box(0.14, 0.92, L, PLANK, g, -(W / 2 - 0.07), 1.18, 0);
+  for (const ze of [1, -1]) box(W, 0.09, 0.18, CAP, g, 0, 1.68, ze * (L / 2 - 0.07)); // capping rails
+  for (const s of [-1, 1]) box(0.18, 0.09, L, CAP, g, s * (W / 2 - 0.07), 1.68, 0);
+  box(W - 0.5, 0.5, L - 0.7, ORE, g, 0, 1.28, 0);                  // mineral load, heaped below the rim
+  box(0.8, 0.5, 0.8, CRATE, g, 0.25, 1.55, 0.6);                   // a crate or two on top
+  box(0.62, 0.42, 0.62, CRATE, g, -0.4, 1.5, -0.7);
+  for (const ze of [1, -1]) {                                       // buffer beams + buffers, both ends
+    box(W - 0.08, 0.46, 0.16, RED, g, 0, 0.86, ze * (L / 2 + 0.03));
+    for (const s of [-1, 1]) cyl(0.08, 0.3, STEEL, g, s * 0.6, 0.86, ze * (L / 2 + 0.13), 'z', 8);
+  }
+  const wheels = [];
+  for (const s of [-1, 1]) for (let i = 0; i < 2; i++) wheels.push(driver(0.4, IRON, g, s * 0.95, 0.4, 0.9 - i * 1.8));
+  return { group: g, wheels, length: 5.3 };
+}
+
 // T' whole rake as articulated parts. Each part carries a chainage offset
 // frae t' schedule position; t' game poses each at its own spot on t' spline
 // so she bends honestly through t' curves.
@@ -297,12 +345,16 @@ export function buildTrain() {
   const tender = buildTender();
   const carriage = buildCarriage();
   const carriage2 = buildCarriage();
+  const wagon1 = buildWagon();
+  const wagon2 = buildWagon();
   return {
     parts: [
       { ...loco, offset: 0 },        // schedule chainage = loco centre
       { ...tender, offset: -5.3 },
       { ...carriage, offset: -11.2 },
       { ...carriage2, offset: -17.1 }, // a second coach on the rake
+      { ...wagon1, offset: -23.0 },    // two goods wagons on the tail for the freight
+      { ...wagon2, offset: -28.5 },
     ],
     funnel: loco.funnel,
     seat: carriage.seat,

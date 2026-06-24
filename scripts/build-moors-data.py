@@ -221,24 +221,72 @@ def parse_gpkg_linestring(blob):
         return allp
     return []
 
-def build_rivers():
+def resample_chain(poly, step=8):
+    """Even ~step-spaced points along a polyline (bridges reach-connection gaps with a
+    straight run, so the stored course has no big jumps; the model resamples again)."""
+    if len(poly) < 2:
+        return poly
+    out = [list(poly[0])]
+    carry = 0.0  # distance accumulated since the last emitted point (carried across segments)
+    for i in range(1, len(poly)):
+        ax, az = poly[i - 1]; bx, bz = poly[i]
+        L = ((bx - ax) ** 2 + (bz - az) ** 2) ** 0.5
+        if L < 1e-9:
+            continue
+        pos = step - carry
+        while pos <= L + 1e-9:
+            t = pos / L
+            out.append([round(ax + (bx - ax) * t), round(az + (bz - az) * t)])
+            pos += step
+        carry = (carry + L) % step
+    if out[-1] != list(poly[-1]):
+        out.append(list(poly[-1]))
+    return out
+
+def build_rivers(found):
     gpkg = WORK / "openrivers.gpkg"
     if not gpkg.exists():
         return []
     con = sqlite3.connect(str(gpkg))
     out = []
-    for nm in ("River Esk", "Murk Esk", "River Derwent", "River Rye", "River Dove", "River Seven"):
-        pts = []
+    DALE = {
+        "River Esk": "Eskdale", "Murk Esk": "Eskdale", "River Derwent": "the Derwent valley",
+        "River Rye": "Ryedale", "River Dove": "Farndale", "River Seven": "Rosedale",
+        "River Leven": "the Leven valley", "River Seph": "Bilsdale",
+        "River Riccal": "Riccaldale", "River Tees": "Teesdale",
+    }
+    MAJOR = {"River Esk", "River Derwent", "River Rye", "River Dove", "River Seven", "River Leven"}
+    for nm in DALE:
+        reaches = []
         for (blob,) in con.execute(
                 "SELECT geometry FROM watercourse_link WHERE watercourse_name=?", (nm,)):
-            for E, N in parse_gpkg_linestring(blob):
-                if in_bounds(E, N):
-                    pts.append((E, N))
-        if len(pts) < 4:
+            r = [list(to_block(E, N)) for E, N in parse_gpkg_linestring(blob) if in_bounds(E, N)]
+            if len(r) >= 2:
+                reaches.append(r)
+        if not reaches:
             continue
-        pts.sort(key=lambda p: p[0])           # rough downstream order (W->E for the Esk)
-        keep = pts[:: max(1, len(pts) // 40)]  # simplify to ~40 points
-        out.append({"name": nm, "points": [list(to_block(E, N)) for E, N in keep]})
+        # chain reaches end-to-end: keep each OS LineString's own order, connect by nearest
+        # endpoints (flip as needed), drop bits too far to connect. Merging + easting-sorting
+        # (or NN over) the points scrambles disjoint reaches into parallel channels — the
+        # Dove/Esk jumped 300-1264 blocks near Hutton-le-Hole.
+        reaches.sort(key=lambda r: min(p[0] for p in r))
+        chain = reaches.pop(0)
+        progress = True
+        while reaches and progress:
+            progress = False
+            tx, tz = chain[-1]
+            bi, bflip, bd = -1, False, 1e18
+            for i, r in enumerate(reaches):
+                d0 = (r[0][0] - tx) ** 2 + (r[0][1] - tz) ** 2
+                d1 = (r[-1][0] - tx) ** 2 + (r[-1][1] - tz) ** 2
+                if d0 < bd: bd, bi, bflip = d0, i, False
+                if d1 < bd: bd, bi, bflip = d1, i, True
+            if bi >= 0 and bd <= 40 * 40:
+                r = reaches.pop(bi)
+                chain += r[::-1] if bflip else r
+                progress = True
+        keep = resample_chain(chain, 8)   # even ~8-block spacing — no big jumps; model resamples again
+        out.append({"name": nm, "points": keep, "dale": DALE[nm], "size": "major" if nm in MAJOR else "beck"})
     con.close()
     return out
 
@@ -253,6 +301,28 @@ def build_landmarks(found):
     rx, rz = to_block(457050, 512600)
     if in_bounds(457050, 512600):
         lm.append({"name": "Roseberry Topping", "x": rx, "z": rz, "kind": "hill"})
+
+    # --- moor crosses (real OSGB refs; Fat Betty is the white one) ---
+    # Young Ralph Cross, Blakey Ridge — the National Park's emblem (~ NZ 682 020)
+    if in_bounds(468200, 502000):
+        x, z = to_block(468200, 502000)
+        lm.append({"name": "Young Ralph Cross", "x": x, "z": z, "kind": "cross"})
+    # Fat Betty / White Cross, ~450 m S on the Rosedale road (~ NZ 6823 0158)
+    if in_bounds(468230, 501580):
+        x, z = to_block(468230, 501580)
+        lm.append({"name": "Fat Betty", "x": x, "z": z, "kind": "cross", "params": {"white": True}})
+    # Lilla Cross, Fylingdales Moor — oldest Christian monument on the moors (~ SE 8893 9874)
+    if in_bounds(488930, 498740):
+        x, z = to_block(488930, 498740)
+        lm.append({"name": "Lilla Cross", "x": x, "z": z, "kind": "cross"})
+
+    # --- Wade's Causeway: the Wheeldale Roman road, a short stone-paved line over
+    # Wheeldale Moor (~ SE 805 973 -> SE 812 987). Polyline in block coords. ---
+    causeway_osgb = [(480450, 497300), (480650, 497900), (480820, 498400), (481150, 498650)]
+    pts = [list(to_block(E, N)) for (E, N) in causeway_osgb if in_bounds(E, N)]
+    if len(pts) >= 2:
+        lm.append({"name": "Wade's Causeway", "kind": "causeway", "points": pts,
+                   "x": pts[0][0], "z": pts[0][1]})
     return lm
 
 # ---------------------------------------------------------------- assemble
@@ -261,7 +331,7 @@ def main():
     coast = []   # coast is DEM-driven now (MoorsGeography.coastT reads the elevation), no polyline needed
     towns, found = build_towns()
     stations = build_stations(found)
-    rivers = build_rivers()
+    rivers = build_rivers(found)
     landmarks = build_landmarks(found)
     data = {
         "_note": "Real OS OpenData (OGL): Terrain 50 + Open Names + Open Rivers. "

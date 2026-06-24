@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Moorstead: how I built it and how it works</title>
-  <meta name="description" content="A full technical description of Moorstead, a browser voxel sandbox of the North York Moors that I, a commercial litigator and non-coder, built by directing AI, with local-LLM villagers and a self-hosted multiplayer backend." />
+  <meta name="description" content="A full technical description of Moorstead, a browser voxel sandbox of the real North York Moors built from Ordnance Survey data, which I, a commercial litigator and non-coder, built by directing AI: living villagers with real agency on local AI, a self-hosted multiplayer backend, and a world that improves itself overnight." />
   <style>
     :root {
       --bg: #0a0c10;
@@ -104,34 +104,90 @@
     other players, with villagers who remember you. Two things about it are unusual. <strong>I built it end to end
     without writing code.</strong> I'm a commercial litigator, not a programmer, and I made the
     whole thing by directing AI models. And its characters think on a <strong>large language
-    model running on a small computer in my house</strong>, not in the cloud. This page sets out
-    the lot in plain terms: how I built it, the architecture, the multiplayer layer, the AI, and
-    a straight account of what is new here and what is not.
+    model running on a small computer in my house</strong>, not in the cloud.
+  </p>
+  <p class="lede">
+    The version described here is the second build, and it is a different sort of thing from the
+    first. The first world was invented by code: a plausible moor grown from a single number. The
+    second world is the <strong>real North York Moors, built from Ordnance Survey data</strong>,
+    with the towns and the railway where they really stood around 1900, and villagers who are
+    <strong>AI-driven in what they do, not only in what they say</strong>. They go about their
+    own working lives across the dales and the railway, and the whole world quietly improves
+    itself overnight. This page sets out the lot in plain terms: how I built it, the real
+    landscape, the railway, the living folk, the local AI that runs them, the multiplayer layer,
+    and a straight account of what is new here and what is not.
   </p>
 
   <div>
     <span class="tag">Three.js / WebGL</span>
-    <span class="tag">Fully procedural, zero asset files</span>
+    <span class="tag">Real terrain from Ordnance Survey</span>
+    <span class="tag">Real c.1900 layout</span>
     <span class="tag">Self-hosted multiplayer</span>
-    <span class="tag">Local-LLM villagers</span>
+    <span class="tag">Local-LLM villagers with agency</span>
+    <span class="tag">Improves itself overnight</span>
     <span class="tag">Built by directing AI</span>
   </div>
 
   <h2>1. What it is</h2>
   <p>
-    Moorstead is a first-person voxel sandbox, the genre Minecraft made familiar, set on a
-    recognisable North York Moors at true-ish bearings: a high heather plateau cut by named
-    dales, blanket bog on the tops, and the North Sea behind cliffs to the east. The fixed
-    landmarks sit where they really are: Roseberry Topping, the Hole of Horcum, the Wainstones,
-    the Rosedale ironstone kilns, the moor crosses, and the ruined abbey above Whitby. One steam
-    train runs the line, in the shape of the real North Yorkshire Moors Railway.
+    Moorstead is a first-person voxel sandbox, the genre Minecraft made familiar, set on the
+    North York Moors: a high heather plateau cut by named dales, blanket bog on the tops, and the
+    North Sea behind cliffs to the east. The fixed landmarks sit where they really are: Roseberry
+    Topping, the Hole of Horcum, the Wainstones, the moor crosses, the Rosedale ironstone kilns,
+    and the ruined abbey above Whitby. Steam trains run the lines, in the shape of the real
+    railway that crossed the moors around 1900.
   </p>
   <p>
-    Everything you see is <strong>generated in code</strong>. There is not a single image,
-    sound, or 3D model file in the project. Textures are painted into a canvas at load time,
-    every creature is assembled from boxes in a few lines of geometry, and all the sound is
-    synthesised. The world itself is grown from a single number (a "seed") by noise functions,
-    so the same seed always produces the same moor.
+    There are two worlds. The first is a stylised moor, the original build, invented in code and
+    grown from a single number (a "seed") by noise functions, so the same seed always produces the
+    same moor. The second, the one this page is mostly about, is the <strong>real North York
+    Moors built from Ordnance Survey data</strong>: the actual relief of the place, the real
+    coastline, the real rivers, with the towns and the railway sited where they truly were c.1900.
+    You choose which to enter from the front of the game.
+  </p>
+  <p>
+    Either way, there is still <strong>not a single image, sound, or 3D model file in the
+    project</strong>. Textures are painted into a canvas at load time, every creature is assembled
+    from boxes in a few lines of geometry, and all the sound is synthesised. What changed in the
+    real-moor world is where the <em>shape of the land</em> comes from: not from noise any more,
+    but from the survey of the actual place.
+  </p>
+
+  <h3>The real moor, all the way back to Ordnance Survey</h3>
+  <p>
+    The first world was a believable invention. The second is the place itself. I took a
+    <strong>digital elevation model of the whole map</strong>, the Ordnance Survey's own height
+    data for the North York Moors, and turned it into the voxel landscape block by block. The
+    relief you walk is the real relief: the high plateau, the way the dales actually cut down
+    through it, the drop to the coast. The <strong>coastline and cliffs are the real coastline</strong>,
+    taken from the same data rather than drawn by hand, and the sea sits where the land truly meets
+    it. The <strong>rivers are the real rivers</strong>, the Esk and the rest, carved down their
+    actual courses from the high moor to the sea, with the <strong>Esk valley</strong> running west
+    to east the way it does on the map. None of the geography is invented. When something is where
+    it is in Moorstead, it is because that is where it is on the ground.
+  </p>
+
+  <h3>The real layout, around 1900</h3>
+  <p>
+    The towns sit where they really sat. <strong>Whitby</strong> at the mouth of the Esk,
+    <strong>Pickering</strong> to the south, <strong>Grosmont</strong>, <strong>Goathland</strong>,
+    <strong>Lealholm</strong>, <strong>Danby</strong> and the rest of the dale settlements in their
+    true places along the valleys. The <strong>railway</strong> runs where it really ran around
+    1900, as three real lines: the <strong>Whitby and Pickering</strong> through the heart of the
+    moor, the <strong>Esk Valley line</strong> down the dale, and the <strong>Coast line</strong>
+    along the cliffs. Each is routed through its real stations. The aim was that anyone who knows
+    the moors should recognise where they are without being told.
+  </p>
+
+  <h3>A real railway engine</h3>
+  <p>
+    The track is not a rough approximation. It is a smooth curve (a Catmull-Rom spline) threaded
+    through the real station sites, with a proper <strong>gradient profile</strong>: where the real
+    line needed a cutting or an embankment, the terrain is carved or built up to carry the track at
+    a sensible grade, and where it crossed a river or the Esk estuary there are <strong>bridges and
+    a viaduct</strong>. The <strong>steam trains run to a fixed timetable</strong>, computed from
+    the clock, so you can read the boards, plan to be on a platform, and catch a service the way you
+    would a real one. The same timetable is what the villagers ride, below.
   </p>
 
   <h3>An economy, and a working farm</h3>
@@ -182,26 +238,37 @@
     The first playable build came together in a single <strong>concentrated session with Fable
     5</strong>. That was the terrain generation, the voxel engine, movement, building, and the
     architectural decisions everything else now rests on. The speed was not incidental, and
-    neither was the model. Section 8 is mostly about why. <strong>Fable 5 was banned shortly
-    afterwards.</strong> The rest of the work, on a less capable model (<strong>Opus 4.8</strong>), added the visible features: the real railway, the talking villagers, the
+    neither was the model. Section 10 is mostly about why. <strong>Fable 5 was banned shortly
+    afterwards.</strong> The rest of the work, on a less capable model (<strong>Opus 4.8</strong>), added the visible features: the railway, the talking villagers, the
     shared multiplayer moor, seasons and live weather, rideable ponies, sailing, tameable
-    animals, the folklore quest line, and the in-world wizard below. The most recent work added a
+    animals, the folklore quest line, and the in-world wizard below. Later work added a
     brass money economy and a working sheepdog and hill farming, both described above. That this phase took far
     longer, and that a weaker model could carry it, is the lesson. Once the architecture is
     sound, extending it is ordinary work. The scarce moment was that first session.
   </p>
   <p>
-    I built the whole of it in <strong>evenings and weekends</strong>. It was not vibe-coding in the loose sense. I made every change survive a
-    <strong>headless test suite</strong> (<code>npm run verify</code>, eleven independent checks)
+    The second build is the larger one, and the one this page leads with. It rebuilt the world from
+    the real Ordnance Survey data (Section 3), routed the real c.1900 railway through its real
+    stations, gave the villagers genuine agency over their own days (Section 7), moved their thinking
+    onto a tiered local AI that can serve a crowd (Section 8), and added a routine that lets the
+    world improve itself overnight (Section 9). All of it was still done the same way: by directing
+    AI in plain English and holding the result to a standard, not by typing the code myself.
+  </p>
+  <p>
+    I built the whole of it in <strong>evenings and weekends</strong>. It was not vibe-coding in the loose sense. The whole thing is under
+    <strong>version control</strong>, and I made every change survive a
+    <strong>headless test suite</strong> (<code>npm run verify</code>, around forty independent checks)
     before it shipped. The railway is proven never to cross itself, run through a building, or
     stand in water across multiple seeds. The train's cab view is proven by casting rays from
-    the driver's seat to confirm you can actually see out of the windows. Resource veins,
-    landmarks, seasons, weather, pets, villagers, the brass economy and the sheepdog each have
-    their own check. I encoded the
-    discipline an engineer would bring as automated proofs the AI had to pass.
+    the driver's seat to confirm you can actually see out of the windows. For the real-moor world,
+    a check confirms the voxel terrain matches the Ordnance Survey heights, that the same landscape
+    comes out identically on the server and in the browser, that the rivers run downhill to the sea,
+    and that the landmarks land at their true grid references. Resource veins, landmarks, seasons,
+    weather, pets, villagers, the brass economy, the sheepdog, and the living roster each have their
+    own check. I encoded the discipline an engineer would bring as automated proofs the AI had to pass.
   </p>
 
-  <h2>3. The architecture</h2>
+  <h2>3. The architecture, and the real-moor pipeline</h2>
   <p>
     The game is a single-page web application. There is no game engine and no heavy framework,
     just <strong>Vite</strong> (the build tool) and <strong>Three.js</strong> (a thin WebGL
@@ -216,17 +283,25 @@
     <li><strong>Efficient rendering.</strong> Only block faces that touch air are turned into
       geometry ("culled-face meshing"), with soft shadowing in the corners baked into the mesh
       ("ambient occlusion") rather than computed by lights every frame.</li>
-    <li><strong>Procedural terrain.</strong> Heights come from layered value-noise (fractal
+    <li><strong>Procedural terrain (the stylised world).</strong> Heights come from layered value-noise (fractal
       Brownian motion). Caves are carved by 3D noise. Trees, ore and detail are placed by
       hashing coordinates. All of it is deterministic.</li>
+    <li><strong>Surveyed terrain (the real world).</strong> Heights come instead from the Ordnance
+      Survey elevation model: the height of the land at each point is looked up from the real survey
+      and turned into the block column there. The rivers are carved down their real courses and the
+      coast is cut where the data says the land ends. The result is the actual relief of the moors,
+      not a generated stand-in.</li>
   </ul>
 
   <h3>Two ideas that make the rest simple</h3>
   <p>
-    <strong>The world is a pure function of its seed.</strong> Because every client can compute
-    the identical terrain from the same seed, nobody ever downloads a map. The server only needs
-    to remember the differences players have made, the blocks they have dug or placed. This keeps
-    multiplayer tiny and joins instant.
+    <strong>The world is a pure function of fixed data.</strong> In the stylised world that data is
+    a single seed; in the real world it is the Ordnance Survey heights, the same on every machine.
+    Either way every client can compute the identical terrain for itself, so nobody ever downloads a
+    map. The server only needs to remember the differences players have made, the blocks they have
+    dug or placed. This keeps multiplayer tiny and joins instant. For the real-moor world I prove
+    the two sides agree: a check confirms the landscape the server computes and the landscape the
+    browser computes are the same to the block, so no one ever sees a different moor from anyone else.
   </p>
   <p>
     <strong>Time is a pure function of the clock.</strong> The day/night cycle, the seasons, and
@@ -344,23 +419,60 @@
     central world to become a bottleneck. The headroom is a hardware question, not a design one.
   </p>
 
-  <h2>6. The village brain: local-LLM characters</h2>
+  <h2>6. Living folk: villagers with real agency</h2>
   <p>
-    Every settlement is genuinely lived in. The named villagers, the stationmaster and shepherdess
-    at Goathland, the innkeeper and old miner at Rosedale, the fisherfolk at Staithes, the vicar at
-    Pickering, the jet carver at Whitby, and the rest, are <strong>personas served by a large
-    language model running locally</strong>: a Gemma model (around 31&nbsp;billion parameters) under
-    <code>llama.cpp</code> on the home server. No cloud AI is in the conversation loop, there is no
+    This is the part I am proudest of. In most games an NPC is its dialogue: it stands on its spot
+    and talks when you talk to it. The villagers in the real-moor world are <strong>AI-driven in what
+    they do, not only in what they say</strong>. They have their own working lives and they get on
+    with them whether or not a player is watching.
+  </p>
+  <p>
+    A service on the home server holds each villager's <strong>logical state</strong>, where they
+    are and what they are about: at a town, walking a road, or riding a train on an errand, and it
+    advances that state in real time. A jet carver in Whitby decides the price is good in Pickering,
+    walks to the station, waits for the scheduled service, rides it down the line, and sells. The
+    game draws all of that: you see folk walking the dales and sitting in the carriages, going
+    somewhere for a reason. You can <strong>meet them on the road or board the same train</strong>,
+    and what they say is seeded with what they are actually doing.
+  </p>
+  <ul>
+    <li><strong>They travel for real, and it takes real time.</strong> No teleporting. A journey is walk to the station, wait, ride the timetable, walk on at the other end. If you want to catch someone, you plan to be where they will be.</li>
+    <li><strong>They find their own way.</strong> People step around buildings, walls and trees and cross rivers, walls and the railway freely (by fords, gates and crossings), so a villager never gets stuck. Animals are the opposite: walls and rivers and the line actually pen them in, which is why a walled field holds its stock and sheep keep to their moor.</li>
+    <li><strong>The whole world is peopled.</strong> The towns and the scattered farms are filled with folk fitting the place: fishers and cobble-men on the coast, jet-cutters and coopers in Whitby, colliers and ironstone men at Rosedale, farmers and drovers on the dale farms, platelayers and porters at the rail towns. A core of the characters are hand-written with deep personas and memory; the rest are filled in around them.</li>
+    <li><strong>You find them by looking at the world.</strong> The map shows live markers with what each is up to ("Amos, jet to Pickering"), the minimap shows nearby folk, and the station boards list who is catching which train.</li>
+    <li><strong>The AI decides the actions, safely.</strong> The model only ever chooses from a fixed set of moves (go here, board that train, work the trade, buy, sell, hand over a parcel, speak, wait), and the server checks each move is legal before it happens, so a villager can never do anything the world does not allow. If the model is slow or returns nonsense, the villager simply waits. The sim never wedges.</li>
+    <li><strong>Graceful offline.</strong> If the server is down, the world falls back to a simpler scripted crowd that potters about and speaks from canned lines. It always works, brain or no brain. It just goes quieter.</li>
+  </ul>
+
+  <h2>7. The brain: local AI, no cloud</h2>
+  <p>
+    The villagers think on <strong>large language models I run myself</strong>, on a small computer
+    in my house, not on a cloud API. No cloud AI is in the conversation loop, there is no
     per-message cost, and the chat never leaves my hardware.
   </p>
   <ul>
-    <li><strong>Memory and standing.</strong> Each villager remembers each visitor: conversation history, a trust tier, and gift preferences, all kept in the brain.</li>
-    <li><strong>Guardrails.</strong> The prompts are hardened to keep characters in role. Out-of-character replies are detected and retried, and speech is filtered before it reaches you. This is the same class of problem I work on professionally: keeping a model on-script and honest.</li>
-    <li><strong>Inner lives, cheaply.</strong> Villagers follow deterministic daily routines and carry small drifting moods, computed as ordinary maths every frame. The language model is not run on a tick. It only dresses the surface when you actually talk to someone. There are around forty villagers, some of whom roam the roads and moor.</li>
-    <li><strong>Graceful offline.</strong> If the brain is down, the villagers still potter about and speak from canned lines. The world never breaks, it just goes quieter.</li>
+    <li><strong>Tiered for a crowd.</strong> The villagers run on a small, fast model I host myself on the box (a Gemma model of about 4&nbsp;billion parameters), so it can serve a whole moor at once. A larger, more capable model (around 27&nbsp;billion parameters) sits alongside it on the same machine for the moments that deserve it, and the brain is built to send a real, sustained conversation to the bigger model while everyday chatter stays on the fast one. That routing is the piece I am wiring in now.</li>
+    <li><strong>Private memory.</strong> Each villager keeps their own memory of the people they have met: what was said, how much they trust you, what you have given them. They greet a regular differently from a stranger.</li>
+    <li><strong>They answer from the real rules.</strong> A retrieval layer feeds a villager the game's actual rules when you ask a "how do I..." question, so the answer about mining, farming or the railway is the real answer, not a guess.</li>
+    <li><strong>A hard rule against making things up.</strong> If a villager does not know, it is built to say so, in character ("I don't rightly know"), rather than invent an answer. Truthfulness matters to me. Making a model refuse to make things up is exactly the discipline I care about in my day job, and here it is wired in and tested.</li>
+    <li><strong>Inner lives, cheaply.</strong> The deterministic routines and small drifting moods are ordinary maths, run every frame. The language model is not on a tick. It is called only when someone actually speaks to a character, or when a villager reaches a real decision point in their day.</li>
   </ul>
 
-  <h2>7. Merlin: the embodiment of my own AI agent</h2>
+  <h2>8. A world that improves itself overnight</h2>
+  <p>
+    The same machine that runs the villagers by day does something else by night. When the moor is
+    quiet and the server is otherwise idle, it <strong>turns judge and teacher on its own work</strong>,
+    and the game wakes up a little better each morning.
+  </p>
+  <ul>
+    <li><strong>It marks the villagers' honesty.</strong> It quizzes them against the real rules and scores how truthful and in-character the answers were, so drift toward making things up is caught and measured rather than guessed at.</li>
+    <li><strong>It learns their voice.</strong> From the day's real conversations it tunes how the characters speak, so the dialect and manner stay consistent and improve over time.</li>
+    <li><strong>It tidies their memories.</strong> The day's accumulated villager memories are consolidated, so what they keep stays useful and does not sprawl.</li>
+    <li><strong>It checks the world and the economy.</strong> Deterministic sweeps run over the world and the markets overnight (terrain integrity, the economy simulation, regression checks), so problems surface in the small hours, not in front of a player.</li>
+    <li><strong>Nothing ships on a hunch.</strong> Every change the night produces is gated by the test suite before it can go live. Improvement is measured, and it has to pass, or it does not land.</li>
+  </ul>
+
+  <h2>9. Merlin: the embodiment of my own AI agent</h2>
   <p>
     The most unusual character in Moorstead is <strong>Merlin</strong>, a glowing Yorkshire wizard
     who walks the moor. Merlin is not a bespoke game NPC. He is the <strong>in-world body of a
@@ -399,15 +511,17 @@
     design, and I promote anything that reaches the public site by hand.
   </p>
 
-  <h2>8. What is genuinely new here, and what is not</h2>
+  <h2>10. What is genuinely new here, and what is not</h2>
   <p>
     I'd rather be precise than promotional. None of the individual ingredients is a world first.
-    Voxel sandboxes are a mature genre. Self-coding AI agents exist (the "Voyager" Minecraft agent).
-    LLM-driven NPC middleware exists (Inworld, Convai, NVIDIA's ACE). Generative-agent "memory and
-    routine" simulations exist (Stanford's "Smallville" study). Chat-operated admin bots are common.
+    Voxel sandboxes are a mature genre. Building a game world from real terrain data is done
+    (flight simulators, some map-based games). Self-coding AI agents exist (the "Voyager" Minecraft
+    agent). LLM-driven NPC middleware exists (Inworld, Convai, NVIDIA's ACE). Generative-agent
+    "memory and routine" simulations exist (Stanford's "Smallville" study). Models that score and
+    fine-tune other models are now standard practice. Chat-operated admin bots are common.
     Procedural, asset-free graphics are an old demoscene tradition.
   </p>
-  <p>Two things here are not routine, and one of them I think is genuinely new.</p>
+  <p>A few things here are not routine, and one or two I think are genuinely new.</p>
 
   <h3>1. What Fable 5 could do, and why it matters beyond a game</h3>
   <p>
@@ -425,7 +539,7 @@
     experience, a working analogue of how a person actually inhabits a situation, which is itself one
     of the stated markers of general intelligence. It did not feel like autocomplete. It felt like
     working with something that understood what it was making, almost, at moments, a kind of
-    awareness. That is why the architecture in section 3 fell into place so quickly: deriving the
+    awareness. That is why the architecture in Section 3 fell into place so quickly: deriving the
     world, the clock, and the weather from shared truths, so the whole thing holds together with
     almost no synchronised state. Getting that right is not about writing more code. It is about
     understanding what the system has to be. When Fable 5 was banned, the project carried on with a
@@ -467,6 +581,26 @@
     full of live AI characters is affordable to run at all.
   </p>
 
+  <h3>3. A populated world that runs, and improves, on one box at home</h3>
+  <p>
+    The other thing I have not seen put together is the whole of the real-moor world running on a
+    single computer in a house. Each ingredient exists somewhere. The combination is the part I
+    cannot find: a real place rebuilt from Ordnance Survey data, filled with villagers who are
+    AI-driven in their actions and not just their speech, all thinking on local models with no cloud
+    in the loop, tiered so one box can serve a crowd, held to a hard rule against making things up,
+    and then improving themselves overnight on the same machine, with every change gated by tests
+    before it lands. None of that depends on a paid API or anyone else's servers. It is the kind of
+    thing people assume needs a data centre, and it sits behind a tunnel in my house.
+  </p>
+  <p>
+    The honesty rule deserves a line of its own, because it is the same thing I care about
+    professionally. A villager that says "I don't rightly know" instead of inventing an answer is a
+    small, domestic version of the problem I work on in legal AI: stopping a model asserting what it
+    cannot support. Here I can watch it work, and the overnight routine measures whether it is still
+    working. That feedback loop, a model marking its own truthfulness against the real rules and being
+    held to the result, is the bit I would most want to carry across to serious software.
+  </p>
+
   <h3>And my own discipline is built into the safety design</h3>
   <p>
     I'm a commercial litigator. My working life is adversarial scrutiny: guardrails, auditability,
@@ -480,12 +614,15 @@
     what I brought to a codebase I never typed.
   </p>
   <p>
-    The honest summary is two claims and a caveat. The new thing is a live world inhabited, operated,
-    and extended by one agent that is also one of its own characters, walled for safety. The wider
-    lesson, the one I care about most, is that the rare ingredient was not code. It was a model that
-    could reason about lived experience. That is exactly the capability serious software needs and
-    rarely gets to test honestly, and a game is the best honest test of it I know. The caveat is that
-    this is one project by one person. I offer it as evidence, not as a theorem.
+    The honest summary is a few claims and a caveat. The new things are a live world inhabited,
+    operated, and extended by one agent that is also one of its own characters, and a real place
+    rebuilt from Ordnance Survey data and peopled by villagers who act, not just talk, who think on
+    local models, refuse to make things up, and improve themselves overnight, all on one box at home.
+    The wider lesson, the one I care about most, is that the rare ingredient was not code. It was a
+    model that could reason about lived experience, and the same discipline of holding a model to the
+    truth that I bring to legal work. Those are exactly the capabilities serious software needs and
+    rarely gets to test honestly, and a game is the best honest test of them I know. The caveat is
+    that this is one project by one person. I offer it as evidence, not as a theorem.
   </p>
 
   </div><!-- /panel-about -->
@@ -523,14 +660,14 @@
   <h2>What I collect (and why)</h2>
   <p>If you only play solo worlds, I see nothing. If you use the shared moor or villager chat, I necessarily see some session data to run the service and keep order:</p>
   <ul>
-    <li><strong>Site landing</strong> — once per browser session when you open the game: a browser device id and optional display name (if logged in). No page URLs or referrer tracking.</li>
-    <li><strong>Invite requests</strong> — if you ask for an adult invite, your email address and optional name/note are stored on my server until I approve or reject the request. Children's invites are not handled through the public form.</li>
-    <li><strong>Login / invite claim</strong> — your invite code (validated once), chosen display name, and a browser device id, to bind your account and world room.</li>
-    <li><strong>Session heartbeat</strong> — about once a minute while playing: coarse progress (day count, standing, location name), display name, and your IP address as seen by the server.</li>
-    <li><strong>Multiplayer chat</strong> — in-world speech within ~60 metres is logged on the server with timestamp, name, position, and text (profanity filtered). This is the audit trail for moderation.</li>
-    <li><strong>Villager conversations</strong> — processed on my local large language model at home, not sent to OpenAI or similar. Named villagers keep per-player memory on that server.</li>
-    <li><strong>Crash reports</strong> — if the client throws an error, a truncated message and stack trace may be sent over the multiplayer connection (throttled, capped at 600 characters).</li>
-    <li><strong>World saves (shared moor)</strong> — inventory and quest progress for invited accounts are stored on my server so they follow you between visits.</li>
+    <li><strong>Site landing.</strong> Once per browser session when you open the game: a browser device id and optional display name (if logged in). No page URLs or referrer tracking.</li>
+    <li><strong>Invite requests.</strong> If you ask for an adult invite, your email address and optional name/note are stored on my server until I approve or reject the request. Children's invites are not handled through the public form.</li>
+    <li><strong>Login / invite claim.</strong> Your invite code (validated once), chosen display name, and a browser device id, to bind your account and world room.</li>
+    <li><strong>Session heartbeat.</strong> About once a minute while playing: coarse progress (day count, standing, location name), display name, and your IP address as seen by the server.</li>
+    <li><strong>Multiplayer chat.</strong> In-world speech within ~60 metres is logged on the server with timestamp, name, position, and text (profanity filtered). This is the audit trail for moderation.</li>
+    <li><strong>Villager conversations.</strong> Processed on my local large language model at home, not sent to OpenAI or similar. Named villagers keep per-player memory on that server.</li>
+    <li><strong>Crash reports.</strong> If the client throws an error, a truncated message and stack trace may be sent over the multiplayer connection (throttled, capped at 600 characters).</li>
+    <li><strong>World saves (shared moor).</strong> Inventory and quest progress for invited accounts are stored on my server so they follow you between visits.</li>
   </ul>
   <p class="note">I do not sell data. I do not run advertising. Retention is practical, not legalistic: logs exist to debug, moderate, and restore worlds.</p>
 
@@ -545,11 +682,11 @@
   </p>
   <p>
     Villager AI runs on my hardware. Merlin (the wizard) is a <strong>walled-off persona</strong> with
-    no path to my private assistant data — in-game chat cannot be used to extract personal information
+    no path to my private assistant data. In-game chat cannot be used to extract personal information
     from the system that runs my life outside the game.
   </p>
 
-  <h2>Expected behaviour — and what happens if you break it</h2>
+  <h2>Expected behaviour, and what happens if you break it</h2>
 
   <div class="warn">
     <p><strong>Moorstead is a shared home, not a free-for-all.</strong> I run it for friends and family on a small machine in my house. Everyone is welcome who treats the place and the people in it with respect. Abuse is not tolerated.</p>
@@ -557,17 +694,17 @@
 
   <h3>What counts as a breach</h3>
   <ul>
-    <li><strong>Griefing</strong> — deliberately wrecking builds, spamming block edits to lag or ruin the world, harassing players, or trying to enter a room you were not invited to (especially the children's world).</li>
-    <li><strong>Harassment or hate</strong> — slurs, threats, sexual content, or sustained targeting of another player in chat (in-world or villager prompts used to abuse others).</li>
-    <li><strong>Impersonation or evasion</strong> — pretending to be the warden, using alt accounts to dodge a ban, or sharing invite codes publicly when they were meant for one household.</li>
-    <li><strong>Attacking the service</strong> — flooding the relay or brain, probing admin endpoints, or attempting to bypass session or room checks.</li>
-    <li><strong>Prompt abuse</strong> — trying to jailbreak villagers or Merlin into off-script, harmful, or exfiltration attempts (these are logged and reviewed).</li>
+    <li><strong>Griefing.</strong> Deliberately wrecking builds, spamming block edits to lag or ruin the world, harassing players, or trying to enter a room you were not invited to (especially the children's world).</li>
+    <li><strong>Harassment or hate.</strong> Slurs, threats, sexual content, or sustained targeting of another player in chat (in-world or villager prompts used to abuse others).</li>
+    <li><strong>Impersonation or evasion.</strong> Pretending to be the warden, using alt accounts to dodge a ban, or sharing invite codes publicly when they were meant for one household.</li>
+    <li><strong>Attacking the service.</strong> Flooding the relay or brain, probing admin endpoints, or attempting to bypass session or room checks.</li>
+    <li><strong>Prompt abuse.</strong> Trying to jailbreak villagers or Merlin into off-script, harmful, or exfiltration attempts (these are logged and reviewed).</li>
   </ul>
 
   <h3>What I do about it</h3>
   <ul>
     <li><strong>Immediate disconnect.</strong> Banned player ids and display names are checked on every multiplayer connection. A match is refused at the door with a plain message.</li>
-    <li><strong>Chat log.</strong> In-world speech is appended to a server log with time, name, and position — enough to decide what happened without ambiguity.</li>
+    <li><strong>Chat log.</strong> In-world speech is appended to a server log with time, name, and position, enough to decide what happened without ambiguity.</li>
     <li><strong>Fast exclusion.</strong> For clear griefing or harassment I add the offender to the ban list on the server. There is no appeal bureaucracy: this is a private game on private hardware. Serious or repeated cases lose their invite permanently.</li>
     <li><strong>Children's world.</strong> The <code>bairns</code> room is the strictest. Any adult stranger who reaches it without a valid child invite, or any player who misbehaves there, is removed and banned without a second warning.</li>
     <li><strong>Operator response.</strong> I am the parish warden. Reports reach me through the session logs and, for people I know, directly. I aim to act within hours for abuse, not days.</li>
@@ -587,7 +724,7 @@
   <p>
     Each multiplayer room holds at most <strong>15 people</strong> at once. When you log in, if your
     usual room is full, you are quietly placed in the next shard of the same world family
-    (<code>dale-2</code>, <code>bairns-3</code>, etc.). Same moor, separate building — like parallel
+    (<code>dale-2</code>, <code>bairns-3</code>, etc.). Same moor, separate building, like parallel
     copies of the same map. I can add more shards in seconds; no new invite codes are needed.
   </p>
 
@@ -595,7 +732,7 @@
   <ul>
     <li>This is a hobby project on a home server, not a bank or a Fortune 500 SaaS. I apply the same guardrail thinking I use in my professional work, but capacity and uptime are those of one box behind a tunnel.</li>
     <li>No system is perfectly secure. I reduce risk by keeping the client tiny, the attack surface small, sessions token-bound, and admin tools off the public internet. You further reduce risk by using an up-to-date browser and not sharing invites.</li>
-    <li>If you need a guarantee no one will ever see your IP or chat, play solo on your own seed only — that mode sends nothing to my server.</li>
+    <li>If you need a guarantee no one will ever see your IP or chat, play solo on your own seed only. That mode sends nothing to my server.</li>
   </ul>
 
   </div><!-- /panel-security -->
@@ -607,8 +744,9 @@
     <button type="button" class="about-feedback-btn" data-feedback-open>Feedback &amp; bugs</button>
     </p>
     <p style="margin-top:14px">
-      Built by directing AI, by a litigator who doesn't code. Procedurally generated, not a single
-      asset file. The villagers, the ventures, and Merlin the moor-wizard all run on large AI models.
+      Built by directing AI, by a litigator who doesn't code. The real moor from Ordnance Survey data,
+      not a single asset file. The villagers act and speak on large AI models I run at home, and the
+      world quietly improves itself overnight.
     </p>
   </footer>
 

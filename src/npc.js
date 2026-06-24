@@ -50,6 +50,15 @@ export async function fetchRoster() {
   }
 }
 
+// Phase B.1: the living-roster sim's logical state (or null if the brain's offline).
+export async function rosterState() {
+  try {
+    return await req('/api/roster/state', {}, 8000);   // { seq, now, npcs:[...] }
+  } catch {
+    return null;   // degrade silently — the client falls back to the scripted crowd
+  }
+}
+
 // -> {reply, character, trust, tier, events} (throws when offline)
 // context: optional situational knowledge (quests, clues) injected into t' prompt
 export function talk(characterId, message, playerName, playerId, context) {

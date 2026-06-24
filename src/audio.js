@@ -423,6 +423,35 @@ export class AudioEngine {
     o.start(t0); o.stop(t0 + 2.4);
   }
 
+  // thunder: a low, rolling rumble (filtered noise, long decay) with a sharp
+  // crack on top for a near strike (a louder call = closer). Played by the storm
+  // controller a beat after each lightning flash.
+  thunder(vol = 0.35) {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime;
+    const near = vol > 0.4;
+    // the body of the rumble: low-passed noise, swelling then dying away over ~2 s
+    const s = this.ctx.createBufferSource();
+    s.buffer = this.noiseBuf; s.loop = true;
+    s.playbackRate.value = 0.5 + Math.random() * 0.25;
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = near ? 380 : 220;
+    const g = this.ctx.createGain();
+    const dur = near ? 1.8 : 2.6;
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + (near ? 0.04 : 0.25)); // a near crack hits at once; a far one rolls in
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    // a slow tremor in the filter = the rumble rolling across the moor
+    const lfo = this.ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 3 + Math.random() * 2;
+    const lfoG = this.ctx.createGain(); lfoG.gain.value = near ? 120 : 60;
+    lfo.connect(lfoG).connect(lp.frequency);
+    s.connect(lp).connect(g).connect(this.master);
+    s.start(t0); s.stop(t0 + dur + 0.1);
+    lfo.start(t0); lfo.stop(t0 + dur + 0.1);
+    // the sharp crack of a close strike, riding the front of the rumble
+    if (near) this.noiseBurst(t0, 0.18, vol * 0.8, 1800, 'highpass');
+  }
+
   // a proper two-tone steam whistle
   whistle(vol = 0.5) {
     if (!this.ctx) return;

@@ -11,6 +11,17 @@ import { HEIGHT, WATER_LEVEL } from './defs.js';
 import { flockCentroid, driveTarget, dogGoal, foldAt } from './herding.js';
 import { festiveActive } from './festive.js';
 
+// The only blocks a land beast may stand or spawn on: open, walkable ground.
+// NOT trees (LOG/LEAVES), NOT buildings (PLANKS/COBBLE/THATCH...), NOT water/bog.
+const WALKABLE_GROUND = new Set([B.GRASS, B.PEAT, B.DIRT, B.STONE, B.SAND]);
+function isWalkableGround(b) { return WALKABLE_GROUND.has(b); }
+
+// Built stock barriers a beast must not hop out over (walls + hurdles + gates).
+const BARRIER = new Set([B.FENCE, B.GATE, B.COBBLE]);
+function isBarrier(b) { return BARRIER.has(b); }
+// People (villagers) cross walls/fences/water freely; only true beasts are penned.
+function isAnimal(mob) { return mob.type !== 'villager' && mob.type !== 'coble'; }
+
 const HERD_RADIUS = 18; // how near a working dog will gather loose sheep
 
 const GRAVITY = 26;
@@ -99,6 +110,31 @@ function makeDracula() {
   return { group: g, legs, body, head, cape };
 }
 
+// A colossal moor giant (Wade or Bell) — a dark, simple silhouette built to be
+// read against the dusk skyline from far off. Modelled like makeBarghest/makeDracula
+// (a THREE group, returning {group, legs} so the stride animation can swing the legs),
+// but scaled ≈5× a villager (~7 m tall). No face detail — it's a striding shadow.
+// MOB_TYPES.giant.h is ~7.0; these part offsets sum to roughly that height.
+function makeGiant() {
+  const g = new THREE.Group();
+  const DARK = 0x14131a, DARKER = 0x0d0c12;
+  // long striding legs (children swing in the stride; the group sits on the ground)
+  const legs = [];
+  for (const x of [-0.7, 0.7]) {
+    const l = box(0.85, 3.4, 0.95, DARKER); l.position.set(x, 1.7, 0); g.add(l); legs.push(l);
+  }
+  // a heavy torso
+  const body = box(2.3, 2.8, 1.5, DARK); body.position.y = 4.7; g.add(body);
+  // broad shoulders + long arms hanging at the sides
+  const shoulders = box(2.9, 0.7, 1.6, DARK); shoulders.position.y = 5.7; g.add(shoulders);
+  for (const x of [-1.5, 1.5]) {
+    const a = box(0.7, 2.6, 0.8, DARKER); a.position.set(x, 4.5, 0); g.add(a);
+  }
+  // a blunt head
+  const head = box(1.2, 1.3, 1.2, DARK); head.position.set(0, 6.6, 0.05); g.add(head);
+  return { group: g, legs, body, head };
+}
+
 function makeBoggart() {
   const g = new THREE.Group();
   const body = box(0.5, 0.55, 0.35, 0x2a3326); body.position.y = 0.62; g.add(body);
@@ -115,6 +151,51 @@ function makeBoggart() {
     const l = box(0.14, 0.35, 0.14, 0x222a1e); l.position.set(x, 0.17, 0); g.add(l); legs.push(l);
   }
   return { group: g, legs: legs.concat(arms), body, head };
+}
+
+// A small night bat — the Count's flutter of summons (Slice 2). A dark body with two
+// thin wing planes (children, so updateFlyer's wing-flap swings them). Never wild-spawns;
+// spawned + culled only by updateDraculaBoss while the Count is engaged.
+function makeBat() {
+  const g = new THREE.Group();
+  const body = box(0.16, 0.16, 0.26, 0x161018); body.position.y = 0; g.add(body);
+  const head = box(0.12, 0.12, 0.1, 0x1c1420); head.position.set(0, 0.04, 0.16); g.add(head);
+  for (const x of [-0.06, 0.06]) { const ear = box(0.04, 0.1, 0.03, 0x1c1420); ear.position.set(x, 0.13, 0.14); g.add(ear); }
+  for (const x of [-0.1, 0.1]) { const eye = box(0.03, 0.03, 0.02, 0xff2030, 0xff2030); eye.position.set(x, 0.05, 0.2); g.add(eye); }
+  const wings = [];
+  for (const x of [-1, 1]) { const w = box(0.34, 0.03, 0.22, 0x120c14); w.position.set(x * 0.24, 0, -0.02); g.add(w); wings.push(w); }
+  return { group: g, legs: [], body, head, wings };
+}
+
+// The Demeter, run aground on the Whitby strand (Slice 3). A broken Russian schooner —
+// dark, storm-wet timber: a long hull listing to port, a snapped foremast slumped over the
+// bow, a stub of mainmast, a couple of fallen spars and a torn yard. Simple boxes, no AI:
+// MOB_TYPES.wreck is special:true, so it is spawned/posed/despawned solely by updateQuestFx
+// (main.js), exactly like the giants. The whole group is tilted (listing) by the caller; the
+// parts are modelled upright here so that one rotation reads as a ship heeled over on the sand.
+function makeWreck() {
+  const g = new THREE.Group();
+  const HULL = 0x2a2018, HULL_DK = 0x1c1610, DECK = 0x3a2c1e, MAST = 0x241a12, SAIL = 0x6a6256;
+  // the hull: a long clinker-planked body, deeper aft, with a raked bow
+  const hull = box(2.0, 1.5, 7.0, HULL); hull.position.y = 0.75; g.add(hull);
+  const keel = box(1.4, 0.5, 7.2, HULL_DK); keel.position.y = 0.0; g.add(keel);
+  const deck = box(1.7, 0.25, 6.4, DECK); deck.position.y = 1.5; g.add(deck);
+  const bow = box(1.4, 1.3, 1.6, HULL); bow.position.set(0, 0.95, 4.0); bow.rotation.x = -0.5; g.add(bow);
+  const stern = box(1.9, 1.5, 1.0, HULL); stern.position.set(0, 0.95, -3.6); g.add(stern);
+  // gunwale rails down each side
+  for (const x of [-0.92, 0.92]) { const rail = box(0.16, 0.3, 6.2, HULL_DK); rail.position.set(x, 1.6, 0); g.add(rail); }
+  // a ragged hole stove in the port side (a dark gap of broken planking)
+  const breach = box(0.3, 0.8, 1.6, 0x070504); breach.position.set(-0.95, 0.7, -0.6); g.add(breach);
+  // the foremast, snapped off short and slumped forward over the bow
+  const foremast = box(0.34, 3.4, 0.34, MAST); foremast.position.set(0.1, 2.4, 2.4); foremast.rotation.x = 0.7; g.add(foremast);
+  const foreStub = box(0.4, 0.9, 0.4, MAST); foreStub.position.set(0.1, 1.9, 1.7); g.add(foreStub);
+  // the mainmast, a broken stump amidships
+  const mainStump = box(0.42, 1.6, 0.42, MAST); mainStump.position.set(-0.05, 2.3, -0.6); g.add(mainStump);
+  // fallen spars / a torn yard across the deck, and a shred of sail
+  const yard = box(3.0, 0.22, 0.22, MAST); yard.position.set(0, 1.85, 0.4); yard.rotation.z = 0.18; g.add(yard);
+  const spar = box(0.2, 0.2, 2.4, MAST); spar.position.set(0.5, 1.8, -1.4); spar.rotation.y = 0.5; g.add(spar);
+  const sail = box(0.08, 1.2, 1.6, SAIL); sail.position.set(0.2, 2.4, 2.5); sail.rotation.x = 0.7; g.add(sail);
+  return { group: g };
 }
 
 function makeCow() {
@@ -823,6 +904,48 @@ export const MOB_TYPES = {
     hostile: true, dmg: 8, attackRange: 2.2, drops: [[I.JET_GEM, 2, 3], [I.DRACULA_JOURNAL, 1, 1]],
     cap: 0, natural: false, night: true, boss: true, name: 'Count Dracula',
   },
+  // The Count's bats (Slice 2): a small flutter he summons while engaged at night. A flier
+  // (uses updateFlyer), harmless on its own but unnerving; never wild-spawns (natural:false,
+  // cap:0). Spawned + capped + culled by updateDraculaBoss; all despawn when the Count dies.
+  bat: {
+    make: makeBat, hw: 0.18, h: 0.2, hp: 2, speed: 5.0, fleeSpeed: 5.0,
+    hostile: false, drops: [], cap: 0, natural: false, night: true, fly: true, flyBand: 6, name: 'Bat', summon: true,
+  },
+  // a folklore manifestation: a colossal, wordless, unkillable giant (Wade/Bell) that
+  // strides the far skyline. Never wild-spawns and skips all mob AI — it is spawned,
+  // posed and despawned solely by the quest-gated updateQuestFx() (see main.js), like
+  // a coble is driven by floatCoble. `special:true` flags the no-AI skip in updateMobs.
+  giant: {
+    make: makeGiant, hw: 1.6, h: 7.0, hp: Infinity, speed: 1.0,
+    hostile: false, drops: [], cap: 0, natural: false, special: true, name: 'Giant',
+  },
+  // Slice 3 — the Demeter wreck: a static, no-AI prop aground on the Whitby strand while
+  // the player is on the Dracula opening chapters. special:true (skips all mob AI), never
+  // wild-spawns; spawned, seated/listed and despawned solely by updateQuestFx (main.js).
+  wreck: {
+    make: makeWreck, hw: 1.2, h: 2.6, hp: Infinity, speed: 0,
+    hostile: false, drops: [], cap: 0, natural: false, special: true, name: 'The Demeter',
+  },
+  // Slice 3 — the spectral black hound that leapt from the Demeter and bounded up the 199
+  // steps. Reuses makeBarghest, near-black and large, but it is a manifestation (special:true,
+  // no AI): updateQuestFx poses it bounding from the harbour up the East-Cliff line toward the
+  // abbey at night, then fades it. Never wild-spawns; never attacks. Distinct from the AI
+  // `barghest` the Count summons.
+  houndspectre: {
+    make: () => {
+      const m = makeBarghest();
+      m.group.scale.setScalar(1.5);
+      // sink to near-black: drop every part's colour right down (red eyes stay, set emissive)
+      m.group.traverse(o => {
+        if (o.isMesh && o.material && o.material.color && !(o.material.emissiveIntensity > 0)) {
+          o.material.color.multiplyScalar(0.4);
+        }
+      });
+      return m;
+    },
+    hw: 0.7, h: 2.4, hp: Infinity, speed: 1.0,
+    hostile: false, drops: [], cap: 0, natural: false, special: true, name: 'Black Hound',
+  },
 };
 
 export class Entities {
@@ -876,6 +999,7 @@ export class Entities {
       // ---- inner life ----
       role: opts.role || null,
       roam: !!opts.roam,
+      streamed: !!opts.streamed,   // server-driven (roster sim) — skips local AI; pos owned by RosterClient
       work: opts.work || null,    // their daytime patch
       green: opts.green || null,  // the village green (midday social)
       mood: Math.max(0.15, Math.min(0.95, 0.55 + (Math.random() * 0.4 - 0.2))),
@@ -1003,7 +1127,7 @@ export class Entities {
     for (let y = HEIGHT - 2; y > 1; y--) {
       const b = this.world.getBlock(x, y, z);
       if (b === B.AIR) continue;
-      if (b === B.GRASS || b === B.PEAT || b === B.DIRT || b === B.STONE || b === B.SAND) {
+      if (isWalkableGround(b)) {
         const above = this.world.getBlock(x, y + 1, z);
         if (above === B.AIR || (BLOCKS[above] && BLOCKS[above].kind === 'cutout')) { surfY = y; surfB = b; }
       }
@@ -1043,7 +1167,7 @@ export class Entities {
     for (let y = HEIGHT - 2; y > 1; y--) {
       const b = this.world.getBlock(x, y, z);
       if (b === B.AIR) continue;
-      if (b === B.GRASS || b === B.PEAT || b === B.DIRT || b === B.STONE || b === B.SAND) {
+      if (isWalkableGround(b)) {
         const above = this.world.getBlock(x, y + 1, z);
         if (above === B.AIR || (BLOCKS[above] && BLOCKS[above].kind === 'cutout')) {
           this.spawnMob(type, x + 0.5, t.fly ? y + (t.flyBand || 14) : y + 1.05, z + 0.5);
@@ -1053,18 +1177,23 @@ export class Entities {
     }
   }
 
-  // pop a stuck beast onto t' highest dry surface within a few blocks — out o' a
-  // dug pit (t' rim stands higher than t' floor) or off a bog pool.
+  // pop a stuck beast onto t' nearest walkable ground within a few blocks — out o' a
+  // dug pit or off a bog pool, but never onto a tree canopy or a roof.
   rescueStuck(mob) {
     const sx = Math.floor(mob.pos.x), sz = Math.floor(mob.pos.z);
-    let best = null, bestY = -1;
+    let best = null, bestD = 1e9;
     for (let dx = -5; dx <= 5; dx++) for (let dz = -5; dz <= 5; dz++) {
       const x = sx + dx, z = sz + dz;
       if (!this.world.isLoaded(x, z)) continue;
       for (let y = HEIGHT - 2; y > 1; y--) {
         const b = this.world.getBlock(x, y, z);
         if (b === B.AIR) continue;
-        if (b !== B.WATER && b !== B.BOG && this.world.getBlock(x, y + 1, z) === B.AIR && y > bestY) { bestY = y; best = { x, z, y }; }
+        // only a column whose TOP surface is walkable ground counts — so a beast is never
+        // popped onto a tree canopy or a roof, only onto honest ground; nearest wins, not highest.
+        if (isWalkableGround(b) && this.world.getBlock(x, y + 1, z) === B.AIR) {
+          const d = dx * dx + dz * dz;
+          if (d < bestD) { bestD = d; best = { x, z, y }; }
+        }
         break;
       }
     }
@@ -1081,7 +1210,7 @@ export class Entities {
       for (let y = HEIGHT - 2; y > 1; y--) {
         const b = this.world.getBlock(ox, y, oz);
         if (b === B.AIR) continue;
-        if ((b === B.GRASS || b === B.PEAT || b === B.DIRT || b === B.STONE || b === B.SAND) && this.world.getBlock(ox, y + 1, oz) === B.AIR) {
+        if (isWalkableGround(b) && this.world.getBlock(ox, y + 1, oz) === B.AIR) {
           this.spawnMob(type, ox + 0.5, y + 1.05, oz + 0.5); spawned++;
         }
         break;
@@ -1118,13 +1247,40 @@ export class Entities {
   hurtMob(mob, dmg, kx, kz, audio, player) {
     if (mob.type === 'villager') return; // tha doesn't clout t' neighbours
     const held = player.heldItem && player.heldItem();
+    let staggerOnly = false;
     if (mob.type === 'dracula') {
-      if (held && held.id === I.HOLY_STAKE) dmg = 24;
-      else dmg = Math.max(1, Math.floor(dmg * 0.12));
+      const withStake = held && held.id === I.HOLY_STAKE;
+      dmg = withStake ? 24 : Math.max(1, Math.floor(dmg * 0.12));
+      // The kill gate (Slice 2): the Count can only be FELLED with the holy stake AND his
+      // three boxes of grave-earth sanctified AND the grey of dawn near (sky.time within
+      // ~0.04 of the 0.18 night->day edge). Until all three hold, a stake hit STAGGERS him
+      // (knockback below) but cannot take his last hp — clamp to >=1. boxesSanctified is a
+      // v2-only counter but defaults to 0 and is set in BOTH worlds now (both chain through
+      // dracC), so the gate is satisfiable in the stylised fight too.
+      const boxes = this.game?.quests?.boxesSanctified || 0;
+      const t = this.game?.sky?.time ?? 0.5;
+      const nearDawn = t >= 0.14 && t < 0.18;            // the last sliver of night, ~0.04 before dawn
+      const canFinish = withStake && boxes >= 3 && nearDawn;
+      if (withStake && !canFinish && mob.hp - dmg <= 0) {
+        // would be fatal, but the gate isn't met: stagger instead, leave him on 1 hp
+        dmg = Math.max(0, mob.hp - 1);
+        staggerOnly = true;
+        mob.draculaHintCd = (mob.draculaHintCd || 0) - 1;
+        if (this.game?.ui && mob.draculaHintCd <= 0) {
+          mob.draculaHintCd = 4;
+          const hint = boxes < 3
+            ? 'Thi stake bites, but he will not fall — <b>his graves still shelter him.</b> Sanctify his boxes o’ earth.'
+            : 'Thi stake bites, but he will not fall — <b>he’s strongest in t’ dark.</b> Hold him till t’ grey o’ dawn.';
+          this.game.ui.toast(hint, 5000);
+        }
+      }
     }
     mob.hp -= dmg;
     mob.flash = 0.25;
-    mob.vel.x += kx * 7; mob.vel.z += kz * 7; mob.vel.y = 5;
+    // a staked-but-ungated Count is thrown back hard (the warding stagger), but survives
+    const kk = staggerOnly ? 10 : 7;
+    mob.vel.x += kx * kk; mob.vel.z += kz * kk; mob.vel.y = staggerOnly ? 6 : 5;
+    if (staggerOnly) { mob.state = 'flee'; mob.fleeTimer = 1.5; mob.lungeBlock = 1.5; }
     if (!mob.t.hostile) { mob.state = 'flee'; mob.fleeTimer = 7; }
     if (audio) audio.mobHurt(mob.type);
     if (mob.hp <= 0) this.killMob(mob, player);
@@ -1433,6 +1589,50 @@ export class Entities {
     }
   }
 
+  // Seed a small flock (3-5 sheep, the odd cow) inside each loaded farm fold that's near the
+  // player and under-populated. Runs on the spawn timer (every ~1.2 s). Moors-gated; capped;
+  // never re-spawns if the fold already has enough. The barrier rule (Task 3) keeps them penned.
+  seedFoldLivestock(player) {
+    const geo = this.world.gen.geo;
+    const farms = geo.farmSites();
+    if (!farms.length) return;
+    const LOAD_R = 80; // only seed folds within loaded range
+    for (const f of farms) {
+      if (Math.hypot(f.x - player.pos.x, f.z - player.pos.z) > LOAD_R) continue;
+      if (!this.world.isLoaded(f.x, f.z)) continue;
+      const fold = geo._farmBuildings(f).find(b => b.type === 'fold');
+      if (!fold) continue;
+      // count sheep / cows already inside this fold
+      const inFold = this.mobs.filter(m => m && !m.dead && !m.owner &&
+        (m.type === 'sheep' || m.type === 'cow') &&
+        m.pos.x >= fold.x0 && m.pos.x <= fold.x1 &&
+        m.pos.z >= fold.z0 && m.pos.z <= fold.z1);
+      if (inFold.length >= 3) continue; // already well-populated
+      // seed: 3-5 sheep, 1 cow at every other farm
+      const wantSheep = 3 + ((f.seed >>> 0) % 3); // 3-5 deterministic per farm
+      const wantCow = ((f.seed >>> 0) % 2 === 0) ? 1 : 0;
+      const need = (wantSheep + wantCow) - inFold.length;
+      if (need <= 0) continue;
+      // spawn inside the fold interior (avoid the perimeter fence itself)
+      const ix0 = fold.x0 + 1, ix1 = fold.x1 - 1, iz0 = fold.z0 + 1, iz1 = fold.z1 - 1;
+      if (ix0 > ix1 || iz0 > iz1) continue;
+      for (let i = 0; i < need; i++) {
+        const type = (i === 0 && wantCow) ? 'cow' : 'sheep';
+        const wx = ix0 + ((Math.random() * (ix1 - ix0 + 1)) | 0);
+        const wz = iz0 + ((Math.random() * (iz1 - iz0 + 1)) | 0);
+        if (!this.world.isLoaded(wx, wz)) continue;
+        for (let y = HEIGHT - 2; y > 1; y--) {
+          const b = this.world.getBlock(wx, y, wz);
+          if (b === B.AIR) continue;
+          if (isWalkableGround(b) && this.world.getBlock(wx, y + 1, wz) === B.AIR) {
+            this.spawnMob(type, wx + 0.5, y + 1.05, wz + 0.5);
+          }
+          break;
+        }
+      }
+    }
+  }
+
   // Find the player's fenced fold(s): for each gate nearby, flood-fill its open neighbours;
   // an enclosed fill is the fold interior. Cached in this.foldCells (cell keys "x,z"), used
   // by the one-way gate (an animal inside can't leave) and the pen trigger. Throttled.
@@ -1455,6 +1655,84 @@ export class Entities {
     this.gateCells = gates;
   }
 
+  // The multi-phase Count (Slice 2). Reuses the existing chase/stake-damage/dread; this
+  // layers on (1) SUMMONS — while he's alive and engaged at night he periodically calls a
+  // barghest (the hound) and a flutter of bats, capped (<=1 hound + <=3 bats), all tagged
+  // draculaSummon so they're culled the instant he dies; and (2) WARDING — when the player
+  // holds a blessed silver token or holy water within close range he's staggered back and
+  // can't lunge for a beat (mob.lungeBlock, respected in the chase block). All v2-safe:
+  // nothing here touches v2-only state, so the stylised fight gets the same elevation.
+  updateDraculaBoss(dt, player, audio) {
+    let count = null;
+    for (const m of this.mobs) { if (m.type === 'dracula' && !m.dead) { count = m; break; } }
+    if (!count) {
+      // no Count abroad: cull any orphaned summons (he died, or never rose)
+      if (this._hadDracula) {
+        for (const m of this.mobs) {
+          if (m.draculaSummon && !m.dead) { this.scene.remove(m.model.group); m.dead = true; }
+        }
+        this._hadDracula = false;
+      }
+      return;
+    }
+    this._hadDracula = true;
+    const night = this.game?.sky?.isNight?.() ?? true;
+    const distP = Math.hypot(count.pos.x - player.pos.x, count.pos.z - player.pos.z);
+
+    // ---- warding: silver token or holy water in hand staggers him back, blocks his lunge ----
+    const held = player.heldItem && player.heldItem();
+    const wardItem = held && (held.id === I.SILVER_TOKEN || held.id === I.HOLY_WATER);
+    count.wardCd = (count.wardCd || 0) - dt;
+    if (wardItem && distP < 6 && count.wardCd <= 0) {
+      count.wardCd = 1.6;
+      count.lungeBlock = 1.6;                 // can't close to attack for ~1.6s
+      count.state = 'flee'; count.fleeTimer = Math.max(count.fleeTimer || 0, 1.4);
+      const dx = count.pos.x - player.pos.x, dz = count.pos.z - player.pos.z, L = Math.hypot(dx, dz) || 1;
+      count.vel.x += dx / L * 9; count.vel.z += dz / L * 9; count.vel.y = 5;
+      count.flash = 0.2;
+      if (audio) audio.mobHurt('dracula');
+      if (this.game?.ui) {
+        this.game.ui.toast(held.id === I.SILVER_TOKEN
+          ? 'T’ blessed silver flares — t’ Count recoils, hissing, an’ gives ground.'
+          : 'Tha flings holy water — it sears him an’ drives him back a step.', 2200);
+      }
+    }
+    if (count.lungeBlock > 0) count.lungeBlock -= dt;
+
+    // ---- summons: a hound + a flutter of bats, while engaged at night, capped ----
+    count.summonCd = (count.summonCd || 6) - dt;
+    if (night && distP < 44 && count.summonCd <= 0) {
+      count.summonCd = 7 + Math.random() * 5;
+      let hounds = 0, bats = 0;
+      for (const m of this.mobs) {
+        if (!m.draculaSummon || m.dead) continue;
+        if (m.type === 'barghest') hounds++; else if (m.type === 'bat') bats++;
+      }
+      const groundAt = (x, z) => this.world.gen.height(Math.floor(x), Math.floor(z));
+      if (hounds < 1) {
+        const ang = Math.random() * Math.PI * 2, r = 8 + Math.random() * 6;
+        const x = count.pos.x + Math.cos(ang) * r, z = count.pos.z + Math.sin(ang) * r;
+        if (this.world.isLoaded(x, z)) {
+          const h = groundAt(x, z);
+          const hound = this.spawnMob('barghest', x + 0.5, h + 1.2, z + 0.5);
+          hound.draculaSummon = true;
+          this.burst(x + 0.5, h + 1.2, z + 0.5, [20, 0, 30], 10);
+          if (audio) audio.howl(0.18);
+          if (this.game?.ui) this.game.ui.toast('T’ Count throws back his head — <b>a great hound</b> bounds frae t’ dark to his side!', 4000);
+        }
+      }
+      const wantBats = Math.min(3 - bats, 1 + (Math.random() * 2 | 0));
+      for (let i = 0; i < wantBats; i++) {
+        const ang = Math.random() * Math.PI * 2, r = 3 + Math.random() * 5;
+        const x = count.pos.x + Math.cos(ang) * r, z = count.pos.z + Math.sin(ang) * r;
+        if (!this.world.isLoaded(x, z)) continue;
+        const h = groundAt(x, z);
+        const bat = this.spawnMob('bat', x + 0.5, h + 4 + Math.random() * 3, z + 0.5);
+        bat.draculaSummon = true;
+      }
+    }
+  }
+
   updateMobs(dt, player, isNight, audio) {
     const geo = this.world.gen.geo;
     this.foldScanT = (this.foldScanT || 0) - dt;
@@ -1471,10 +1749,18 @@ export class Entities {
       const burst = wild < 50 ? 5 : wild < 95 ? 2 : 1;
       for (let i = 0; i < burst; i++) this.trySpawns(player, isNight, audio);
       this.ensureHarbourCobles(player);
+      if (geo.realWorld && geo.farmSites) this.seedFoldLivestock(player);
     }
+
+    // the multi-phase Count: summons (a hound + a flutter of bats) + warding, every frame
+    this.updateDraculaBoss(dt, player, audio);
 
     for (const mob of this.mobs) {
       if (mob.dead) continue;
+      // a special manifestation (the giant): no wander, no chase, no distance-despawn —
+      // it is spawned, posed and removed solely by the quest-gated updateQuestFx (main.js),
+      // exactly as a coble is driven by the game, not its own AI.
+      if (mob.t.special) continue;
       // a field gate stands open to an animal frae OUTSIDE the fold (enter), shut frae inside (stay penned)
       mob.passGate = !(this.foldCells && this.foldCells.has(Math.floor(mob.pos.x) + ',' + Math.floor(mob.pos.z)));
       if (mob.label) { // pony's "right-click to ride" prompt — fades in close, gone once tha's up
@@ -1559,9 +1845,13 @@ export class Entities {
         const shelter = geo.nearestShelter(player.pos.x, player.pos.z);
         const inShelter = shelter && shelter.dist < 9;
         if (mob.type === 'dracula') {
-          // Count Dracula: shelters an' villages are sanctuary; holy stake repels him
+          // Count Dracula: shelters an' villages are sanctuary; holy stake repels him; a
+          // fresh ward (silver/holy water, see updateDraculaBoss) holds him off via lungeBlock
           if (geo.inVillage(player.pos.x, player.pos.z, -4) || inShelter) {
             if (mob.state === 'chase') { mob.state = 'flee'; mob.fleeTimer = 5; }
+          } else if (mob.lungeBlock > 0) {
+            // staggered by a ward — keep him recoiling, no chase, until the block lapses
+            mob.state = 'flee'; mob.fleeTimer = Math.max(mob.fleeTimer || 0, mob.lungeBlock);
           } else if (heldStake && distP < 11) {
             if (mob.state === 'chase') { mob.state = 'flee'; mob.fleeTimer = 2.5; }
           } else {
@@ -1690,9 +1980,12 @@ export class Entities {
       }
       const preX = mob.pos.x, preZ = mob.pos.z;
       moveEntity(this.world, mob, dt);
-      // hop up single blocks
+      // hop up single blocks — but a penned beast won't hop a built barrier (wall/hurdle/gate),
+      // so walls and folds actually hold stock. Terrain still hops; people cross freely.
       if (mob.hitWall && mob.onGround && (Math.abs(wishX) > 0.1 || Math.abs(wishZ) > 0.1)) {
-        mob.vel.y = 7.5;
+        const ax = Math.floor(mob.pos.x + wishX * 0.6), az = Math.floor(mob.pos.z + wishZ * 0.6);
+        const ahead = this.world.getBlock(ax, Math.floor(mob.pos.y) + 1, az);
+        if (!(isAnimal(mob) && isBarrier(ahead))) mob.vel.y = 7.5;
       }
       // open water is a WALL for land beasts. The sea sits LOWER than the shore, so scan
       // the column below her feet for the first solid/liquid.
@@ -1855,6 +2148,27 @@ export class Entities {
         mob.model.group.add(_plate);
       }
     }
+    // roster folk: the brain's sim owns their logical state and the RosterClient sets their
+    // pos/yaw each frame — we just dress them (no local wander/greet/gravity AI). Moors-only;
+    // `streamed` defaults false so ordinary villagers are unaffected.
+    if (mob.streamed) {
+      const lp = mob.lastPos || mob.pos;
+      const sp = Math.hypot(mob.pos.x - lp.x, mob.pos.z - lp.z) / Math.max(dt, 0.001);
+      mob.lastPos = { x: mob.pos.x, y: mob.pos.y, z: mob.pos.z };
+      mob.walkPhase += Math.min(sp, 6) * dt * 3.2;
+      const swing = Math.sin(mob.walkPhase * Math.PI) * Math.min(1, sp / 3) * 0.5;
+      mob.model.legs.forEach((l, i) => { l.rotation.x = (i % 2 === 0 ? swing : -swing); });
+      mob.model.group.position.set(mob.pos.x, mob.pos.y, mob.pos.z);
+      mob.model.group.rotation.y = mob.yaw;
+      const tgt = (distP < 30 && !mob.chatting) ? 1 : 0;
+      mob.plate.material.opacity += (tgt - mob.plate.material.opacity) * Math.min(1, dt * 8);
+      if (mob.bubble) {
+        mob.bubbleT -= dt;
+        mob.bubble.material.opacity = Math.max(0, Math.min(1, mob.bubbleT));
+        if (mob.bubbleT <= 0) { mob.model.group.remove(mob.bubble); mob.bubble = null; }
+      }
+      return;
+    }
     // remote players: t' network drives their position, we just dress it
     if (mob.isRemotePlayer) {
       const lp = mob.lastPos || mob.pos;
@@ -1898,6 +2212,18 @@ export class Entities {
       mob.model.group.position.set(mob.pos.x, mob.pos.y, mob.pos.z);
       return;
     }
+    // GLOBAL POLICY: folk sleep out of sight at neet — they vanish at dusk an' are back at
+    // dawn, rather than trekkin' home or standin' about i' t' dark (so no houses are needed).
+    // People only — animals, remote players an' train-riders already returned above.
+    const skyT = this.game && this.game.sky ? this.game.sky.time : 0.5;
+    if ((skyT > 0.76 || skyT < 0.16) && !mob.chatting) {
+      if (mob.model.group.visible) mob.model.group.visible = false;
+      mob.vel.x = mob.vel.y = mob.vel.z = 0;
+      if (mob.bubble) { mob.model.group.remove(mob.bubble); mob.bubble = null; }
+      if (mob.nosyApproach) { mob.nosyApproach = null; if (this.nosyToken === mob) this.nosyToken = null; }
+      return;
+    }
+    if (!mob.model.group.visible) mob.model.group.visible = true; // dawn — back about their day
     mob.stateTimer -= dt;
     // nameplate fades in as tha gets near
     const target = distP < 9 && !mob.chatting ? Math.min(1, (9 - distP) / 4) : 0;
@@ -2256,6 +2582,7 @@ export {
   makePig,
   makeRat,
   makeCoble,
+  makeGiant,
   makeVillager,
   villagerLook,
   makeWizardExtras

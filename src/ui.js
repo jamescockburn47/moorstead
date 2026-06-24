@@ -73,6 +73,8 @@ export class UI {
     this.interactHint.id = 'interact-hint';
     this.dreadOverlay = this.el('div', '', this.hud);
     this.dreadOverlay.id = 'dread-overlay';
+    this.stormFlash = this.el('div', '', this.hud);   // white lightning-flash blip (storm controller)
+    this.stormFlash.id = 'storm-flash';
 
     const stats = this.el('div', '', this.hud); stats.id = 'stats';
     this.brassEl = this.el('div', '', stats); this.brassEl.id = 'brass';
@@ -106,6 +108,15 @@ export class UI {
     this.bigMap.width = 900; this.bigMap.height = 760;
     this.mapBase = document.createElement('canvas'); // cached static layer
     this.mapBaseKey = null;
+    // ride-camera switcher — shown while riding the train; keys 1/2/3 pick the view
+    this.rideViewMenu = this.el('div', '', document.body); this.rideViewMenu.id = 'ride-view-menu';
+    this.rideViewMenu.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);display:none;gap:7px;z-index:60;pointer-events:none;font:600 13px system-ui,sans-serif';
+    this._rideChips = {};
+    for (const [k, lbl] of [['seat', '1 · On board'], ['driver', '2 · Driver'], ['overhead', '3 · Overhead']]) {
+      const c = this.el('div', '', this.rideViewMenu, lbl);
+      c.style.cssText = 'padding:5px 12px;border-radius:7px;background:rgba(22,17,12,0.7);color:#cdbf9a;border:1px solid rgba(0,0,0,0.5);box-shadow:0 1px 4px rgba(0,0,0,0.45);white-space:nowrap';
+      this._rideChips[k] = c;
+    }
     this.mapInfo = this.el('div', '', mapBox); this.mapInfo.id = 'map-info';
 
     this.toastBox = this.el('div', '', this.hud); this.toastBox.id = 'toasts';
@@ -776,7 +787,34 @@ export class UI {
       fromBoard ? 'T&rsquo; Parish Notice Board' : 'Thi Ventures (Journal)');
     this.el('div', 'r-needs', this.boardPanel,
       `Standing in Moorstead: <b style="color:#9ec27a">${q.standingLabel()}</b>` +
+      (q.wornTitle ? `, <i style="color:#c9b27a">${q.wornTitle}</i>` : '') +
       (q.shame > 0 ? ` &mdash; <span style="color:#d87a5a">but tha&rsquo;s in folk&rsquo;s bad books (${q.shame}). Good deeds&rsquo;ll mend it.</span>` : ''));
+
+    // ---- Honours: earned period titles; wear one (or none). Inert until one is earned. ----
+    {
+      const titles = q.earnedTitleList();
+      if (titles.length) {
+        this.el('div', 'inv-title', this.boardPanel, 'Honours');
+        const hlist = this.el('div', 'recipes board-list', this.boardPanel);
+        const wearRow = (label, value, worn) => {
+          const row = this.el('div', 'recipe quest-row', hlist);
+          row.innerHTML = `<div class="r-name"><b>${worn ? '★ ' : ''}${label}</b>` +
+            (worn ? '<br><span class="r-needs">worn now</span>' : '') + '</div>';
+          if (!worn) {
+            const b = this.el('button', 'mc chat-btn', row, 'Wear');
+            b.addEventListener('click', () => { q.setWornTitle(value); this.openBoard(fromBoard); });
+          }
+        };
+        for (const t of titles) wearRow(t, t, q.wornTitle === t);
+        wearRow('&mdash; none &mdash;', null, q.wornTitle === null);
+      } else if (this.game.world && this.game.world.gen.geo.realWorld) {
+        // Moors world: a faint period line where honours are earnable. The stylised world
+        // earns none, so it stays exactly as before (no label, no box) — the inert path.
+        this.el('div', 'inv-title', this.boardPanel, 'Honours');
+        this.el('div', 'r-needs', this.boardPanel,
+          '<span style="opacity:.7">No honours yet &mdash; folk have no special name for thee.</span>');
+      }
+    }
 
     if (q.active.length) {
       this.el('div', 'inv-title', this.boardPanel, 'At It Now');
@@ -1025,6 +1063,13 @@ export class UI {
     this.dreadOverlay.style.opacity = String(Math.max(0, Math.min(0.72, v * 0.65)));
   }
 
+  // a white screen-flash blip for a lightning strike; the CSS transition fades it
+  // back out, so the storm controller need only blip it up on each strike.
+  setStormFlash(v) {
+    if (!this.stormFlash) return;
+    this.stormFlash.style.opacity = String(Math.max(0, Math.min(0.85, v)));
+  }
+
   // ============ HUD quest tracker ============
   updateTracker() {
     const q = this.game.quests;
@@ -1215,6 +1260,21 @@ export class UI {
       }
     }
     ctx.putImageData(img, 0, 0);
+    // the railways drawn crisp over the terrain (every line), clipped to the window
+    ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (const { path } of world.gen.geo.railPaths()) {
+      for (const [col, w] of [['rgba(28,28,28,0.85)', 3], ['rgba(203,183,132,0.95)', 1.2]]) {
+        ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath();
+        let on = false;
+        for (const pt of path.pts) {
+          const sx = (pt.z - player.pos.z) * scale + size / 2, sy = -(pt.x - player.pos.x) * scale + size / 2;
+          if (sx < -4 || sx > size + 4 || sy < -4 || sy > size + 4) { on = false; continue; }
+          if (on) ctx.lineTo(sx, sy); else { ctx.moveTo(sx, sy); on = true; }
+        }
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
     // other folk on t' shared moor, if any are in t' window
     const net = this.game && this.game.net;
     if (net && net.remotes && net.remotes.size) {
@@ -1316,12 +1376,15 @@ export class UI {
       b.fillStyle = this.mapTint(geo, wx, wz);
       b.fillRect(Math.floor(w2x(wx, wz) - cw / 2), Math.floor(w2y(wx, wz) - ch / 2), cw, ch);
     }
-    const path = geo.railPath().pts;                                    // t' railway
-    b.lineJoin = 'round';
-    b.strokeStyle = '#1c1c1c'; b.lineWidth = 4; b.beginPath();
-    path.forEach((pt, i) => { const X = w2x(pt.x, pt.z), Y = w2y(pt.x, pt.z); i ? b.lineTo(X, Y) : b.moveTo(X, Y); }); b.stroke();
-    b.strokeStyle = '#cbb784'; b.lineWidth = 1.4; b.stroke();
-    for (const st of geo.railway()) {                                   // stations
+    b.lineJoin = 'round';                                               // every railway line
+    for (const { path } of geo.railPaths()) {
+      const pts = path.pts;
+      b.strokeStyle = '#1c1c1c'; b.lineWidth = 4; b.beginPath();
+      pts.forEach((pt, i) => { const X = w2x(pt.x, pt.z), Y = w2y(pt.x, pt.z); i ? b.lineTo(X, Y) : b.moveTo(X, Y); }); b.stroke();
+      b.strokeStyle = '#cbb784'; b.lineWidth = 1.4; b.stroke();
+    }
+    const stations = (geo.realWorld && geo.data) ? geo.data.stations : geo.railway();
+    for (const st of stations) {                                        // stations
       const X = w2x(st.x, st.z), Y = w2y(st.x, st.z);
       b.fillStyle = '#1c1c1c'; b.fillRect(X - 3, Y - 3, 6, 6);
       b.fillStyle = '#e8d8a0'; b.fillRect(X - 2, Y - 2, 4, 4);
@@ -1372,6 +1435,29 @@ export class UI {
         ctx.fillStyle = '#cdefff'; ctx.fillText(r.name || 'rambler', X + 6, Y + 3);
       }
     }
+    const game = this.game;                                             // every train, live
+    if (game && game.world) {
+      const geo = game.world.gen.geo;
+      const lines = geo.railPaths ? geo.railPaths() : [];
+      const mainName = (lines.find(l => l.path === geo.railPath()) || {}).name;
+      const single = lines.length <= 1;
+      const trains = [];
+      if (game.trainState) trains.push({ x: game.trainState.x, z: game.trainState.z, name: single ? 'T’ Train' : (mainName || 'Train') });
+      for (const bt of (game.branchTrains || [])) if (bt.state) trains.push({ x: bt.state.x, z: bt.state.z, name: bt.name });
+      ctx.textAlign = 'left';
+      for (const t of trains) {
+        const TX = w2x(t.x, t.z), TY = w2y(t.x, t.z);
+        ctx.save(); ctx.translate(TX, TY);
+        ctx.fillStyle = 'rgba(245,245,245,0.85)'; ctx.beginPath(); ctx.arc(-5, -6, 3, 0, 7); ctx.fill();  // steam
+        ctx.fillStyle = '#241310'; ctx.fillRect(-7, -4, 14, 8);                                           // loco body
+        ctx.fillStyle = '#d34b38'; ctx.fillRect(2, -4, 5, 8);                                             // red boiler front
+        ctx.strokeStyle = '#f4dca0'; ctx.lineWidth = 1.4; ctx.strokeRect(-7, -4, 14, 8);                  // gold outline
+        ctx.restore();
+        ctx.font = 'bold 11px sans-serif';
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.strokeText(t.name, TX + 10, TY + 4);
+        ctx.fillStyle = '#ffd98a'; ctx.fillText(t.name, TX + 10, TY + 4);
+      }
+    }
     const X = w2x(player.pos.x, player.pos.z), Y = w2y(player.pos.x, player.pos.z);  // thee
     ctx.save(); ctx.translate(X, Y); ctx.rotate(-player.yaw - Math.PI / 2);
     ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
@@ -1415,6 +1501,19 @@ export class UI {
   }
 
   hideBigMap() { this.mapOverlay.classList.add('hidden'); }
+
+  // ride-camera switcher
+  showRideViewMenu(active) { if (this.rideViewMenu) { this.rideViewMenu.style.display = 'flex'; this.setRideViewMenu(active); } }
+  setRideViewMenu(active) {
+    if (!this._rideChips) return;
+    for (const k in this._rideChips) {
+      const on = k === active, c = this._rideChips[k];
+      c.style.background = on ? 'rgba(211,75,56,0.92)' : 'rgba(22,17,12,0.7)';
+      c.style.color = on ? '#fff' : '#cdbf9a';
+      c.style.borderColor = on ? 'rgba(255,220,160,0.6)' : 'rgba(0,0,0,0.5)';
+    }
+  }
+  hideRideViewMenu() { if (this.rideViewMenu) this.rideViewMenu.style.display = 'none'; }
 
   // warden world chooser — resolves wi' a relay room name
   pickWorld(currentRoom) {

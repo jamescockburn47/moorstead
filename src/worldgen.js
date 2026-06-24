@@ -3,6 +3,7 @@ import { B, BLOCKS, CHUNK, HEIGHT, WATER_LEVEL } from './defs.js';
 import { fbm2, fbm3, noise3, hash2i, hash3i, mulberry32, strSeed } from './noise.js';
 import { Geography, ROSEBERRY, WAINSTONES, KILNS, CASTLE } from './geography.js';
 import { MoorsGeography } from './moorsgeo.js';
+import { stationOrient } from './railpath.js';
 
 // The real-Moors world id — the seed string main.js uses for the solo world + the shared room
 export const MOORS_SEED = strSeed('t-moors-1900');
@@ -145,10 +146,16 @@ export class Gen {
     if (h <= WATER_LEVEL || h > 34) return false;
     if (this.geo.bogginess(x, z) > 0.4 || this.geo.coastT(x, z) > 0) return false;
     if (this.geo.inVillage(x, z, 8)) return false;
+    if (this.geo.nearRiver && this.geo.nearRiver(x, z, 1)) return false; // walls stop at the beck, not over it
     if (Math.abs(x - 60) < 4 && z > -420 && z < 60) return false; // keep off Wade's Causey
-    const gx = ((x % 48) + 48) % 48, gz = ((z % 40) + 40) % 40;
+    // real Moors: wobble the grid lines + thin the runs so the walls aren't a dead-straight
+    // square grid (the stylised world keeps its tidy grid — wob/gap stay at the old values)
+    const real = !!this.geo.realWorld;
+    const wobX = real ? Math.round(fbm2(z * 0.07 + 2.1, 1.3, 2, this.seed ^ 0xa13) * 3) : 0;
+    const wobZ = real ? Math.round(fbm2(x * 0.07 + 5.4, 7.7, 2, this.seed ^ 0xa14) * 3) : 0;
+    const gx = (((x - wobX) % 48) + 48) % 48, gz = (((z - wobZ) % 40) + 40) % 40;
     if (gx !== 0 && gz !== 0) return false;
-    if (hash2i(x, z, this.seed ^ 0xa11) < 0.12) return false;
+    if (hash2i(x, z, this.seed ^ 0xa11) < (real ? 0.2 : 0.12)) return false;
     const onX = gx === 0;
     const h2 = this.geo.height(x + (onX ? 0 : 1), z + (onX ? 1 : 0));
     if (Math.abs(h - h2) > 2) return false;
@@ -243,19 +250,31 @@ export class Gen {
     // Cleveland ironstone / Jet thinning near old workings (Rosedale kilns)
     const nearKilns = Math.hypot(x - KILNS.x, z - KILNS.z) < 70;
     
-    // NE/Boulby coast deep evaporites (polyhalite & rock salt)
-    const isNECoast = z > 0 && x > cx - 180;
-    if (isNECoast && y < 12 && v > 0.85) return B.POLYHALITE;
-    if (isNECoast && y < 16 && v > 0.65) return B.ROCK_SALT;
-    
-    // Coastal cliff shallow alum shale
-    const isCoastCliff = x > cx - 100 && x < cx - 10;
-    if (isCoastCliff && y >= 15 && y < 45 && v > 0.65) return B.ALUM_SHALE;
-    
-    // Existing ores, with Rosedale kilns thinning (historically exhausted)
-    if (y < 20 && v > (nearKilns ? 0.94 : 0.86)) return B.JET_ORE;    // jet
-    if (y < 34 && v > (nearKilns ? 0.82 : 0.68)) return B.IRON_ORE;   // ironstone
-    if (y < 48 && v > (nearKilns ? 0.78 : 0.61)) return B.COAL_ORE;   // coal
+    // STYLISED world only — none of these belong in the c.1900 real Moors:
+    //  • Boulby potash/polyhalite mine is 1960s+ (≈70 yr too early)
+    //  • deep rock salt: by 1900 Cleveland salt was Teesside brine-pumping, off this map
+    //  • the NYM alum industry collapsed ≈1871, so by 1900 it's gone (player said: strict, no ruins)
+    if (!geo.realWorld) {
+      const isNECoast = z > 0 && x > cx - 180;
+      if (isNECoast && y < 12 && v > 0.85) return B.POLYHALITE;
+      if (isNECoast && y < 16 && v > 0.65) return B.ROCK_SALT;
+      const isCoastCliff = x > cx - 100 && x < cx - 10;
+      if (isCoastCliff && y >= 15 && y < 45 && v > 0.65) return B.ALUM_SHALE;
+    }
+
+    // jet: in the real-Moors world it's the Whitby jet rock — won at the Whitby cliffs/moors, rare elsewhere
+    const jetThresh = geo.realWorld
+      ? ((geo.jetAt && geo.jetAt(x, z)) ? 0.62 : 0.97)
+      : (nearKilns ? 0.94 : 0.86);
+    if (y < 20 && v > jetThresh) return B.JET_ORE;    // jet
+    // ironstone: in the real-Moors world it's the Rosedale field — rich seams there, rare elsewhere
+    const ironThresh = geo.realWorld
+      ? ((geo.ironstoneAt && geo.ironstoneAt(x, z)) ? 0.5 : 0.92)
+      : (nearKilns ? 0.82 : 0.68);
+    if (y < 34 && v > ironThresh) return B.IRON_ORE;                  // ironstone
+    // coal: the NYM moor seams were thin, poor an' nigh worked-out by 1900 (Durham coal came by rail) — scarce
+    const coalThresh = geo.realWorld ? 0.9 : (nearKilns ? 0.78 : 0.61);
+    if (y < 48 && v > coalThresh) return B.COAL_ORE;                  // coal
     
     return B.STONE;
   }
@@ -279,7 +298,11 @@ export class Gen {
         const vcol = geo.villageColumn(x, z);
         const onRoad = geo.onRoad(x, z) && h > WATER_LEVEL && !blanketBog;
 
-        const beach = coast > 0.3 && h >= 22 && h <= 27;
+        // beach: the moors coast lays a flat sand strip at the foot of the cliffs (h≈WL+1,
+        // hard by the sea); the stylised world keeps its DEM-coast rule.
+        const beach = geo.realWorld
+          ? (h <= WATER_LEVEL + 1 && geo.coastDistCoarse(x, z) <= 14)
+          : (coast > 0.3 && h >= 22 && h <= 27);
         for (let y = 0; y <= h; y++) {
           let id;
           if (y === 0) id = B.BEDROCK;
@@ -304,8 +327,22 @@ export class Gen {
         if (h < WATER_LEVEL) {
           for (let y = h + 1; y <= WATER_LEVEL; y++) data[IDX(lx, y, lz)] = B.WATER;
         }
-        // blanket bog pools: two deep, dark and hungry
-        if (pool) {
+        // moor rivers (client carve): cut the beck bed into the un-carved ground and run
+        // water down it (h is the un-carved ground). Don't flood the track gauge — the rail
+        // crosses on its embankment for now (proper bridges/culverts are a later slice).
+        let inRiver = false, riverRC = null;
+        if (geo.realWorld && geo.riverColumn && !vcol) {
+          const rc = geo.riverColumn(x, z);
+          if (rc) {
+            inRiver = true; riverRC = rc;
+            for (let y = rc.bed + 1; y <= h + 2 && y < HEIGHT; y++) data[IDX(lx, y, lz)] = B.AIR; // clear the channel
+            if (rc.bed > 0) data[IDX(lx, rc.bed, lz)] = B.GRAVEL;                                  // gravel bed
+            for (let y = rc.bed + 1; y <= rc.wl && y < HEIGHT; y++) data[IDX(lx, y, lz)] = B.WATER; // water runs through (the rail crosses on a culvert)
+          }
+        }
+        // blanket bog pools: two deep, dark and hungry — STYLISED world only.
+        // The real Moors' tops are walkable peat-marsh, so no open liquid there.
+        if (pool && !geo.realWorld) {
           data[IDX(lx, h, lz)] = B.BOG;
           if (h - 1 > 0) data[IDX(lx, h - 1, lz)] = B.BOG;
           if (h - 2 > 0) data[IDX(lx, h - 2, lz)] = B.PEAT;
@@ -316,7 +353,7 @@ export class Gen {
         const ri = geo.railInfo(x, z);
 
         // surface vegetation
-        if (!vcol && !pool && !onRoad && h >= WATER_LEVEL && h <= HEIGHT - 3) {
+        if (!vcol && (!pool || geo.realWorld) && !onRoad && !inRiver && h >= WATER_LEVEL && h <= HEIGHT - 3) {
           const surf = data[IDX(lx, h, lz)];
           const r = hash2i(x, z, this.seed ^ 0xf10);
           const heath = geo.heatheriness(x, z);
@@ -369,7 +406,8 @@ export class Gen {
               else if (r < 0.092) data[IDX(lx, h + 1, lz)] = B.HAZEL;
             }
           } else if (surf === B.PEAT) {
-            if (r < 0.14) data[IDX(lx, h + 1, lz)] = B.TUSSOCK;
+            if (geo.realWorld && geo.bogginess(x, z) > 0.6 && r < 0.16) data[IDX(lx, h + 1, lz)] = B.COTTONGRASS;
+            else if (r < 0.14) data[IDX(lx, h + 1, lz)] = B.TUSSOCK;
             else if (r < 0.2) data[IDX(lx, h + 1, lz)] = B.HEATHER;
           } else if (surf === B.STONE && r < 0.04) {
             data[IDX(lx, h + 1, lz)] = B.TUSSOCK;
@@ -389,9 +427,30 @@ export class Gen {
           // floor (not round) so t' voxel bed tucks UNDER t' smooth ballast crown
           const deck = Math.max(1, Math.min(HEIGHT - 5, Math.floor(ri.deck)));
           // embankment / causeway: fill frae t' ground (or t' watter bed) up to
-          // t' deck so there's a level shoulder either side — no trench
-          for (let y = Math.min(h, deck); y < deck && y > 0; y++) {
-            data[IDX(lx, y, lz)] = B.STONE;
+          // t' deck so there's a level shoulder either side — no trench. BUT where t'
+          // line crosses a beck, leave a CULVERT: keep t' water, cap it wi' a stone
+          // lintel, an' raise t' embankment frae there up — t' beck flows under t' rails.
+          // In the river-crossing zone, a raised deck becomes an OPEN arch carried on a
+          // stone deck slab — symmetrically over BOTH the beck and the raised banks (dry
+          // relief arches), so no side is a blank embankment wall. Solid dressed-stone only
+          // where the deck comes down to the ground (the abutment ends). Normal earth
+          // embankment away from rivers.
+          const bridgeZone = geo.realWorld && geo.nearRiver && geo.nearRiver(x, z, 3);
+          const overSea = geo.realWorld && geo.coastT && geo.coastT(x, z) > 0.5;
+          const spanLevel = riverRC ? riverRC.wl : h;
+          if (bridgeZone && deck - spanLevel > 2) {
+            for (let y = spanLevel + 1; y <= deck - 2 && y < HEIGHT; y++) data[IDX(lx, y, lz)] = B.AIR; // open arch
+            if (deck - 1 > 0) data[IDX(lx, deck - 1, lz)] = B.STONEBRICK; // deck slab carries the track
+          } else if (overSea && deck > WATER_LEVEL + 2) {
+            // SEA VIADUCT (Larpool, over the Esk estuary): open span over the water on a stone
+            // deck slab, with a masonry pier every few blocks down to the seabed — sea flows under.
+            for (let y = WATER_LEVEL + 1; y <= deck - 2 && y < HEIGHT; y++) data[IDX(lx, y, lz)] = B.AIR;
+            if (deck - 1 > 0) data[IDX(lx, deck - 1, lz)] = B.STONEBRICK; // deck slab
+            if ((x + z) % 6 === 0) for (let y = WATER_LEVEL - 8; y < deck - 1 && y > 0; y++) data[IDX(lx, y, lz)] = B.STONEBRICK; // pier
+          } else if (bridgeZone) {
+            for (let y = Math.min(h, deck); y < deck && y > 0; y++) data[IDX(lx, y, lz)] = B.STONEBRICK; // dressed-stone abutment
+          } else {
+            for (let y = Math.min(h, deck); y < deck && y > 0; y++) data[IDX(lx, y, lz)] = B.STONE; // earth embankment
           }
           // clear t' loading gauge: a slot WIDE an' TALL enough for t' train wi'
           // her sway — cuttings get the full slot, open ground just the air
@@ -420,8 +479,11 @@ export class Gen {
         const size = (fruit || th) ? 0 : this.boulderAt(x, z);
         const mh = (fruit || th || size) ? 0 : this.monkeyPuzzleAt(x, z);
         if (!fruit && !th && !size && !mh) continue;
+        if (geo.realWorld && geo.nearRiver && geo.nearRiver(x, z, 2)) continue; // nowt grows in t' beck
         const tri = geo.railInfo(x, z);
         if (tri && tri.d < 4) continue; // a cleared verge — nowt grows in t' four-foot
+        if (geo.realWorld && geo.nearTownBuilding && geo.nearTownBuilding(x, z, 5)) continue; // streets kept clear o' trees
+        if (geo.realWorld && geo.nearAbbey && geo.nearAbbey(x, z, 4)) continue; // a clear headland round the abbey
         const gh = this.geo.height(x, z);
         if (fruit) this.stampTree(data, lx, gh + 1, lz, 4, true);
         else if (th) this.stampTree(data, lx, gh + 1, lz, th);
@@ -431,7 +493,11 @@ export class Gen {
     }
 
     this.stampVillage(data, cx, cz);
+    this.stampTownExtras(data, cx, cz);
     this.stampLandmarks(data, cx, cz);
+    this.stampAbbey(data, cx, cz);
+    this.stampWorks(data, cx, cz);
+    this.stampFarm(data, cx, cz);
     this.stampShelters(data, cx, cz);
     this.stampStructures(data, cx, cz);
     this.stampCastle(data, cx, cz);
@@ -545,19 +611,45 @@ export class Gen {
       if (lx < 0 || lx >= CHUNK || lz < 0 || lz >= CHUNK || wy <= 0 || wy >= HEIGHT) return undefined;
       return data[IDX(lx, wy, lz)];
     };
-    const path = this.geo.railPath();
-    const stns = this.geo.railway();
-    for (let si = 0; si < stns.length; si++) {
+    const stamped = new Set();
+    for (const { name: lineName, path } of this.geo.railPaths()) {
+      const line = this.geo.railLines().find(l => l.name === lineName);
+      const stns = line ? line.stops : [];
+      for (let si = 0; si < stns.length; si++) {
       const s = stns[si];
       if (s.x < x0 - 24 || s.x > x0 + CHUNK + 24 || s.z < z0 - 24 || s.z > z0 + CHUNK + 24) continue;
-      const sp = this.geo.samplePos(path.stationS[si]);
+      if (stamped.has(s.name)) continue;   // a shared junction (Grosmont/Whitby) is stamped once
+      stamped.add(s.name);
+      const sp = this.geo.samplePosOn(path, path.stationS[si]);
       const g = Math.max(Math.round(sp.deck), WATER_LEVEL + 1);
       const ux = sp.tx, uz = sp.tz, px = uz, pz = -ux;
       const cell = (a, w) => [Math.round(sp.x + ux * a + px * w), Math.round(sp.z + uz * a + pz * w)];
+      const { along: bAl, across: bAc } = stationOrient(ux, uz);
       const isPickering = s.name === 'Pickering';
       const isBig = isPickering || s.name === 'Whitby';
       const sides = isBig ? [1, -1] : [1];
       const aHalf = isBig ? 9 : 5;
+      // The building is stamped on a world-cardinal basis (n/s or e/w) so it's a clean box, not a
+      // staircased diagonal. Its CENTRE is offset along the rail-perpendicular (px,pz — the platform
+      // side), NOT the cardinal axis: on a diagonal line the cardinal offset isn't perpendicular and
+      // sits the box back on the rails (Sandsend). Platforms/track/furniture keep `cell` (rail-parallel).
+      const bOff = isBig ? 10 : 8;
+      // pick the side (±rail-perpendicular) whose footprint best clears ALL tracks and isn't over
+      // the sea — at a junction (Grosmont) one side sits on the crossing line; on the coast one
+      // side is open water. Ties favour +px (the platform side, so the door faces the platform).
+      const sideAt = (sgn) => {
+        const bx = Math.round(sp.x + px * sgn * bOff), bz = Math.round(sp.z + pz * sgn * bOff);
+        if (this.geo.coastT && this.geo.coastT(bx, bz) > 0.3) return { bx, bz, md: -1 };
+        let md = Infinity;
+        for (let a = -4; a <= 4; a++) for (let w = -2; w <= 2; w++) {
+          const ri = this.geo.railInfo(bx + bAl[0] * a + bAc[0] * w, bz + bAl[1] * a + bAc[1] * w);
+          if (ri) md = Math.min(md, ri.d);
+        }
+        return { bx, bz, md };
+      };
+      const sP = sideAt(1), sM = sideAt(-1), pick = sM.md > sP.md ? sM : sP;
+      const bX = pick.bx, bZ = pick.bz;
+      const boxCell = (a, w) => [bX + bAl[0] * a + bAc[0] * w, bZ + bAl[1] * a + bAc[1] * w];
 
       // platforms (planks level wi' t' deck, footing carried down to t' ground)
       for (const sd of sides) for (let a = -aHalf; a <= aHalf; a++) for (let w = 2; w <= 4; w++) {
@@ -574,7 +666,7 @@ export class Gen {
         const lowMat = stone ? B.STONEBRICK : B.ST_RED, hiMat = stone ? B.STONEBRICK : B.ST_CREAM;
         const peak = g + wallH + 1 + Math.round(half);
         for (let a = a0; a <= a1; a++) for (let w = w0; w <= w1; w++) {
-          const [wx, wz] = cell(a, sd * w);
+          const [wx, wz] = boxCell(a, sd * w);
           const roofY = g + wallH + 1 + Math.round(half - Math.abs(w - wc));
           for (let y = g + 1; y <= peak + 1; y++) put(wx, y, wz, B.AIR);
           put(wx, g, wz, B.PLANKS);
@@ -586,16 +678,16 @@ export class Gen {
           put(wx, roofY, wz, B.SLATE);
         }
         const am = Math.round((a0 + a1) / 2);
-        const fr = (a, w, y, id) => { const [wx, wz] = cell(a, sd * w); put(wx, y, wz, id); };
+        const fr = (a, w, y, id) => { const [wx, wz] = boxCell(a, sd * w); put(wx, y, wz, id); };
         fr(am - 1, w0, g + 1, B.AIR); fr(am, w0, g + 1, B.AIR); fr(am, w0, g + 2, B.AIR); // doorway
         fr(a0 + 1, w0, g + 2, B.WINDOW); fr(a1 - 1, w0, g + 2, B.WINDOW);
         // (the running-in board is now a big free-standing departures board on the platform — see below)
-        const [chx, chz] = cell(a0 + 1, sd * Math.round(wc));
+        const [chx, chz] = boxCell(a0 + 1, sd * Math.round(wc));
         for (let y = g + wallH + 1; y <= peak + 2; y++) put(chx, y, chz, B.RBRICK); // chimney
       };
 
-      if (isPickering) { this.stampTrainshed(put, cell, g, aHalf); buildOne(1, -4, 4, 6, 10, 4, true); }
-      else buildOne(1, -3, 3, 5, 8, 3, false);
+      if (isPickering) { this.stampTrainshed(put, cell, g, aHalf); buildOne(1, -4, 4, -2, 2, 4, true); }
+      else buildOne(1, -3, 3, -2, 1, 3, false);
 
       // platform furniture
       for (const a of [-aHalf + 1, aHalf - 1]) { const c = cell(a, 3); put(c[0], g + 1, c[1], B.LANTERN); }
@@ -614,6 +706,7 @@ export class Gen {
 
       if (isBig) this.stampFootbridge(put, cell, g, aHalf);
       if (s.name === 'Grosmont') this.stampTerrace(put, cell);
+      }
     }
   }
 
@@ -797,7 +890,7 @@ export class Gen {
           const x = x0 + lx, z = z0 + lz;
           const vcol = geo.villageColumn(x, z);
           if (!vcol || vcol.kind !== 'building' || vcol.v !== vv) continue;
-          this.stampBuildingColumn(data, lx, lz, x, z, vcol.b, vv.ground);
+          this.stampBuildingColumn(data, lx, lz, x, z, vcol.b, vcol.b.g != null ? vcol.b.g : vv.ground);
         }
       }
     }
@@ -841,10 +934,146 @@ export class Gen {
     }
   }
 
+  // Whitby Abbey — a dramatic, imposing GOTHIC RUIN on the East Cliff: soaring nave walls with
+  // tall pointed-arch lancets, a great east window frame over the sea, broken jagged tops and
+  // standing crossing-piers. Trees are cleared off the headland round it.
+  stampAbbey(data, cx, cz) {
+    const geo = this.geo;
+    if (!geo.realWorld || !geo.data) return;
+    const lm = (geo.data.landmarks || []).find(l => l.kind === 'abbey');
+    if (!lm) return;
+    const x0c = cx * CHUNK, z0c = cz * CHUNK;
+    if (lm.x < x0c - 12 || lm.x > x0c + CHUNK + 12 || lm.z < z0c - 14 || lm.z > z0c + CHUNK + 14) return;
+    const put = (wx, wy, wz, id) => { const lx = wx - x0c, lz = wz - z0c; if (lx >= 0 && lx < CHUNK && lz >= 0 && lz < CHUNK && wy > 0 && wy < HEIGHT) data[IDX(lx, wy, lz)] = id; };
+    const g = Math.max(WATER_LEVEL + 1, Math.round(geo.height(lm.x, lm.z)));
+    const NX0 = lm.x - 3, NX1 = lm.x + 3, Z0 = lm.z - 6, Z1 = lm.z + 6; // nave: 7 wide × 13 long, E end at Z1 (the sea)
+    // precinct: clear the headland (trees + air), lay a grassed-rubble floor under the church
+    for (let x = lm.x - 5; x <= lm.x + 5; x++) for (let z = lm.z - 8; z <= lm.z + 8; z++) {
+      for (let y = g + 1; y <= g + 20 && y < HEIGHT; y++) put(x, y, z, B.AIR);
+      if (x >= NX0 - 1 && x <= NX1 + 1 && z >= Z0 - 1 && z <= Z1 + 1) put(x, g, z, ((x * 3 + z) % 4 === 0) ? B.GRASS : B.GRAVEL);
+    }
+    // the two long nave walls — tall, ruined (jagged tops), with tall pointed-arch lancets
+    for (const wx of [NX0, NX1]) for (let z = Z0; z <= Z1; z++) {
+      const top = g + 14 - (hash2i(wx, z, this.seed ^ 0xabbe) * 5 | 0);
+      const arch = ((z - Z0) % 3 === 1);
+      for (let y = g + 1; y <= top && y < HEIGHT; y++) { if (arch && y >= g + 3 && y <= g + 9) continue; put(wx, y, z, B.STONEBRICK); }
+    }
+    // the GREAT EAST WINDOW — a soaring arched frame over the sea
+    for (let x = NX0; x <= NX1; x++) for (let y = g + 1; y <= g + 18 && y < HEIGHT; y++) {
+      if (!(x > NX0 && x < NX1 && y >= g + 3 && y <= g + 15)) put(x, y, Z1, B.STONEBRICK);
+    }
+    // west gable — lower, broken
+    for (let x = NX0; x <= NX1; x++) { const top = g + 8 - (hash2i(x, Z0, this.seed ^ 0xabc) * 3 | 0); for (let y = g + 1; y <= top; y++) put(x, y, Z0, B.STONEBRICK); }
+    // four standing crossing-piers down the middle, for drama
+    for (const px of [lm.x - 2, lm.x + 2]) for (const pz of [lm.z - 1, lm.z + 1]) for (let y = g + 1; y <= g + 12 && y < HEIGHT; y++) put(px, y, pz, B.STONEBRICK);
+  }
+
+  // The industrial WORKS: Rosedale's calcining kilns (a long bank of arched stone kilns built into
+  // the slope) and the Grosmont blast furnace (a tall stone stack with a brick chimney + cast-house).
+  // Sites are found by the geography; the yard is cleared + floored.
+  stampWorks(data, cx, cz) {
+    const geo = this.geo;
+    if (!geo.realWorld || !geo.worksSites) return;
+    const x0c = cx * CHUNK, z0c = cz * CHUNK;
+    const put = (wx, wy, wz, id) => { const lx = wx - x0c, lz = wz - z0c; if (lx >= 0 && lx < CHUNK && lz >= 0 && lz < CHUNK && wy > 0 && wy < HEIGHT) data[IDX(lx, wy, lz)] = id; };
+    for (const s of geo.worksSites()) {
+      if (s.x < x0c - 18 || s.x > x0c + CHUNK + 18 || s.z < z0c - 18 || s.z > z0c + CHUNK + 18) continue;
+      const g = s.g;
+      // clear + floor the yard (also clears any trees)
+      for (let x = s.x - s.hw - 3; x <= s.x + s.hw + 3; x++) for (let z = s.z - s.hd - 3; z <= s.z + s.hd + 3; z++) {
+        for (let y = g + 1; y <= g + 14 && y < HEIGHT; y++) put(x, y, z, B.AIR);
+        put(x, g, z, B.GRAVEL);
+      }
+      if (s.kind === 'kiln') {
+        // a bank of calcining kilns: a tall stone face with arched draw-holes, the bank rising behind
+        for (let dx = -s.hw; dx <= s.hw; dx++) {
+          const wx = s.x + dx, arch = ((dx + s.hw) % 3 === 1);
+          for (let y = g + 1; y <= g + 5 && y < HEIGHT; y++) { if (arch && y <= g + 3) continue; put(wx, y, s.z + s.hd, B.STONEBRICK); }
+          for (let d = 0; d <= s.hd * 2; d++) put(wx, g + 1 + Math.min(d, 4), s.z + s.hd - d, B.STONE); // the filled bank, sloping up
+        }
+      } else if (s.kind === 'jetshop') {
+        // a small jet carver's workshop: stone walls, a pitched slate roof, a window an' a bench
+        for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+          const perim = Math.abs(dx) === 2 || Math.abs(dz) === 2;
+          for (let y = g + 1; y <= g + 3; y++) put(s.x + dx, y, s.z + dz, perim ? B.COBBLE : B.AIR);
+          put(s.x + dx, g + 4 + (2 - Math.abs(dz)), s.z + dz, B.SLATE); // little gable, ridge along x
+        }
+        put(s.x, g + 1, s.z - 2, B.AIR); put(s.x, g + 2, s.z - 2, B.AIR);                 // doorway
+        put(s.x + 1, g + 2, s.z - 2, B.WINDOW); put(s.x - 1, g + 2, s.z - 2, B.WINDOW);   // shop windows
+        put(s.x, g + 1, s.z + 1, B.BENCH);                                                // the carver's bench
+      } else {
+        // the blast furnace: a 5x5 stone stack, hollow, with a brick chimney top + a slated cast-house
+        for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+          const perim = Math.abs(dx) === 2 || Math.abs(dz) === 2;
+          for (let y = g + 1; y <= g + 11 && y < HEIGHT; y++) put(s.x + dx, y, s.z + dz, perim ? B.STONEBRICK : B.AIR);
+        }
+        for (let y = g + 1; y <= g + 13 && y < HEIGHT; y++) put(s.x, y, s.z, B.RBRICK); // the chimney up the middle
+        for (let dx = -2; dx <= 2; dx++) for (let dz = 3; dz <= 5; dz++) { put(s.x + dx, g, s.z + dz, B.PLANKS); put(s.x + dx, g + 4, s.z + dz, B.SLATE); for (let y = g + 1; y <= g + 3; y++) if (Math.abs(dx) === 2 || dz === 5) put(s.x + dx, y, s.z + dz, B.STONEBRICK); }
+      }
+    }
+  }
+
+  // Farmsteads: farmhouse + barn stamped via the town building column stamper;
+  // fold as a 2-high fence ring on the ground so Task-3's barrier rule pens the stock.
+  // Moors-gated; the stylised world is untouched.
+  stampFarm(data, cx, cz) {
+    const geo = this.geo;
+    if (!geo.realWorld || !geo.farmSites) return;
+    const x0c = cx * CHUNK, z0c = cz * CHUNK;
+    for (const f of geo.farmSites()) {
+      for (const b of geo._farmBuildings(f)) {
+        if (b.x1 < x0c - 1 || b.x0 > x0c + CHUNK || b.z1 < z0c - 1 || b.z0 > z0c + CHUNK) continue;
+        if (b.type === 'fold') {
+          // a 2-high fence ring — stock can't hop it (Task 3 barrier rule)
+          for (let x = b.x0; x <= b.x1; x++) for (let z = b.z0; z <= b.z1; z++) {
+            if (x !== b.x0 && x !== b.x1 && z !== b.z0 && z !== b.z1) continue; // perimeter only
+            const lx = x - x0c, lz = z - z0c;
+            if (lx < 0 || lx >= CHUNK || lz < 0 || lz >= CHUNK) continue;
+            const g = this.geo.height(x, z);
+            data[IDX(lx, g + 1, lz)] = B.FENCE;
+            data[IDX(lx, g + 2, lz)] = B.FENCE;
+          }
+        } else {
+          // farmhouse / barn — reuse the town building column stamper
+          for (let x = b.x0; x <= b.x1; x++) for (let z = b.z0; z <= b.z1; z++) {
+            const lx = x - x0c, lz = z - z0c;
+            if (lx < 0 || lx >= CHUNK || lz < 0 || lz >= CHUNK) continue;
+            this.stampBuildingColumn(data, lx, lz, x, z, b, b.g != null ? b.g : geo.height(x, z));
+          }
+        }
+      }
+    }
+  }
+
+  // Town dressing: a sign post + a levelled, accessible doorstep outside every place of business,
+  // so folk are led to them an' can actually get in (the door's on t' -z wall).
+  stampTownExtras(data, cx, cz) {
+    const geo = this.geo, x0 = cx * CHUNK, z0 = cz * CHUNK;
+    if (!geo.realWorld || !geo._townBuildings) return;
+    const put = (wx, wy, wz, id) => { const lx = wx - x0, lz = wz - z0; if (lx >= 0 && lx < CHUNK && lz >= 0 && lz < CHUNK && wy > 0 && wy < HEIGHT) data[IDX(lx, wy, lz)] = id; };
+    for (const v of geo.villages) {
+      if (Math.abs(v.x - (x0 + 8)) > v.radius + 24 || Math.abs(v.z - (z0 + 8)) > v.radius + 24) continue;
+      for (const b of geo._townBuildings(v)) {
+        if (!b.biz) continue;                 // only places of business get a sign + doorstep
+        const midX = Math.floor((b.x0 + b.x1) / 2), g = b.g;
+        // accessible doorstep: a levelled cobble forecourt just outside the door (the z0 wall)
+        for (let dx = -1; dx <= 1; dx++) for (let dd = 1; dd <= 2; dd++) {
+          put(midX + dx, g, b.z0 - dd, B.COBBLE);
+          for (let y = g + 1; y <= g + 4; y++) put(midX + dx, y, b.z0 - dd, B.AIR);
+        }
+        // a stout sign post with a board by the door — visible down the street
+        const sx = midX + 1, sz = b.z0 - 1;
+        for (let y = g + 1; y <= g + 3; y++) put(sx, y, sz, B.LOG);
+        put(sx, g + 4, sz, B.BOARD);
+        put(midX, g + 4, b.z0 - 1, B.BOARD);  // a board hung out over the doorway
+      }
+    }
+  }
+
   stampBuildingColumn(data, lx, lz, x, z, b, g) {
     if (b.type === 'minster') return this.stampMinsterColumn(data, lx, lz, x, z, b, g);
     if (b.type === 'ruin') return this.stampRuinColumn(data, lx, lz, x, z, b, g);
-    const wallMat = b.type === 'barn' ? B.PLANKS : B.STONEBRICK;
+    const wallMat = b.wall === 'cobble' ? B.COBBLE : b.wall === 'stonebrick' ? B.STONEBRICK : (b.type === 'barn' ? B.PLANKS : B.STONEBRICK);
     const onPerim = x === b.x0 || x === b.x1 || z === b.z0 || z === b.z1;
     const corner = (x === b.x0 || x === b.x1) && (z === b.z0 || z === b.z1);
     const midX = Math.floor((b.x0 + b.x1) / 2);
@@ -879,7 +1108,7 @@ export class Gen {
         // stone gable ends up to t' thatch line
         for (let y = g + b.wallH + 1; y < roofY && y < HEIGHT; y++) data[IDX(lx, y, lz)] = wallMat;
       }
-      data[IDX(lx, roofY, lz)] = B.THATCH;
+      data[IDX(lx, roofY, lz)] = b.roof === 'slate' ? B.SLATE : b.roof === 'pantile' ? B.ST_RED : B.THATCH;
     }
 
     // chapel tower at t' north end: square, taller than owt else
@@ -1004,6 +1233,24 @@ export class Gen {
       const lx = wx - x0, lz = wz - z0;
       if (lx >= 0 && lx < CHUNK && lz >= 0 && lz < CHUNK && wy > 0 && wy < HEIGHT) data[IDX(lx, wy, lz)] = id;
     };
+
+    // Real-Moors crosses: fixed at their true sites (data list), not the 96-grid —
+    // adjacent crosses (Young Ralph + Fat Betty) share a cell, so iterate directly.
+    if (geo.realWorld && geo.data && geo.data.landmarks) {
+      for (const lm of geo.data.landmarks) {
+        if (lm.kind !== 'cross') continue;
+        if (lm.x < x0 - 2 || lm.x > x0 + CHUNK + 1 || lm.z < z0 - 2 || lm.z > z0 + CHUNK + 1) continue;
+        const h = geo.height(lm.x, lm.z);
+        const white = (lm.params && lm.params.white) || /Betty/.test(lm.name);
+        const mat = white ? B.WOOL : B.STONE;
+        put(lm.x, h + 1, lm.z, B.STONE);
+        put(lm.x, h + 2, lm.z, B.STONE);
+        put(lm.x, h + 3, lm.z, mat);
+        put(lm.x + 1, h + 3, lm.z, mat);
+        put(lm.x - 1, h + 3, lm.z, mat);
+        put(lm.x, h + 4, lm.z, mat);
+      }
+    }
 
     // --- moor crosses (96-grid; whole cross stamped from any chunk it touches) ---
     for (let gx = Math.floor((x0 - 4) / 96); gx <= Math.floor((x0 + CHUNK + 4) / 96); gx++) {

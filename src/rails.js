@@ -27,9 +27,9 @@ export class Rails {
     this.fenceRailGeom = new THREE.BoxGeometry(0.06, 0.1, 1);
   }
 
-  // nearest chainage to a point — coarse stride scan, it's only for t' window
-  nearestS(px, pz) {
-    const pts = this.geo.railPath().pts;
+  // nearest chainage on a given path to a point — coarse stride scan, it's only for t' window
+  nearestSOn(path, px, pz) {
+    const pts = path.pts;
     let best = 0, bd = Infinity;
     for (let i = 0; i < pts.length; i += 6) {
       const d = Math.hypot(pts[i].x - px, pts[i].z - pz);
@@ -42,16 +42,18 @@ export class Rails {
     this.timer -= dt;
     if (this.timer > 0) return;
     this.timer = 0.5;
-    const near = this.nearestS(playerPos.x, playerPos.z);
-    if (near.d > 320) { this.clear(); return; }
-    if (this.center !== null && Math.abs(near.s - this.center) < REBUILD_MOVE && this.meshes.length) return;
-    this.build(near.s);
+    // dress every line near the player; rebuild only when she's drifted far enough
+    if (this.lastPos && Math.hypot(playerPos.x - this.lastPos.x, playerPos.z - this.lastPos.z) < REBUILD_MOVE && this.meshes.length) return;
+    this.clear();
+    let any = false;
+    for (const { path } of this.geo.railPaths()) {
+      const near = this.nearestSOn(path, playerPos.x, playerPos.z);
+      if (near.d <= 320) { this.build(path, near.s); any = true; }
+    }
+    this.lastPos = any ? { x: playerPos.x, z: playerPos.z } : null;
   }
 
-  build(centerS) {
-    this.clear();
-    this.center = centerS;
-    const path = this.geo.railPath();
+  build(path, centerS) {
     const pts = path.pts;
     const s0 = Math.max(0, centerS - WINDOW), s1 = Math.min(path.length, centerS + WINDOW);
     // gather t' samples in window
@@ -159,7 +161,7 @@ export class Rails {
     const sleepers = new THREE.InstancedMesh(this.sleeperGeom, this.sleeperMat, nSleep);
     let si = 0;
     for (let k = 0; k < nSleep; k++) {
-      const sp = this.geo.samplePos(s0 + k * SLEEPER_EVERY);
+      const sp = this.geo.samplePosOn(path,s0 + k * SLEEPER_EVERY);
       e.set(-Math.atan(sp.grade), Math.atan2(sp.tx, sp.tz), 0);
       q.setFromEuler(e);
       m.compose(new THREE.Vector3(sp.x, sp.deck + 1.06, sp.z), q, new THREE.Vector3(1, 1, 1));
@@ -179,7 +181,7 @@ export class Rails {
       const frails = new THREE.InstancedMesh(this.fenceRailGeom, this.fenceMat, seg * 2);
       let pi = 0, fri = 0;
       for (let k = 0; k < nP; k++) {
-        const sp = this.geo.samplePos(s0 + k * EVERY);
+        const sp = this.geo.samplePosOn(path,s0 + k * EVERY);
         for (const side of [-1, 1]) {
           m.compose(new THREE.Vector3(sp.x + sp.tz * side * FOFF, sp.deck + 1.0 + FH / 2, sp.z - sp.tx * side * FOFF), idq, new THREE.Vector3(1, 1, 1));
           posts.setMatrixAt(pi++, m);

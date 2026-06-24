@@ -34,6 +34,9 @@ export class Sky {
     this.rainAmount = 0;
     this.dread = 0;
     this.dreadTarget = 0;
+    this.flash = 0;       // transient lightning-flash term (0..1), spiked by the storm controller, decays each frame
+    this.stormPrecip = undefined; // when set (~1) the storm overrides precip to a downpour; cleared restores normal weather
+    this.stormIsSnow = undefined; // storm precip falls as snow (winter) vs rain
     this.moorFog = 0;    // T' Great Fog intensity at t' player, 0..1
     this.moorGate = 0;   // set by t' game: 1 on t' high moor, 0 in villages/coast
     this._gateS = 0;
@@ -239,8 +242,12 @@ export class Sky {
     this.sun.position.set(playerPos.x + sunX * 60, sunY * 80, playerPos.z + 20);
     this.sun.target.position.set(playerPos.x, playerPos.y, playerPos.z);
     const dayness = Math.max(0, Math.min(1, (sunY + 0.12) * 3));
-    this.sun.intensity = (0.25 + dayness * 1.0) * (1 - this.dread * 0.35);
-    this.ambient.intensity = (0.16 + dayness * 0.5) * (1 - this.dread * 0.25);
+    // lightning flash: decays fast (~200 ms from a full spike) and briefly floods
+    // the scene lighting — spiked by the storm controller (sky.flash = 1).
+    this.flash = Math.max(0, this.flash - dt / 0.22);
+    const flashLift = this.flash * this.flash * 2.4; // eased, a sharp blue-white burst
+    this.sun.intensity = (0.25 + dayness * 1.0) * (1 - this.dread * 0.35) + flashLift;
+    this.ambient.intensity = (0.16 + dayness * 0.5) * (1 - this.dread * 0.25) + flashLift * 0.7;
     this.sun.color.setHSL(0.1, dayness < 0.4 ? 0.6 : 0.25, 0.85);
 
     this.sunSprite.position.set(playerPos.x + sunX * 160, sunY * 150 + playerPos.y * 0.3, playerPos.z - 60);
@@ -253,7 +260,14 @@ export class Sky {
     else if (sunY > -0.2) col = lerpC(sunX > 0 ? SKY.dawn : SKY.dusk, SKY.night, -sunY / 0.2);
     else col = SKY.night;
     // precipitation: split into snow (wintry) vs rain, using live feed or deterministic clock
-    const { snow: snowFall, rain: rainTarget } = winterPrecip(season, this.liveRain != null ? this.liveRain : null, season ? snowfallIntensity(Date.now(), season) : 0);
+    let { snow: snowFall, rain: rainTarget } = winterPrecip(season, this.liveRain != null ? this.liveRain : null, season ? snowfallIntensity(Date.now(), season) : 0);
+    // the Dracula storm (sky.stormPrecip, set by the storm controller only while
+    // the Count's fight is live) overrides precip to a downpour — snow in winter,
+    // else rain. Scoped to the fight: clearing the override restores normal weather.
+    if (this.stormPrecip) {
+      if (this.stormIsSnow) { snowFall = 1; rainTarget = 0; }
+      else { rainTarget = 1; snowFall = 0; }
+    }
     const targetRain = rainTarget;
 
     // weather greys t' sky

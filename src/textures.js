@@ -222,6 +222,16 @@ const TILE_PAINTERS = {
       }
     }
   },
+  [TILE.COTTONGRASS](p) {
+    p.clear();
+    for (let i = 0; i < 6; i++) {
+      const x = 2 + ((p.rng() * 12) | 0);
+      const h = 7 + ((p.rng() * 7) | 0);
+      for (let y = 0; y < h; y++) p.px(x, T - 1 - y, shade(0x6b6b40, 0.7 + p.rng() * 0.3)); // green stalk
+      // white cotton head
+      for (let dy = 0; dy < 3; dy++) for (let dx = -1; dx <= 1; dx++) p.px(x + dx, T - 1 - h - dy, shade(0xf4f1ea, 0.85 + p.rng() * 0.3));
+    }
+  },
   [TILE.WOOL](p) {
     p.speckle(0xe2dcd0, 0.08);
     p.dots(0xcfc8ba, 24); p.dots(0xf2eee6, 18);
@@ -1192,6 +1202,24 @@ const ITEM_ICON_PAINTERS = {
     ctx.fillStyle = '#3a3a55'; ctx.beginPath();
     ctx.moveTo(16, 5); ctx.lineTo(20, 13); ctx.lineTo(12, 13); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#6a6a9a'; ctx.fillRect(14, 9, 2, 2);
+  },
+  [I.CALCINED_IRONSTONE](ctx) {
+    ctx.fillStyle = '#7a4838'; ctx.beginPath(); ctx.arc(16, 17, 9, 0, 7); ctx.fill(); // roasted reddish-grey
+    ctx.fillStyle = '#9c6850'; ctx.fillRect(11, 12, 4, 4); ctx.fillRect(18, 18, 3, 3);
+    ctx.fillStyle = '#4e372e'; ctx.fillRect(14, 16, 3, 2); // a roasting crack
+  },
+  [I.PIG_IRON](ctx) {
+    ctx.fillStyle = '#54565e'; ctx.beginPath(); // a dark rough cast pig
+    ctx.moveTo(6, 22); ctx.lineTo(10, 12); ctx.lineTo(24, 12); ctx.lineTo(28, 22); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#70727a'; ctx.fillRect(11, 13, 11, 3);
+    ctx.fillStyle = '#3a3c42'; ctx.fillRect(9, 19, 16, 2);
+  },
+  [I.CARVED_JET](ctx) {
+    // a polished mourning brooch: carved jet in a fine setting, with a sheen
+    ctx.fillStyle = '#b9982f'; ctx.beginPath(); ctx.ellipse(16, 16, 11, 9, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#0c0c14'; ctx.beginPath(); ctx.ellipse(16, 16, 8, 6, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#3a3a55'; ctx.beginPath(); ctx.ellipse(13, 13, 3, 2, -0.6, 0, 7); ctx.fill();
+    ctx.fillStyle = '#7a7ab0'; ctx.fillRect(12, 12, 2, 1);
   },
   [I.RAW_MUTTON](ctx) { drawMeat(ctx, '#d2697a', '#e8909e'); },
   [I.COOKED_MUTTON](ctx) { drawMeat(ctx, '#8a5230', '#b07448'); },

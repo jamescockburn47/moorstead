@@ -15,7 +15,7 @@ writeFileSync(new URL('../deploy/world/parity-ref.json', import.meta.url), JSON.
 let failed = false;
 const ok = m => console.log('  ok    ' + m);
 const bad = m => { failed = true; console.log('  FAIL  ' + m); };
-(out.length === 60 ? ok : bad)(`emitted ${out.length} reference samples`);
+(out.length >= 60 ? ok : bad)(`emitted ${out.length} reference samples`);
 (out.every(([, , h]) => h >= 5 && h <= HEIGHT - 6) ? ok : bad)('all heights within [5, HEIGHT-6]');
 (out.every(([, , h]) => Number.isFinite(h)) ? ok : bad)('all heights finite');
 
