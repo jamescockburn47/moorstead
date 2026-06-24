@@ -54,14 +54,15 @@ export class TitleFlyover {
       // colour by height + a heather/bracken noise
       const heather = noise2(x * 0.03 + 5, z * 0.03, this.seed + 3);
       const t = Math.min(1, Math.max(0, y / 22));
-      if (y < 1.2) c.setHex(0x46562f);                        // boggy tarn-side green
-      else if (y > 16.5) c.setHex(0xeef2f6);                  // snow on the caps
-      else if (y > 13) c.lerpColors(new THREE.Color(0x6f5d38), new THREE.Color(0xeef2f6), (y - 13) / 3.5); // snowline dusting the tops
-      else if (heather > 0.6 && t > 0.34) c.setHex(0x6f5470); // heather purple on the moor
-      else if (t < 0.34) c.setHex(0x53612f);                  // dale grass
-      else c.lerpColors(new THREE.Color(0x53612f), new THREE.Color(0x67632f), (t - 0.34) / 0.3); // moor grass into bracken
-      // a touch of per-vertex variation so it isn't flat
-      const j = (hash2i((x * 4) | 0, (z * 4) | 0, this.seed) - 0.5) * 0.06;
+      // deep winter: snow over the whole moor, with sparse dead heather / windblown rock breaking through the tops
+      if (y > 15.5) c.setHex(0xf4f8fd);                         // bright snow on the caps
+      else if (heather > 0.74 && t > 0.42) c.setHex(0x6a5566);  // a clump of dead heather poking through
+      else if (heather > 0.68 && t > 0.5) c.setHex(0x7b6f63);   // exposed rock/bracken on a windblown brow
+      else c.setHex(0xe8eef6);                                  // snow-covered ground + dale floor
+      // cold blue shadow settling into the hollows
+      const shade = Math.max(0, (8 - y) * 0.006);
+      c.r = Math.max(0, c.r - shade); c.g = Math.max(0, c.g - shade * 0.5);
+      const j = (hash2i((x * 4) | 0, (z * 4) | 0, this.seed) - 0.5) * 0.05;
       col[i * 3] = Math.max(0, c.r + j); col[i * 3 + 1] = Math.max(0, c.g + j); col[i * 3 + 2] = Math.max(0, c.b + j);
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -73,8 +74,8 @@ export class TitleFlyover {
 
   _sky() {
     const geo = new THREE.SphereGeometry(420, 24, 16);
-    // sunrise: a bright gold horizon warming up through rose to a pale morning blue
-    const zenith = new THREE.Color(0x6f9fd4), midSky = new THREE.Color(0xe7a98c), horizon = new THREE.Color(0xffd9a0);
+    // a cold, overcast winter sky: pale grey-blue at the zenith down to a snow-laden white horizon
+    const zenith = new THREE.Color(0x93a8be), midSky = new THREE.Color(0xbcc9d6), horizon = new THREE.Color(0xdde5ec);
     const pos = geo.attributes.position, col = new Float32Array(pos.count * 3), c = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
       const yy = Math.max(0, Math.min(1, pos.getY(i) / 420 * 0.5 + 0.5)); // 0 horizon .. 1 zenith
@@ -92,8 +93,10 @@ export class TitleFlyover {
     const trunk = box(0.4, h, 0.4, 0x4a3826); trunk.position.y = h / 2; g.add(trunk);
     for (let i = 0; i < 3; i++) {
       const s = 2.2 - i * 0.5;
-      const f = box(s, 1.3, s, i % 2 ? 0x33502c : 0x3c5a30);
+      const f = box(s, 1.3, s, i % 2 ? 0x2e4628 : 0x36512e); // dark winter conifer
       f.position.y = h - 0.2 + i * 0.9; g.add(f);
+      const cap = box(s * 0.94, 0.4, s * 0.94, 0xeef4fa);     // snow lying on the boughs
+      cap.position.y = h - 0.2 + i * 0.9 + 0.75; g.add(cap);
     }
     g.position.set(x, this.H(x, z), z);
     return g;
@@ -104,7 +107,8 @@ export class TitleFlyover {
     const place = (mesh, x, z, yoff = 0) => { mesh.position.set(cx + x, this.H(cx + x, cz + z) + yoff, cz + z); g.add(mesh); };
     // church: nave + tower + spire
     const nave = box(3.2, 2.4, 5, 0x8a8478); place(nave, 0, 0, 1.2);
-    const roof = box(3.4, 1.2, 5.2, 0x5a3a30); place(roof, 0, 0, 2.9);
+    const roof = box(3.4, 1.2, 5.2, 0x4a3228); place(roof, 0, 0, 2.9);
+    const roofSnow = box(3.5, 0.45, 5.3, 0xeef4fa); place(roofSnow, 0, 0, 3.6); // snow on the church roof
     const tower = box(2.2, 5.2, 2.2, 0x9a9486); place(tower, 0, -3.2, 2.6);
     const spire = new THREE.Mesh(new THREE.ConeGeometry(1.5, 2.2, 4), new THREE.MeshLambertMaterial({ color: 0x4a4036 }));
     spire.rotation.y = Math.PI / 4; place(spire, 0, -3.2, 6.3);
@@ -114,7 +118,8 @@ export class TitleFlyover {
       const x = Math.cos(a) * r, z = Math.sin(a) * (r * 0.8) + 6;
       const w = 2 + Math.random() * 1.4, d = 2.6 + Math.random();
       const body = box(w, 2, d, 0x8f8576); body.position.set(cx + x, this.H(cx + x, cz + z) + 1, cz + z); g.add(body);
-      const rf = box(w + 0.3, 0.9, d + 0.3, 0x5a4030); rf.position.set(cx + x, this.H(cx + x, cz + z) + 2.4, cz + z); g.add(rf);
+      const rf = box(w + 0.3, 0.9, d + 0.3, 0x4a3326); rf.position.set(cx + x, this.H(cx + x, cz + z) + 2.4, cz + z); g.add(rf);
+      const rfs = box(w + 0.4, 0.38, d + 0.4, 0xeef4fa); rfs.position.set(cx + x, this.H(cx + x, cz + z) + 2.95, cz + z); g.add(rfs); // snow-capped
     }
     return g;
   }
@@ -176,6 +181,20 @@ export class TitleFlyover {
     return g;
   }
 
+  // a frozen river (the Esk) winding along the dale floor, the railway following it
+  _river() {
+    const g = new THREE.Group();
+    const n = 64;
+    for (let i = 0; i <= n; i++) {
+      const x = -150 + 300 * (i / n);
+      const z = -6 + Math.sin(x * 0.021) * 13;                              // winds through the dale
+      const seg = box(6.5, 0.3, 8.5, i % 7 === 0 ? 0x44596a : 0xccdde9);    // pale ice, the odd dark open pool
+      seg.position.set(x, this.H(x, z) + 0.18, z);
+      g.add(seg);
+    }
+    return g;
+  }
+
   // oval track the train runs on; returns {pos,ang} for a 0..1 parameter
   _trackAt(u) {
     const a = u * Math.PI * 2;
@@ -188,27 +207,27 @@ export class TitleFlyover {
     r.setPixelRatio(Math.min(devicePixelRatio || 1, 1.6));
     this.renderer = r;
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0xf2dcb4, 175, 470); // pale dawn haze, pushed back so the moor reads clear
+    this.scene.fog = new THREE.Fog(0xdbe4ee, 105, 380); // cold snowy haze, pulled in so the snow hangs in the air
     this.camera = new THREE.PerspectiveCamera(52, 1, 0.5, 700);
 
     this.scene.add(this._sky());
     // a low rising sun — bright morning light
-    const sunDir = new THREE.Vector3(0.46, 0.20, -0.86).normalize();
-    const sun = new THREE.DirectionalLight(0xfff0d2, 1.5); sun.position.copy(sunDir).multiplyScalar(120); this.scene.add(sun);
-    this.scene.add(new THREE.HemisphereLight(0xdce8f4, 0x6a5e44, 0.9)); // bright morning fill
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.18));
+    const sunDir = new THREE.Vector3(0.40, 0.32, -0.86).normalize();
+    const sun = new THREE.DirectionalLight(0xeaf1f8, 0.80); sun.position.copy(sunDir).multiplyScalar(120); this.scene.add(sun); // a weak, cold winter sun
+    this.scene.add(new THREE.HemisphereLight(0xe2ecf6, 0x9aa3ac, 0.95)); // soft overcast fill, snow bouncing up off the ground
+    this.scene.add(new THREE.AmbientLight(0xeaf0f8, 0.34));
     // the rising sun: a bright core inside a warm halo, low on the horizon
     const gtex = puffTexture();
-    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: gtex, color: 0xffe6b0, transparent: true, depthWrite: false, opacity: 0.85, fog: false }));
-    halo.scale.set(115, 115, 1); halo.position.copy(sunDir).multiplyScalar(340); this.scene.add(halo);
-    const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: gtex, color: 0xfff7e2, transparent: true, depthWrite: false, opacity: 1, fog: false }));
-    core.scale.set(36, 36, 1); core.position.copy(sunDir).multiplyScalar(345); this.scene.add(core);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: gtex, color: 0xeef3f9, transparent: true, depthWrite: false, opacity: 0.38, fog: false }));
+    halo.scale.set(95, 95, 1); halo.position.copy(sunDir).multiplyScalar(340); this.scene.add(halo);
+    const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: gtex, color: 0xf7fafd, transparent: true, depthWrite: false, opacity: 0.55, fog: false }));
+    core.scale.set(24, 24, 1); core.position.copy(sunDir).multiplyScalar(345); this.scene.add(core); // a faint sun smothered behind the snow-cloud
 
     this.scene.add(this._terrain());
 
     // a tarn in a low spot
-    const water = new THREE.Mesh(new THREE.CircleGeometry(9.5, 28), new THREE.MeshLambertMaterial({ color: 0x35506a, transparent: true, opacity: 0.9 }));
-    water.rotateX(-Math.PI / 2); water.position.set(-70, 0.9, 60); this.scene.add(water);
+    const water = new THREE.Mesh(new THREE.CircleGeometry(9.5, 28), new THREE.MeshLambertMaterial({ color: 0xc6d8e6, transparent: true, opacity: 0.95 }));
+    water.rotateX(-Math.PI / 2); water.position.set(-70, 0.9, 60); this.scene.add(water); // a frozen tarn
 
     this.scene.add(this._village(38, 30));
     // scatter trees in the dale, away from the village
@@ -233,6 +252,22 @@ export class TitleFlyover {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: ptex, transparent: true, depthWrite: false, opacity: 0 }));
       s.userData.life = i / 12; this.scene.add(s); this.puffs.push(s);
     }
+
+    // the frozen Esk winding the dale
+    this.scene.add(this._river());
+
+    // falling snow: a points cloud kept around the scene centre, recycled as each flake lands
+    const SN = 1300; const sgeo = new THREE.BufferGeometry();
+    const spos = new Float32Array(SN * 3); this.snowVel = new Float32Array(SN);
+    for (let i = 0; i < SN; i++) {
+      spos[i * 3] = -170 + Math.random() * 340;
+      spos[i * 3 + 1] = Math.random() * 120;
+      spos[i * 3 + 2] = -120 + Math.random() * 300;
+      this.snowVel[i] = 5 + Math.random() * 7;
+    }
+    sgeo.setAttribute('position', new THREE.BufferAttribute(spos, 3));
+    this.snow = new THREE.Points(sgeo, new THREE.PointsMaterial({ color: 0xffffff, size: 1.0, transparent: true, opacity: 0.9, depthWrite: false, fog: true }));
+    this.scene.add(this.snow);
 
     this.built = true;
     this._resize();
@@ -276,6 +311,18 @@ export class TitleFlyover {
         s.position.y += 0.05; s.position.x += 0.03; s.position.z -= 0.02;
         const sc = 0.8 + lf * 3.0; s.scale.set(sc, sc, 1);
         s.material.opacity = Math.max(0, 0.55 * (1 - lf));
+      }
+
+      // falling snow — drift down, sway a little, recycle to the top once it lands
+      if (this.snow) {
+        const p = this.snow.geometry.attributes.position;
+        for (let i = 0; i < p.count; i++) {
+          let yy = p.getY(i) - this.snowVel[i] * 0.016;
+          let xx = p.getX(i) + Math.sin((t + i) * 0.6) * 0.05;
+          if (yy < 0) { yy = 110 + Math.random() * 12; xx = -170 + Math.random() * 340; }
+          p.setX(i, xx); p.setY(i, yy);
+        }
+        p.needsUpdate = true;
       }
 
       this.renderer.render(this.scene, this.camera);

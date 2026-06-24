@@ -142,7 +142,7 @@ export class UI {
     // ---------- title ----------
     this.titleScreen = this.el('div', 'overlay', body); this.titleScreen.id = 'title-screen';
     this.el('h1', 'title', this.titleScreen, 'MOORSTEAD');
-    this.el('div', 'subtitle', this.titleScreen, 'A reet grand voxel adventure on t&rsquo; North York Moors');
+    this.el('div', 'subtitle', this.titleScreen, 'A realistic, playable recreation of the North York Moors in 1900 &mdash; powered and built by AI');
     // "About" + "Feedback & bugs" pinned together to the top-right corner (see .title-links)
     const titleLinks = this.el('div', 'title-links', this.titleScreen);
     this.aboutBtn = this.el('a', 'about-btn', titleLinks, 'About');

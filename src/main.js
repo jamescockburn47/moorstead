@@ -400,17 +400,18 @@ class Game {
   startTitlePreview() {
     if (this.world || this.titlePreview || this.titlePreviewFailed) return;
     try {
-      this.startWorld('t-shared-moor', null, new Map()); // builds world+sky+rails+entities on the scene
+      this.startWorld(strSeed('t-moors-1900'), null, new Map()); // the real moors world as the backdrop
       this.state = 'title';        // keep the title up (startWorld switched to 'loading')
       this.ui.show('titleScreen'); // and its UI (startWorld showed the loading panel)
       this.titlePreview = true;
       this.titleT = 0;
       this.titleCamY = null;       // re-anchor the orbit height cleanly on (re)start
-      this.sky.time = 0.30;        // a touch after sunrise
-      this.sky.forceClear = true;  // a clear morning, never the live moor mizzle
+      this.sky.time = 0.40;        // a low, flat winter daylight
+      this.sky.forceClear = false; // let the snow fall (don't force a clear sky)
       const geo = this.world.gen.geo;
-      const v = geo.villages.find(x => x.name === 'Goathland') || geo.village;
-      this.player.pos = { x: v.x + 0.5, y: this.world.gen.height(v.x, v.z) + 2, z: v.z + 0.5 };
+      // open down Eskdale (the Esk valley) — Grosmont, where the line drops into the dale
+      const v = (geo.villages && (geo.villages.find(x => x.name === 'Grosmont') || geo.villages.find(x => x.name === 'Glaisdale'))) || geo.village || geo.railway()[0];
+      this.player.pos = { x: v.x + 0.5, y: this.world.gen.height(Math.floor(v.x), Math.floor(v.z)) + 2, z: v.z + 0.5 };
     } catch (e) {
       this.titlePreview = false; this.titlePreviewFailed = true;
     }
@@ -3616,11 +3617,12 @@ class Game {
         this.player.pos.x = ax; this.player.pos.y = gy + 2; this.player.pos.z = az; // centre everything on the train
         const ready = this.world.readyAround(ax, az, 1);
         for (let i = 0; i < (ready ? 2 : 6); i++) this.world.update(ax, az);
-        this.sky.time = 0.45; // a bright morning — sun well up so the moor itself is lit, not just the sky
-        // warm autumn daylight for a bright, golden scene — but snow still lies on the high caps
-        const lightSeason = seasonStateAtPhase(0.6);
-        setSnowLevel(0.7); // snow on the tops, decoupled frae the (warm) light
-        if (this._seasonBucket !== 99) { this._seasonBucket = 99; retintAtlasForSeason(lightSeason); }
+        this.sky.time = 0.40; // a low, flat winter daylight
+        // deep winter on the moor: cold light, full snow cover, and snow falling
+        const lightSeason = seasonStateAtPhase(0.875); // peak winter
+        setSnowLevel(1.0);                             // snow lying everywhere, not just the high tops
+        this.sky.stormPrecip = 1; this.sky.stormIsSnow = true; // make it snow over the scene
+        if (this._seasonBucket !== 98) { this._seasonBucket = 98; retintAtlasForSeason(lightSeason); }
         this.sky.update(dt, this.player.pos, lightSeason, false);
         if (this.rails) this.rails.update(dt, { x: ax, z: az });
         this.entities.update(dt, this.player, false, this.audio, () => {});
