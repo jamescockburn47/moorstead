@@ -36,14 +36,42 @@ export function townAnchor(name, geo) {
   return { x: v.x, y: (v.ground != null ? v.ground : geo.height(v.x, v.z)) + 1, z: v.z };
 }
 
-// deterministic small offset around the anchor, by id, so a town's folk spread out
-// (FNV-1a over the id -> a stable angle + radius). ~8 villagers ring the centre.
-function _spread(id) {
+// stable FNV-1a over the id — deterministic run-to-run (Math.imul keeps it 32-bit).
+export function idHash(id) {
   let h = 2166136261;
   for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
-  const a = (h >>> 0) / 4294967295 * Math.PI * 2;
+  return h >>> 0;
+}
+
+function _spread(id) {
+  const h = idHash(id);
+  const a = h / 4294967295 * Math.PI * 2;
   const r = 2 + ((h >>> 9) % 1000) / 1000 * 6;   // 2..8 blocks
   return { dx: Math.cos(a) * r, dz: Math.sin(a) * r };
+}
+
+export const PLATFORM_CAP = 5;     // most NPCs allowed to gather on one platform at once
+export const WAIT_LEAD = 75;       // seconds before a train is due that a ranked NPC walks to the platform
+
+// This id's rank (0 = first) among the ids waiting for the SAME (line, from). Deterministic by
+// id-hash, with the id string as a tiebreak, so the set of approachers is stable frame-to-frame.
+export function waiterRank(id, groupIds) {
+  const mine = idHash(id);
+  let r = 0;
+  for (const other of groupIds) {
+    if (other === id) continue;
+    const h = idHash(other);
+    if (h < mine || (h === mine && other < id)) r++;
+  }
+  return r;
+}
+
+// What a waiting NPC should do this frame: approach the platform only if within the cap AND the
+// train is nearly due; otherwise potter in town (keeps platforms empty until a train is coming).
+export function waitMode(due, rank) {
+  if (rank >= PLATFORM_CAP) return 'potter';
+  if (due != null && due <= WAIT_LEAD) return 'approach';
+  return 'potter';
 }
 
 // logical state -> {x,y,z, frac?}. Returns null if any referenced name can't be resolved

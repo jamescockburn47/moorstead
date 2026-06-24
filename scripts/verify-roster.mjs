@@ -3,7 +3,7 @@
 import assert from 'node:assert';
 import { Gen, MOORS_SEED } from '../src/worldgen.js';
 import { B } from '../src/defs.js';
-import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity, surfaceHeight, __resetSurfCache } from '../src/roster.js';
+import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity, surfaceHeight, __resetSurfCache, idHash, waiterRank, waitMode, PLATFORM_CAP, WAIT_LEAD } from '../src/roster.js';
 
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
 const geo = new Gen(MOORS_SEED).geo;
@@ -93,6 +93,21 @@ __resetSurfCache();
   // water is not a standing surface -> falls through to DEM
   __resetSurfCache();
   ok(surfaceHeight(stubWorld({ [`310,${geo.height(310, 310) + 1},310`]: B.WATER }), geo, 310, 310) === geo.height(310, 310) + 1, 'surfaceHeight ignores water');
+}
+
+// --- platform cap: stable per-id rank within a (line,from) wait group ------------------------
+{
+  ok(idHash('amos') === idHash('amos') && idHash('amos') !== idHash('mary'), 'idHash is stable and distinguishes ids');
+  const group = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+  const ranks = group.map(id => waiterRank(id, group));
+  ok(new Set(ranks).size === group.length, 'waiterRank gives every member a distinct rank');
+  ok(Math.min(...ranks) === 0 && Math.max(...ranks) === group.length - 1, 'ranks are 0..n-1');
+  ok(waiterRank('a', ['a']) === 0, 'a lone waiter ranks 0');
+  // waitMode: overflow potters; ranked-and-due approaches; ranked-but-early potters
+  ok(waitMode(10, PLATFORM_CAP) === 'potter', 'overflow (rank>=cap) potters in town');
+  ok(waitMode(10, 0) === 'approach', 'ranked and due-soon -> approach the platform');
+  ok(waitMode(WAIT_LEAD + 50, 0) === 'potter', 'ranked but train far off -> potter in town');
+  ok(waitMode(null, 0) === 'potter', 'no timetable answer -> potter (never crowd early)');
 }
 
 console.log(`verify-roster: ${n} assertions OK`);
