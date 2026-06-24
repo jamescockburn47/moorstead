@@ -412,12 +412,12 @@ class Game {
       const summer = { phase: 0.375, snow: 0.0, precip: 0, snowing: false, skyTime: 0.50 };
       const autumn = { phase: 0.625, snow: 0.0, precip: 0, snowing: false, skyTime: 0.46 };
       this._titleScenes = [
-        { line: 'Esk Valley', ...winter, cam: 'orbit'     }, // down Eskdale, deep winter, from above
-        { line: 'Coast Line', ...summer, cam: 'driver'    }, // driving the coast line in summer
-        { line: null,         ...autumn, cam: 'orbit'     }, // the moors line (main train) in autumn, from above
-        { line: 'Esk Valley', ...winter, cam: 'driver'    }, // driving down Eskdale in winter (driver, not passenger — smoother)
-        { line: 'Coast Line', ...summer, cam: 'orbit'     }, // the summer coast from above
-        { line: null,         ...autumn, cam: 'passenger' }, // riding the moors line as a passenger in autumn
+        { line: 'Esk Valley', ...winter, cam: 'orbit'  }, // Eskdale, deep winter, from above
+        { line: 'Coast Line', ...summer, cam: 'front'  }, // up the line on the summer coast
+        { line: null,         ...autumn, cam: 'window' }, // out the window over the autumn moor (main line)
+        { line: 'Esk Valley', ...winter, cam: 'front'  }, // up the line down wintry Eskdale
+        { line: 'Coast Line', ...summer, cam: 'window' }, // out the window along the summer coast
+        { line: null,         ...autumn, cam: 'orbit'  }, // the moors line in autumn, from above
       ];
       this._titleSceneIdx = 0;
       this._titleSceneT = 0;
@@ -3678,25 +3678,27 @@ class Game {
         if (scene.cam === 'orbit') {
           orbitCam();
         } else {
-          // ride the train, reusing the in-game ride cameras' SMOOTHED heading (camYaw) so it glides
-          // round curves — the raw spline tangent jerks on the pegged coast/esk lines. Heading is
-          // low-passed again here. driver = off the footplate over the boiler; passenger = a window seat.
+          // Ride views, anchored to the train MESH and using the train's SMOOTHED heading (camYaw),
+          // low-passed again so it glides round curves. forward = (sin sy, cos sy) is the way of
+          // travel (verified). 'front' floats well AHEAD of the engine looking up the line (engine
+          // behind, out of frame — no looking at its back); 'window' looks square out to the side.
           const tm = br ? br.train : this.train;
           const target = br ? br.camYaw : (this.train ? this.train.camYaw : null);
           const loco = tm && tm.loco && tm.loco.group;
-          if (loco && loco.parent && target != null) {
+          const carr = tm && tm.carriage && tm.carriage.group;
+          const anchor = scene.cam === 'window' ? (carr || loco) : loco;
+          if (anchor && anchor.parent && target != null) {
             if (this._titleRideYaw == null) this._titleRideYaw = target;
             else { let dY = target - this._titleRideYaw; while (dY > Math.PI) dY -= Math.PI * 2; while (dY < -Math.PI) dY += Math.PI * 2; this._titleRideYaw += dY * Math.min(1, dt * 4); }
             const sy = this._titleRideYaw, fx = Math.sin(sy), fz = Math.cos(sy);
-            const carr = tm.carriage && tm.carriage.group;
-            if (scene.cam === 'passenger' && carr) {
-              // a window seat: sit in the carriage, a touch to one side, looking up the line (the loco leads ahead)
-              this.camera.position.set(carr.position.x + fx * 0.6 - fz * 0.7, carr.position.y + 2.0, carr.position.z + fz * 0.6 + fx * 0.7);
-              this.camera.lookAt(carr.position.x + fx * 45, carr.position.y + 1.0, carr.position.z + fz * 45);
-            } else {
-              // the driver: just behind the smokebox, up on the footplate, looking up the line over the boiler
-              this.camera.position.set(loco.position.x - fx * 3.4, loco.position.y + 3.0, loco.position.z - fz * 3.4);
-              this.camera.lookAt(loco.position.x + fx * 50, loco.position.y + 0.6, loco.position.z + fz * 50);
+            const P = anchor.position;
+            if (scene.cam === 'window') {
+              const sx = -fz, sz = fx; // square to the side of travel — the country slides past
+              this.camera.position.set(P.x + sx * 3.0, P.y + 1.9, P.z + sz * 3.0);
+              this.camera.lookAt(P.x + sx * 50, P.y + 1.2, P.z + sz * 50);
+            } else { // 'front': ahead of the smokebox, looking up the line
+              this.camera.position.set(P.x + fx * 8, P.y + 2.6, P.z + fz * 8);
+              this.camera.lookAt(P.x + fx * 70, P.y + 1.0, P.z + fz * 70);
             }
             this.camera.rotation.z = 0;
           } else {
