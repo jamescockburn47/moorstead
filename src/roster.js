@@ -59,6 +59,34 @@ export function npcVoxelPos(npc, nowEff, geo) {
   return null;
 }
 
+// A plain-English account of what this NPC is doing right now — `short` for the floating marker,
+// `full` for chat. Grounded in the REAL state (where + mode + destination) so a body can ask and
+// get the truth, with the LLM's own intent quoted as the voice. `ride` is the client-side committed
+// rail journey, which overrides the brain state while she's actually aboard the visible train.
+export function npcActivity(d, ride) {
+  const st = (d && d.state) || {};
+  const intent = ((d && d.intent) || '').trim();
+  const home = (d && d.home) || st.place || '';
+  const riding = ride && ride.phase && ride.phase !== 'done';
+  let where, short;
+  if (riding) {
+    where = `on the train to ${ride.to}`;
+    short = `→ ${ride.to} (train)`;
+  } else if (st.kind === 'rail') {
+    where = `taking the ${st.line} train to ${st.toStn}`;
+    short = `→ ${st.toStn} (train)`;
+  } else if (st.kind === 'walk') {
+    where = `walking over to ${st.to}`;
+    short = `→ ${st.to}`;
+  } else {                                            // 'at'
+    const place = st.place || home || 'the village';
+    if (home && place !== home) { where = `at ${place}, away from home in ${home}`; short = `at ${place}`; }
+    else { where = `at home in ${place}, working as a ${(d && d.role) || 'villager'}`; short = intent || (d && d.role) || ''; }
+  }
+  const full = intent ? `${where} — in your own words: "${intent}"` : where;
+  return { full, short };
+}
+
 // --- naturalistic walking ----------------------------------------------------------------
 // A person can stand at (x,z): walkable surface, gentle slope, and NOT blocked by a 2-high
 // solid column (a building, a drystone wall, or a tree) — those they walk AROUND. They don't
@@ -177,17 +205,20 @@ export class RosterClient {
     for (const [, e] of this.npcs) {
       const m = e.mob; if (!m) continue;
       const grp = m.model && m.model.group;
+      // What she's up to right now — drives the floating marker AND what she says if asked (chat).
+      const act = npcActivity(e.data, e.ride);
+      m.activity = act.full; m.activityShort = act.short;
+      if (!m.village) m.village = e.data.home || (e.data.state && e.data.state.place) || null;
       // A committed rail journey overrides the brain state until she's delivered — so she actually
       // waits for, BOARDS, rides and ALIGHTS the VISIBLE train, rather than gliding the bare rails
       // alone (the brain's rail timing never lined up with the real train's schedule).
-      if (e.ride && e.ride.phase !== 'done') { this._driveRail(e, m, dt); if (e.data.intent) m.intent = e.data.intent; continue; }
+      if (e.ride && e.ride.phase !== 'done') { this._driveRail(e, m, dt); continue; }
       const s = e.data.state;
       if (s && s.kind === 'rail') {
         if (!e.ride || e.ride.line !== s.line || e.ride.from !== s.fromStn || e.ride.to !== s.toStn) {
           e.ride = { line: s.line, from: s.fromStn, to: s.toStn, phase: 'wait', t: 0 };   // begin a journey
         }
         this._driveRail(e, m, dt);
-        if (e.data.intent) m.intent = e.data.intent;
         continue;
       }
       // not travelling by rail: make sure she's shown (she may have just alighted) + clear the ride
@@ -204,7 +235,6 @@ export class RosterClient {
         const ddx = p.x - m.pos.x, ddz = p.z - m.pos.z;
         if (ddx * ddx + ddz * ddz > 0.01) m.yaw = Math.atan2(ddx, ddz);
       }
-      if (e.data.intent) m.intent = e.data.intent;         // later phase surfaces this in chat/markers
     }
   }
 

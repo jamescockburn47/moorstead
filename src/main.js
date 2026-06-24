@@ -1435,7 +1435,11 @@ class Game {
     if (!v || !text || this.ui.chatWaiting) return;
     this.ui.chatInput.value = '';
     v.chatLog.push({ who: 'you', text });
-    if (!v.charId) {
+    // Procedural roster folk (ids like "pop-whitby-0") aren't registered chat personas — they would
+    // 404 on /api/talk — so route them, like unregistered villagers, through the brain's generic
+    // passer-by voice. Curated/persona NPCs (other ids) keep the registered path with memory + trust.
+    const usePersona = v.charId && !(typeof v.charId === 'string' && v.charId.startsWith('pop-'));
+    if (!usePersona) {
       if (v.onTrain && v.cannedReplies && v.cannedReplies.length) {
         v.chatLog.push({ who: 'them', text: v.cannedReplies[(Math.random() * v.cannedReplies.length) | 0] });
         this.ui.renderChatLog();

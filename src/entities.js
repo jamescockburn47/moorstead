@@ -494,22 +494,32 @@ function villagerLook(name) {
   return { scale: 1.0, jumper: 0x6a5a40, skirt: 0x4a4438, hair: 0x4a3a28, cap: 0x3a342e };
 }
 
-// Floating nameplate so tha can tell who's who from across t' green.
-function makeNameplate(text) {
+// Floating nameplate so tha can tell who's who from across t' green. `sub` (optional) adds a
+// second, smaller line beneath the name — used to show a roster NPC what it's currently up to.
+function makeNameplate(text, sub) {
   const c = document.createElement('canvas');
-  c.width = 256; c.height = 64;
+  c.width = 256; c.height = sub ? 96 : 64;
   const x = c.getContext('2d');
-  x.font = 'bold 30px "Segoe UI", sans-serif';
   x.textAlign = 'center'; x.textBaseline = 'middle';
+  const nameY = sub ? 26 : 32;
+  x.font = 'bold 30px "Segoe UI", sans-serif';
   x.strokeStyle = 'rgba(0,0,0,0.85)'; x.lineWidth = 6;
-  x.strokeText(text, 128, 32);
+  x.strokeText(text, 128, nameY);
   x.fillStyle = '#ffe9b0';
-  x.fillText(text, 128, 32);
+  x.fillText(text, 128, nameY);
+  if (sub) {
+    const s = sub.length > 30 ? sub.slice(0, 29) + '…' : sub;
+    x.font = '20px "Segoe UI", sans-serif';
+    x.strokeStyle = 'rgba(0,0,0,0.85)'; x.lineWidth = 5;
+    x.strokeText(s, 128, 66);
+    x.fillStyle = '#cfe8ff';                       // soft blue, so the activity reads as separate from the name
+    x.fillText(s, 128, 66);
+  }
   const tex = new THREE.CanvasTexture(c);
   const spr = new THREE.Sprite(new THREE.SpriteMaterial({
     map: tex, transparent: true, depthTest: false, opacity: 0,
   }));
-  spr.scale.set(1.9, 0.48, 1);
+  spr.scale.set(1.9, sub ? 0.72 : 0.48, 1);
   spr.renderOrder = 50;
   return spr;
 }
@@ -2160,6 +2170,24 @@ export class Entities {
       mob.model.legs.forEach((l, i) => { l.rotation.x = (i % 2 === 0 ? swing : -swing); });
       mob.model.group.position.set(mob.pos.x, mob.pos.y, mob.pos.z);
       mob.model.group.rotation.y = mob.yaw;
+      // Activity marker: rebuild the plate as "Name / <activity>" when the activity changes — only
+      // on state changes (a handful of times per trip), never per-frame. The proximity fade below
+      // keeps it from cluttering the whole moor; you read it by getting near a body.
+      if (mob.activityShort !== mob._plateAct) {
+        mob._plateAct = mob.activityShort;
+        const opacity = mob.plate ? mob.plate.material.opacity : 0;
+        const py = mob.plate ? mob.plate.position.y : (Math.max(0.9, 1.65) + 0.55);
+        if (mob.plate) {
+          mob.model.group.remove(mob.plate);
+          if (mob.plate.material.map) mob.plate.material.map.dispose();
+          mob.plate.material.dispose();
+        }
+        const np = makeNameplate(mob.displayName, mob.activityShort || null);
+        np.position.y = py;
+        np.material.opacity = opacity;          // keep the current fade so it doesn't flash on change
+        mob.model.group.add(np);
+        mob.plate = np;
+      }
       const tgt = (distP < 30 && !mob.chatting) ? 1 : 0;
       mob.plate.material.opacity += (tgt - mob.plate.material.opacity) * Math.min(1, dt * 8);
       if (mob.bubble) {

@@ -3,7 +3,7 @@
 import assert from 'node:assert';
 import { Gen, MOORS_SEED } from '../src/worldgen.js';
 import { B } from '../src/defs.js';
-import { npcVoxelPos, townAnchor, steerWalk, walkableStep } from '../src/roster.js';
+import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity } from '../src/roster.js';
 
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
 const geo = new Gen(MOORS_SEED).geo;
@@ -55,5 +55,29 @@ const solidWorld = { getBlock: (x, y, z) => (y > gAt(x, z) ? B.COBBLE : B.GRASS)
 const fg = gAt(startA.x, startA.z);
 ok(!walkableStep(solidWorld, geo, startA.x + 4, startA.z, fg), 'walkableStep rejects a 2-high solid (no walking through buildings/trees)');
 ok(walkableStep(openWorld, geo, startA.x + 4, startA.z, fg), 'walkableStep accepts open walkable ground');
+
+// --- npcActivity: a truthful account of what an NPC is doing (marker `short` + chat `full`) ---
+const homeAct = npcActivity({ role: 'herbwife', home: 'Lealholm', intent: 'drying my herbs',
+  state: { kind: 'at', place: 'Lealholm' } });
+ok(homeAct.full.includes('at home in Lealholm') && homeAct.full.includes('herbwife'), 'activity: at-home names town + trade');
+ok(homeAct.full.includes('drying my herbs'), 'activity: full quotes the NPC intent');
+ok(homeAct.short === 'drying my herbs', 'activity: at-home short shows the intent');
+
+const awayAct = npcActivity({ role: 'fishwife', home: 'Whitby', intent: 'selling the catch',
+  state: { kind: 'at', place: 'Pickering' } });
+ok(awayAct.full.includes('away from home in Whitby') && awayAct.full.includes('Pickering'), 'activity: away names where + home');
+ok(awayAct.short === 'at Pickering', 'activity: away short shows the place');
+
+const walkAct = npcActivity({ home: 'Whitby', state: { kind: 'walk', from: 'Whitby', to: 'Sleights' } });
+ok(walkAct.full.includes('walking over to Sleights') && walkAct.short === '→ Sleights', 'activity: walk names the destination');
+
+const railAct = npcActivity({ home: 'Grosmont', intent: 'off to market',
+  state: { kind: 'rail', line: 'Whitby & Pickering', fromStn: 'Grosmont', toStn: 'Pickering' } });
+ok(railAct.full.includes('train to Pickering') && railAct.short === '→ Pickering (train)', 'activity: rail names the line destination');
+
+// a committed client-side ride OVERRIDES the brain state (she's actually aboard the visible train)
+const rideAct = npcActivity({ home: 'Grosmont', state: { kind: 'at', place: 'Grosmont' } },
+  { phase: 'aboard', to: 'Whitby' });
+ok(rideAct.short === '→ Whitby (train)' && rideAct.full.includes('on the train to Whitby'), 'activity: a committed ride overrides the brain state');
 
 console.log(`verify-roster: ${n} assertions OK`);

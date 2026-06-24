@@ -1432,6 +1432,12 @@ export class Quests {
     parts.push(`Village reputation note: the visitor is currently "${STANDINGS[sIdx]}" in the village.` +
       (this.shame > 0 ? ' You have also heard they have caused damage or trouble around the village lately; you are noticeably cooler with them until they make amends, and you may mention what you heard.' : ''));
 
+    // What THIS NPC is doing right now (from the roster sim) — so if the visitor asks, they answer
+    // truthfully about their own day or errand instead of improvising something that isn't true.
+    if (villager.activity) {
+      parts.push(`Right now you are ${villager.activity} If the visitor asks what you are doing, where you are headed, or why, answer truthfully and in character from this; otherwise just let it colour your manner.`);
+    }
+
     // a nosey glance at what the visitor's been up to (inventory, stock, progress)
     // — only on a fresh approach, so they notice it as a greeting, not on every turn
     const fresh = !villager.chatLog || villager.chatLog.filter(m => m.who !== 'sys').length <= 1;
