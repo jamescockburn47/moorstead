@@ -176,12 +176,28 @@ export class RosterClient {
     const nowEff = this._nowEff();
     for (const [, e] of this.npcs) {
       const m = e.mob; if (!m) continue;
+      const grp = m.model && m.model.group;
+      // A committed rail journey overrides the brain state until she's delivered — so she actually
+      // waits for, BOARDS, rides and ALIGHTS the VISIBLE train, rather than gliding the bare rails
+      // alone (the brain's rail timing never lined up with the real train's schedule).
+      if (e.ride && e.ride.phase !== 'done') { this._driveRail(e, m, dt); if (e.data.intent) m.intent = e.data.intent; continue; }
       const s = e.data.state;
+      if (s && s.kind === 'rail') {
+        if (!e.ride || e.ride.line !== s.line || e.ride.from !== s.fromStn || e.ride.to !== s.toStn) {
+          e.ride = { line: s.line, from: s.fromStn, to: s.toStn, phase: 'wait', t: 0 };   // begin a journey
+        }
+        this._driveRail(e, m, dt);
+        if (e.data.intent) m.intent = e.data.intent;
+        continue;
+      }
+      // not travelling by rail: make sure she's shown (she may have just alighted) + clear the ride
+      if (grp && !grp.visible) grp.visible = true;
+      e.ride = null;
       if (s && s.kind === 'walk') {
         const from = townAnchor(s.from, this.geo), to = townAnchor(s.to, this.geo);
         if (from && to) steerWalk(m, from, to, s.started, s.eta, nowEff, this.world, this.geo, dt);
       } else {
-        const p = npcVoxelPos(e.data, nowEff, this.geo);   // 'at' anchor / 'rail' on the line
+        const p = npcVoxelPos(e.data, nowEff, this.geo);   // 'at' anchor
         if (!p) continue;
         const k = Math.min(1, dt * 6);                     // lerp idiom (as multiplayer remotes)
         m.pos.x += (p.x - m.pos.x) * k; m.pos.y += (p.y - m.pos.y) * k; m.pos.z += (p.z - m.pos.z) * k;
@@ -190,5 +206,49 @@ export class RosterClient {
       }
       if (e.data.intent) m.intent = e.data.intent;         // later phase surfaces this in chat/markers
     }
+  }
+
+  // The visible scheduled train on a line, or null: { x, z, station (the stop she's calling at while
+  // dwelling, else null), dwelling }. Reads the game's live train state (main line + branch trains).
+  _visibleTrain(lineName) {
+    const g = this.game, geo = this.geo;
+    const mainName = (geo.railPaths().find(l => l.path === geo.railPath()) || {}).name;
+    if (lineName === mainName) {
+      const ts = g.trainState; if (!ts || !ts.s) return null;
+      const st = geo.railway()[ts.s.i];
+      return { x: ts.x, z: ts.z, station: (ts.s.mode === 'dwell' && st) ? st.name : null, dwelling: ts.s.mode === 'dwell' };
+    }
+    const bt = (g.branchTrains || []).find(b => b.name === lineName);
+    if (!bt || !bt.state || !bt.state.s) return null;
+    const st = bt.stations[bt.state.s.i];
+    return { x: bt.state.x, z: bt.state.z, station: (bt.state.s.mode === 'dwell' && st) ? st.name : null, dwelling: bt.state.s.mode === 'dwell' };
+  }
+
+  // Drive a committed rail journey (e.ride) against the visible train: wait on the origin platform;
+  // board (vanish into the carriage) when the train dwells there; ride hidden, carried with the
+  // train; alight (reappear) at the destination when the train dwells there. A timeout stops her
+  // waiting forever if the two schedules never line up.
+  _driveRail(e, m, dt) {
+    const ride = e.ride;
+    ride.t += dt;
+    const vt = this._visibleTrain(ride.line);
+    if (vt && vt.dwelling) {
+      if (ride.phase === 'wait' && vt.station === ride.from) ride.phase = 'aboard';
+      else if (ride.phase === 'aboard' && vt.station === ride.to) ride.phase = 'done';
+    }
+    if (ride.t > 240) ride.phase = 'done';                  // never wait forever — give up if no train comes
+    const grp = m.model && m.model.group;
+    if (ride.phase === 'aboard') {
+      if (grp && grp.visible) grp.visible = false;          // she's inside the carriage now
+      if (vt) { m.pos.x = vt.x; m.pos.z = vt.z; m.pos.y = this.geo.height(Math.round(vt.x), Math.round(vt.z)) + 2; } // carried with the train (hidden)
+      return;
+    }
+    if (grp && !grp.visible) grp.visible = true;
+    const stn = ride.phase === 'done' ? ride.to : ride.from; // alighted at the destination, or waiting at the origin
+    const a = townAnchor(stn, this.geo); if (!a) return;
+    const sp = _spread(e.data.id);
+    const tx = a.x + sp.dx, tz = a.z + sp.dz, ty = this.geo.height(Math.round(tx), Math.round(tz)) + 1;
+    const k = Math.min(1, dt * 6);
+    m.pos.x += (tx - m.pos.x) * k; m.pos.y += (ty - m.pos.y) * k; m.pos.z += (tz - m.pos.z) * k;
   }
 }
