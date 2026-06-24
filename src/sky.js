@@ -26,6 +26,7 @@ const SKY = {
 export class Sky {
   constructor(scene, camera) {
     this.scene = scene;
+    this.camera = camera;  // anchor precipitation to the viewer so snow fills the frame in any view (incl. the aerial title orbit)
     this.time = 0.3; // start mid-morning
     this.day = 1;
     this.weather = 'misty';
@@ -152,14 +153,14 @@ export class Sky {
     scene.add(this.rain);
 
     // snow (winter) — softer, slower, drifting; mirrors the rain rig
-    this.snowCount = 1100;
+    this.snowCount = 2400;
     this.snowAmount = 0;
     const sg = new THREE.BufferGeometry();
     const sp = new Float32Array(this.snowCount * 3);
     for (let i = 0; i < this.snowCount; i++) {
-      sp[i * 3] = (Math.random() - 0.5) * 40;
-      sp[i * 3 + 1] = Math.random() * 24;
-      sp[i * 3 + 2] = (Math.random() - 0.5) * 40;
+      sp[i * 3] = (Math.random() - 0.5) * 80;
+      sp[i * 3 + 1] = Math.random() * 48 - 28;     // -28..+20: a tall column centred on the viewer
+      sp[i * 3 + 2] = (Math.random() - 0.5) * 80;
     }
     sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
     const snowC = document.createElement('canvas'); snowC.width = snowC.height = 8;
@@ -354,22 +355,26 @@ export class Sky {
         p.array[i * 3 + 1] = y;
       }
       p.needsUpdate = true;
-      this.rain.position.set(playerPos.x, playerPos.y - 8, playerPos.z);
+      const va = this.camera ? this.camera.position : playerPos;
+      this.rain.position.set(va.x, va.y - 8, va.z);
     }
 
     // winter snow: falls slow, drifts on the wind, no rain alongside
     this.snowAmount += ((covered ? 0 : snowFall) - this.snowAmount) * Math.min(1, dt * 0.5);
     this.snow.material.opacity = this.snowAmount * 0.85;
     if (this.snowAmount > 0.02) {
+      const va = this.camera ? this.camera.position : playerPos;
       const p = this.snow.geometry.attributes.position;
       for (let i = 0; i < this.snowCount; i++) {
         let y = p.array[i * 3 + 1] - dt * 6.5;
         p.array[i * 3] += Math.sin((this.cloudT + i) * 0.7) * dt * 0.6;
-        if (y < 0) { y = 18 + Math.random() * 6; p.array[i * 3] = (Math.random() - 0.5) * 40; p.array[i * 3 + 2] = (Math.random() - 0.5) * 40; }
+        // a tall column centred on the viewer: recycle from below the view back up above it, so
+        // flakes fall through the WHOLE frame (sky → ground), incl. the aerial title orbit
+        if (y < -28) { y = 20 + Math.random() * 8; p.array[i * 3] = (Math.random() - 0.5) * 80; p.array[i * 3 + 2] = (Math.random() - 0.5) * 80; }
         p.array[i * 3 + 1] = y;
       }
       p.needsUpdate = true;
-      this.snow.position.set(playerPos.x, playerPos.y - 8, playerPos.z);
+      this.snow.position.set(va.x, va.y, va.z);
     }
 
     return msg;
