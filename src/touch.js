@@ -95,7 +95,8 @@ export class TouchControls {
   _destroy() {
     this.active = false;
     document.documentElement.classList.remove('touch');
-    if (this.root) { this.root.remove(); this.root = null; }
+    if (this._hbEl && this._hbTap) { this._hbEl.removeEventListener('touchstart', this._hbTap); this._hbEl = null; this._hbTap = null; }
+    if (this.root) { this.root.remove(); this.root = null; }   // root's own children (buttons/zones/pills/more) detach with it
     this.zones = {}; this.btns = {};
     this.game.clearKeys?.();   // don't leave any synthesised key stuck
   }
@@ -206,11 +207,15 @@ export class TouchControls {
     // hotbar slot taps. #hotbar holds `.slot` divs, but ui.js rebuilds them via innerHTML each
     // render — so DELEGATE one listener on the container and derive the index from the touched child.
     const hb = document.getElementById('hotbar');
-    if (hb) hb.addEventListener('touchstart', e => {
-      const slot = e.target.closest('.slot'); if (!slot) return;
-      const i = Array.prototype.indexOf.call(hb.children, slot);
-      if (i >= 0) { e.preventDefault(); g.player.hotbar = i; g.ui.invDirty = true; }
-    }, { passive: false });
+    if (hb) {
+      this._hbEl = hb;        // #hotbar lives OUTSIDE the touch root, so _destroy must detach this by hand
+      this._hbTap = e => {
+        const slot = e.target.closest('.slot'); if (!slot) return;
+        const i = Array.prototype.indexOf.call(hb.children, slot);
+        if (i >= 0) { e.preventDefault(); g.player.hotbar = i; g.ui.invDirty = true; }
+      };
+      hb.addEventListener('touchstart', this._hbTap, { passive: false });
+    }
   }
 
   _toggleMore() { if (this._more) this._more.classList.toggle('open'); }
