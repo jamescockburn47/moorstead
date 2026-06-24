@@ -277,21 +277,25 @@ export class RosterClient {
   }
   _teardown() { for (const [, e] of this.npcs) this._remove(e); this.npcs.clear(); }
 
-  // called each frame: drive each streamed mob. 'walk' uses naturalistic steering (skirts
-  // buildings / walls / trees); 'at' + 'rail' track the authoritative point directly.
   update(dt) {
     if (!this.active) return;
     const nowEff = this._nowEff();
+    // group the folk waiting for each (line|from) so the platform stays capped at PLATFORM_CAP.
+    const rankMap = new Map();
+    for (const [, e] of this.npcs) {
+      if (e.ride && e.ride.phase === 'wait') {
+        const key = e.ride.line + '|' + e.ride.from;
+        let g = rankMap.get(key); if (!g) { g = []; rankMap.set(key, g); }
+        g.push(e.data.id);
+      }
+    }
     for (const [, e] of this.npcs) {
       const m = e.mob; if (!m) continue;
       const grp = m.model && m.model.group;
-      // What she's up to right now — drives the floating marker AND what she says if asked (chat).
       const act = npcActivity(e.data, e.ride);
       m.activity = act.full; m.activityShort = act.short;
       if (!m.village) m.village = e.data.home || (e.data.state && e.data.state.place) || null;
-      // Hailed: while a player has her in conversation, turn to face them and hold. She addresses
-      // you when spoken to, but never breaks off to greet you unprompted — so folk get on with their
-      // work and don't crowd you. Her errand (ride timer included) resumes when the chat closes.
+      // Hailed: face the player and hold; her errand (ride timer included) resumes when chat closes.
       if (m.chatting) {
         const pl = this.game.player;
         if (pl && pl.pos) {
@@ -300,48 +304,22 @@ export class RosterClient {
         }
         continue;
       }
-      // A committed rail journey overrides the brain state until she's delivered. The brain's rail
-      // leg finishes faster than the slow visible train reaches her exact stop, so when the brain
-      // says the leg is done, ALIGHT at the destination (else 'done' rarely fired and folk rode on
-      // forever, never getting off).
-      if (e.ride && e.ride.phase !== 'done' && !e.ride.titleForced) {
-        const brainRail = e.data.state && e.data.state.kind === 'rail';
-        if (!brainRail) { if (e.ride.phase === 'aboard') e.ride.phase = 'done'; else e.ride = null; }
-      }
-      if (e.ride && e.ride.phase !== 'done') { this._driveRail(e, m, dt); continue; }
+      // A committed ride OWNS her until it completes or times out — the brain's faster logical
+      // arrival does NOT cut it short (that was the old teleport). _driveRail clears e.ride itself.
+      if (e.ride) { this._driveRail(e, m, dt, rankMap); continue; }
       const s = e.data.state;
-      if (s && s.kind === 'rail') {
-        if (!e.ride || e.ride.line !== s.line || e.ride.from !== s.fromStn || e.ride.to !== s.toStn) {
-          e.ride = { line: s.line, from: s.fromStn, to: s.toStn, phase: 'wait', t: 0 };   // begin a journey
-        }
-        this._driveRail(e, m, dt);
+      if (s && s.kind === 'rail') {                         // commit a NEW ride (only when ride-less)
+        e.ride = { line: s.line, from: s.fromStn, to: s.toStn, phase: 'wait', t: 0 };
+        this._driveRail(e, m, dt, rankMap);
         continue;
       }
-      // not travelling by rail: make sure she's shown (she may have just alighted) + clear the ride
       if (grp && !grp.visible) grp.visible = true;
-      e.ride = null;
       if (s && s.kind === 'walk') {
         const from = townAnchor(s.from, this.geo), to = townAnchor(s.to, this.geo);
         if (from && to) steerWalk(m, from, to, s.started, s.eta, nowEff, this.world, this.geo, dt);
-      } else {
-        // 'at': potter gently about her patch so the town looks alive, not frozen — a slow wander
-        // around her anchor (+ per-id spread), re-aimed every few seconds within a small radius.
-        const p = npcVoxelPos(e.data, nowEff, this.geo);   // 'at' anchor + per-id spread
-        if (!p) continue;
-        if (m._ambleT == null || nowEff > m._ambleT) {
-          m._ambleT = nowEff + 5 + Math.random() * 8;      // re-aim every 5–13s (a few steps, then a pause)
-          const r = Math.random() * 2.2, ang = Math.random() * Math.PI * 2;
-          const cx = p.x + Math.cos(ang) * r, cz = p.z + Math.sin(ang) * r;
-          const fromG = this.geo.height(Math.round(p.x), Math.round(p.z));
-          if (walkableStep(this.world, this.geo, cx, cz, fromG)) { m._ambleDX = Math.cos(ang) * r; m._ambleDZ = Math.sin(ang) * r; }
-          else { m._ambleDX = 0; m._ambleDZ = 0; } // wall / tree / water / steep — don't amble into it
-        }
-        const tx = p.x + (m._ambleDX || 0), tz = p.z + (m._ambleDZ || 0);
-        const k = Math.min(1, dt * 1.6);                   // amble slowly so the leg-swing reads as walking, not gliding
-        m.pos.x += (tx - m.pos.x) * k; m.pos.z += (tz - m.pos.z) * k;
-        m.pos.y += (this.geo.height(Math.round(m.pos.x), Math.round(m.pos.z)) + 1 - m.pos.y) * k;
-        const ddx = tx - m.pos.x, ddz = tz - m.pos.z;
-        if (ddx * ddx + ddz * ddz > 0.02) m.yaw = Math.atan2(ddx, ddz);
+      } else {                                              // 'at': potter about her patch
+        const p = npcVoxelPos(e.data, nowEff, this.geo);
+        if (p) this._potterAt(m, p, nowEff, dt);
       }
     }
   }
