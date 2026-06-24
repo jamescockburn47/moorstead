@@ -214,4 +214,45 @@ export class TouchControls {
   }
 
   _toggleMore() { if (this._more) this._more.classList.toggle('open'); }
+
+  _buildContext() {
+    const g = this.game;
+    const pill = (name, label, fn) => {
+      const p = document.createElement('button');
+      p.className = 'touch-pill'; p.dataset.touch = name; p.hidden = true; p.innerHTML = label;
+      p.addEventListener('touchstart', e => { e.preventDefault(); fn(); }, { passive: false });
+      this.root.appendChild(p); this.btns[name] = p; return p;
+    };
+    // Only talk + mount are pills — they have cheap predicates (villagerInView / boat||mount).
+    // Board + Sleep self-gate in their handlers (keyboard Q/N work anywhere), so they live in More.
+    pill('talk', '<i class="ti ti-message"></i> Talk', () => { const v = g.villagerInView(); if (v) g.openChat(v); });
+    pill('mount', 'Leave', () => { if (g.boat) g.leaveBoat(); else if (g.mount) g.dismountPony(); });
+    // state clusters (riding / driving): shown by setState
+    const cluster = (name, items) => {
+      const c = document.createElement('div'); c.className = 'touch-cluster'; c.dataset.touch = name; c.hidden = true;
+      for (const [label, fn] of items) { const b = document.createElement('button'); b.className = 'touch-btn'; b.innerHTML = label; b.addEventListener('touchstart', e => { e.preventDefault(); fn(); }, { passive: false }); c.appendChild(b); }
+      this.root.appendChild(c); this.btns[name] = c; return c;
+    };
+    cluster('ride', [['Seat', () => g.setRideView('seat')], ['Driver', () => g.setRideView('driver')], ['Top', () => g.setRideView('overhead')], ['Leave', () => g.wardenLeaveTrain?.()]]);
+    cluster('drive', [['Reverser', () => { if (g.drive) g.drive.reverser *= -1; }], ['Coal', () => g.shovelCoal()], ['Leave', () => g.leaveDrive()]]);
+  }
+
+  // Show the right control set for the current state; called from tick().
+  setState(state) {
+    if (this._state === state) return;
+    this._state = state;
+    const playing = state === 'playing';
+    for (const n of ['jump', 'crouch', 'mine', 'place']) if (this.btns[n]) this.btns[n].hidden = !playing;
+    if (this.zones.move) this.zones.move.hidden = !playing;
+    if (this.btns.ride) this.btns.ride.hidden = state !== 'riding';
+    if (this.btns.drive) this.btns.drive.hidden = state !== 'driving';
+  }
+
+  // Contextual pills that depend on the world (cheap checks; called each tick).
+  refreshContext() {
+    if (this._state !== 'playing') { for (const n of ['talk', 'mount']) if (this.btns[n]) this.btns[n].hidden = true; return; }
+    const g = this.game;
+    if (this.btns.talk) this.btns.talk.hidden = !g.villagerInView();
+    if (this.btns.mount) this.btns.mount.hidden = !(g.boat || g.mount);
+  }
 }
