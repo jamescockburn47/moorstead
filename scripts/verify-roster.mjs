@@ -42,7 +42,7 @@ const noId = npcVoxelPos({ state: { kind: 'at', place: 'Whitby' } }, 0, geo);
 ok(noId.x === anchorWh.x && noId.z === anchorWh.z, 'no-id at-state maps exactly to the anchor (back-compat)');
 
 // --- naturalistic walking: skirts obstacles, makes progress on open ground ---
-const openWorld = { getBlock: () => B.AIR };                         // nothing in the way
+const openWorld = { getBlock: () => B.AIR, chunkAt: () => ({}) };    // loaded, nothing in the way
 const startA = townAnchor('Whitby', geo), goalB = townAnchor('Sleights', geo);
 const mob = { pos: { x: startA.x, y: startA.y, z: startA.z }, yaw: 0 };
 const d0 = Math.hypot(goalB.x - mob.pos.x, goalB.z - mob.pos.z);
@@ -51,7 +51,7 @@ ok(Math.hypot(goalB.x - mob.pos.x, goalB.z - mob.pos.z) < d0 - 5, 'steerWalk mak
 
 // a 2-high solid column (building / wall / tree) is NOT standable; open ground IS
 const gAt = (x, z) => geo.height(Math.round(x), Math.round(z));
-const solidWorld = { getBlock: (x, y, z) => (y > gAt(x, z) ? B.COBBLE : B.GRASS) };
+const solidWorld = { getBlock: (x, y, z) => (y > gAt(x, z) ? B.COBBLE : B.GRASS), chunkAt: () => ({}) };
 const fg = gAt(startA.x, startA.z);
 ok(!walkableStep(solidWorld, geo, startA.x + 4, startA.z, fg), 'walkableStep rejects a 2-high solid (no walking through buildings/trees)');
 ok(walkableStep(openWorld, geo, startA.x + 4, startA.z, fg), 'walkableStep accepts open walkable ground');
@@ -86,18 +86,28 @@ const waitAct = npcActivity({ home: 'Grosmont', state: { kind: 'at', place: 'Gro
 ok(waitAct.short === '→ Whitby (train)' && waitAct.full.includes('waiting for the train to Whitby'), 'activity: a waiting rider is waiting for the train, not aboard it');
 
 // --- surfaceHeight: stand ON the top built block, fall back to DEM when unloaded -------------
-const stubWorld = (blocks) => ({ getBlock: (x, y, z) => (blocks[`${x},${y},${z}`] ?? B.AIR) });
+// stub world: getBlock from a sparse map; chunkAt reports the chunk loaded (default) or not.
+const stubWorld = (blocks, loaded = true) => ({ getBlock: (x, y, z) => (blocks[`${x},${y},${z}`] ?? B.AIR), chunkAt: () => (loaded ? {} : null) });
 __resetSurfCache();
 {
   const g0 = geo.height(300, 300);                 // a real column's DEM height
   // a plank deck two blocks above the DEM, with air above it
   const w = stubWorld({ [`300,${g0 + 2},300`]: B.PLANKS });
   ok(surfaceHeight(w, geo, 300, 300) === g0 + 3, 'surfaceHeight stands on the built deck (DEM+2 block -> +3)');
-  // empty column (chunk effectively unloaded) -> DEM + 1
-  ok(surfaceHeight(stubWorld({}), geo, 305, 305) === geo.height(305, 305) + 1, 'surfaceHeight falls back to DEM+1 when no blocks');
+  // empty column (chunk loaded, all air) -> DEM + 1
+  ok(surfaceHeight(stubWorld({}), geo, 305, 305) === geo.height(305, 305) + 1, 'surfaceHeight falls back to DEM+1 when the loaded column is all air');
   // water is not a standing surface -> falls through to DEM
   __resetSurfCache();
   ok(surfaceHeight(stubWorld({ [`310,${geo.height(310, 310) + 1},310`]: B.WATER }), geo, 310, 310) === geo.height(310, 310) + 1, 'surfaceHeight ignores water');
+  // UNLOADED chunk: world.getBlock returns B.STONE for the whole column (so nowt falls through) —
+  // surfaceHeight must NOT read that as a surface; it grounds on the DEM. (regression: floated NPCs +6)
+  __resetSurfCache();
+  const solidUnloaded = { getBlock: () => B.STONE, chunkAt: () => null };
+  ok(surfaceHeight(solidUnloaded, geo, 321, 321) === geo.height(321, 321) + 1, 'surfaceHeight DEM-grounds an UNLOADED solid column, not the scan top');
+  // and a loaded column with that same deck DOES stand on it (proves the gate is chunk-loaded, not block-value)
+  __resetSurfCache();
+  const gd = geo.height(322, 322);
+  ok(surfaceHeight(stubWorld({ [`322,${gd + 1},322`]: B.STONE }, true), geo, 322, 322) === gd + 2, 'surfaceHeight stands on a loaded deck block');
 }
 
 // --- platform cap: stable per-id rank within a (line,from) wait group ------------------------

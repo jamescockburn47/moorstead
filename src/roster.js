@@ -1,7 +1,7 @@
 // Phase B.1 — render the brain's living roster. The brain owns logical state; this file
 // owns ALL geometry: it maps {at|walk|rail} to a voxel position the client can draw.
 import { rosterState } from './npc.js';
-import { B } from './defs.js';
+import { B, CHUNK } from './defs.js';
 
 const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
 
@@ -14,10 +14,15 @@ const _surfCache = new Map();
 export function __resetSurfCache() { _surfCache.clear(); }   // test hook: stub worlds reuse columns
 export function surfaceHeight(world, geo, x, z) {
   const rx = Math.round(x), rz = Math.round(z);
+  const dem = geo.height(rx, rz);
+  // Only trust the voxel column when its chunk is LOADED. An ungenerated chunk returns B.STONE for
+  // every block (world.js getBlock — so nowt falls through the world), which would otherwise read as
+  // a surface at the top of the scan and float a body ~6 blocks up. Unloaded -> ground on the DEM,
+  // uncached (the chunk may load later with a real, possibly built, surface).
+  if (!world.chunkAt(Math.floor(rx / CHUNK), Math.floor(rz / CHUNK))) return dem + 1;
   const key = rx + ',' + rz;
   const c = _surfCache.get(key);
   if (c !== undefined) return c;
-  const dem = geo.height(rx, rz);
   let top = null;
   for (let y = dem + 6; y >= dem - 8 && y > 0; y--) {        // built things sit at/above the DEM
     const b = world.getBlock(rx, y, rz);
