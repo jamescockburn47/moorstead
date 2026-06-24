@@ -310,6 +310,7 @@ class Game {
     if (this.world) this.teardownWorld();
     this.titlePreview = false; // a real world supersedes the title backdrop
     this.renderer.domElement.style.opacity = '1'; // clear any mid-flight title cross-fade
+    this.ride = null; // drop any title ride-camera state
     this.moorsPreview = false; // cleared for normal worlds; set by startMoorsWorld()
     this.seed = seed;
     this.world = new World(this.scene, seed, chunks);
@@ -3641,6 +3642,9 @@ class Game {
           this._titleRevealT = null;  // the new region must stream before we fade it back in
           this.titleCamY = null;      // re-anchor the orbit height onto the new line's train
           this._titleRideYaw = null;  // re-anchor the ride-view heading onto the new line
+          this.rideSmoothYaw = undefined; this.rideYawSet = false; // re-seed the in-game ride camera for the new line
+          const ns = this._titleScenes[this._titleSceneIdx];
+          this.sky.snowAmount = ns.snowing ? 1 : 0;  // SNAP the falling snow so winter doesn't bleed into a summer scene
         }
         const scene = this._titleScenes[this._titleSceneIdx];
         // follow THIS scene's train: a named branch (Esk Valley / Coast Line), else the main line (the moors)
@@ -3675,35 +3679,32 @@ class Game {
           this.camera.lookAt(ax, gy + 4, az);
           this.camera.rotation.z += Math.sin(a) * 0.04;
         };
-        if (scene.cam === 'orbit') {
-          orbitCam();
-        } else {
-          // Ride views, anchored to the train MESH and using the train's SMOOTHED heading (camYaw),
-          // low-passed again so it glides round curves. forward = (sin sy, cos sy) is the way of
-          // travel (verified). 'front' floats well AHEAD of the engine looking up the line (engine
-          // behind, out of frame — no looking at its back); 'window' looks square out to the side.
-          const tm = br ? br.train : this.train;
+        const tm = br ? br.train : this.train;
+        const carr = tm && tm.carriage && tm.carriage.group;
+        const meshReady = carr && carr.parent;
+        if (scene.cam === 'front' && meshReady) {
+          // THE in-game driver camera (the one players choose riding a train) — it follows the loco
+          // properly. updateRide sets player.pos/yaw/pitch; we then drive the camera off the player
+          // exactly as the playing/riding states do.
+          this.ride = { bt: br || null };
+          this.rideView = 'driver';
+          this.updateRide(dt);
+          this.camera.position.set(this.player.pos.x, this.player.pos.y + this.player.eye, this.player.pos.z);
+          this.camera.rotation.set(this.player.pitch, this.player.yaw, 0);
+        } else if (scene.cam === 'window' && meshReady) {
+          // look SQUARE out of the side at the passing country, riding the carriage. Smoothed heading.
           const target = br ? br.camYaw : (this.train ? this.train.camYaw : null);
-          const loco = tm && tm.loco && tm.loco.group;
-          const carr = tm && tm.carriage && tm.carriage.group;
-          const anchor = scene.cam === 'window' ? (carr || loco) : loco;
-          if (anchor && anchor.parent && target != null) {
+          if (target != null) {
             if (this._titleRideYaw == null) this._titleRideYaw = target;
             else { let dY = target - this._titleRideYaw; while (dY > Math.PI) dY -= Math.PI * 2; while (dY < -Math.PI) dY += Math.PI * 2; this._titleRideYaw += dY * Math.min(1, dt * 4); }
-            const sy = this._titleRideYaw, fx = Math.sin(sy), fz = Math.cos(sy);
-            const P = anchor.position;
-            if (scene.cam === 'window') {
-              const sx = -fz, sz = fx; // square to the side of travel — the country slides past
-              this.camera.position.set(P.x + sx * 3.0, P.y + 1.9, P.z + sz * 3.0);
-              this.camera.lookAt(P.x + sx * 50, P.y + 1.2, P.z + sz * 50);
-            } else { // 'front': ahead of the smokebox, looking up the line
-              this.camera.position.set(P.x + fx * 8, P.y + 2.6, P.z + fz * 8);
-              this.camera.lookAt(P.x + fx * 70, P.y + 1.0, P.z + fz * 70);
-            }
+            const sy = this._titleRideYaw, fx = Math.sin(sy), fz = Math.cos(sy), sx = -fz, sz = fx;
+            const P = carr.position;
+            this.camera.position.set(P.x + sx * 3.0, P.y + 1.9, P.z + sz * 3.0);
+            this.camera.lookAt(P.x + sx * 50, P.y + 1.2, P.z + sz * 50);
             this.camera.rotation.z = 0;
-          } else {
-            orbitCam(); // mesh not streamed in yet (just flipped) — hold the orbit a beat
-          }
+          } else { orbitCam(); }
+        } else {
+          orbitCam(); // 'orbit', or the train mesh hasn't streamed in yet right after a flip
         }
         // cross-fade at each flip: fade the backdrop out over the last FADE secs of a scene, then
         // back in over FADE secs once the NEW region has streamed (gated on _titleRevealT — no pop-in).

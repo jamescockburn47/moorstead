@@ -246,7 +246,10 @@ export class RosterClient {
         if (m._ambleT == null || nowEff > m._ambleT) {
           m._ambleT = nowEff + 5 + Math.random() * 8;      // re-aim every 5–13s (a few steps, then a pause)
           const r = Math.random() * 2.2, ang = Math.random() * Math.PI * 2;
-          m._ambleDX = Math.cos(ang) * r; m._ambleDZ = Math.sin(ang) * r;
+          const cx = p.x + Math.cos(ang) * r, cz = p.z + Math.sin(ang) * r;
+          const fromG = this.geo.height(Math.round(p.x), Math.round(p.z));
+          if (walkableStep(this.world, this.geo, cx, cz, fromG)) { m._ambleDX = Math.cos(ang) * r; m._ambleDZ = Math.sin(ang) * r; }
+          else { m._ambleDX = 0; m._ambleDZ = 0; } // wall / tree / water / steep — don't amble into it
         }
         const tx = p.x + (m._ambleDX || 0), tz = p.z + (m._ambleDZ || 0);
         const k = Math.min(1, dt * 1.6);                   // amble slowly so the leg-swing reads as walking, not gliding
@@ -266,18 +269,20 @@ export class RosterClient {
     if (lineName === mainName) {
       const ts = g.trainState; if (!ts || !ts.s) return null;
       const st = geo.railway()[ts.s.i];
-      return { x: ts.x, z: ts.z, station: (ts.s.mode === 'dwell' && st) ? st.name : null, dwelling: ts.s.mode === 'dwell' };
+      return { x: ts.x, z: ts.z, station: (ts.s.mode === 'dwell' && st) ? st.name : null, dwelling: ts.s.mode === 'dwell',
+               path: geo.railPath(), chainage: ts.s.s, dir: ts.s.dir };
     }
     const bt = (g.branchTrains || []).find(b => b.name === lineName);
     if (!bt || !bt.state || !bt.state.s) return null;
     const st = bt.stations[bt.state.s.i];
-    return { x: bt.state.x, z: bt.state.z, station: (bt.state.s.mode === 'dwell' && st) ? st.name : null, dwelling: bt.state.s.mode === 'dwell' };
+    return { x: bt.state.x, z: bt.state.z, station: (bt.state.s.mode === 'dwell' && st) ? st.name : null, dwelling: bt.state.s.mode === 'dwell',
+             path: bt.path, chainage: bt.state.s.s, dir: bt.state.s.dir };
   }
 
   // Drive a committed rail journey (e.ride) against the visible train: wait on the origin platform;
-  // board (vanish into the carriage) when the train dwells there; ride hidden, carried with the
-  // train; alight (reappear) at the destination when the train dwells there. A timeout stops her
-  // waiting forever if the two schedules never line up.
+  // board when the train dwells there; ride VISIBLY in the coaches (on the rail deck behind the
+  // loco); alight (reappear on the platform) at the destination when the train dwells there. A
+  // timeout stops her waiting forever if the two schedules never line up.
   _driveRail(e, m, dt) {
     const ride = e.ride;
     ride.t += dt;
@@ -289,8 +294,19 @@ export class RosterClient {
     if (ride.t > 720) ride.phase = 'done';                  // safety net: never wait forever (sparse timetable ~ minutes)
     const grp = m.model && m.model.group;
     if (ride.phase === 'aboard') {
-      if (grp && grp.visible) grp.visible = false;          // she's inside the carriage now
-      if (vt) { m.pos.x = vt.x; m.pos.z = vt.z; m.pos.y = this.geo.height(Math.round(vt.x), Math.round(vt.z)) + 2; } // carried with the train (hidden)
+      // Ride VISIBLY, as a passenger in the coaches: sit on the rail deck behind the loco (the
+      // carriage zone), so folk are actually seen aboard the moving train rather than vanishing.
+      if (grp && !grp.visible) grp.visible = true;
+      if (vt && vt.path && vt.chainage != null) {
+        const poseFwd = vt.dir === 0 ? 1 : -1;
+        if (e.ride.slot == null) e.ride.slot = 1 + (Math.round(Math.abs(_spread(e.data.id).dx * 7)) % 8); // 1..8 along the rake
+        const back = 11 + e.ride.slot * 0.75;               // ~12..17 m behind the loco lead — within the two coaches
+        const cr = Math.max(0, Math.min(vt.path.length, vt.chainage - back * poseFwd));
+        const sp = this.geo.samplePosOn(vt.path, cr);
+        const lat = (e.ride.slot % 2 ? 0.55 : -0.55);
+        m.pos.x = sp.x + (-sp.tz) * lat; m.pos.z = sp.z + sp.tx * lat; m.pos.y = sp.deck + 1.0;
+        if (sp.tx || sp.tz) m.yaw = Math.atan2(sp.tx * poseFwd, sp.tz * poseFwd);
+      }
       return;
     }
     if (grp && !grp.visible) grp.visible = true;
