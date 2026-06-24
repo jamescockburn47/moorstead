@@ -309,6 +309,7 @@ class Game {
   startWorld(seed, meta, chunks) {
     if (this.world) this.teardownWorld();
     this.titlePreview = false; // a real world supersedes the title backdrop
+    this.renderer.domElement.style.opacity = '1'; // clear any mid-flight title cross-fade
     this.moorsPreview = false; // cleared for normal worlds; set by startMoorsWorld()
     this.seed = seed;
     this.world = new World(this.scene, seed, chunks);
@@ -405,6 +406,15 @@ class Game {
       this.ui.show('titleScreen'); // and its UI (startWorld showed the loading panel)
       this.titlePreview = true;
       this.titleT = 0;
+      // the backdrop flips between three line+season vignettes (driven in frame()'s title branch)
+      this._titleScenes = [
+        { line: 'Esk Valley', phase: 0.875, snow: 1.0, precip: 1, snowing: true,  skyTime: 0.40 }, // down Eskdale, deep winter, snowing
+        { line: 'Coast Line', phase: 0.375, snow: 0.0, precip: 0, snowing: false, skyTime: 0.50 }, // along the coast, mid-summer
+        { line: null,         phase: 0.625, snow: 0.0, precip: 0, snowing: false, skyTime: 0.46 }, // over the moors (main line), autumn
+      ];
+      this._titleSceneIdx = 0;
+      this._titleSceneT = 0;
+      this._titleRevealT = null;   // when the current scene finished streaming (gates the fade-in)
       this.titleCamY = null;       // re-anchor the orbit height cleanly on (re)start
       this.sky.time = 0.40;        // a low, flat winter daylight
       this.sky.forceClear = false; // let the snow fall (don't force a clear sky)
@@ -3612,37 +3622,54 @@ class Game {
       if (!this.world && !this.titlePreviewFailed) this.startTitlePreview();
       if (this.titlePreview && this.world) {
         this.titleT += dt;
+        this._titleSceneT += dt;
         this.updateTrainWorld(dt);   // keep the main-line train running on its schedule
         this.updateBranchTrains(dt); // …and a train on every branch — the whole network's alive
-        // the front page follows the ESK VALLEY branch train down Eskdale (falls back to the main train)
-        const esk = (this.branchTrains || []).find(b => b.name === 'Esk Valley' && b.state);
-        const ts = esk ? esk.state : this.trainState;
+        const SCENE_DUR = 16, FADE = 0.7;
+        // flip to the next vignette when this one's had its turn (it's faded out by now — see below)
+        if (this._titleSceneT >= SCENE_DUR) {
+          this._titleSceneIdx = (this._titleSceneIdx + 1) % this._titleScenes.length;
+          this._titleSceneT = 0;
+          this._titleRevealT = null;  // the new region must stream before we fade it back in
+          this.titleCamY = null;      // re-anchor the orbit height onto the new line's train
+        }
+        const scene = this._titleScenes[this._titleSceneIdx];
+        // follow THIS scene's train: a named branch (Esk Valley / Coast Line), else the main line (the moors)
+        const br = scene.line ? (this.branchTrains || []).find(b => b.name === scene.line && b.state) : null;
+        const ts = br ? br.state : this.trainState;
         const ax = ts ? ts.x : this.player.pos.x, az = ts ? ts.z : this.player.pos.z;
-        // Follow the SMOOTH rail deck under the train (not the stepped raw terrain),
-        // then damp it — so the orbit glides over cuttings an' embankments instead of
-        // jumping up an' down at every gradient change.
+        // Follow the SMOOTH rail deck under the train (not the stepped raw terrain), then damp it —
+        // so the orbit glides over cuttings an' embankments instead of jolting at every gradient.
         const cs = ts && ts.s && typeof ts.s.s === 'number' ? ts.s.s : null;
-        const anchorY = cs != null ? (esk ? this.world.gen.geo.samplePosOn(esk.path, cs).deck : this.world.gen.geo.samplePos(cs).deck)
+        const anchorY = cs != null ? (br ? this.world.gen.geo.samplePosOn(br.path, cs).deck : this.world.gen.geo.samplePos(cs).deck)
                                    : this.world.gen.height(Math.floor(ax), Math.floor(az));
         this.titleCamY = this.titleCamY == null ? anchorY : this.titleCamY + (anchorY - this.titleCamY) * Math.min(1, dt * 3);
         const gy = this.titleCamY;
         this.player.pos.x = ax; this.player.pos.y = gy + 2; this.player.pos.z = az; // centre everything on the train
         const ready = this.world.readyAround(ax, az, 1);
         for (let i = 0; i < (ready ? 2 : 6); i++) this.world.update(ax, az);
-        this.sky.time = 0.40; // a low, flat winter daylight
-        // deep winter on the moor: cold light, full snow cover, and snow falling
-        const lightSeason = seasonStateAtPhase(0.875); // peak winter
-        setSnowLevel(1.0);                             // snow lying everywhere, not just the high tops
-        this.sky.stormPrecip = 1; this.sky.stormIsSnow = true; // make it snow over the scene
-        if (this._seasonBucket !== 98) { this._seasonBucket = 98; retintAtlasForSeason(lightSeason); }
+        if (ready && this._titleRevealT == null) this._titleRevealT = this.titleT; // moment this scene finished streaming
+        // force THIS scene's season: light of day, snow cover, and precipitation
+        this.sky.time = scene.skyTime;
+        const lightSeason = seasonStateAtPhase(scene.phase);
+        setSnowLevel(scene.snow);
+        this.sky.stormPrecip = scene.precip; this.sky.stormIsSnow = scene.snowing;
+        if (this._seasonBucket !== 90 + this._titleSceneIdx) { this._seasonBucket = 90 + this._titleSceneIdx; retintAtlasForSeason(lightSeason); }
         this.sky.update(dt, this.player.pos, lightSeason, false);
         if (this.rails) this.rails.update(dt, { x: ax, z: az });
         this.entities.update(dt, this.player, false, this.audio, () => {});
-        // a slow aerial orbit, following the steam train across the snowy moor
+        // a slow aerial orbit, following the steam train across the scene
         const a = this.titleT * 0.13;
         this.camera.position.set(ax + Math.cos(a) * 34, gy + 19, az + Math.sin(a) * 34);
         this.camera.lookAt(ax, gy + 4, az);
         this.camera.rotation.z += Math.sin(a) * 0.04;
+        // cross-fade at each flip: fade the backdrop out over the last FADE secs of a scene, then
+        // back in over FADE secs once the NEW region has streamed (gated on _titleRevealT — no pop-in).
+        let op;
+        if (this._titleSceneT > SCENE_DUR - FADE) op = Math.max(0, (SCENE_DUR - this._titleSceneT) / FADE);
+        else if (this._titleRevealT == null) op = 0;
+        else op = Math.min(1, (this.titleT - this._titleRevealT) / FADE);
+        this.renderer.domElement.style.opacity = String(op);
         if (ready) document.getElementById('title-screen')?.classList.add('world-shown'); // reveal it behind the UI
       }
       this.renderer.render(this.scene, this.camera);
