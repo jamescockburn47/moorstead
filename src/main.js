@@ -406,15 +406,23 @@ class Game {
       this.ui.show('titleScreen'); // and its UI (startWorld showed the loading panel)
       this.titlePreview = true;
       this.titleT = 0;
-      // the backdrop flips between three line+season vignettes (driven in frame()'s title branch)
+      // the backdrop flips between line+season vignettes, alternating an aerial ORBIT with a
+      // FRONT-of-the-train view, so every line is shown both ways across the loop (driven in frame()).
+      const winter = { phase: 0.875, snow: 1.0, precip: 1, snowing: true,  skyTime: 0.40 };
+      const summer = { phase: 0.375, snow: 0.0, precip: 0, snowing: false, skyTime: 0.50 };
+      const autumn = { phase: 0.625, snow: 0.0, precip: 0, snowing: false, skyTime: 0.46 };
       this._titleScenes = [
-        { line: 'Esk Valley', phase: 0.875, snow: 1.0, precip: 1, snowing: true,  skyTime: 0.40 }, // down Eskdale, deep winter, snowing
-        { line: 'Coast Line', phase: 0.375, snow: 0.0, precip: 0, snowing: false, skyTime: 0.50 }, // along the coast, mid-summer
-        { line: null,         phase: 0.625, snow: 0.0, precip: 0, snowing: false, skyTime: 0.46 }, // over the moors (main line), autumn
+        { line: 'Esk Valley', ...winter, cam: 'orbit' }, // down Eskdale, deep winter, from above
+        { line: 'Coast Line', ...summer, cam: 'front' }, // riding the coast line in summer
+        { line: null,         ...autumn, cam: 'orbit' }, // the moors line (main train) in autumn, from above
+        { line: 'Esk Valley', ...winter, cam: 'front' }, // riding down Eskdale in winter
+        { line: 'Coast Line', ...summer, cam: 'orbit' }, // the summer coast from above
+        { line: null,         ...autumn, cam: 'front' }, // riding the moors line in autumn
       ];
       this._titleSceneIdx = 0;
       this._titleSceneT = 0;
       this._titleRevealT = null;   // when the current scene finished streaming (gates the fade-in)
+      this._titleFrontYaw = null;  // smoothed heading for the front-of-train camera
       this.titleCamY = null;       // re-anchor the orbit height cleanly on (re)start
       this.sky.time = 0.40;        // a low, flat winter daylight
       this.sky.forceClear = false; // let the snow fall (don't force a clear sky)
@@ -3625,13 +3633,14 @@ class Game {
         this._titleSceneT += dt;
         this.updateTrainWorld(dt);   // keep the main-line train running on its schedule
         this.updateBranchTrains(dt); // …and a train on every branch — the whole network's alive
-        const SCENE_DUR = 16, FADE = 0.7;
+        const SCENE_DUR = 30, FADE = 0.7;
         // flip to the next vignette when this one's had its turn (it's faded out by now — see below)
         if (this._titleSceneT >= SCENE_DUR) {
           this._titleSceneIdx = (this._titleSceneIdx + 1) % this._titleScenes.length;
           this._titleSceneT = 0;
           this._titleRevealT = null;  // the new region must stream before we fade it back in
           this.titleCamY = null;      // re-anchor the orbit height onto the new line's train
+          this._titleFrontYaw = null; // re-anchor the front-view heading onto the new line
         }
         const scene = this._titleScenes[this._titleSceneIdx];
         // follow THIS scene's train: a named branch (Esk Valley / Coast Line), else the main line (the moors)
@@ -3657,12 +3666,26 @@ class Game {
         if (this._seasonBucket !== 90 + this._titleSceneIdx) { this._seasonBucket = 90 + this._titleSceneIdx; retintAtlasForSeason(lightSeason); }
         this.sky.update(dt, this.player.pos, lightSeason, false);
         if (this.rails) this.rails.update(dt, { x: ax, z: az });
+        if (this.rosterClient) this.rosterClient.update(dt); // drive the living roster — folk board, ride and alight the train
         this.entities.update(dt, this.player, false, this.audio, () => {});
-        // a slow aerial orbit, following the steam train across the scene
-        const a = this.titleT * 0.13;
-        this.camera.position.set(ax + Math.cos(a) * 34, gy + 19, az + Math.sin(a) * 34);
-        this.camera.lookAt(ax, gy + 4, az);
-        this.camera.rotation.z += Math.sin(a) * 0.04;
+        if (scene.cam === 'front') {
+          // ride the footplate: sit just above and behind the smokebox, looking up the line. The
+          // heading is the train's (rotY for the main line, camYaw for a branch), low-passed so it
+          // glides round curves instead of snapping at every spline corner.
+          const targetYaw = br ? (br.camYaw || 0) : (this.trainState ? (this.trainState.rotY || 0) : 0);
+          if (this._titleFrontYaw == null) this._titleFrontYaw = targetYaw;
+          else { let dY = targetYaw - this._titleFrontYaw; while (dY > Math.PI) dY -= Math.PI * 2; while (dY < -Math.PI) dY += Math.PI * 2; this._titleFrontYaw += dY * Math.min(1, dt * 2); }
+          const fx = Math.sin(this._titleFrontYaw), fz = Math.cos(this._titleFrontYaw);
+          this.camera.position.set(ax - fx * 2.0, gy + 3.4, az - fz * 2.0);
+          this.camera.lookAt(ax + fx * 60, gy + 2.0, az + fz * 60);
+          this.camera.rotation.z = 0;
+        } else {
+          // a slow aerial orbit, following the steam train across the scene
+          const a = this.titleT * 0.13;
+          this.camera.position.set(ax + Math.cos(a) * 34, gy + 19, az + Math.sin(a) * 34);
+          this.camera.lookAt(ax, gy + 4, az);
+          this.camera.rotation.z += Math.sin(a) * 0.04;
+        }
         // cross-fade at each flip: fade the backdrop out over the last FADE secs of a scene, then
         // back in over FADE secs once the NEW region has streamed (gated on _titleRevealT — no pop-in).
         let op;
