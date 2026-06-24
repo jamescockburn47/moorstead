@@ -412,17 +412,17 @@ class Game {
       const summer = { phase: 0.375, snow: 0.0, precip: 0, snowing: false, skyTime: 0.50 };
       const autumn = { phase: 0.625, snow: 0.0, precip: 0, snowing: false, skyTime: 0.46 };
       this._titleScenes = [
-        { line: 'Esk Valley', ...winter, cam: 'orbit' }, // down Eskdale, deep winter, from above
-        { line: 'Coast Line', ...summer, cam: 'front' }, // riding the coast line in summer
-        { line: null,         ...autumn, cam: 'orbit' }, // the moors line (main train) in autumn, from above
-        { line: 'Esk Valley', ...winter, cam: 'front' }, // riding down Eskdale in winter
-        { line: 'Coast Line', ...summer, cam: 'orbit' }, // the summer coast from above
-        { line: null,         ...autumn, cam: 'front' }, // riding the moors line in autumn
+        { line: 'Esk Valley', ...winter, cam: 'orbit'     }, // down Eskdale, deep winter, from above
+        { line: 'Coast Line', ...summer, cam: 'driver'    }, // driving the coast line in summer
+        { line: null,         ...autumn, cam: 'orbit'     }, // the moors line (main train) in autumn, from above
+        { line: 'Esk Valley', ...winter, cam: 'driver'    }, // driving down Eskdale in winter (driver, not passenger — smoother)
+        { line: 'Coast Line', ...summer, cam: 'orbit'     }, // the summer coast from above
+        { line: null,         ...autumn, cam: 'passenger' }, // riding the moors line as a passenger in autumn
       ];
       this._titleSceneIdx = 0;
       this._titleSceneT = 0;
       this._titleRevealT = null;   // when the current scene finished streaming (gates the fade-in)
-      this._titleFrontYaw = null;  // smoothed heading for the front-of-train camera
+      this._titleRideYaw = null;   // smoothed, low-passed heading for the driver/passenger ride camera
       this.titleCamY = null;       // re-anchor the orbit height cleanly on (re)start
       this.sky.time = 0.40;        // a low, flat winter daylight
       this.sky.forceClear = false; // let the snow fall (don't force a clear sky)
@@ -3640,7 +3640,7 @@ class Game {
           this._titleSceneT = 0;
           this._titleRevealT = null;  // the new region must stream before we fade it back in
           this.titleCamY = null;      // re-anchor the orbit height onto the new line's train
-          this._titleFrontYaw = null; // re-anchor the front-view heading onto the new line
+          this._titleRideYaw = null;  // re-anchor the ride-view heading onto the new line
         }
         const scene = this._titleScenes[this._titleSceneIdx];
         // follow THIS scene's train: a named branch (Esk Valley / Coast Line), else the main line (the moors)
@@ -3668,23 +3668,40 @@ class Game {
         if (this.rails) this.rails.update(dt, { x: ax, z: az });
         if (this.rosterClient) this.rosterClient.update(dt); // drive the living roster — folk board, ride and alight the train
         this.entities.update(dt, this.player, false, this.audio, () => {});
-        if (scene.cam === 'front') {
-          // ride the footplate: sit just above and behind the smokebox, looking up the line. The
-          // heading is the train's (rotY for the main line, camYaw for a branch), low-passed so it
-          // glides round curves instead of snapping at every spline corner.
-          const targetYaw = br ? (br.camYaw || 0) : (this.trainState ? (this.trainState.rotY || 0) : 0);
-          if (this._titleFrontYaw == null) this._titleFrontYaw = targetYaw;
-          else { let dY = targetYaw - this._titleFrontYaw; while (dY > Math.PI) dY -= Math.PI * 2; while (dY < -Math.PI) dY += Math.PI * 2; this._titleFrontYaw += dY * Math.min(1, dt * 2); }
-          const fx = Math.sin(this._titleFrontYaw), fz = Math.cos(this._titleFrontYaw);
-          this.camera.position.set(ax - fx * 2.0, gy + 3.4, az - fz * 2.0);
-          this.camera.lookAt(ax + fx * 60, gy + 2.0, az + fz * 60);
-          this.camera.rotation.z = 0;
-        } else {
+        const orbitCam = () => {
           // a slow aerial orbit, following the steam train across the scene
           const a = this.titleT * 0.13;
           this.camera.position.set(ax + Math.cos(a) * 34, gy + 19, az + Math.sin(a) * 34);
           this.camera.lookAt(ax, gy + 4, az);
           this.camera.rotation.z += Math.sin(a) * 0.04;
+        };
+        if (scene.cam === 'orbit') {
+          orbitCam();
+        } else {
+          // ride the train, reusing the in-game ride cameras' SMOOTHED heading (camYaw) so it glides
+          // round curves — the raw spline tangent jerks on the pegged coast/esk lines. Heading is
+          // low-passed again here. driver = off the footplate over the boiler; passenger = a window seat.
+          const tm = br ? br.train : this.train;
+          const target = br ? br.camYaw : (this.train ? this.train.camYaw : null);
+          const loco = tm && tm.loco && tm.loco.group;
+          if (loco && loco.parent && target != null) {
+            if (this._titleRideYaw == null) this._titleRideYaw = target;
+            else { let dY = target - this._titleRideYaw; while (dY > Math.PI) dY -= Math.PI * 2; while (dY < -Math.PI) dY += Math.PI * 2; this._titleRideYaw += dY * Math.min(1, dt * 4); }
+            const sy = this._titleRideYaw, fx = Math.sin(sy), fz = Math.cos(sy);
+            const carr = tm.carriage && tm.carriage.group;
+            if (scene.cam === 'passenger' && carr) {
+              // a window seat: sit in the carriage, a touch to one side, looking up the line (the loco leads ahead)
+              this.camera.position.set(carr.position.x + fx * 0.6 - fz * 0.7, carr.position.y + 2.0, carr.position.z + fz * 0.6 + fx * 0.7);
+              this.camera.lookAt(carr.position.x + fx * 45, carr.position.y + 1.0, carr.position.z + fz * 45);
+            } else {
+              // the driver: just behind the smokebox, up on the footplate, looking up the line over the boiler
+              this.camera.position.set(loco.position.x - fx * 3.4, loco.position.y + 3.0, loco.position.z - fz * 3.4);
+              this.camera.lookAt(loco.position.x + fx * 50, loco.position.y + 0.6, loco.position.z + fz * 50);
+            }
+            this.camera.rotation.z = 0;
+          } else {
+            orbitCam(); // mesh not streamed in yet (just flipped) — hold the orbit a beat
+          }
         }
         // cross-fade at each flip: fade the backdrop out over the last FADE secs of a scene, then
         // back in over FADE secs once the NEW region has streamed (gated on _titleRevealT — no pop-in).
