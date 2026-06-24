@@ -513,12 +513,12 @@ html.touch .game { touch-action: none; }
 .touch-btn[data-touch=place]  { right: calc(env(safe-area-inset-right) + 36px); bottom: calc(env(safe-area-inset-bottom) + 20px); background: rgba(29,158,117,.5); }
 .touch-btn[data-touch=crouch] { right: calc(env(safe-area-inset-right) + 112px); bottom: calc(env(safe-area-inset-bottom) + 18px); width: 52px; height: 52px; }
 .touch-btn.top { top: calc(env(safe-area-inset-top) + 10px); width: 46px; height: 40px; border-radius: 10px; }
-.touch-btn[data-touch=pack] { right: calc(env(safe-area-inset-right) + 64px); }
-.touch-btn[data-touch=more] { right: calc(env(safe-area-inset-right) + 10px); }
-.touch-pill { position: absolute; top: calc(env(safe-area-inset-top) + 10px); left: calc(env(safe-area-inset-left) + 10px); height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.5); background: rgba(13,27,38,.6); color: #fff; font: 500 13px/1 sans-serif; }
+.touch-btn[data-touch=pack] { left: calc(env(safe-area-inset-left) + 10px); }
+.touch-btn[data-touch=more] { left: calc(env(safe-area-inset-left) + 64px); }
+.touch-pill { position: absolute; top: calc(env(safe-area-inset-top) + 56px); left: calc(env(safe-area-inset-left) + 10px); height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.5); background: rgba(13,27,38,.6); color: #fff; font: 500 13px/1 sans-serif; }
 .touch-cluster { position: absolute; right: calc(env(safe-area-inset-right) + 20px); bottom: calc(env(safe-area-inset-bottom) + 20px); display: flex; gap: 10px; }
 .touch-cluster button { min-width: 64px; height: 48px; border-radius: 12px; border: 1.5px solid rgba(255,255,255,.6); background: rgba(255,255,255,.16); color: #fff; }
-.touch-more { position: absolute; right: calc(env(safe-area-inset-right) + 10px); top: 60px; width: 220px; max-height: 70%; overflow: auto; display: none; flex-direction: column; gap: 6px; padding: 10px; border-radius: 12px; background: rgba(13,27,38,.92); border: 1px solid rgba(255,255,255,.3); }
+.touch-more { position: absolute; left: calc(env(safe-area-inset-left) + 10px); top: 60px; width: 220px; max-height: 70%; overflow: auto; display: none; flex-direction: column; gap: 6px; padding: 10px; border-radius: 12px; background: rgba(13,27,38,.92); border: 1px solid rgba(255,255,255,.3); }
 .touch-more.open { display: flex; }
 .touch-more-item { min-height: 44px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; }
 .touch-whistles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
