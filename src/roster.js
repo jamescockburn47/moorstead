@@ -209,9 +209,17 @@ export class RosterClient {
       const act = npcActivity(e.data, e.ride);
       m.activity = act.full; m.activityShort = act.short;
       if (!m.village) m.village = e.data.home || (e.data.state && e.data.state.place) || null;
-      // Stop to chat: while a player has her in conversation, freeze her where she stands so she
-      // doesn't walk off mid-natter. Her errand resumes (ride timer included) when the chat closes.
-      if (m.chatting) continue;
+      // Hailed: while a player has her in conversation, turn to face them and hold. She addresses
+      // you when spoken to, but never breaks off to greet you unprompted — so folk get on with their
+      // work and don't crowd you. Her errand (ride timer included) resumes when the chat closes.
+      if (m.chatting) {
+        const pl = this.game.player;
+        if (pl && pl.pos) {
+          const dx = pl.pos.x - m.pos.x, dz = pl.pos.z - m.pos.z;
+          if (dx * dx + dz * dz > 0.01) m.yaw = Math.atan2(dx, dz);
+        }
+        continue;
+      }
       // A committed rail journey overrides the brain state until she's delivered — so she actually
       // waits for, BOARDS, rides and ALIGHTS the VISIBLE train, rather than gliding the bare rails
       // alone (the brain's rail timing never lined up with the real train's schedule).
