@@ -179,4 +179,39 @@ export class TouchControls {
     z.addEventListener('touchend', end);
     z.addEventListener('touchcancel', end);
   }
+
+  _buildButtons() {
+    const g = this.game;
+    // press/hold helper: onDown at touchstart, onUp at touchend/cancel.
+    const hold = (b, onDown, onUp) => {
+      b.addEventListener('touchstart', e => { e.preventDefault(); onDown(); }, { passive: false });
+      const up = e => { e.preventDefault(); onUp && onUp(); };
+      b.addEventListener('touchend', up); b.addEventListener('touchcancel', up);
+    };
+    // Jump (hold = jump/fly-up; each tap feeds jumpTapped so player.js can double-tap-toggle fly)
+    hold(this._btn('jump', 'Jump', 'big'), () => { g.keys['Space'] = true; g.input.jumpTapped = true; }, () => { g.keys['Space'] = false; });
+    // Crouch (hold = sneak / fly-down)
+    hold(this._btn('crouch', '<i class="ti ti-chevron-down"></i>'), () => { g.keys['ShiftLeft'] = true; }, () => { g.keys['ShiftLeft'] = false; });
+    // Mine (hold = break centred block; updateMining polls mouseDown[0])
+    hold(this._btn('mine', 'Mine', 'act'), () => { if (g.state !== 'playing') return; g.mouseDown[0] = true; g.breakProgress = 0; g.attackOrMine(true); }, () => { g.mouseDown[0] = false; });
+    // Place (use item at crosshair; place-repeat polls mouseDown[2])
+    hold(this._btn('place', 'Place', 'act'), () => { if (g.state !== 'playing') return; g.mouseDown[2] = true; g.placeRepeat = 0.4; g.useItem(); }, () => { g.mouseDown[2] = false; });
+  }
+
+  _buildTop() {
+    const g = this.game;
+    const tap = (b, fn) => b.addEventListener('touchstart', e => { e.preventDefault(); fn(); }, { passive: false });
+    tap(this._btn('pack', '<i class="ti ti-box"></i>', 'top'), () => g.openInventory());
+    tap(this._btn('more', '<i class="ti ti-menu-2"></i>', 'top'), () => this._toggleMore());
+    // hotbar slot taps. #hotbar holds `.slot` divs, but ui.js rebuilds them via innerHTML each
+    // render — so DELEGATE one listener on the container and derive the index from the touched child.
+    const hb = document.getElementById('hotbar');
+    if (hb) hb.addEventListener('touchstart', e => {
+      const slot = e.target.closest('.slot'); if (!slot) return;
+      const i = Array.prototype.indexOf.call(hb.children, slot);
+      if (i >= 0) { e.preventDefault(); g.player.hotbar = i; g.ui.invDirty = true; }
+    }, { passive: false });
+  }
+
+  _toggleMore() { if (this._more) this._more.classList.toggle('open'); }
 }
