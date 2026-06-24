@@ -3603,14 +3603,17 @@ class Game {
       if (!this.world && !this.titlePreviewFailed) this.startTitlePreview();
       if (this.titlePreview && this.world) {
         this.titleT += dt;
-        this.updateTrainWorld(dt); // the one true train, on its real schedule
-        const ts = this.trainState;
+        this.updateTrainWorld(dt);   // keep the main-line train running on its schedule
+        this.updateBranchTrains(dt); // …and a train on every branch — the whole network's alive
+        // the front page follows the ESK VALLEY branch train down Eskdale (falls back to the main train)
+        const esk = (this.branchTrains || []).find(b => b.name === 'Esk Valley' && b.state);
+        const ts = esk ? esk.state : this.trainState;
         const ax = ts ? ts.x : this.player.pos.x, az = ts ? ts.z : this.player.pos.z;
         // Follow the SMOOTH rail deck under the train (not the stepped raw terrain),
         // then damp it — so the orbit glides over cuttings an' embankments instead of
         // jumping up an' down at every gradient change.
         const cs = ts && ts.s && typeof ts.s.s === 'number' ? ts.s.s : null;
-        const anchorY = cs != null ? this.world.gen.geo.samplePos(cs).deck
+        const anchorY = cs != null ? (esk ? this.world.gen.geo.samplePosOn(esk.path, cs).deck : this.world.gen.geo.samplePos(cs).deck)
                                    : this.world.gen.height(Math.floor(ax), Math.floor(az));
         this.titleCamY = this.titleCamY == null ? anchorY : this.titleCamY + (anchorY - this.titleCamY) * Math.min(1, dt * 3);
         const gy = this.titleCamY;
