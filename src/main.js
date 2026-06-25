@@ -31,6 +31,7 @@ import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase } from './season.js';
 import { activeForageables, hostForageFor, fruitSpeciesAt, fruitTreeRipe } from './forage.js';
 import { deepSnow, wintry, yuletide } from './festive.js';
+import { FESTIVALS, festivalState } from './festivals.js';
 import { DEFAULT_SNOWMAN, cycleSnowman } from './snowman.js';
 import { cellInstances } from './flora-placement.js';
 import { startLiveWeather } from './weather-live.js';
@@ -271,6 +272,25 @@ class Game {
         // snap the lying snow to the new season so a flip shows snow at once
         G.snowAccum = accumulationTarget(G.seasonOverride != null ? seasonStateAtPhase(G.seasonOverride) : seasonState());
         return G.seasonOverride;
+      },
+      // dev: jump to any year phase (0..1) or null to resume wall-clock time.
+      // Returns { phase, season, festival } so caller can see what was selected.
+      // When clearing, season/festival reflect the live wall-clock state.
+      phase(p) {
+        G.seasonOverride = (p == null ? null : Math.max(0, Math.min(0.999, p)));
+        G.snowAccum = accumulationTarget(G.seasonOverride != null ? seasonStateAtPhase(G.seasonOverride) : seasonState());
+        const effective = G.seasonOverride != null ? G.seasonOverride : null;
+        const sState = effective != null ? seasonStateAtPhase(effective) : seasonState();
+        const fState = festivalState(effective != null ? effective : sState.yearPhase);
+        return { phase: effective, season: sState.season, festival: fState.active };
+      },
+      // dev: jump to a named festival (its .centre phase), or null to resume.
+      // e.g. moorstead.debug.festival('yule')
+      festival(id) {
+        if (id == null) return this.phase(null);
+        const f = FESTIVALS.find(f => f.id === id);
+        if (!f) return { error: 'unknown festival', known: FESTIVALS.map(f => f.id) };
+        return this.phase(f.centre);
       },
     };
   }
