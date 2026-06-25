@@ -3,7 +3,7 @@
 import assert from 'node:assert';
 import { Gen, MOORS_SEED } from '../src/worldgen.js';
 import { B } from '../src/defs.js';
-import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity, surfaceHeight, __resetSurfCache, idHash, waiterRank, waitMode, PLATFORM_CAP, WAIT_LEAD, platformPoint, roadWaypoints, ridesThisLeg } from '../src/roster.js';
+import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity, surfaceHeight, __resetSurfCache, idHash, waiterRank, waitMode, PLATFORM_CAP, WAIT_LEAD, platformPoint, roadWaypoints, ridesThisLeg, RIDE_PACE, RosterClient } from '../src/roster.js';
 
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
 const geo = new Gen(MOORS_SEED).geo;
@@ -214,6 +214,62 @@ __resetSurfCache();
   ok(cast.some(c => ridesThisLeg(c, 'A', 'B', far)), 'a long leg on the same ids does ride (gate is distance, not blanket-off)');
   // unknown place -> never rides (safe; caller just walks).
   ok(!ridesThisLeg({ id: 'amos', role: 'drover' }, 'Nowhere', TO, geo), 'an unknown place never rides (safe)');
+}
+
+// --- mount lifecycle: spawn a controlled pony, seat the rider on her back, despawn without leaks ---
+{
+  ok(RIDE_PACE > 2.2, `ride pace (${RIDE_PACE} b/s) is faster than a walk (~2.2)`);
+  // a minimal game/world the RosterClient + surfaceHeight are happy with: chunks "loaded", flat ground.
+  const removed = [];                                    // scene.remove calls (despawn evidence)
+  const spawned = [];                                   // spawnMob calls
+  const fakeGroup = () => ({ position: { set() {} }, rotation: {}, add() {}, remove() {} });
+  const fakeWorld = {
+    gen: { geo }, chunkAt: () => ({}), getBlock: () => B.AIR, isLoaded: () => true,
+  };
+  const game = {
+    world: fakeWorld,
+    entities: {
+      scene: { remove: g => removed.push(g) },
+      spawnMob: (type, x, y, z) => {
+        const mob = { type, pos: { x, y, z }, yaw: 0, model: { group: fakeGroup(), legs: [{ rotation: {} }, { rotation: {} }, { rotation: {} }, { rotation: {} }] }, label: { material: { opacity: 0.9 } } };
+        spawned.push(mob); return mob;
+      },
+    },
+  };
+  const rc = new RosterClient(game);
+  // a riding villager mob (streamed-style) part-way along a leg
+  const rider = { pos: { x: 100, y: 64, z: 100 }, yaw: 0.5, model: { group: fakeGroup() } };
+  const e = { data: { id: 'rider-1', role: 'drover' }, mob: rider };
+
+  const pony = rc._spawnMount(e, rider.pos);
+  ok(pony && e._pony === pony, '_spawnMount stashes the pony on e._pony');
+  ok(pony.type === 'pony' && spawned.length === 1, '_spawnMount spawns exactly one pony mob');
+  ok(pony.ridden === true, 'the mount is `ridden` (entities AI leaves it to us — no wander/gravity/despawn)');
+  ok(pony.rosterMount === true, 'the mount is flagged rosterMount (out of the wild cap, un-hijackable)');
+  ok(pony.label.material.opacity === 0, 'no "right-click to ride" label on an NPC mount');
+  // idempotent: a second spawn on the same leg reuses the pony, never doubles up.
+  ok(rc._spawnMount(e, rider.pos) === pony && spawned.length === 1, '_spawnMount is idempotent (no double pony)');
+
+  // seat the rider: she sits ABOVE the pony (on her back, not through it, not floating) sharing its yaw.
+  pony.pos.x = 120; pony.pos.z = 130; pony.pos.y = 70; pony.yaw = 1.23;
+  rc._seatRider(e);
+  ok(rider.pos.x === 120 && rider.pos.z === 130, 'the seated rider tracks the pony in x/z');
+  ok(rider.pos.y > pony.pos.y && rider.pos.y - pony.pos.y < 1.6, 'the rider sits a small lift ABOVE the pony (on her back, not floating)');
+  ok(rider.yaw === pony.yaw, 'the seated rider faces the way the pony trots');
+
+  // despawn: pony leaves the scene, e._pony cleared, and it's idempotent (no double-remove / no leak).
+  rc._despawnMount(e);
+  ok(removed.length === 1 && removed[0] === pony.model.group, '_despawnMount removes the pony group from the scene');
+  ok(pony.dead === true && e._pony === null, '_despawnMount marks the pony dead and clears e._pony');
+  rc._despawnMount(e);
+  ok(removed.length === 1, '_despawnMount is idempotent (a second call is a no-op — no leak, no throw)');
+
+  // leak guard: _remove (rider streams out mid-ride) despawns her pony too — no orphan ponies.
+  const e2 = { data: { id: 'rider-2', role: 'farmer' }, mob: { pos: { x: 1, y: 64, z: 1 }, model: { group: fakeGroup() } } };
+  rc._spawnMount(e2, e2.mob.pos);
+  const before = removed.length;
+  rc._remove(e2);
+  ok(removed.length === before + 2 && e2._pony === null, '_remove despawns the rider AND her pony (leak guard) — no orphan');
 }
 
 console.log(`verify-roster: ${n} assertions OK`);

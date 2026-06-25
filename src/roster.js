@@ -120,6 +120,8 @@ function _spread(id) {
 // round) saddle up more often than a townsfolk villager. Short hops are always walked — you don't
 // fetch a pony to nip next door. `from`/`to` are town names, as the walk branch passes them.
 const RIDE_MIN_DIST = 80;          // blocks: legs shorter than this are always walked
+export const RIDE_PACE = 3.5;      // blocks/sec a mounted NPC trots a lane (vs ~2.2 walking) — live-tunable
+const RIDE_SEAT_LIFT = 1.0;        // blocks the rider sits above the pony's standing pos (on her back)
 const RIDE_BASE = 0.225;           // a generic villager's chance on a ride-eligible leg
 // trades that keep/ride a pony — each adds to the base chance (tuned so the cast lands ~20–30%).
 const RIDE_ROLE_BONUS = { drover: 0.22, farmer: 0.16, gentry: 0.18, doctor: 0.14, parson: 0.13, carrier: 0.20, squire: 0.18 };
@@ -254,12 +256,14 @@ export function walkableStep(world, geo, x, z, fromY) {
 // following the ground, paced to arrive by `eta`. Mutates mob.pos/yaw. The streamed mob's
 // own wander AI is off (it's driven here, like a ridden pony / remote player), so this owns
 // its locomotion. Server keeps the LOGICAL leg + eta; the client owns HOW it walks there.
-export function steerWalk(mob, from, to, started, eta, now, world, geo, dt) {
+// `pace` (blocks/sec), when given, overrides the eta-paced speed — a mounted NPC trots at a fixed
+// ride pace rather than dawdling to an eta. Omitted -> unchanged eta pacing (all walk call sites).
+export function steerWalk(mob, from, to, started, eta, now, world, geo, dt, pace) {
   const dx = to.x - mob.pos.x, dz = to.z - mob.pos.z;
   const dist = Math.hypot(dx, dz);
   if (dist < 1.2) { mob.pos.x = to.x; mob.pos.z = to.z; mob.pos.y = to.y; return; } // arrived
   const remain = Math.max(1, eta - now);
-  const speed = Math.max(1.2, Math.min(3.0, dist / remain));         // blocks/sec, paced to the eta
+  const speed = pace != null ? pace : Math.max(1.2, Math.min(3.0, dist / remain));  // fixed ride pace, or eta-paced
   const goal = Math.atan2(dx, dz);
   const fromY = surfaceHeight(world, geo, Math.round(mob.pos.x), Math.round(mob.pos.z));  // her real standing height
   // context steering: take the most direct heading (fanned out from the goal) that's walkable
@@ -339,11 +343,65 @@ export class RosterClient {
   }
 
   _remove(e) {
+    this._despawnMount(e);                                 // leak guard: never strand a pony
     if (!e.mob) return;
     this.game.entities.scene.remove(e.mob.model.group);   // codebase despawn idiom (no removeMob helper)
     e.mob.dead = true;                                     // culled from entities.mobs next frame
   }
   _teardown() { for (const [, e] of this.npcs) this._remove(e); this.npcs.clear(); }
+
+  // ---- mounted NPCs (roads Slice 2) ----
+  // Spawn a pony under a riding NPC for this leg. It's CONTROLLED, not wild: `ridden` makes the
+  // entities AI skip it (no wander/gravity/distance-despawn — exactly as a player-ridden pony is
+  // posed by the game, entities.js:1780), and `rosterMount` keeps it out of the wild-spawn cap and
+  // un-hijackable by the player. We pose it ourselves each frame from the walk branch.
+  _spawnMount(e, at) {
+    if (e._pony) return e._pony;
+    const y = surfaceHeight(this.world, this.geo, at.x, at.z);
+    const pony = this.game.entities.spawnMob('pony', at.x, y, at.z);
+    pony.ridden = true;          // entities AI leaves a ridden pony to its driver (us)
+    pony.rosterMount = true;     // not a wild pony: excluded from the spawn cap, can't be mounted
+    if (pony.label) pony.label.material.opacity = 0;   // no "right-click to ride" on an NPC's mount
+    e._pony = pony;
+    return pony;
+  }
+
+  // Seat the rider villager mob on the pony's back, facing travel. Mirrors updateMount's pose
+  // (main.js): the rider sits a seat-lift above the pony's standing pos and shares its yaw. The
+  // streamed-villager dressing in entities.js then draws the model at mob.pos/yaw, so the rider
+  // rides ON the back (not through it, not floating).
+  _seatRider(e) {
+    const pony = e._pony, m = e.mob; if (!pony || !m) return;
+    m.pos.x = pony.pos.x; m.pos.z = pony.pos.z;
+    m.pos.y = pony.pos.y + RIDE_SEAT_LIFT;               // up on her back
+    m.yaw = pony.yaw;                                    // face the way the pony trots
+  }
+
+  // Draw + animate the driven pony (the entities AI skips a `ridden` mob, so we own its model).
+  // Mirrors updateMount (main.js): group sits a touch below the standing pos, faces yaw+PI, and the
+  // legs stride from a walkPhase advanced by how far she moved this frame.
+  _strideMount(pony, dt) {
+    const g = pony.model.group;
+    const lp = pony._lastPos || pony.pos;
+    const sp = Math.hypot(pony.pos.x - lp.x, pony.pos.z - lp.z) / Math.max(dt, 0.001);
+    pony._lastPos = { x: pony.pos.x, y: pony.pos.y, z: pony.pos.z };
+    g.position.set(pony.pos.x, pony.pos.y - 0.15, pony.pos.z);
+    g.rotation.y = pony.yaw + Math.PI;
+    pony.walkPhase = (pony.walkPhase || 0) + Math.min(sp, 8) * dt * 0.9;
+    const swing = Math.sin(pony.walkPhase) * Math.min(1, sp / 3) * 0.5;
+    if (pony.model.legs) pony.model.legs.forEach((l, i) => { l.rotation.x = (i % 2 === 0 ? swing : -swing); });
+  }
+
+  // Remove an NPC's pony and clear all seat state (mirrors the streamed-villager removal idiom).
+  // Idempotent — safe to call on a leg end, a brain-state change, removal or teardown.
+  _despawnMount(e) {
+    const pony = e && e._pony; if (!pony) return;
+    if (!pony.dead) {
+      this.game.entities.scene.remove(pony.model.group);
+      pony.dead = true;                                  // culled from entities.mobs next frame
+    }
+    e._pony = null;
+  }
 
   update(dt) {
     if (!this.active) return;
@@ -381,10 +439,11 @@ export class RosterClient {
       // is what stops dozens of stale waits piling up at stations when trains run slower than the brain.
       if (e.ride) {
         const matches = s && s.kind === 'rail' && e.ride.line === s.line && e.ride.from === s.fromStn && e.ride.to === s.toStn;
-        if (e.ride.phase !== 'wait' || matches) { this._driveRail(e, m, dt, rankMap); continue; }
+        if (e.ride.phase !== 'wait' || matches) { if (e._pony) this._despawnMount(e); this._driveRail(e, m, dt, rankMap); continue; }
         e.ride = null;                                       // stale wait — fall through to her current brain state
       }
       if (s && s.kind === 'rail') {                         // commit a NEW ride (only when ride-less)
+        if (e._pony) this._despawnMount(e);                 // off the lane onto the rails — no orphan pony
         e.ride = { line: s.line, from: s.fromStn, to: s.toStn, phase: 'wait', t: 0 };
         this._driveRail(e, m, dt, rankMap);
         continue;
@@ -394,9 +453,18 @@ export class RosterClient {
         const from = townAnchor(s.from, this.geo), to = townAnchor(s.to, this.geo);
         if (from && to) {
           // reset the lane index when a NEW walk leg starts (changed from/to/started), so she
-          // never resumes a stale waypoint from her last errand.
+          // never resumes a stale waypoint from her last errand. Decide ride-or-walk ONCE per leg
+          // (stable, no per-frame re-roll): saddle a pony up front, or drop a stale one from a past leg.
           const legKey = s.from + '>' + s.to + '@' + s.started;
-          if (e._roadLeg !== legKey) { e._roadLeg = legKey; e._roadI = 0; }
+          if (e._roadLeg !== legKey) {
+            e._roadLeg = legKey; e._roadI = 0;
+            if (ridesThisLeg(e.data, s.from, s.to, this.geo)) this._spawnMount(e, m.pos);
+            else this._despawnMount(e);
+          }
+          // mounted -> drive the PONY along the lane at a trot; the rider follows on her back.
+          // afoot -> drive the rider mob herself, exactly as before.
+          const drv = e._pony || m;
+          const pace = e._pony ? RIDE_PACE : undefined;
           const lane = roadWaypoints(from, to, this.geo);
           if (lane) {
             // follow the lane: steer to the current waypoint; advance once within a couple of blocks;
@@ -405,16 +473,18 @@ export class RosterClient {
             if (i < lane.length) {
               const wp = lane[i];
               const goal = { x: wp.x, y: surfaceHeight(this.world, this.geo, wp.x, wp.z), z: wp.z };
-              if ((m.pos.x - wp.x) ** 2 + (m.pos.z - wp.z) ** 2 < 4) { e._roadI = ++i; }   // ~2 blocks -> next
-              steerWalk(m, from, goal, s.started, s.eta, nowEff, this.world, this.geo, dt);
+              if ((drv.pos.x - wp.x) ** 2 + (drv.pos.z - wp.z) ** 2 < 4) { e._roadI = ++i; }   // ~2 blocks -> next
+              steerWalk(drv, from, goal, s.started, s.eta, nowEff, this.world, this.geo, dt, pace);
             } else {
-              steerWalk(m, from, to, s.started, s.eta, nowEff, this.world, this.geo, dt);
+              steerWalk(drv, from, to, s.started, s.eta, nowEff, this.world, this.geo, dt, pace);
             }
           } else {
-            steerWalk(m, from, to, s.started, s.eta, nowEff, this.world, this.geo, dt);   // no lane -> direct (unchanged)
+            steerWalk(drv, from, to, s.started, s.eta, nowEff, this.world, this.geo, dt, pace);   // no lane -> direct (still mounted)
           }
+          if (e._pony) { this._strideMount(e._pony, dt); this._seatRider(e); }   // pose pony legs + seat the rider
         }
-      } else {                                              // 'at': potter about her patch
+      } else {                                              // 'at': potter about her patch — afoot, drop any leg pony
+        if (e._pony) this._despawnMount(e);
         const p = npcVoxelPos(e.data, nowEff, this.geo);
         if (p) this._potterAt(m, p, nowEff, dt);
       }

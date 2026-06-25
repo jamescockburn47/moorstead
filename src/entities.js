@@ -1075,7 +1075,9 @@ export class Entities {
 
   trySpawns(player, isNight, audio) {
     const counts = {};
-    for (const m of this.mobs) counts[m.type] = (counts[m.type] || 0) + 1;
+    // roster-driven mounts (NPCs riding the lanes) don't count toward the wild-pony cap — they
+    // come and go with their rider's journey, and shouldn't starve the moor of grazing ponies.
+    for (const m of this.mobs) { if (m.rosterMount) continue; counts[m.type] = (counts[m.type] || 0) + 1; }
     // t' amulet o' t' moors wards off owt dark
     const warded = player.countItem(I.AMULET) > 0;
     const dracGone = this.draculaVanquished();

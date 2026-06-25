@@ -931,7 +931,7 @@ class Game {
   // Warden shortcut: drop by t' nearest grazin' pony so tha can climb straight on;
   // if there's none about, set down on t' open moor where they roam an' they'll spawn near.
   wardenToPony() {
-    const live = this.entities.mobs.filter(m => m.type === 'pony' && !m.dead);
+    const live = this.entities.mobs.filter(m => m.type === 'pony' && !m.dead && !m.rosterMount);
     if (live.length) {
       let best = live[0], bd = Infinity;
       for (const m of live) {
@@ -2247,7 +2247,7 @@ class Game {
 
   // ---- moorland ponies: a rideable mount 'twixt shanks's pony an' t' railway ----
   mountPony(pony) {
-    if (this.mount || !pony || pony.dead) return;
+    if (this.mount || !pony || pony.dead || pony.rosterMount) return;   // an NPC's mount isn't thine to take
     this.mount = pony;
     pony.ridden = true;
     this.player.mounted = true;
