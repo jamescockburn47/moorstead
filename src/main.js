@@ -24,6 +24,7 @@ import { initTelemetry } from './telemetry.js';
 import { escHtml } from './escape.js';
 import { buildTrain } from './train.js';
 import { Rails } from './rails.js';
+import { RoadLayer } from './roads.js';
 import { FloraLayer } from './floraLayer.js';
 import { FestiveLayer } from './festiveLayer.js';
 import { Footprints } from './footprints.js';
@@ -333,6 +334,8 @@ class Game {
     this.milestones = new Milestones(this);
     if (this.rails) this.rails.dispose();
     this.rails = new Rails(this.scene, this.world.gen.geo); // t' permanent way, drawn proper
+    if (this.roads) this.roads.dispose();
+    this.roads = new RoadLayer(this.scene, this.world, this.world.gen.geo); // t' parish lanes — needs the chunk world for surfaceHeight
     if (this.floraLayer) this.floraLayer.clear();
     this.floraLayer = new FloraLayer(this.scene, this.world);
     if (this.festiveLayer) this.festiveLayer.clear();
@@ -379,6 +382,7 @@ class Game {
   teardownWorld() {
     if (this.rosterClient) { this.rosterClient.stop(); this.rosterClient = null; }
     if (this.rails) { this.rails.dispose(); this.rails = null; }
+    if (this.roads) { this.roads.dispose(); this.roads = null; }
     if (this.floraLayer) { this.floraLayer.clear(); this.floraLayer = null; }
     if (this.festiveLayer) { this.festiveLayer.clear(); this.festiveLayer = null; }
     if (this.footprints) { this.footprints.clear(); this.footprints = null; }
@@ -3701,6 +3705,7 @@ class Game {
         if (this._seasonBucket !== 90 + this._titleSceneIdx) { this._seasonBucket = 90 + this._titleSceneIdx; retintAtlasForSeason(lightSeason); }
         this.sky.update(dt, this.player.pos, lightSeason, false);
         if (this.rails) this.rails.update(dt, { x: ax, z: az });
+        if (this.roads) this.roads.update(dt, { x: ax, z: az });
         if (this.rosterClient) { this.rosterClient.update(dt); this._titlePopulateTrain(br); } // drive the roster + keep the watched train busy with boarders
         this.entities.update(dt, this.player, false, this.audio, () => {});
         const orbitCam = () => {
@@ -3774,6 +3779,7 @@ class Game {
       this.updateTrainWorld(dt);
       this.updateBranchTrains(dt); // …an' a train on every other line — the whole network's alive
       if (this.rails) this.rails.update(dt, this.player.pos);
+      if (this.roads) this.roads.update(dt, this.player.pos);
       if (this.state === 'riding' && this.ride) {
         this.updateRide(dt);
       } else if (this.state === 'driving') {
