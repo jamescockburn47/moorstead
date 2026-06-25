@@ -4198,6 +4198,38 @@ class Game {
       this.carolBox.setActive(audible, nearestVillageDist, this.sky.day);
     }
 
+    // festival audio: a bonfire crackle bed (Bonfire Night / Midsummer) and church-
+    // bell peals (Harvest Home / Eastertide), both gated on the active festival +
+    // nearness to a village. Cheap: a village-distance scan, a couple o' compares,
+    // and one peal timer. Drives audio.js's setCrackle bed + bells() peal.
+    this._fireCrackle = 0;
+    if (this.world && this.season) {
+      const active = festivalState(this.season.yearPhase).active;
+      const geo = this.world.gen && this.world.gen.geo;
+      let villDist = 1e9;
+      if (geo) {
+        const pp = this.player.pos;
+        for (const v of geo.villages) { const d = Math.hypot(v.x - pp.x, v.z - pp.z); if (d < villDist) villDist = d; }
+      }
+      const nearVillage = villDist < 60;
+      // bonfire roar: fades up as you near the green, full within ~village, gone by 40 blocks
+      if (nearVillage && (active === 'bonfire' || active === 'midsummer')) {
+        this._fireCrackle = Math.max(0, 1 - villDist / 40) * 0.5;
+      }
+      // bells: a peal every ~45-70 s while in the window near a village; first peal soon
+      // after you arrive. Reset the timer outside the window so re-entry rings promptly.
+      if (nearVillage && (active === 'harvest' || active === 'easter')) {
+        if (this._bellTimer == null) this._bellTimer = 4 + Math.random() * 4; // first peal ~4-8 s in
+        this._bellTimer -= dt;
+        if (this._bellTimer <= 0) {
+          this._bellTimer = 45 + Math.random() * 25;
+          this.audio.bells({ gain: Math.max(0.05, 0.2 * (1 - villDist / 60)) });
+        }
+      } else {
+        this._bellTimer = null;
+      }
+    }
+
     // audio ambience
     let nearSheep = false;
     for (const m of this.entities.mobs) {
@@ -4244,6 +4276,7 @@ class Game {
       onCoast: this._onCoast || 0,
       nearInn: this._nearInn || 0,
       trainDist,
+      fireCrackle: this._fireCrackle || 0,
     });
 
     // HUD

@@ -83,6 +83,20 @@ export class AudioEngine {
     this.pubSrc.start();
     this.pubFilter = pubFilter;
 
+    // ---- festival bonfire: a low filtered-noise roar (the body o' the blaze),
+    // wi' enveloped crackle grains scheduled on top (see _scheduleCrackle). Built
+    // as a bed like t' others — proximity fades this.crackleGain via setCrackle. ----
+    this.crackleSrc = this.ctx.createBufferSource();
+    this.crackleSrc.buffer = this.pinkBuf; this.crackleSrc.loop = true;
+    const crackleFilter = this.ctx.createBiquadFilter();
+    crackleFilter.type = 'lowpass'; crackleFilter.frequency.value = 380; // warm, low — a near fire, not a hiss
+    this.crackleGain = this.ctx.createGain(); this.crackleGain.gain.value = 0;
+    this.crackleSrc.connect(crackleFilter).connect(this.crackleGain).connect(this.master);
+    this.crackleSrc.start();
+    this.crackleFilter = crackleFilter;
+    this._crackleLevel = 0;   // last level set by setCrackle — gates the grain scheduler
+    this._crackleTimer = 0;   // counts down to t' next crackle-grain burst
+
     this.pubTimer = 0; this.whistleTimer = 0; this.brassTimer = 90;
   }
 
@@ -93,7 +107,8 @@ export class AudioEngine {
 
   // call each frame
   update(dt, { rain = 0, windiness = 0.5, isNight = false, nearSheep = false, dread = 0,
-               season = null, nearWater = 0, onCoast = 0, nearInn = 0, trainDist = null }) {
+               season = null, nearWater = 0, onCoast = 0, nearInn = 0, trainDist = null,
+               fireCrackle = 0 }) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     this.dread = dread;
@@ -110,6 +125,10 @@ export class AudioEngine {
     this.surfGain.gain.setTargetAtTime(onCoast * (0.06 + (Math.sin(t * 0.18) * 0.5 + 0.5) * 0.06), t, 0.8); // swell
     this.pubGain.gain.setTargetAtTime(nearInn * 0.06, t, 0.7);
     this.pubFilter.frequency.setTargetAtTime(440 + Math.sin(t * 1.3) * 80, t, 0.3); // murmur wobble
+
+    // festival fire-crackle bed: roar level set by the caller (proximity), grains
+    // scheduled on top only while it's actually audible (no work near silence).
+    this.setCrackle(fireCrackle, dt);
 
     // tap-room one-shots of an evening: pots, a laugh, t' hearth, a dog
     if (nearInn > 0.2) {
@@ -180,6 +199,92 @@ export class AudioEngine {
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + delay + 0.22);
       o.connect(g).connect(this.master);
       o.start(t0 + delay); o.stop(t0 + delay + 0.3);
+    }
+  }
+
+  // ---------- festival: bonfire crackle + church bells ----------
+  // Ramp the bonfire-roar bed toward `level` (proximity, 0..~0.5) and, while it's
+  // audible, schedule short crackle grains at random-ish gaps. The scheduler is
+  // gated on level: near silence we ramp the roar down and do no grain work.
+  setCrackle(level, dt) {
+    if (!this.ctx || !this.crackleGain) return;
+    const t = this.ctx.currentTime;
+    this._crackleLevel = level;
+    // anti-click: never slam to a hard 0 — a tiny floor, then audibly silent
+    this.crackleGain.gain.setTargetAtTime(Math.max(0.0001, level), t, 0.5);
+    if (level < 0.02) { this._crackleTimer = 0; return; } // hushed: don't schedule grains
+    this._crackleTimer -= dt;
+    if (this._crackleTimer <= 0) {
+      // a wee cluster o' snaps, then a gap — fires crackle in flurries, not evenly
+      const n = 1 + ((Math.random() * 3) | 0);
+      for (let i = 0; i < n; i++) this._crackleGrain(t + i * (0.02 + Math.random() * 0.06), level);
+      this._crackleTimer = 0.12 + Math.random() * 0.4;
+    }
+  }
+
+  // one crackle grain: a tiny enveloped band-passed noise pop (a spit o' the fire).
+  _crackleGrain(t0, level) {
+    if (!this.ctx) return;
+    const s = this.ctx.createBufferSource();
+    s.buffer = this.noiseBuf;
+    s.playbackRate.value = 0.8 + Math.random() * 0.9;
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = 900 + Math.random() * 2200; f.Q.value = 4 + Math.random() * 6;
+    const g = this.ctx.createGain();
+    const peak = level * (0.18 + Math.random() * 0.5);  // grains scale wi' proximity too
+    const dur = 0.02 + Math.random() * 0.05;            // very short — a snap, not a hiss
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t0 + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    s.connect(f).connect(g).connect(this.master);
+    s.start(t0); s.stop(t0 + dur + 0.02);
+  }
+
+  // bells(opts): ONE church-bell PEAL (not a bed). Rings ~8 struck tones in a
+  // descending round over a few seconds, at a tenor-bell pitch. Each strike is
+  // additive partials at bell ratios through a gentle low-pass; one call schedules
+  // the whole peal and returns. `gain` is the peal volume (proximity-set).
+  bells({ gain = 0.18 } = {}) {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime + 0.05;
+    // a shared gentle low-pass softens the higher partials so it tolls, not clangs
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 3200; lp.Q.value = 0.4;
+    const peal = this.ctx.createGain();
+    peal.gain.value = Math.max(0.0001, gain); // anti-click floor; one peal = one fixed level
+    lp.connect(peal).connect(this.master);
+    // a descending round on a tenor-bell scale around A3 — change-ringing feel
+    const base = 220; // A3, a real tenor-bell pitch
+    const scale = [1, 0.891, 0.794, 0.749, 0.667, 0.595, 0.561, 0.5]; // ~A G F E D C B A (octave down)
+    const gap = 0.34;
+    for (let i = 0; i < scale.length; i++) this._bellStrike(base * scale[i], t0 + i * gap, lp);
+  }
+
+  // one struck bell = additive partials at bell ratios, each a sine with a near-
+  // instant attack and a long exponential decay (higher partials die faster). The
+  // tierce (1.2, the minor third) is what makes metal read as a *bell*.
+  _bellStrike(f0, t0, dest) {
+    if (!this.ctx) return;
+    // [ratio, level, decay(s)] — hum, prime, tierce(min-3rd), quint(5th), nominal, + two upper
+    const partials = [
+      [0.5, 0.55, 3.6],   // hum — the deep undertone, longest ring
+      [1.0, 1.00, 3.0],   // prime — the named note
+      [1.2, 0.85, 2.4],   // tierce — the minor third, a bell's signature
+      [1.5, 0.50, 1.8],   // quint — the fifth
+      [2.0, 0.65, 1.6],   // nominal — the strike-note octave
+      [2.7, 0.30, 0.9],   // upper partial — adds the metallic 'ting'
+      [3.6, 0.18, 0.6],   // higher still — decays fast, just the attack shimmer
+    ];
+    for (const [ratio, lvl, dec] of partials) {
+      const o = this.ctx.createOscillator();
+      o.type = 'sine'; o.frequency.value = f0 * ratio;
+      const g = this.ctx.createGain();
+      const peak = 0.16 * lvl;
+      g.gain.setValueAtTime(0.0001, t0);                              // from a tiny floor (no click)
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t0 + 0.004); // struck: near-instant attack
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dec);          // long, ringing tail
+      o.connect(g).connect(dest);
+      o.start(t0); o.stop(t0 + dec + 0.05);
     }
   }
 
