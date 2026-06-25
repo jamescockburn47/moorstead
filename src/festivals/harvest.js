@@ -38,7 +38,7 @@ export function buildHarvest(ctx) {
         if (!col || (col.kind !== 'green' && col.kind !== 'closes')) continue;
         const sy = gen.height(x, z);
         if (world.getBlock(x, sy + 1, z) !== B.AIR) continue;
-        // Deterministic sparse gate — ~35% of qualifying cells
+        // Sparse gate: place when hash <= 0.35, skip otherwise — ~35% of qualifying cells
         if (hash2i(x, z, gen.geo.seed ^ 0xe3a7) > 0.35) continue;
         const yaw = hash2i(x, z, 0x5b3c) * Math.PI * 2;
         const stook = buildStook();
@@ -218,6 +218,7 @@ function deckChapelHarvest(scene, objects, b, midX, gen) {
 function buildWallSheaf() {
   const g = new THREE.Group();
   const matStraw = new THREE.MeshLambertMaterial({ color: STRAW_GOLD });
+  const matLight = new THREE.MeshLambertMaterial({ color: STRAW_LIGHT });
   const matBind  = new THREE.MeshLambertMaterial({ color: BIND_BROWN });
 
   // Main bundle — a broad flat box (read as a bundle of stalks)
@@ -226,7 +227,6 @@ function buildWallSheaf() {
   g.add(bundle);
 
   // Ears at top — a slightly wider, shorter box in lighter gold
-  const matLight = new THREE.MeshLambertMaterial({ color: STRAW_LIGHT });
   const ears = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.14, 0.07), matLight);
   ears.position.y = 0.47;
   g.add(ears);

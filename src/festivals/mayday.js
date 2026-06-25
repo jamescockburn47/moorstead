@@ -36,7 +36,7 @@ export function buildMayDay(ctx) {
     const fp = greenPlacement(world, v);
     if (fp) {
       const groundY = gen.height(fp.x, fp.z) + 1;
-      const pole = buildMaypole(fp.x, fp.z, gen.geo.seed);
+      const pole = buildMaypole(fp.x, fp.z);
       pole.position.set(fp.x + 0.5, groundY, fp.z + 0.5);
       scene.add(pole);
       objects.push(pole);
@@ -56,7 +56,7 @@ export function buildMayDay(ctx) {
 //   - A greenery garland ring (TorusGeometry) near the top with flower dots
 //   - 6 spiralling ribbon strips descending from just below the top to a wider
 //     base radius, in bright alternating Maytime colours
-function buildMaypole(wx, wz, seed) {
+function buildMaypole(wx, wz) {
   const group = new THREE.Group();
 
   const matPole    = new THREE.MeshLambertMaterial({ color: 0xd4bc8a }); // pale weathered wood
@@ -119,6 +119,9 @@ function buildMaypole(wx, wz, seed) {
   const RIBBON_W       = 0.06;
   const RIBBON_H       = 0.55; // height of each segment box
 
+  // Shared geometry for every ribbon segment — one allocation instead of ~60
+  const segGeo = new THREE.BoxGeometry(RIBBON_W, RIBBON_H, RIBBON_W * 0.5);
+
   for (let ri = 0; ri < RIBBON_N; ri++) {
     const mat = new THREE.MeshLambertMaterial({ color: RIBBON_COLORS[ri % RIBBON_COLORS.length] });
     // Deterministic twist offset per ribbon so they don't all start at the same angle
@@ -145,11 +148,8 @@ function buildMaypole(wx, wz, seed) {
       const px = Math.cos(mid_angle) * mid_r;
       const pz = Math.sin(mid_angle) * mid_r;
 
-      // Segment geometry: thin flat box representing a ribbon strip
-      const seg = new THREE.Mesh(
-        new THREE.BoxGeometry(RIBBON_W, RIBBON_H, RIBBON_W * 0.5),
-        mat
-      );
+      // Segment mesh reuses the shared segGeo
+      const seg = new THREE.Mesh(segGeo, mat);
       seg.position.set(px, mid_y, pz);
 
       // Orient the segment: yaw tangent to the helix circle + slight inward tilt

@@ -46,7 +46,7 @@ export function buildEaster(ctx) {
         if (!col || (col.kind !== 'green' && col.kind !== 'closes')) continue;
         const sy = gen.height(x, z);
         if (world.getBlock(x, sy + 1, z) !== B.AIR) continue;
-        // Deterministic sparse gate — ~30% of qualifying cells
+        // Sparse gate: place when hash <= 0.30, skip otherwise — ~30% of qualifying cells
         if (hash2i(x, z, gen.geo.seed ^ 0x7be4) > 0.30) continue;
         // Pick colour deterministically from the palette
         const colorIdx = Math.floor(hash2i(x, z, 0x4e9a) * EGG_COLORS.length);
