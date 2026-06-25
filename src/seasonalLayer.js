@@ -10,14 +10,15 @@ import { SCARF_COLORS, DEFAULT_SNOWMAN } from './snowman.js';
 import { hash2i } from './noise.js';
 import { B } from './defs.js';
 import { buildChristmas } from './festivals/christmas.js';
+import { buildBonfire } from './festivals/bonfire.js';
 
 const RADIUS = 48;
 const REBUILD_MOVE = 8;
 
-// Registry of festival-id → dressing builder. Later slices add entries
-// (mayday, harvest, bonfire…); the host calls whichever matches the active
-// festival window, so nowt is drawn outside its calendar window.
-const FESTIVAL_BUILDERS = { yule: buildChristmas };
+// Registry of festival-id → dressing builder. Later slices add more entries
+// (mayday, harvest…); the host calls whichever matches the active festival
+// window, so nowt is drawn outside its calendar window.
+const FESTIVAL_BUILDERS = { yule: buildChristmas, bonfire: buildBonfire };
 
 export class SeasonalLayer {
   constructor(scene, world) {
@@ -246,9 +247,15 @@ export class SeasonalLayer {
   clear() {
     for (const o of this.objects) {
       this.scene.remove(o);
+      // Groups that own a lifecycle (e.g. the bonfire's hero Fire — ember/smoke
+      // particle systems + a registered pulsing light) expose dispose(); call it
+      // first so their tick registries are released. It frees its OWN geometry +
+      // per-fire materials but NEVER the shared flame material.
+      if (typeof o.dispose === 'function') o.dispose();
       o.traverse(c => {
         if (c.geometry) c.geometry.dispose();
-        // Only dispose materials that the object owns (not the shared cutout material)
+        // Only dispose materials that the object owns (not the shared cutout/flame
+        // material, flagged sharedMaterial).
         if (c.material && !c.userData.sharedMaterial) c.material.dispose();
       });
     }

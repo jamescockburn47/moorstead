@@ -10,7 +10,7 @@
 // read the Set, filter to a radius, sort by distance, cap the count. So the
 // rebuild is O(lights near the player), an' it only fires on the throttle.
 import * as THREE from 'three';
-import { makeFlameMaterial, Fire, tickFlame } from './fire.js';
+import { getFlameMaterial, Fire } from './fire.js';
 
 const RADIUS = 32;       // only light blocks within this of the player get a flame
 const REBUILD_MOVE = 4;  // rebuild once the player drifts this many blocks
@@ -31,21 +31,19 @@ export class FireLayer {
   constructor(scene, world) {
     this.scene = scene;
     this.world = world;
-    this.mat = makeFlameMaterial(); // the ONE shared flame material (we tick it)
+    this.mat = getFlameMaterial(); // the ONE shared flame material (singleton —
+                                   // we DON'T tick it; main.js drives tickFires)
     this.fires = [];                // live Fire groups
     this.center = null;             // [x,z] of the last rebuild
     this.lightKey = null;           // world.lanterns.size at the last rebuild
     this.lastBuildY = null;         // player Y at the last rebuild (mine-shaft gate)
     this.timer = 0;
-    this.t = 0;                     // flame animation clock
   }
 
   update(dt, playerPos, camera) {
-    // Flame animation runs EVERY frame, before the rebuild early-out — the
-    // billboard faces the camera in-shader, so there's no per-frame CPU rotation.
-    this.t += dt;
-    tickFlame(this.mat, this.t);
-
+    // NOTE: the flame clock is no longer ticked here. The shared flame material
+    // is a module singleton driven ONCE PER FRAME by tickFires() in main.js, so
+    // both these torches AND the off-layer festival bonfire animate off one clock.
     this.timer -= dt;
     if (this.timer > 0) return;
     this.timer = REBUILD_EVERY;
@@ -106,7 +104,7 @@ export class FireLayer {
   }
 
   // Dispose every live fire group (frees their geometries). NEVER the shared
-  // material — it lives for the whole layer; teardown drops it with the layer.
+  // flame material — it's the game-wide singleton an' outlives every world.
   clear() {
     for (const f of this.fires) {
       this.scene.remove(f);
@@ -115,10 +113,13 @@ export class FireLayer {
     this.fires.length = 0;
   }
 
-  // Full teardown: free geometries AND the shared flame material (shader program).
-  // Call this on world reload / scene destruction; call clear() for a soft rebuild.
+  // Full teardown on world reload / scene destruction: free this layer's fire
+  // GROUP geometries (via clear()). The shared flame material is a persistent
+  // module singleton — we drop our reference but DON'T dispose its shader program
+  // (it's reused by the next world an' by festival fires). clear() for a soft
+  // rebuild; dispose() for teardown.
   dispose() {
     this.clear();
-    if (this.mat) { this.mat.dispose(); this.mat = null; }
+    this.mat = null; // drop the ref only — the singleton lives on
   }
 }

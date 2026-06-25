@@ -28,6 +28,7 @@ import { RoadLayer } from './roads.js';
 import { FloraLayer } from './floraLayer.js';
 import { SeasonalLayer } from './seasonalLayer.js';
 import { FireLayer } from './fireLayer.js';
+import { tickFires } from './fire.js';
 import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase } from './season.js';
 import { activeForageables, hostForageFor, fruitSpeciesAt, fruitTreeRipe } from './forage.js';
@@ -3926,6 +3927,10 @@ class Game {
       if (this.floraLayer) this.floraLayer.update(dt, this.player.pos, season);
       if (this.seasonalLayer) this.seasonalLayer.update(dt, this.player.pos, season, this.snowAccum);
       if (this.fireLayer) this.fireLayer.update(dt, this.player.pos, this.camera);
+      // ONE global flame tick: drives the shared flame material's uTime, every
+      // hero fire's embers/smoke, an' the pulsing bonfire light — so torches
+      // (FireLayer) AND the festival bonfire (SeasonalLayer) animate off one clock.
+      this._fireT = (this._fireT || 0) + dt; tickFires(this._fireT);
       if (this.footprints && this.snowAccum > 0.1) {
         const fpNow = performance.now() / 1000;
         const walkers = [{ x: this.player.pos.x, z: this.player.pos.z }];

@@ -1,20 +1,28 @@
-// fire.js — a real animated flame for every torch, lantern an' safety-lamp.
+// fire.js — a real animated flame for every torch, lantern, safety-lamp AN' the
+// festival bonfire.
 //
 // The flame LOOK is the proven prototype (prototypes/fire.html): a domain-warped
 // fBm turbulence carved into a multi-tongue bed, coloured through a blackbody
 // ramp. Here it's ported FAITHFULLY into a three.js ShaderMaterial — the same
-// hash/vnoise/fbm an' the same heat→colour ramp — wi' two changes for the world:
+// hash/vnoise/fbm an' the same heat→colour ramp — wi' three changes for the world:
 //   1. the VERTEX shader billboards the quad toward the camera (no per-frame CPU
 //      rotation), offsetting the group centre in view space by the corner * size;
 //   2. a per-vertex aSeed offsets the noise so two torches side by side don't
-//      pulse in lockstep.
-// The in-game flames are torch/lantern-sized — one small narrow tongue — so the
-// prototype's "torch" preset constants are baked straight into the GLSL. The
-// broad chaotic bonfire is the same shader wi' wider params; that lands wi' the
-// bonfire in Slice 7.
+//      pulse in lockstep;
+//   3. a per-vertex aBig (0/1) picks the FLAME PRESET — 0 collapses it to the
+//      prototype's narrow "torch" tongue, 1 spreads it to the broad, chaotic
+//      "bonfire" bed (PRESETS.bonfire frae the prototype). Both presets ride the
+//      ONE shared material, resolved in-shader, so torches an' the bonfire animate
+//      off the same uTime wi'out a second material.
 //
-// Mirrors the sky-dome idiom in src/sky.js: a ShaderMaterial wi' a uTime uniform
-// advanced each frame (here by tickFlame, called from FireLayer).
+// SINGLETON + GLOBAL TICK. There is exactly ONE flame ShaderMaterial for the
+// whole game (getFlameMaterial(), lazy, module-level). It is shared by BOTH the
+// FireLayer torches an' festival Fire() calls, an' it LIVES for the game — it is
+// never disposed on world-reload (the shader program is persistent). tickFires(t)
+// is called ONCE PER FRAME frae main.js: it advances the material's uTime, drives
+// every hero fire's ember system, an' pulses the hero point-lights. Mirrors the
+// sky-dome idiom in src/sky.js (a ShaderMaterial wi' a uTime uniform advanced each
+// frame), but centralised so off-FireLayer fires animate too.
 import * as THREE from 'three';
 
 // --- the billboard quad -------------------------------------------------------
@@ -26,7 +34,9 @@ import * as THREE from 'three';
 // an' narrow, ~1.6:1).
 const ASPECT = 0.62; // == prototype uAspect for a tall narrow flame (width/height)
 
-function flameQuad(seed) {
+// `big` (0|1) is baked into every vertex of the quad as aBig — picks the flame
+// preset in-shader (0 = torch, 1 = bonfire). One number per quad; const per fire.
+function flameQuad(seed, big) {
   const g = new THREE.BufferGeometry();
   // two tris; base edge at y=0, tip at y=1
   const pos = [
@@ -35,29 +45,38 @@ function flameQuad(seed) {
   ];
   const uv = [0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1];
   const seeds = new Array(6).fill(seed);
+  const bigs = new Array(6).fill(big ? 1 : 0);
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setAttribute('aSeed', new THREE.Float32BufferAttribute(seeds, 1));
+  g.setAttribute('aBig', new THREE.Float32BufferAttribute(bigs, 1));
   return g;
 }
 
 // --- the shared flame material ------------------------------------------------
-// ONE material is shared by every flame in the world (FireLayer owns it). Never
-// dispose it from a Fire group — only its geometries.
+// ONE material is shared by every flame in the world. Never dispose it (it
+// outlives every world). Only its render targets — the Fire groups' geometries —
+// are disposed.
 //
 // VERTEX: billboard. The group's centre (local origin) is transformed to view
-// space, then the quad corner is added in view space (× per-instance uSize) so
+// space, then the quad corner is added in view space (× per-instance scale) so
 // the quad always faces the camera, upright, rising from the centre. vUv + aSeed
-// pass through to the fragment.
+// + aBig pass through to the fragment.
 //
-// FRAGMENT: the prototype flame body, torch preset baked as constants.
+// FRAGMENT: the prototype flame body. The slider params are no longer baked as
+// constants — they're resolved per-fragment by mixing the torch preset an' the
+// bonfire preset on aBig, so the same material draws both a narrow torch tongue
+// an' a broad chaotic bonfire bed.
 const VERT = `
   attribute float aSeed;
+  attribute float aBig;
   varying vec2 vUv;
   varying float vSeed;
+  varying float vBig;
   void main() {
     vUv = uv;
     vSeed = aSeed;
+    vBig = aBig;
     // billboard: take the mesh origin into view space, then offset by the quad
     // corner so the quad always faces the camera, upright. Per-mesh size comes
     // from the model matrix's x/y scale columns (so each Fire's group/mesh scale
@@ -71,25 +90,30 @@ const VERT = `
 `;
 
 // Faithful port of prototypes/fire.html FRAG. The uniforms that were sliders in
-// the prototype are frozen to the "torch" preset (a single narrow tongue); only
-// uTime + the per-vertex seed vary. ASPECT/sway/etc. match the torch numbers.
+// the prototype are resolved per-fragment by mix(torch, bonfire, vBig) — the two
+// presets are PRESETS.torch an' PRESETS.bonfire frae the prototype, baked here as
+// const pairs. Only uTime + the per-vertex seed/big vary across draws.
 const FRAG = `
   precision highp float;
   varying vec2 vUv;
   varying float vSeed;
+  varying float vBig;
   uniform float uTime;
 
-  // torch preset (== PRESETS.torch in the prototype)
-  const float uScale     = 4.5;
-  const float uSpeed     = 1.5;
-  const float uChaos     = 1.0;
-  const float uHeight    = 0.85;
-  const float uBaseWidth = 0.14;
-  const float uTongues   = 2.5;
-  const float uIntensity = 1.9;
-  const float uTemp      = 1.0;
-  const float uAspect    = ${ASPECT.toFixed(2)};
-  const float uSway      = 0.7;
+  // PRESETS.torch (narrow single tongue) an' PRESETS.bonfire (broad chaotic bed),
+  // verbatim frae the prototype. vBig (0|1) mixes between them — a torch resolves
+  // to the torch numbers, the bonfire to the bonfire numbers.
+  const float uAspect = ${ASPECT.toFixed(2)};
+  //                        torch   bonfire
+  const float uScaleA     = 4.5,  uScaleB     = 3.2;
+  const float uSpeedA     = 1.5,  uSpeedB     = 1.15;
+  const float uChaosA     = 1.0,  uChaosB     = 2.3;
+  const float uHeightA    = 0.85, uHeightB    = 0.98;
+  const float uBaseWidthA = 0.14, uBaseWidthB = 0.58;
+  const float uTonguesA   = 2.5,  uTonguesB   = 8.0;
+  const float uIntensityA = 1.9,  uIntensityB = 1.8;
+  const float uTempA      = 1.0,  uTempB      = 1.12;
+  const float uSwayA      = 0.7,  uSwayB      = 0.5;
 
   float hash(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
   float vnoise(vec2 p){
@@ -105,6 +129,17 @@ const FRAG = `
   }
 
   void main(){
+    // resolve the preset for this fragment (torch ↔ bonfire on vBig)
+    float uScale     = mix(uScaleA,     uScaleB,     vBig);
+    float uSpeed     = mix(uSpeedA,     uSpeedB,     vBig);
+    float uChaos     = mix(uChaosA,     uChaosB,     vBig);
+    float uHeight    = mix(uHeightA,    uHeightB,    vBig);
+    float uBaseWidth = mix(uBaseWidthA, uBaseWidthB, vBig);
+    float uTongues   = mix(uTonguesA,   uTonguesB,   vBig);
+    float uIntensity = mix(uIntensityA, uIntensityB, vBig);
+    float uTemp      = mix(uTempA,      uTempB,      vBig);
+    float uSway      = mix(uSwayA,      uSwayB,      vBig);
+
     // per-flame desync: shove every noise lookup by a seed-derived offset so two
     // neighbouring torches writhe out of step.
     vec2 so = vec2(vSeed * 7.13, vSeed * 3.71);
@@ -142,57 +177,233 @@ const FRAG = `
   }
 `;
 
-// Build the ONE shared flame material. Additive + no depth-write so flames glow
-// an' never occlude owt behind them (sky.js domeMat uses the same depthWrite:false
-// idiom). The caller (FireLayer) keeps a single instance an' ticks its uTime.
-export function makeFlameMaterial() {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uTime: { value: 0 },
-    },
-    vertexShader: VERT,
-    fragmentShader: FRAG,
+// --- the ONE shared flame material (module singleton) -------------------------
+// Built lazily, reused by every fire in the game, NEVER disposed. Additive + no
+// depth-write so flames glow an' never occlude owt behind them (sky.js domeMat
+// uses the same depthWrite:false idiom).
+let _flameMat = null;
+export function getFlameMaterial() {
+  if (!_flameMat) {
+    _flameMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: VERT,
+      fragmentShader: FRAG,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+  }
+  return _flameMat;
+}
+
+// Back-compat alias: callers (an' the headless test) historically called
+// makeFlameMaterial(). It now returns the SAME singleton — one material per
+// process is the whole point. `.shared` still exposes the instance for the test's
+// material-identity assertion.
+export function makeFlameMaterial() { return getFlameMaterial(); }
+Object.defineProperty(makeFlameMaterial, 'shared', { get: () => _flameMat });
+
+// --- hero registries (driven by tickFires) ------------------------------------
+// Hero fires (the bonfire) add an ember Points an' a point-light. They register
+// here so the ONE global tick animates them; the Fire group's dispose() pulls its
+// own entries back out. CPU per-frame work is nil — embers animate GPU-side; the
+// light is a single intensity write.
+const _emberMats = []; // ShaderMaterials wi' a uTime uniform (ember + smoke plumes)
+const _heroLights = []; // { light, base } — pulsed about `base` intensity
+
+// --- ember particle system ----------------------------------------------------
+// A capped (~EMBER_COUNT) THREE.Points of additive warm motes that rise off the
+// bed an' recycle, animated ENTIRELY GPU-side: the vertex shader derives each
+// mote's life frae uTime + a per-point seed, lifts it up its lane an' shrinks it,
+// the fragment fades warm-orange → transparent over life. No per-frame CPU loop —
+// tickFires only pokes uTime.
+const EMBER_COUNT = 40;
+
+const EMBER_VERT = `
+  attribute float aSeed;   // 0..1 per mote — phase + lane + lifespan jitter
+  uniform float uTime;
+  uniform float uScale;    // fire scale (blocks) — sizes the spread + rise height
+  varying float vLife;     // 0..1 along this mote's current life (for the fade)
+  // cheap 1D hash for per-mote lane offsets
+  float h(float n){ return fract(sin(n * 78.233) * 43758.5453); }
+  void main(){
+    float seed = aSeed;
+    float life = h(seed * 11.1);          // 0.5..1.5s lifespans, varied
+    float dur  = 0.9 + life;
+    // each mote loops on its own phase; t in [0,1) is its progress this cycle
+    float t = fract(uTime / dur + seed);
+    vLife = t;
+    // lane: a fixed-ish x/z drift per mote, widening a touch as it climbs
+    float ang = seed * 6.2831;
+    float rad = (0.10 + 0.22 * h(seed * 3.7)) * uScale * (0.4 + 0.8 * t);
+    float px = cos(ang) * rad + sin(uTime * 1.3 + seed * 10.0) * 0.04 * uScale;
+    float pz = sin(ang) * rad + cos(uTime * 1.1 + seed * 7.0) * 0.04 * uScale;
+    float py = (0.2 + t * (1.1 + 0.6 * h(seed * 5.3))) * uScale; // rises up its lane
+    vec4 mv = modelViewMatrix * vec4(px, py, pz, 1.0);
+    gl_Position = projectionMatrix * mv;
+    // shrink with life + distance; bigger fires throw bigger embers
+    float sz = (1.0 - t) * (2.2 + 2.0 * uScale);
+    gl_PointSize = max(1.0, sz * (300.0 / -mv.z));
+  }
+`;
+
+const EMBER_FRAG = `
+  precision highp float;
+  varying float vLife;
+  void main(){
+    // round soft mote
+    vec2 d = gl_PointCoord - vec2(0.5);
+    float r = length(d);
+    if (r > 0.5) discard;
+    float soft = smoothstep(0.5, 0.0, r);
+    // warm orange cooling toward red as it ages, fading out at both ends of life
+    vec3 col = mix(vec3(1.0, 0.62, 0.18), vec3(0.9, 0.18, 0.04), vLife);
+    float fade = smoothstep(0.0, 0.12, vLife) * (1.0 - smoothstep(0.6, 1.0, vLife));
+    gl_FragColor = vec4(col, soft * fade * 0.9);
+  }
+`;
+
+function makeEmbers(scale) {
+  const g = new THREE.BufferGeometry();
+  // all points sit at the origin in attribute space; the vertex shader places
+  // them — so geometry is just a seed per point (position is a required attr).
+  const pos = new Float32Array(EMBER_COUNT * 3); // all zero
+  const seeds = new Float32Array(EMBER_COUNT);
+  for (let i = 0; i < EMBER_COUNT; i++) seeds[i] = (i + 0.5) / EMBER_COUNT;
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uScale: { value: scale } },
+    vertexShader: EMBER_VERT,
+    fragmentShader: EMBER_FRAG,
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
   });
+  const pts = new THREE.Points(g, mat);
+  pts.frustumCulled = false; // the shader places the motes — static bounds would cull them wrongly
+  pts.userData.emberMat = mat;
+  pts.userData.emberGeo = g;
+  return pts;
 }
 
-// A single fire: a THREE.Group of `layers` billboard quads on the ONE shared
-// flame material, sized by `scale`. The caller positions the group at the fire's
-// world coords (block top). Stacking a few layers (different seeds) reads as a
-// fuller, deeper flame; a torch is happy wi' one.
+// --- smoke plume --------------------------------------------------------------
+// A couple of large soft grey quads stacked above the flame that drift, rise an'
+// fade on uTime. Kept subtle (low alpha). Billboards toward the camera the same
+// way the flame does. GPU-animated; tickFires only pokes uTime.
+const SMOKE_VERT = `
+  attribute float aLayer;  // 0..1 — which puff in the stack (phase + base height)
+  uniform float uTime;
+  uniform float uScale;
+  varying vec2 vUv;
+  varying float vLayer;
+  void main(){
+    vUv = uv;
+    vLayer = aLayer;
+    // rise + recycle on a per-layer phase; a slow lateral sway as it climbs
+    float t = fract(uTime * 0.10 + aLayer);
+    float rise = (0.9 + t * 2.4) * uScale;           // climbs well above the flame
+    float sway = sin(uTime * 0.5 + aLayer * 6.28) * 0.18 * uScale * t;
+    float grow = (0.6 + 1.1 * t);                    // billows wider as it rises
+    vec2 mscale = vec2(length(modelMatrix[0].xyz), length(modelMatrix[1].xyz)) * grow;
+    vec4 centre = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+    centre.xy += position.xy * mscale;
+    centre.x  += sway;
+    centre.y  += rise;
+    gl_Position = projectionMatrix * centre;
+  }
+`;
+
+const SMOKE_FRAG = `
+  precision highp float;
+  varying vec2 vUv;
+  varying float vLayer;
+  uniform float uTime;
+  void main(){
+    vec2 d = vUv - vec2(0.5);
+    float r = length(d);
+    float soft = smoothstep(0.5, 0.08, r);       // soft round puff
+    float t = fract(uTime * 0.10 + vLayer);
+    // fade in low, thin out as it rises an' disperses
+    float fade = smoothstep(0.0, 0.2, t) * (1.0 - smoothstep(0.55, 1.0, t));
+    float a = soft * fade * 0.16;                 // subtle
+    gl_FragColor = vec4(vec3(0.32, 0.30, 0.29), a);
+  }
+`;
+
+const SMOKE_PUFFS = 3;
+
+function makeSmoke(scale) {
+  // one quad per puff, stacked; each puff is a layer 0..1 (phase offset)
+  const pos = [], uv = [], layer = [], idx = [];
+  for (let p = 0; p < SMOKE_PUFFS; p++) {
+    const b = p * 4;
+    // a unit quad centred on origin (size carried by model scale × grow in-shader)
+    pos.push(-0.7, 0, 0, 0.7, 0, 0, 0.7, 1.4, 0, -0.7, 1.4, 0);
+    uv.push(0, 0, 1, 0, 1, 1, 0, 1);
+    const l = (p + 0.5) / SMOKE_PUFFS;
+    layer.push(l, l, l, l);
+    idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('aLayer', new THREE.Float32BufferAttribute(layer, 1));
+  g.setIndex(idx);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uScale: { value: scale } },
+    vertexShader: SMOKE_VERT,
+    fragmentShader: SMOKE_FRAG,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.NormalBlending, // grey smoke darkens, not additive
+  });
+  const mesh = new THREE.Mesh(g, mat);
+  mesh.frustumCulled = false; // shader lifts the quads above their static bounds
+  mesh.userData.smokeMat = mat;
+  mesh.userData.smokeGeo = g;
+  return mesh;
+}
+
+// --- a single fire ------------------------------------------------------------
+// A THREE.Group of `layers` billboard quads on the ONE shared flame material,
+// sized by `scale`. The caller positions the group at the fire's world coords
+// (block top). Stacking a few layers (different seeds) reads as a fuller, deeper
+// flame; a torch is happy wi' one.
 //
 // opts:
 //   scale    world size of the flame (height in blocks; width follows ASPECT)
 //   layers   how many billboard quads (1 = a torch tongue)
 //   seed     desync seed, baked into aSeed (FireLayer hashes it from position)
-//   material the shared flame material to render on. FireLayer passes ITS material
-//            (the one it ticks each frame); omitted (e.g. the headless test) we
-//            fall back to a module singleton so every quad still lands on a
-//            ShaderMaterial. One material per process is the point, not a global.
-//   embers  } Slice 7 hooks — see below. No-ops now (YAGNI): the bonfire wires
-//   smoke   } the ember/smoke particle systems an' the flickering point-light
-//   light   } when it first needs them. Kept in the signature so call sites set.
+//   big      use the BROAD/CHAOTIC bonfire preset (else the narrow torch preset).
+//            Auto-on for big flames (scale ≥ 1.5) so a bonfire reads right even if
+//            the caller forgets the flag; torches stay small/narrow.
+//   embers  } HERO features — only big fires use them. embers: a rising-ember
+//   smoke   } Points; smoke: a soft drifting plume; light: one warm pulsed
+//   light   } PointLight. All GPU-animated off the shared tick (no CPU loop).
+//   material the shared flame material to render on. Defaults to the singleton;
+//            FireLayer passes the same singleton explicitly.
 export function Fire(opts = {}) {
   const {
     scale = 0.3,
     layers = 1,
     seed = 0,
     material = null,
-    embers = false, // Slice 7: ember particle puffs rising off the bed — not built (YAGNI)
-    smoke = false,  // Slice 7: a thin smoke plume above a big fire — not built (YAGNI)
-    light = false,  // Slice 7: a flickering THREE.PointLight on the bonfire — not built (YAGNI)
+    embers = false,
+    smoke = false,
+    light = false,
   } = opts;
+  // a big flame either asks for it, or is simply large
+  const big = opts.big != null ? !!opts.big : scale >= 1.5;
 
-  const mat = material || sharedMaterial();
+  const mat = material || getFlameMaterial();
   const group = new THREE.Group();
   const geoms = [];
   for (let i = 0; i < layers; i++) {
     // each layer gets its own slight seed nudge so stacked quads don't overlap
     // identically; a single-layer torch just uses `seed`.
-    const g = flameQuad(seed + i * 0.37);
+    const g = flameQuad(seed + i * 0.37, big);
     geoms.push(g);
     const m = new THREE.Mesh(g, mat);
     m.userData.sharedMaterial = true; // never dispose the shared flame material
@@ -205,36 +416,80 @@ export function Fire(opts = {}) {
   // each mesh's scale sets the flame's world size: the billboard vertex shader
   // reads it from the model matrix, so no shared size uniform is needed.
   group.userData.fireScale = scale;
-  group.userData.embers = embers; // Slice 7 hook (no-op)
-  group.userData.smoke = smoke;   // Slice 7 hook (no-op)
-  group.userData.light = light;   // Slice 7 hook (no-op)
+  group.userData.big = big;
 
-  // Free this group's geometries. NEVER the shared material (it outlives every
-  // fire — FireLayer owns its lifetime).
+  // -- hero features (big fires only) --
+  let emberPts = null, smokeMesh = null, pointLight = null;
+  if (embers) {
+    emberPts = makeEmbers(scale);
+    group.add(emberPts);
+    _emberMats.push(emberPts.userData.emberMat); // registered for the global tick
+  }
+  if (smoke) {
+    smokeMesh = makeSmoke(scale);
+    group.add(smokeMesh);
+    _emberMats.push(smokeMesh.userData.smokeMat);
+  }
+  if (light) {
+    // one warm point-light — the world's MeshLambert responds to it. Range/
+    // intensity scale with the fire; tickFires pulses it about `base`.
+    const base = 1.6 + scale * 0.5;
+    pointLight = new THREE.PointLight(0xffa64a, base, 10 + scale * 6, 2);
+    pointLight.position.set(0, scale * 0.6, 0); // sit it in the flame body
+    group.add(pointLight);
+    _heroLights.push({ light: pointLight, base });
+  }
+
+  // Free this group's hero geometries + drop its registry entries + remove its
+  // light. NEVER the shared flame material (it outlives every fire).
   group.dispose = () => {
     for (const g of geoms) g.dispose();
     geoms.length = 0;
+    if (emberPts) {
+      emberPts.userData.emberGeo.dispose();
+      emberPts.userData.emberMat.dispose();
+      removeFrom(_emberMats, emberPts.userData.emberMat);
+      emberPts = null;
+    }
+    if (smokeMesh) {
+      smokeMesh.userData.smokeGeo.dispose();
+      smokeMesh.userData.smokeMat.dispose();
+      removeFrom(_emberMats, smokeMesh.userData.smokeMat);
+      smokeMesh = null;
+    }
+    if (pointLight) {
+      group.remove(pointLight);
+      removeLight(_heroLights, pointLight);
+      pointLight = null;
+    }
   };
   return group;
 }
 
-// Advance the flame animation. Called every frame by FireLayer wi' a rising t.
-// (Mirrors how sky.js pokes domeMat.uniforms.uTime.value each frame.)
-export function tickFlame(material, t) {
-  material.uniforms.uTime.value = t;
+function removeFrom(arr, v) { const i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); }
+function removeLight(arr, light) { const i = arr.findIndex(e => e.light === light); if (i >= 0) arr.splice(i, 1); }
+
+// --- the global tick ----------------------------------------------------------
+// Call ONCE PER FRAME frae main.js wi' a rising clock `t` (seconds). Advances the
+// shared flame material, every live ember/smoke material, an' pulses every hero
+// point-light about its base intensity. This is the SOLE driver of flame uTime in
+// the game — FireLayer no longer ticks (its torches ride this), so off-FireLayer
+// fires (the festival bonfire) animate too.
+export function tickFires(t) {
+  const mat = getFlameMaterial();
+  mat.uniforms.uTime.value = t;
+  for (let i = 0; i < _emberMats.length; i++) _emberMats[i].uniforms.uTime.value = t;
+  for (let i = 0; i < _heroLights.length; i++) {
+    const e = _heroLights[i];
+    // a quick warm flicker + a slow breathe, summed — reads as a living fire
+    const flick = 0.85 + 0.15 * Math.sin(t * 11.0 + i * 2.3) + 0.08 * Math.sin(t * 27.0 + i);
+    e.light.intensity = e.base * flick;
+  }
 }
 
-// --- shared-material singleton ------------------------------------------------
-// Fire() needs the one shared material even when called standalone (e.g. the
-// headless test). FireLayer makes its own via makeFlameMaterial() an' ticks that
-// one; Fire() lazily reuses a module-level instance so every quad lands on a
-// ShaderMaterial. In the live game the FireLayer material an' this one are both
-// valid flame materials — what matters is one material per process, not a global.
-let _shared = null;
-function sharedMaterial() {
-  if (!_shared) _shared = makeFlameMaterial();
-  return _shared;
+// Advance the shared flame material only. Kept for back-compat (FireLayer's old
+// per-frame call an' the headless test). Prefer tickFires(t) — it drives embers
+// an' lights too. `material` is honoured if passed, else the singleton.
+export function tickFlame(material, t) {
+  (material || getFlameMaterial()).uniforms.uTime.value = t;
 }
-// expose for the headless test's material-identity assertion
-makeFlameMaterial.shared = null;
-Object.defineProperty(makeFlameMaterial, 'shared', { get: () => _shared });
