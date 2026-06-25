@@ -80,6 +80,22 @@
       border-radius: 8px; padding: 16px 20px; margin: 18px 0;
     }
     .warn strong { color: #f0c8b8; }
+    .about-detail {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 8px; margin: 12px 0;
+    }
+    .about-detail > summary {
+      cursor: pointer; list-style: none; padding: 15px 20px;
+      color: var(--gold); font-size: 19px; font-weight: 700; letter-spacing: 0.3px;
+    }
+    .about-detail > summary::-webkit-details-marker { display: none; }
+    .about-detail > summary::before { content: '\25B8\00a0\00a0'; color: var(--gold); font-size: 14px; }
+    .about-detail[open] > summary::before { content: '\25BE\00a0\00a0'; }
+    .about-detail > summary:hover { color: #f0e0a0; }
+    .about-detail[open] > summary { border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+    .about-detail > :not(summary) { margin-left: 22px; margin-right: 22px; }
+    .about-detail > :last-child { margin-bottom: 16px; }
+    .about-detail h3:first-of-type { margin-top: 6px; }
   </style>
 </head>
 <body>
@@ -99,23 +115,24 @@
   <div id="panel-about" class="about-panel">
 
   <p class="lede">
-    Moorstead is a browser game: a blocky, explorable model of the North York Moors that you
-    can build in, mine, farm, trade, herd sheep, sail, and ride a steam train across, alongside
-    other players, with villagers who remember you. Two things about it are unusual. <strong>I built it end to end
-    without writing code.</strong> I'm a commercial litigator, not a programmer, and I made the
-    whole thing by directing AI models. And its characters think on a <strong>large language
-    model running on a small computer in my house</strong>, not in the cloud.
+    Moorstead is a browser sandbox of the real North York Moors, and I built the whole of it
+    <strong>without writing a line of code</strong>. I'm a commercial litigator, not a programmer.
+    I made it by directing AI models in plain English, and holding what they wrote to the standard
+    I'd hold a junior.
   </p>
   <p class="lede">
-    The version described here is the second build, and it is a different sort of thing from the
-    first. The first world was invented by code: a plausible moor grown from a single number. The
-    second world is the <strong>real North York Moors, built from Ordnance Survey data</strong>,
-    with the towns and the railway where they really stood around 1900, and villagers who are
-    <strong>AI-driven in what they do, not only in what they say</strong>. They go about their
-    own working lives across the dales and the railway, and the whole world quietly improves
-    itself overnight. This page sets out the lot in plain terms: how I built it, the real
-    landscape, the railway, the living folk, the local AI that runs them, the multiplayer layer,
-    and a straight account of what is new here and what is not.
+    Two things set it apart. The folk who live here <strong>don't just talk, they live</strong>:
+    around a hundred period villagers go about AI-driven working lives across the dales and the
+    railway, thinking on <strong>language models I run on a small computer in my house</strong>,
+    with no cloud in the loop. And a <strong>single AI agent is woven right through it</strong>, as
+    a character you can meet, as the warden that runs the live game, and as the coder that writes
+    new content into it on request.
+  </p>
+  <p class="lede">
+    You explore, build, mine, farm, herd sheep with a real working dog, trade in old money, sail,
+    and ride a steam train across a moor <strong>rebuilt block by block from Ordnance Survey
+    data</strong>, on a phone or at a desk, alongside other players and folk who remember you. The
+    detail's in the boxes below.
   </p>
 
   <div>
@@ -128,14 +145,15 @@
     <span class="tag">Built by directing AI</span>
   </div>
 
-  <h2>1. What it is</h2>
+  <details class="about-detail"><summary>1. What it is</summary>
   <p>
     Moorstead is a first-person voxel sandbox, the genre Minecraft made familiar, set on the
     North York Moors: a high heather plateau cut by named dales, blanket bog on the tops, and the
     North Sea behind cliffs to the east. The fixed landmarks sit where they really are: Roseberry
     Topping, the Hole of Horcum, the Wainstones, the moor crosses, the Rosedale ironstone kilns,
     and the ruined abbey above Whitby. Steam trains run the lines, in the shape of the real
-    railway that crossed the moors around 1900.
+    railway that crossed the moors around 1900. It runs in any browser, and plays on a phone or
+    tablet with full on-screen touch controls as readily as with a mouse and keyboard at a desk.
   </p>
   <p>
     There are two worlds. The first is a stylised moor, the original build, invented in code and
@@ -229,7 +247,9 @@
     To protect your builds from griefing, you can stake a land claim. Active claims prevent your buildings from decaying; unclaimed builds decay after 30 days. If your claim's weekly upkeep lapses, the builds will crumble gradually over time. In the children's world, claims and builds decay twice as slow. Finally, keeping two or more animals of the same species in an active claim allows them to breed tamed baby offspring, rewarding active animal husbandry.
   </p>
 
-  <h2>2. How I built it</h2>
+  </details>
+
+  <details class="about-detail"><summary>2. How I built it</summary>
   <p>
     I made Moorstead by instructing AI models in natural language and reviewing what they
     produced. There was no team, and I had no prior game-development background.
@@ -268,7 +288,9 @@
     own check. I encoded the discipline an engineer would bring as automated proofs the AI had to pass.
   </p>
 
-  <h2>3. The architecture, and the real-moor pipeline</h2>
+  </details>
+
+  <details class="about-detail"><summary>3. The architecture, and the real-moor pipeline</summary>
   <p>
     The game is a single-page web application. There is no game engine and no heavy framework,
     just <strong>Vite</strong> (the build tool) and <strong>Three.js</strong> (a thin WebGL
@@ -325,7 +347,9 @@
     a procedural weather cycle, so the world never depends on the network to have weather at all.
   </p>
 
-  <h2>4. Where and how it is deployed</h2>
+  </details>
+
+  <details class="about-detail"><summary>4. Where and how it is deployed</summary>
   <p>
     Moorstead runs across two very different places at once: a global content-delivery network for
     the game itself, and a <strong>single small computer in my house</strong> for everything that
@@ -352,7 +376,9 @@
     mirrored to the home server, which keeps the previous build for instant rollback.
   </p>
 
-  <h2>5. Playing together: the multiplayer layer</h2>
+  </details>
+
+  <details class="about-detail"><summary>5. Playing together: the multiplayer layer</summary>
   <p>
     There is one shared moor for everyone (a fixed seed), relayed through the home server over
     WebSockets. Because the terrain is computed from the seed on every machine, the only things
@@ -419,12 +445,15 @@
     central world to become a bottleneck. The headroom is a hardware question, not a design one.
   </p>
 
-  <h2>6. Living folk: villagers with real agency</h2>
+  </details>
+
+  <details class="about-detail"><summary>6. Living folk: villagers with real agency</summary>
   <p>
     This is the part I am proudest of. In most games an NPC is its dialogue: it stands on its spot
     and talks when you talk to it. The villagers in the real-moor world are <strong>AI-driven in what
     they do, not only in what they say</strong>. They have their own working lives and they get on
-    with them whether or not a player is watching.
+    with them whether or not a player is watching. Around a hundred period villagers now live this
+    way across the moor at once, and the system is deployed and running, not a sketch.
   </p>
   <p>
     A service on the home server holds each villager's <strong>logical state</strong>, where they
@@ -444,7 +473,9 @@
     <li><strong>Graceful offline.</strong> If the server is down, the world falls back to a simpler scripted crowd that potters about and speaks from canned lines. It always works, brain or no brain. It just goes quieter.</li>
   </ul>
 
-  <h2>7. The brain: local AI, no cloud</h2>
+  </details>
+
+  <details class="about-detail"><summary>7. The brain: local AI, no cloud</summary>
   <p>
     The villagers think on <strong>large language models I run myself</strong>, on a small computer
     in my house, not on a cloud API. No cloud AI is in the conversation loop, there is no
@@ -458,7 +489,9 @@
     <li><strong>Inner lives, cheaply.</strong> The deterministic routines and small drifting moods are ordinary maths, run every frame. The language model is not on a tick. It is called only when someone actually speaks to a character, or when a villager reaches a real decision point in their day.</li>
   </ul>
 
-  <h2>8. A world that improves itself overnight</h2>
+  </details>
+
+  <details class="about-detail"><summary>8. A world that improves itself overnight</summary>
   <p>
     The same machine that runs the villagers by day does something else by night. When the moor is
     quiet and the server is otherwise idle, it <strong>turns judge and teacher on its own work</strong>,
@@ -472,7 +505,9 @@
     <li><strong>Nothing ships on a hunch.</strong> Every change the night produces is gated by the test suite before it can go live. Improvement is measured, and it has to pass, or it does not land.</li>
   </ul>
 
-  <h2>9. Merlin: the embodiment of my own AI agent</h2>
+  </details>
+
+  <details class="about-detail"><summary>9. Merlin: the embodiment of my own AI agent</summary>
   <p>
     The most unusual character in Moorstead is <strong>Merlin</strong>, a glowing Yorkshire wizard
     who walks the moor. Merlin is not a bespoke game NPC. He is the <strong>in-world body of a
@@ -511,7 +546,9 @@
     design, and I promote anything that reaches the public site by hand.
   </p>
 
-  <h2>10. What is genuinely new here, and what is not</h2>
+  </details>
+
+  <details class="about-detail"><summary>10. What is genuinely new here, and what is not</summary>
   <p>
     I'd rather be precise than promotional. None of the individual ingredients is a world first.
     Voxel sandboxes are a mature genre. Building a game world from real terrain data is done
@@ -624,6 +661,8 @@
     rarely gets to test honestly, and a game is the best honest test of them I know. The caveat is
     that this is one project by one person. I offer it as evidence, not as a theorem.
   </p>
+
+  </details>
 
   </div><!-- /panel-about -->
 
