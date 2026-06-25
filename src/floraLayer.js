@@ -83,6 +83,8 @@ export class FloraLayer {
       for (let z = cz - RADIUS; z <= cz + RADIUS; z++) {
         const ri = gen.geo.railInfo(x, z);
         if (ri && ri.d < 4) continue;                       // keep the four-foot clear
+        const rd = gen.geo.roadInfo(x, z);
+        if (rd && rd.d < 3) continue;                       // keep the packed-earth lane clear (no flowers through the track)
         const surfY = gen.height(x, z);
         const top = this.world.getBlock(x, surfY + 1, z);
         const surf = this.world.getBlock(x, surfY, z);
