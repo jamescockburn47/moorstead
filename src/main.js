@@ -30,7 +30,7 @@ import { FestiveLayer } from './festiveLayer.js';
 import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase } from './season.js';
 import { activeForageables, hostForageFor, fruitSpeciesAt, fruitTreeRipe } from './forage.js';
-import { deepSnow, festiveActive } from './festive.js';
+import { deepSnow, wintry, yuletide } from './festive.js';
 import { DEFAULT_SNOWMAN, cycleSnowman } from './snowman.js';
 import { cellInstances } from './flora-placement.js';
 import { startLiveWeather } from './weather-live.js';
@@ -3302,7 +3302,7 @@ class Game {
       }
 
       // (b) Scoop a snowball: bare/non-placeable hand, deep snow, top cell is AIR
-      if (!sm && (!_fh || !isPlaceable(_fh.id)) && deepSnow(this.snowAccum) && festiveActive(this.season)) {
+      if (!sm && (!_fh || !isPlaceable(_fh.id)) && deepSnow(this.snowAccum) && wintry(this.season)) {
         const top = this.world.getBlock(sx, sy, sz);
         if (top === B.AIR) {
           this.player.addItem(I.SNOWBALL, 1); this.ui.invDirty = true;
@@ -4166,7 +4166,7 @@ class Game {
       }
       // the carol (recording of "In the Bleak Midwinter") fades up as you near a
       // village in winter, full within ~village, silent beyond ~60 blocks / outside winter.
-      const festVol = festiveActive(this.season)
+      const festVol = yuletide(this.season)
         ? Math.max(0, 1 - nearestVillageDist / 60) * 0.55
         : 0;
       if (festVol > 0) {

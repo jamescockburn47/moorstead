@@ -1,5 +1,5 @@
 // Festive winter — run wi': node scripts/verify-festive.mjs
-import { festiveActive, deepSnow, snowmanMelted } from '../src/festive.js';
+import { wintry, deepSnow, snowmanMelted } from '../src/festive.js';
 import { SCARF_COLORS, HATS, NOSES, DEFAULT_SNOWMAN, cycleSnowman } from '../src/snowman.js';
 import { seasonStateAtPhase } from '../src/season.js';
 
@@ -8,8 +8,8 @@ const ok = m => console.log('  ok    ' + m);
 const bad = m => { failed = true; console.log('  FAIL  ' + m); };
 const winter = seasonStateAtPhase(0.875), summer = seasonStateAtPhase(0.375), spring = seasonStateAtPhase(0.18);
 
-(festiveActive(winter) ? ok : bad)('festive is on in winter');
-(!festiveActive(summer) ? ok : bad)('festive is off in summer');
+(wintry(winter) ? ok : bad)('winter is the cold season');
+(!wintry(summer) ? ok : bad)('summer is not the cold season');
 (deepSnow(0.9) && !deepSnow(0.5) ? ok : bad)('auto-snowmen only when snow is deepest');
 (snowmanMelted(spring) && !snowmanMelted(winter) ? ok : bad)('player snowmen melt in the thaw, not mid-winter');
 {

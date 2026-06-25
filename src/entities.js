@@ -9,7 +9,7 @@ import { TAME_GOAL, FOLLOW_RANGE, feedTrust, chooseName } from './pets.js';
 import { dayPhase, villagerRemark } from './villagerlife.js';
 import { HEIGHT, WATER_LEVEL } from './defs.js';
 import { flockCentroid, driveTarget, dogGoal, foldAt } from './herding.js';
-import { festiveActive } from './festive.js';
+import { wintry } from './festive.js';
 
 // The only blocks a land beast may stand or spawn on: open, walkable ground.
 // NOT trees (LOG/LEAVES), NOT buildings (PLANKS/COBBLE/THATCH...), NOT water/bog.
@@ -981,7 +981,7 @@ export class Entities {
     // In winter (festiveActive) he becomes Father Christmas: green robe, white fur trim.
     const isMerlin = charId === 'clint-body' || (name || '').toLowerCase() === 'merlin';
     const currentSeason = this.game && this.game.season;
-    const isFC = isMerlin && festiveActive(currentSeason);
+    const isFC = isMerlin && wintry(currentSeason);
     if (isMerlin) {
       try { makeWizardExtras(model, look.scale, isFC); } catch (err) { /* fail safe — default avatar still rendered */ }
     }
@@ -2139,7 +2139,7 @@ export class Entities {
     // Merlin swaps between indigo wizard and Father Christmas when winter starts/ends.
     // We rebuild his model+nameplate in-place — same position, same mob object.
     if (mob.isMerlin) {
-      const _nowFC = festiveActive(this.game && this.game.season);
+      const _nowFC = wintry(this.game && this.game.season);
       if (_nowFC !== mob.merlinFC) {
         mob.merlinFC = _nowFC;
         // Strip the old model from the scene and rebuild it.

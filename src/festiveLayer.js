@@ -1,7 +1,7 @@
 // festiveLayer.js — winter-gated scene layer: 3D snowman figures on village
 // greens when snow is at its deepest. Mirror of floraLayer lifecycle.
 import * as THREE from 'three';
-import { festiveActive, deepSnow } from './festive.js';
+import { wintry, deepSnow } from './festive.js';
 import { SCARF_COLORS, DEFAULT_SNOWMAN } from './snowman.js';
 import { hash2i } from './noise.js';
 import { B, TILE } from './defs.js';
@@ -48,7 +48,7 @@ export class FestiveLayer {
     if (this.timer > 0) return;
     this.timer = 0.4;
     const cx = Math.floor(playerPos.x), cz = Math.floor(playerPos.z);
-    const key = (festiveActive(season) ? 'F' : '') + (deepSnow(snowAccum) ? 'D' : '') +
+    const key = (wintry(season) ? 'F' : '') + (deepSnow(snowAccum) ? 'D' : '') +
                 '|' + this.world.snowmanLedger.size;
     if (this.center &&
         Math.abs(cx - this.center[0]) < REBUILD_MOVE &&
@@ -65,7 +65,7 @@ export class FestiveLayer {
     this._lit = [];
     this._robins = [];
     this.clear();
-    if (!festiveActive(season)) return;
+    if (!wintry(season)) return;
     const gen = this.world.gen;
     // Winter firs — one per village, whole festive season (no deep-snow gate)
     for (const v of (gen.geo.villages || [])) {
