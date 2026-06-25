@@ -113,6 +113,30 @@ function _spread(id) {
   return { dx: Math.cos(a) * r, dz: Math.sin(a) * r };
 }
 
+// --- mounted NPCs (roads Slice 2): who saddles up for a walk leg --------------------------------
+// Some folk ride a pony along the lanes rather than walk shanks's pony. Deterministic per
+// (id, leg) so a body's whole journey is mounted-or-not (no flicker), ~1-in-4 over the cast.
+// Mounted trades (drovers move stock, farmers + gentry keep a pony, the doctor + parson ride a
+// round) saddle up more often than a townsfolk villager. Short hops are always walked — you don't
+// fetch a pony to nip next door. `from`/`to` are town names, as the walk branch passes them.
+const RIDE_MIN_DIST = 80;          // blocks: legs shorter than this are always walked
+const RIDE_BASE = 0.225;           // a generic villager's chance on a ride-eligible leg
+// trades that keep/ride a pony — each adds to the base chance (tuned so the cast lands ~20–30%).
+const RIDE_ROLE_BONUS = { drover: 0.22, farmer: 0.16, gentry: 0.18, doctor: 0.14, parson: 0.13, carrier: 0.20, squire: 0.18 };
+export function ridesThisLeg(npc, from, to, geo) {
+  const a = townAnchor(from, geo), b = townAnchor(to, geo);
+  if (!a || !b) return false;                                  // unknown place -> walk (safe)
+  const dist = Math.hypot(a.x - b.x, a.z - b.z);
+  if (dist < RIDE_MIN_DIST) return false;                      // short hop -> always walk
+  const id = (npc && npc.id) || '';
+  const u = idHash(id + '|' + from + '>' + to) / 4294967296;   // stable 0..1 for this (id, leg)
+  const roleBonus = (npc && RIDE_ROLE_BONUS[npc.role]) || 0;
+  // a gentle distance ramp: a longer haul is a touch more likely to be worth saddling up for,
+  // saturating by ~600 blocks so cross-moor treks don't all ride.
+  const distBonus = 0.10 * clamp01((dist - RIDE_MIN_DIST) / 520);
+  return u < (RIDE_BASE + roleBonus + distBonus);
+}
+
 export const PLATFORM_CAP = 5;     // most NPCs allowed to gather on one platform at once
 export const WAIT_LEAD = 75;       // seconds before a train is due that a ranked NPC walks to the platform
 

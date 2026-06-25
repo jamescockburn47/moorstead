@@ -3,7 +3,7 @@
 import assert from 'node:assert';
 import { Gen, MOORS_SEED } from '../src/worldgen.js';
 import { B } from '../src/defs.js';
-import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity, surfaceHeight, __resetSurfCache, idHash, waiterRank, waitMode, PLATFORM_CAP, WAIT_LEAD, platformPoint, roadWaypoints } from '../src/roster.js';
+import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity, surfaceHeight, __resetSurfCache, idHash, waiterRank, waitMode, PLATFORM_CAP, WAIT_LEAD, platformPoint, roadWaypoints, ridesThisLeg } from '../src/roster.js';
 
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
 const geo = new Gen(MOORS_SEED).geo;
@@ -181,6 +181,39 @@ __resetSurfCache();
   // an unconnected pair -> null (she falls back to a direct walk, no phantom lane)
   ok(roadWaypoints(townAnchor('Castleton', geo), townAnchor('Egton', geo), geo) === null,
     'roadWaypoints null for an unconnected village pair (Castleton / Egton)');
+}
+
+// --- ridesThisLeg: who saddles up for a leg — deterministic, role + distance weighted ----------
+{
+  // A long, road-linked leg (Castleton<->Danby ~139 blocks) is ride-eligible; from/to are town NAMES
+  // exactly as the walk branch passes them (s.from, s.to).
+  const FROM = 'Castleton', TO = 'Danby';
+  // determinism: same (id, leg) -> same answer, every call.
+  const a1 = ridesThisLeg({ id: 'amos', role: 'villager' }, FROM, TO, geo);
+  const a2 = ridesThisLeg({ id: 'amos', role: 'villager' }, FROM, TO, geo);
+  ok(a1 === a2, 'ridesThisLeg is deterministic for a given (id, leg)');
+  // a cast of plain villagers: ~20–30% ride over the whole cast (target ~1-in-4).
+  const cast = Array.from({ length: 400 }, (_, i) => ({ id: `pop-ride-${i}`, role: 'villager' }));
+  const frac = cast.filter(c => ridesThisLeg(c, FROM, TO, geo)).length / cast.length;
+  ok(frac > 0.20 && frac < 0.30, `~1-in-4 of the cast ride a long leg (got ${(frac * 100).toFixed(1)}%)`);
+  // role weighting: a mounted-trade role rides MORE often than a generic villager over the same ids.
+  const rideRate = role => cast.filter(c => ridesThisLeg({ id: c.id, role }, FROM, TO, geo)).length / cast.length;
+  const villager = rideRate('villager');
+  for (const role of ['drover', 'farmer', 'gentry', 'doctor', 'parson']) {
+    ok(rideRate(role) > villager, `a ${role} rides more often than a generic villager (${(rideRate(role) * 100).toFixed(0)}% vs ${(villager * 100).toFixed(0)}%)`);
+  }
+  // short-leg gate: a near-zero leg (same place) never rides, whatever the id or role.
+  ok(cast.every(c => !ridesThisLeg(c, FROM, FROM, geo)), 'a zero-length leg never rides');
+  ok(!ridesThisLeg({ id: 'pop-ride-1', role: 'drover' }, FROM, FROM, geo), 'even a drover never rides a zero-length leg');
+  // short-leg gate at the ~80-block threshold: a stub geo with two villages ~50 blocks apart -> none ride;
+  // the same ids on a ~200-block pair -> some ride (so the gate is distance, not a blanket off).
+  const stubGeo = pts => ({ villages: Object.entries(pts).map(([name, p]) => ({ name, x: p.x, z: p.z, ground: 64 })), height: () => 64 });
+  const near = stubGeo({ A: { x: 0, z: 0 }, B: { x: 50, z: 0 } });
+  ok(cast.every(c => !ridesThisLeg(c, 'A', 'B', near)), 'a sub-80-block leg never rides (short-leg gate)');
+  const far = stubGeo({ A: { x: 0, z: 0 }, B: { x: 200, z: 0 } });
+  ok(cast.some(c => ridesThisLeg(c, 'A', 'B', far)), 'a long leg on the same ids does ride (gate is distance, not blanket-off)');
+  // unknown place -> never rides (safe; caller just walks).
+  ok(!ridesThisLeg({ id: 'amos', role: 'drover' }, 'Nowhere', TO, geo), 'an unknown place never rides (safe)');
 }
 
 console.log(`verify-roster: ${n} assertions OK`);
