@@ -35,6 +35,7 @@ export class FireLayer {
     this.fires = [];                // live Fire groups
     this.center = null;             // [x,z] of the last rebuild
     this.lightKey = null;           // world.lanterns.size at the last rebuild
+    this.lastBuildY = null;         // player Y at the last rebuild (mine-shaft gate)
     this.timer = 0;
     this.t = 0;                     // flame animation clock
   }
@@ -50,6 +51,7 @@ export class FireLayer {
     this.timer = REBUILD_EVERY;
 
     const cx = Math.floor(playerPos.x), cz = Math.floor(playerPos.z);
+    const py = playerPos.y;
     // The light set can change without the player moving (a torch placed or
     // broken), so its size joins the rebuild gate — same idea as seasonalLayer
     // keying on the snowman-ledger size.
@@ -58,11 +60,13 @@ export class FireLayer {
     if (this.center &&
         Math.abs(cx - this.center[0]) < REBUILD_MOVE &&
         Math.abs(cz - this.center[1]) < REBUILD_MOVE &&
+        (this.lastBuildY === null || Math.abs(py - this.lastBuildY) < REBUILD_MOVE) &&
         key === this.lightKey &&
         this.fires.length) return;
 
     this.build(playerPos);
     this.center = [cx, cz];
+    this.lastBuildY = py;
     this.lightKey = key;
   }
 
@@ -109,5 +113,12 @@ export class FireLayer {
       if (typeof f.dispose === 'function') f.dispose();
     }
     this.fires.length = 0;
+  }
+
+  // Full teardown: free geometries AND the shared flame material (shader program).
+  // Call this on world reload / scene destruction; call clear() for a soft rebuild.
+  dispose() {
+    this.clear();
+    if (this.mat) { this.mat.dispose(); this.mat = null; }
   }
 }

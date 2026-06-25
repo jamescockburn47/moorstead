@@ -412,7 +412,7 @@ class Game {
     if (this.roads) { this.roads.dispose(); this.roads = null; }
     if (this.floraLayer) { this.floraLayer.clear(); this.floraLayer = null; }
     if (this.seasonalLayer) { this.seasonalLayer.clear(); this.seasonalLayer = null; }
-    if (this.fireLayer) { this.fireLayer.clear(); this.fireLayer = null; }
+    if (this.fireLayer) { this.fireLayer.dispose(); this.fireLayer = null; }
     if (this.footprints) { this.footprints.clear(); this.footprints = null; }
     if (this.festiveMusic) { this.festiveMusic.stop(); this.festiveMusic = null; }
     this.entities.clear();
