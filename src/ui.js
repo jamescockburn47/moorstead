@@ -1726,7 +1726,7 @@ export class UI {
       }
     }
     this.btnRangeClose = this.el('button', 'mc', this.rangePanel, 'Done');
-    this.btnRangeClose.addEventListener('mousedown', () => this.game.closeScreens());
+    this.btnRangeClose.addEventListener('click', () => this.game.closeScreens());   // click (not mousedown) so it fires on touch
     this.show('rangeScreen');
   }
 

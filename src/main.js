@@ -648,7 +648,7 @@ class Game {
       } else if (this.state === 'sleeping') {
         if (e.code === 'KeyN' || e.code === 'Escape') this.cancelSleep('Up an’ about again, then.');
       } else if (this.state === 'riding') {
-        if (e.code === 'Escape' && this.ride && this.ride.warden) this.wardenLeaveTrain();
+        if (e.code === 'Escape' && this.ride) this.wardenLeaveTrain();   // any rider can step off, not just a warden
         else if (e.code === 'Digit1') this.setRideView('seat');
         else if (e.code === 'Digit2') this.setRideView('driver');
         else if (e.code === 'Digit3') this.setRideView('overhead');
