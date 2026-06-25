@@ -320,10 +320,18 @@ export class RosterClient {
         }
         continue;
       }
-      // A committed ride OWNS her until it completes or times out — the brain's faster logical
-      // arrival does NOT cut it short (that was the old teleport). _driveRail clears e.ride itself.
-      if (e.ride) { this._driveRail(e, m, dt, rankMap); continue; }
       const s = e.data.state;
+      // A committed ride shows the VISIBLE journey, but the BRAIN is the source of truth for where she
+      // should be — a ride must not outlive its leg and strand her loitering at a station. Once ABOARD
+      // (or walking off at 'done') the visible trip finishes past the brain's faster logical arrival;
+      // but a 'wait' that no longer matches a LIVE brain rail leg to the same place is dropped at once —
+      // she never boarded and the brain has moved her on, so she stops hanging about the platform. This
+      // is what stops dozens of stale waits piling up at stations when trains run slower than the brain.
+      if (e.ride) {
+        const matches = s && s.kind === 'rail' && e.ride.line === s.line && e.ride.from === s.fromStn && e.ride.to === s.toStn;
+        if (e.ride.phase !== 'wait' || matches) { this._driveRail(e, m, dt, rankMap); continue; }
+        e.ride = null;                                       // stale wait — fall through to her current brain state
+      }
       if (s && s.kind === 'rail') {                         // commit a NEW ride (only when ride-less)
         e.ride = { line: s.line, from: s.fromStn, to: s.toStn, phase: 'wait', t: 0 };
         this._driveRail(e, m, dt, rankMap);
