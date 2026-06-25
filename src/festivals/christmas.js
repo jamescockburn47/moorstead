@@ -1,9 +1,19 @@
 // festivals/christmas.js — the Christmas (Christmastide) dressing for the moor.
 // Moved verbatim from the old festiveLayer.build(): one decorated fir per
-// village (with carol singers, presents, ornaments), door wreaths, candlelit
-// window glow, holly sprigs, and hopping robins. NO snowmen (the host owns
-// those) and NO gating in here — SeasonalLayer only calls this inside the
-// Christmastide window, so the whole module is the festive dressing itself.
+// village (with carol singers), door wreaths, candlelit window glow, holly
+// sprigs, and hopping robins. NO snowmen (the host owns those) and NO gating
+// in here — SeasonalLayer only calls this inside the Christmastide window,
+// so the whole module is the festive dressing itself.
+//
+// Period-accurate c.1900 refit (Slice 4):
+//   • The parish fir is re-sited to the chapel forecourt (not the village green)
+//     — the church was the custodian of the communal tree, not the market square.
+//   • No present-pile under the public tree (an anachronism; gifts were given
+//     indoors on Twelfth Night, not piled publicly under a parish tree).
+//   • Parlour-window trees in farmhouses + a sparse subset of cottages — the
+//     domestic tree lived behind glass, lit candles glowing out into the night.
+//   • The chapel is decked with holly/ivy swags along the front (z0) wall,
+//     reflecting the church's actual custom of dressing with evergreen boughs.
 import * as THREE from 'three';
 import { hash2i } from '../noise.js';
 import { B, TILE } from '../defs.js';
@@ -18,7 +28,7 @@ export function buildChristmas(ctx) {
   // Winter firs — one per village, whole festive season (no deep-snow gate)
   for (const v of (gen.geo.villages || [])) {
     if (Math.abs(v.x - cx) > RADIUS || Math.abs(v.z - cz) > RADIUS) continue;
-    const fp = firPlacement(world, v);
+    const fp = chapelFirPlacement(world, v);
     if (fp) {
       const g = buildFir();
       g.position.set(fp.x + 0.5, gen.height(fp.x, fp.z) + 1, fp.z + 0.5);
@@ -52,17 +62,30 @@ export function buildChristmas(ctx) {
   }
 
   // -- Door wreaths on cottages (whole festive season, no deep-snow gate) --
+  // -- Parlour-window trees on farmhouses + sparse cottages                --
+  // -- Church greenery (holly swags) on the chapel front wall              --
   for (const v of (gen.geo.villages || [])) {
     if (Math.abs(v.x - cx) > RADIUS || Math.abs(v.z - cz) > RADIUS) continue;
     for (const b of (v.buildings || [])) {
-      if (b.type !== 'cottage' && b.type !== 'shop' && b.type !== 'pub') continue;
-      // Door: south wall (lowest z = b.z0), centred on x
       const midX = Math.floor((b.x0 + b.x1) / 2);
-      const doorX = midX + 0.5;
-      const doorZ = b.z0;           // south face of building
-      const doorY = gen.height(midX, doorZ) + 2; // head height above ground
-      // Place wreath just in front of the door, facing south (outward)
-      addBillboard(scene, objects, TILE.WREATH, doorX, doorY, doorZ - 0.15, 0);
+
+      // ---- chapel: holly/ivy greenery swags along front wall ----
+      if (b.type === 'chapel') {
+        deckChapel(scene, objects, b, midX, gen);
+        continue; // no wreath or generic window-glow on the chapel
+      }
+
+      // ---- door wreaths (cottage / shop / pub) ----
+      if (b.type !== 'cottage' && b.type !== 'shop' && b.type !== 'pub' && b.type !== 'farmhouse') continue;
+
+      // Wreath: south wall (lowest z = b.z0), centred on x — not on farmhouse
+      // (farmhouses are larger; visual clutter; they get the parlour tree instead)
+      if (b.type !== 'farmhouse') {
+        const doorX = midX + 0.5;
+        const doorZ = b.z0;
+        const doorY = gen.height(midX, doorZ) + 2; // head height above ground
+        addBillboard(scene, objects, TILE.WREATH, doorX, doorY, doorZ - 0.15, 0);
+      }
 
       // -- Candlelit window glow (Victorian: unlit warm MeshBasicMaterial) --
       // Mirror the worldgen window rule from stampBuildingColumn:
@@ -109,6 +132,15 @@ export function buildChristmas(ctx) {
           addWindowGlow(scene, objects, glowX, glowY, glowZ, yaw);
         }
       }
+
+      // -- Parlour-window tree: farmhouse (always) + ~1-2 cottages per village --
+      // The domestic tree lived in the best parlour, small + lit, visible through
+      // the front window. Placed just inside the south (z0) wall at window height.
+      const wantsParlourTree = b.type === 'farmhouse' ||
+        (b.type === 'cottage' && hash2i(b.x0, b.z0, gen.geo.seed ^ 0xc7d3) < 0.18);
+      if (wantsParlourTree) {
+        addParlourTree(scene, objects, lit, b, g);
+      }
     }
   }
 
@@ -147,6 +179,34 @@ export function buildChristmas(ctx) {
       }
     }
   }
+}
+
+// Re-site the parish fir to the chapel forecourt (south / z0 face).
+// Scans a few candidate cells 2-4 blocks south of the chapel's centre-x,
+// picks the first open ground cell not inside any building footprint.
+// Falls back to the original firPlacement() if no chapel in the village or
+// no clear cell is found close enough to the chapel front.
+function chapelFirPlacement(world, v) {
+  const gen = world.gen;
+  const chapel = (v.buildings || []).find(b => b.type === 'chapel');
+  if (chapel) {
+    const centreX = Math.floor((chapel.x0 + chapel.x1) / 2);
+    // try a small arc of candidates south (z < z0) of the chapel front
+    for (let dz = 2; dz <= 5; dz++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const x = centreX + dx;
+        const z = chapel.z0 - dz; // south of the front (south = lower z in this world)
+        // must not fall inside any building footprint
+        const inBuilding = (v.buildings || []).some(b => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1);
+        if (inBuilding) continue;
+        const sy = gen.height(x, z);
+        if (world.getBlock(x, sy + 1, z) === B.AIR) return { x, z };
+      }
+    }
+    // chapel found but forecourt is hemmed in — fall back below
+  }
+  // fallback: original green/path/any-open scan
+  return firPlacement(world, v);
 }
 
 // Return a deterministic open cell near village centre for the fir.
@@ -193,6 +253,76 @@ function firPlacement(world, v) {
     }
   }
   return null; // genuinely no open cell in range (shouldn't happen in a real village)
+}
+
+// Place holly/ivy greenery swags along the chapel's front (south, z0) wall.
+// Several HOLLY_SPRIG billboards at head height across the front face, plus
+// one centred over the door arch — period church would dress with evergreen
+// boughs hung from the eaves and the porch, not a tree.
+function deckChapel(scene, objects, b, midX, gen) {
+  const wallY = gen.height(midX, b.z0) + 2.4; // slightly above head height — eave level
+  const doorY = gen.height(midX, b.z0) + 2.8; // a touch higher over the door arch
+
+  // One sprig every 2 blocks across the south face (not corner cells)
+  for (let wx = b.x0 + 1; wx <= b.x1 - 1; wx += 2) {
+    const yaw = hash2i(wx, b.z0, 0xd3c9) * Math.PI * 2;
+    addBillboard(scene, objects, TILE.HOLLY_SPRIG, wx + 0.5, wallY, b.z0 - 0.1, yaw);
+  }
+
+  // Extra sprig centred over the door — slightly higher (porch arch)
+  const doorYaw = hash2i(midX, b.z0, 0xa7f1) * Math.PI * 2;
+  addBillboard(scene, objects, TILE.HOLLY_SPRIG, midX + 0.5, doorY, b.z0 - 0.1, doorYaw);
+}
+
+// Build a small lit parlour-window tree Group, placed just inside the south
+// (z0) face of the building at window height, with a warm glow quad in front
+// of it. The tree is a miniature stepped conifer (~1 block tall, 3 layers of
+// green MeshLambertMaterial boxes + a tiny warm cap) — the parlour tree lived
+// inside and was small enough to fit on a side-table. The glow reads from
+// outside as a lit, ornamented tree silhouette behind glass.
+function addParlourTree(scene, objects, lit, b, groundY) {
+  // Position: just inside the south wall (z = b.z0 + 0.6) at window height (groundY + 2)
+  // Centred on the building's x (the main front window bay).
+  const midX = (b.x0 + b.x1) / 2 + 0.5;
+  const treeZ = b.z0 + 0.6;
+  const treeY = groundY + 2;   // window-sill height — sits on the table, in the window
+
+  const treeGroup = new THREE.Group();
+
+  const matLeaf  = new THREE.MeshLambertMaterial({ color: 0x2f5d3a }); // deep fir green
+  const matStar  = new THREE.MeshBasicMaterial({ color: 0xfff2b0 });   // pale gold, unlit (flickers)
+
+  // Three stepped layers, each 0.3 tall — bottom→top: 3×3, 2×2, 1×1 footprint
+  // Each layer is a single flat box (rather than individual unit cubes) at this scale;
+  // the silhouette reads clearly from outside as a Christmas-tree outline.
+  const geoUnit = new THREE.BoxGeometry(1, 1, 1);
+  const layers = [
+    { yOff: 0.15, size: 0.55, h: 0.30 }, // base tier — widest
+    { yOff: 0.50, size: 0.38, h: 0.28 }, // mid
+    { yOff: 0.82, size: 0.22, h: 0.25 }, // top
+  ];
+  for (const { yOff, size, h } of layers) {
+    const geo = new THREE.BoxGeometry(size, h, size * 0.5);
+    const m = new THREE.Mesh(geo, matLeaf);
+    m.position.set(0, yOff, 0);
+    treeGroup.add(m);
+  }
+
+  // Tiny star at the top — tagged flicker so the SeasonalLayer animates it
+  const starGeo = new THREE.OctahedronGeometry(0.075);
+  const star = new THREE.Mesh(starGeo, matStar);
+  star.position.set(0, 1.10, 0);
+  star.userData.flicker = true;
+  treeGroup.add(star);
+
+  treeGroup.position.set(midX, treeY, treeZ);
+  scene.add(treeGroup);
+  objects.push(treeGroup);
+  treeGroup.traverse(c => { if (c.isMesh && c.userData.flicker) lit.push(c); });
+
+  // Warm glow quad just outside the south wall — reads as light spilling out
+  // through the window from the lit parlour tree.
+  addWindowGlow(scene, objects, midX, treeY + 0.4, b.z0 - 0.05, 0);
 }
 
 // Build a small child caroller figure Group, feet at y=0, height ≈1.6.
@@ -320,15 +450,18 @@ function buildFir() {
   }
 
   dressFir(g);
-  buildPresents(g);
+  // NOTE: buildPresents() is defined below but no longer called here.
+  // The present-pile was anachronistic for c.1900 — gifts were given indoors,
+  // not stacked under a public tree. The function is retained for reference.
   return g;
 }
 
+// buildPresents: defined but no longer called (removed from buildFir in Slice 4).
+// Retained as dead code rather than deleted, in case a future slice wants a
+// private indoor gift-pile scene.
 // Add ~22 wrapped present boxes piled in a ring/heap around the trunk base (y≈0).
 // Three rings: inner (r≈0.9, 6 presents), mid (r≈1.6, 9 presents), outer (r≈2.4, 7 presents).
-// Presents sit within the 5×5 footprint outer edge (±2.5) — outer ring at r≈2.4 is safe.
-// Each present: BoxGeometry cube + two perpendicular ribbon strips.
-function buildPresents(g) {
+function buildPresents(g) { // eslint-disable-line no-unused-vars
   const boxColors    = [0xb23b3b, 0x2f6e4f, 0xc9a13b, 0x7a4da8, 0xe8e0c8, 0xc25c2a];
   const ribbonColors = [0xc9a13b, 0xe8e0c8, 0xb23b3b, 0xe8e0c8, 0x7a4da8, 0xc9a13b];
 
