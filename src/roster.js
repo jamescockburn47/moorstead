@@ -23,12 +23,19 @@ export function surfaceHeight(world, geo, x, z) {
   const key = rx + ',' + rz;
   const c = _surfCache.get(key);
   if (c !== undefined) return c;
-  let top = null;
-  for (let y = dem + 6; y >= dem - 8 && y > 0; y--) {        // built things sit at/above the DEM
+  // Find the GROUND: the topmost solid block that has a solid block DIRECTLY below it. Scanning from
+  // well above the DEM finds RAISED ground (embankments, the steep coast, harbour builds — the old
+  // dem+6 ceiling buried bodies in it, ~14% of columns), and the solid-below test skips roofs, bridge
+  // decks, tree canopies and overhangs (solid with AIR below), so a body grounds on the floor, never
+  // the roof (which a naive higher ceiling would do at covered stations like Pickering's trainshed).
+  let surf = null;
+  for (let y = dem + 24; y >= dem - 16 && y > 1; y--) {
     const b = world.getBlock(rx, y, rz);
-    if (b !== B.AIR && b !== B.WATER) { top = y; break; }
+    if (b === B.AIR || b === B.WATER) continue;
+    const below = world.getBlock(rx, y - 1, rz);
+    if (below !== B.AIR && below !== B.WATER) { surf = y; break; }
   }
-  const h = (top != null ? top : dem) + 1;
+  const h = (surf != null ? surf : dem) + 1;
   if (_surfCache.size > 60000) _surfCache.clear();
   _surfCache.set(key, h);
   return h;

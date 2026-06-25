@@ -91,23 +91,27 @@ const stubWorld = (blocks, loaded = true) => ({ getBlock: (x, y, z) => (blocks[`
 __resetSurfCache();
 {
   const g0 = geo.height(300, 300);                 // a real column's DEM height
-  // a plank deck two blocks above the DEM, with air above it
-  const w = stubWorld({ [`300,${g0 + 2},300`]: B.PLANKS });
-  ok(surfaceHeight(w, geo, 300, 300) === g0 + 3, 'surfaceHeight stands on the built deck (DEM+2 block -> +3)');
+  // a deck = a top block WITH footing below it (a real platform/ground always has solid beneath).
+  const w = stubWorld({ [`300,${g0 + 2},300`]: B.PLANKS, [`300,${g0 + 1},300`]: B.STONE });
+  ok(surfaceHeight(w, geo, 300, 300) === g0 + 3, 'surfaceHeight stands on the built deck (block+footing at DEM+2 -> +3)');
   // empty column (chunk loaded, all air) -> DEM + 1
   ok(surfaceHeight(stubWorld({}), geo, 305, 305) === geo.height(305, 305) + 1, 'surfaceHeight falls back to DEM+1 when the loaded column is all air');
-  // water is not a standing surface -> falls through to DEM
+  // water is not a standing surface -> ignored
   __resetSurfCache();
   ok(surfaceHeight(stubWorld({ [`310,${geo.height(310, 310) + 1},310`]: B.WATER }), geo, 310, 310) === geo.height(310, 310) + 1, 'surfaceHeight ignores water');
-  // UNLOADED chunk: world.getBlock returns B.STONE for the whole column (so nowt falls through) —
-  // surfaceHeight must NOT read that as a surface; it grounds on the DEM. (regression: floated NPCs +6)
+  // UNLOADED chunk returns B.STONE everywhere (so nowt falls through) — must DEM-ground, not read it.
   __resetSurfCache();
-  const solidUnloaded = { getBlock: () => B.STONE, chunkAt: () => null };
-  ok(surfaceHeight(solidUnloaded, geo, 321, 321) === geo.height(321, 321) + 1, 'surfaceHeight DEM-grounds an UNLOADED solid column, not the scan top');
-  // and a loaded column with that same deck DOES stand on it (proves the gate is chunk-loaded, not block-value)
+  ok(surfaceHeight({ getBlock: () => B.STONE, chunkAt: () => null }, geo, 321, 321) === geo.height(321, 321) + 1, 'surfaceHeight DEM-grounds an UNLOADED solid column');
+  // RAISED ground far above the DEM (THE bug: ~14% of columns sit >6 above the DEM and buried NPCs).
+  // ground top at DEM+10 with footing -> stand at DEM+11, not capped near the DEM.
   __resetSurfCache();
-  const gd = geo.height(322, 322);
-  ok(surfaceHeight(stubWorld({ [`322,${gd + 1},322`]: B.STONE }, true), geo, 322, 322) === gd + 2, 'surfaceHeight stands on a loaded deck block');
+  const gr = geo.height(330, 330);
+  ok(surfaceHeight(stubWorld({ [`330,${gr + 10},330`]: B.STONE, [`330,${gr + 9},330`]: B.STONE }, true), geo, 330, 330) === gr + 11, 'surfaceHeight finds RAISED ground well above the DEM (embankment/cliff)');
+  // ROOF skipped: a roof block high up (AIR below it) over a deck lower down (footing below) -> the
+  // deck, not the roof — so covered-station platforms ground on the platform, not the shed roof.
+  __resetSurfCache();
+  const gp = geo.height(332, 332);
+  ok(surfaceHeight(stubWorld({ [`332,${gp + 8},332`]: B.STONE, [`332,${gp + 1},332`]: B.PLANKS, [`332,${gp},332`]: B.STONE }, true), geo, 332, 332) === gp + 2, 'surfaceHeight skips a roof (air below) and stands on the deck beneath it');
 }
 
 // --- platform cap: stable per-id rank within a (line,from) wait group ------------------------
@@ -138,7 +142,7 @@ __resetSurfCache();
   const PLAT = 3;
   const sx = Math.round(p.x + (-p.tz) * PLAT), sz = Math.round(p.z + (p.tx) * PLAT);
   __resetSurfCache();
-  const w = stubWorld({ [`${sx},${deck},${sz}`]: B.PLANKS });
+  const w = stubWorld({ [`${sx},${deck},${sz}`]: B.PLANKS, [`${sx},${deck - 1},${sz}`]: B.STONE });  // plank + footing
   const pt = platformPoint(w, geo, line, station);
   ok(pt && Math.hypot(pt.x - sx, pt.z - sz) < 1.5, 'platformPoint picks the planked side');
   ok(pt.y === deck + 1, 'platformPoint stands one above the plank deck');
