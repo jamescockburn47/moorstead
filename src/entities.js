@@ -978,7 +978,7 @@ export class Entities {
     const look = villagerLook(name);
     const model = makeVillager(look);
     // Merlin gets the wizard treatment — keyed on pid (charId) with name fallback.
-    // In winter (festiveActive) he becomes Father Christmas: green robe, white fur trim.
+    // In winter (wintry) he becomes Father Christmas: green robe, white fur trim.
     const isMerlin = charId === 'clint-body' || (name || '').toLowerCase() === 'merlin';
     const currentSeason = this.game && this.game.season;
     const isFC = isMerlin && wintry(currentSeason);
