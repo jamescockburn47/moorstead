@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Moorstead — procedural flame prototype</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #0b0d12; color: #cdd3df;
+    font: 14px/1.5 system-ui, sans-serif; display: flex; min-height: 100vh;
+  }
+  #stage { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+  canvas { width: min(78vh, 94%); height: min(68vh, 88%); background: #05060a; border-radius: 6px; }
+  #panel { width: 320px; padding: 18px 20px; background: #11141c; border-left: 1px solid #1d2230; overflow-y: auto; }
+  h1 { font-size: 15px; margin: 0 0 4px; color: #ffd9a0; }
+  .sub { font-size: 12px; color: #8a93a6; margin: 0 0 16px; }
+  .row { margin: 10px 0; }
+  .row label { display: flex; justify-content: space-between; font-size: 12px; color: #aeb6c6; }
+  .row input[type=range] { width: 100%; accent-color: #ff8a3c; }
+  .val { color: #ffb368; font-variant-numeric: tabular-nums; }
+  .presets { display: flex; gap: 8px; margin: 6px 0 14px; }
+  .presets button {
+    flex: 1; padding: 8px; border: 1px solid #2a3142; background: #1a1f2b; color: #cdd3df;
+    border-radius: 5px; cursor: pointer; font-size: 13px;
+  }
+  .presets button:hover { background: #232a39; border-color: #ff8a3c; }
+  .note { font-size: 11px; color: #6f7790; margin-top: 18px; border-top: 1px solid #1d2230; padding-top: 12px; }
+</style>
+</head>
+<body>
+  <div id="stage"><canvas id="c"></canvas></div>
+  <div id="panel">
+    <h1>Procedural flame — prototype</h1>
+    <p class="sub">Multi-tongue flame shader (domain-warped fBm → blackbody ramp). Same GLSL that ports into the in-game <code>fire.js</code>. Torch/candle = one coherent tongue; bonfire = a broad, chaotic bed of tongues.</p>
+    <div class="presets">
+      <button data-preset="candle">Candle</button>
+      <button data-preset="torch">Torch</button>
+      <button data-preset="bonfire">Bonfire</button>
+    </div>
+    <div id="controls"></div>
+    <p class="note">Embers, smoke and a flickering point-light are separate layers added in-game (this is the flame body). Drag a slider, or tell me "broader / wilder / lower" and I'll move the preset defaults.</p>
+  </div>
+
+<script type="text/javascript">
+const cv = document.getElementById('c');
+const gl = cv.getContext('webgl', { premultipliedAlpha: false, alpha: false });
+if (!gl) { document.body.innerHTML = '<p style="padding:24px">WebGL not available in this browser.</p>'; }
+
+const VERT = `
+attribute vec2 aPos;
+varying vec2 vUv;
+void main(){ vUv = aPos * 0.5 + 0.5; gl_Position = vec4(aPos, 0.0, 1.0); }
+`;
+
+// A wide fire-bed whose columns lick up to different, writhing heights (the
+// "tongues"), carved by domain-warped turbulence and coloured through a
+// blackbody ramp. Torch/candle params collapse it to a single narrow tongue;
+// bonfire params spread it wide and chaotic.
+const FRAG = `
+precision highp float;
+varying vec2 vUv;
+uniform float uTime, uScale, uSpeed, uChaos, uHeight, uBaseWidth, uTongues, uIntensity, uTemp, uAspect, uSway;
+
+float hash(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  float a = hash(i), b = hash(i + vec2(1.0,0.0)), c = hash(i + vec2(0.0,1.0)), d = hash(i + vec2(1.0,1.0));
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+}
+float fbm(vec2 p){
+  float s = 0.0, a = 0.55;
+  for (int i = 0; i < 5; i++){ s += a * vnoise(p); p = p * 2.02 + 7.0; a *= 0.5; }
+  return s;
+}
+
+void main(){
+  float y = vUv.y;
+  float x = (vUv.x - 0.5) * uAspect;
+  x += uSway * 0.05 * sin(uTime * 1.7 + y * 3.0) * y;
+
+  // bed across the fire's width, narrowing only slightly with height
+  float halfW = uBaseWidth * (1.0 - y * 0.18);
+  float inX = smoothstep(halfW, halfW * 0.45, abs(x));
+
+  // per-column reach: noise across x (scrolling, so tongues writhe). Higher
+  // uTongues => more, finer tongues across a broad bed.
+  float colN = fbm(vec2(x * uTongues + 13.0, uTime * uSpeed * 0.7));
+  float reach = uHeight * (0.30 + 1.25 * colN);
+  float vert = smoothstep(reach, reach * 0.22, y) * smoothstep(0.0, 0.06, y);
+
+  // fine turbulence, domain-warped, scrolling upward
+  vec2 q = vec2(vUv.x * uScale, vUv.y * uScale - uTime * uSpeed);
+  vec2 w = vec2(fbm(q + vec2(0.0, uTime * uSpeed * 0.6)), fbm(q + vec2(5.2, 1.3)));
+  float n = fbm(q + uChaos * w);
+
+  float heat = inX * vert * (0.45 + 0.95 * n);
+  heat = clamp(heat * uIntensity, 0.0, 1.0);
+  heat *= smoothstep(0.05, 0.24, heat);
+
+  vec3 col = mix(vec3(0.0),  vec3(0.55, 0.04, 0.0), smoothstep(0.0,  0.22, heat));
+  col      = mix(col,        vec3(1.0,  0.32, 0.02), smoothstep(0.18, 0.5,  heat));
+  col      = mix(col,        vec3(1.0,  0.78, 0.22), smoothstep(0.5,  0.8,  heat));
+  col      = mix(col,        vec3(1.0,  0.96, 0.82), smoothstep(0.84, 1.0,  heat));
+  col *= uTemp;
+
+  float alpha = smoothstep(0.02, 0.2, heat);
+  gl_FragColor = vec4(col * alpha, alpha);
+}
+`;
+
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'aPos');
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+gl.enable(gl.BLEND);
+gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+gl.clearColor(0.02, 0.025, 0.04, 1.0);
+
+const UNIFORMS = ['uTime','uScale','uSpeed','uChaos','uHeight','uBaseWidth','uTongues','uIntensity','uTemp','uAspect','uSway'];
+const U = {};
+UNIFORMS.forEach(n => U[n] = gl.getUniformLocation(prog, n));
+
+const PARAMS = [
+  { k: 'uBaseWidth', label: 'Breadth',     min: 0.05, max: 0.75, step: 0.01 },
+  { k: 'uTongues',   label: 'Tongues',     min: 1,    max: 13,   step: 0.1 },
+  { k: 'uChaos',     label: 'Chaos',       min: 0,    max: 3,    step: 0.05 },
+  { k: 'uScale',     label: 'Noise scale', min: 1,    max: 9,    step: 0.1 },
+  { k: 'uSpeed',     label: 'Rise speed',  min: 0.1,  max: 3,    step: 0.05 },
+  { k: 'uHeight',    label: 'Height',      min: 0.45, max: 1.2,  step: 0.01 },
+  { k: 'uIntensity', label: 'Intensity',   min: 0.5,  max: 3.5,  step: 0.05 },
+  { k: 'uTemp',      label: 'Brightness',  min: 0.5,  max: 1.6,  step: 0.02 },
+  { k: 'uSway',      label: 'Sway',        min: 0,    max: 2,    step: 0.05 },
+];
+const PRESETS = {
+  candle:  { uBaseWidth: 0.06, uTongues: 1.5, uChaos: 0.5, uScale: 6.5, uSpeed: 1.2,  uHeight: 0.60, uIntensity: 2.2, uTemp: 0.95, uSway: 1.0 },
+  torch:   { uBaseWidth: 0.14, uTongues: 2.5, uChaos: 1.0, uScale: 4.5, uSpeed: 1.5,  uHeight: 0.85, uIntensity: 1.9, uTemp: 1.00, uSway: 0.7 },
+  bonfire: { uBaseWidth: 0.58, uTongues: 8.0, uChaos: 2.3, uScale: 3.2, uSpeed: 1.15, uHeight: 0.98, uIntensity: 1.8, uTemp: 1.12, uSway: 0.5 },
+};
+const state = Object.assign({}, PRESETS.bonfire);
+
+const controls = document.getElementById('controls');
+const widgets = {};
+for (const p of PARAMS){
+  const row = document.createElement('div'); row.className = 'row';
+  const lab = document.createElement('label');
+  const span = document.createElement('span'); span.textContent = p.label;
+  const val = document.createElement('span'); val.className = 'val';
+  lab.append(span, val);
+  const inp = document.createElement('input');
+  inp.type = 'range'; inp.min = p.min; inp.max = p.max; inp.step = p.step;
+  inp.addEventListener('input', () => { state[p.k] = parseFloat(inp.value); val.textContent = (+inp.value).toFixed(2); });
+  row.append(lab, inp); controls.append(row);
+  widgets[p.k] = { inp, val };
+}
+function syncWidgets(){ for (const p of PARAMS){ widgets[p.k].inp.value = state[p.k]; widgets[p.k].val.textContent = (+state[p.k]).toFixed(2); } }
+document.querySelectorAll('.presets button').forEach(b =>
+  b.addEventListener('click', () => { Object.assign(state, PRESETS[b.dataset.preset]); syncWidgets(); }));
+syncWidgets();
+
+function resize(){
+  const dpr = 1; // prototype: cap at 1 so the heavy full-canvas shader stays responsive
+  const w = Math.round(cv.clientWidth * dpr), h = Math.round(cv.clientHeight * dpr);
+  if (cv.width !== w || cv.height !== h){ cv.width = w; cv.height = h; }
+  gl.viewport(0, 0, cv.width, cv.height);
+}
+const t0 = performance.now();
+function frame(){
+  resize();
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.uniform1f(U.uTime, (performance.now() - t0) / 1000);
+  gl.uniform1f(U.uAspect, cv.width / cv.height);
+  for (const p of PARAMS) gl.uniform1f(U[p.k], state[p.k]);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+window.__fireState = state;
+</script>
+</body>
+</html>

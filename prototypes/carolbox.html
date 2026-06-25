@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Moorstead — carol prototype (real MIDI + sampled instrument)</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0b0d12; color: #cdd3df; font: 14px/1.6 system-ui, sans-serif; }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 28px 22px 60px; }
+  h1 { font-size: 18px; margin: 0 0 4px; color: #ffd9a0; }
+  .sub { font-size: 13px; color: #8a93a6; margin: 0 0 22px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; margin-bottom: 18px; }
+  label.field { display: block; font-size: 12px; color: #9aa3b6; margin-bottom: 5px; }
+  select, .wrap input[type=range] { width: 100%; }
+  select { background: #11141c; color: #cdd3df; border: 1px solid #232a39; border-radius: 6px; padding: 9px 10px; font-size: 14px; }
+  .row { margin: 12px 0; }
+  .row label { display: flex; justify-content: space-between; font-size: 12px; color: #aeb6c6; }
+  .row input[type=range] { accent-color: #ff8a3c; }
+  .val { color: #ffb368; font-variant-numeric: tabular-nums; }
+  .transport { display: flex; gap: 10px; align-items: center; margin: 20px 0 8px; }
+  .transport button { padding: 10px 16px; border: 1px solid #2a3142; background: #1a1f2b; color: #cdd3df; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  .transport button.primary { background: #2f6e4f; border-color: #3f8f66; color: #eafff2; font-weight: 600; }
+  .transport button:disabled { opacity: 0.5; cursor: default; }
+  #status { font-size: 12.5px; color: #7fd0a0; min-height: 18px; }
+  .note { font-size: 11.5px; color: #6f7790; margin-top: 26px; border-top: 1px solid #1d2230; padding-top: 12px; }
+  code { color: #ffb368; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Carol — real MIDI through a sampled instrument</h1>
+  <p class="sub">Public-domain carol MIDI arrangements (full harmony, correct tunes) played through real recorded instrument samples. No hand-synthesis. Pick a carol and a voice, hit Play.</p>
+
+  <div class="grid2">
+    <div>
+      <label class="field" for="carol">Carol</label>
+      <select id="carol"></select>
+    </div>
+    <div>
+      <label class="field" for="inst">Instrument (sampled)</label>
+      <select id="inst"></select>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>Tempo <span class="val" id="tempoVal">1.00×</span></label>
+    <input type="range" id="tempo" min="0.6" max="1.5" step="0.05" value="1" />
+  </div>
+  <div class="row">
+    <label>Volume <span class="val" id="volVal">0.85</span></label>
+    <input type="range" id="vol" min="0" max="1" step="0.02" value="0.85" />
+  </div>
+  <div class="row">
+    <label>Reverb (village air) <span class="val" id="revVal">0.28</span></label>
+    <input type="range" id="rev" min="0" max="0.8" step="0.02" value="0.28" />
+  </div>
+
+  <div class="transport">
+    <button id="play" class="primary">▶ Play</button>
+    <button id="stop">■ Stop</button>
+    <span id="status"></span>
+  </div>
+
+  <p class="note">Instruments are GM sample sets (MusyngKite, via the gleitz CDN — free); the MIDI is public-domain (Good King Wenceslas from the Timeless Truths hymn library; the rest from mfiles). The in-game build loads one chosen instrument + the MIDI set once, fades by village proximity, and rotates day-seeded. <b>First Play of each instrument downloads its samples — give it a second.</b></p>
+</div>
+
+<script type="module">
+import { Midi } from 'https://esm.sh/@tonejs/midi@2.0.28';
+import Soundfont from 'https://esm.sh/soundfont-player@0.12.0';
+
+const CAROLS = [
+  { name: 'Good King Wenceslas',        file: 'good-king-wenceslas.mid' },
+  { name: 'While Shepherds Watched',    file: 'while-shepherds-watched.mid' },
+  { name: 'God Rest You Merry',         file: 'god-rest-you-merry.mid' },
+  { name: 'The First Nowell',           file: 'the-first-nowell.mid' },
+  { name: "Once in Royal David's City", file: 'once-in-royal-davids-city.mid' },
+  { name: 'Hark! The Herald Angels',    file: 'hark-the-herald.mid' },
+  { name: 'O Come All Ye Faithful',     file: 'o-come-all-ye-faithful.mid' },
+];
+const INSTRUMENTS = [
+  ['church_organ',   'Church organ'],
+  ['reed_organ',     'Reed organ / harmonium'],
+  ['music_box',      'Music box'],
+  ['celesta',        'Celesta'],
+  ['glockenspiel',   'Glockenspiel'],
+  ['orchestral_harp','Harp'],
+  ['tubular_bells',  'Tubular bells'],
+];
+
+const $ = id => document.getElementById(id);
+const carolSel = $('carol'), instSel = $('inst');
+CAROLS.forEach((c, i) => carolSel.add(new Option(c.name, i)));
+INSTRUMENTS.forEach(([v, l]) => instSel.add(new Option(l, v)));
+instSel.value = 'church_organ';
+
+for (const [id, vid, fmt] of [['tempo','tempoVal',v=>v.toFixed(2)+'×'],['vol','volVal',v=>v.toFixed(2)],['rev','revVal',v=>v.toFixed(2)]])
+  $(id).addEventListener('input', () => { $(vid).textContent = fmt(parseFloat($(id).value)); if (id==='vol'&&master) master.gain.value = parseFloat($(id).value); if (id==='rev'&&wet) wet.gain.value = parseFloat($(id).value); });
+
+let ac = null, busIn = null, wet = null, master = null;
+const instCache = {};
+let current = null;          // { inst, fadeStop }
+const status = s => { $('status').textContent = s; };
+
+function makeIR(c, secs, decay){
+  const len = Math.floor(c.sampleRate * secs), b = c.createBuffer(2, len, c.sampleRate);
+  for (let ch = 0; ch < 2; ch++){ const d = b.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, decay); }
+  return b;
+}
+function ensureBus(){
+  if (ac) return;
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  busIn = ac.createGain();
+  const conv = ac.createConvolver(); conv.buffer = makeIR(ac, 2.4, 3);
+  wet = ac.createGain(); wet.gain.value = parseFloat($('rev').value);
+  const dry = ac.createGain(); dry.gain.value = 1;
+  master = ac.createGain(); master.gain.value = parseFloat($('vol').value);
+  busIn.connect(dry).connect(master);
+  busIn.connect(conv).connect(wet).connect(master);
+  master.connect(ac.destination);
+}
+async function getInstrument(name){
+  if (instCache[name]) return instCache[name];
+  status('loading "' + name + '" samples…');
+  const inst = await Soundfont.instrument(ac, name, { soundfont: 'MusyngKite', destination: busIn });
+  instCache[name] = inst;
+  return inst;
+}
+
+async function play(){
+  stop();
+  try {
+    ensureBus();
+    if (ac.state === 'suspended') await ac.resume();
+    master.gain.value = parseFloat($('vol').value);
+    const instName = instSel.value;
+    const inst = await getInstrument(instName);
+    const carol = CAROLS[carolSel.value];
+    status('loading ' + carol.name + '…');
+    const midi = await Midi.fromUrl('/prototypes/midi/' + carol.file);
+    const mult = parseFloat($('tempo').value);
+    const t0 = ac.currentTime + 0.3;
+    let n = 0, end = 0;
+    for (const track of midi.tracks){
+      if (track.instrument && track.instrument.percussion) continue;
+      for (const note of track.notes){
+        const when = t0 + note.time / mult, dur = note.duration / mult;
+        inst.play(note.name, when, { duration: dur, gain: Math.max(0.2, note.velocity) });
+        end = Math.max(end, when + dur); n++;
+      }
+    }
+    current = { inst };
+    status('♪ ' + carol.name + ' — ' + instName.replace('_',' ') + ' (' + n + ' notes)');
+    const ms = (end - ac.currentTime) * 1000 + 500;
+    current.timer = setTimeout(() => { if (current && current.inst === inst) status('done.'); }, ms);
+  } catch (e){
+    status('error: ' + (e && e.message ? e.message : e));
+    console.error(e);
+  }
+}
+function stop(){
+  if (current){ try { current.inst.stop(); } catch(e){} if (current.timer) clearTimeout(current.timer); current = null; }
+  if (master && ac){ master.gain.cancelScheduledValues(ac.currentTime); master.gain.setValueAtTime(0.0001, ac.currentTime); master.gain.linearRampToValueAtTime(parseFloat($('vol').value), ac.currentTime + 0.15); }
+  status('');
+}
+$('play').addEventListener('click', play);
+$('stop').addEventListener('click', stop);
+window.__carolReady = true;
+</script>
+</body>
+</html>
