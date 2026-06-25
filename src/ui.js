@@ -66,6 +66,7 @@ export class UI {
     // ---------- HUD ----------
     this.hud = this.el('div', 'hidden', body); this.hud.id = 'hud';
     this.el('div', '', this.hud).id = 'crosshair';
+    this.lockHint = this.el('div', '', this.hud); this.lockHint.id = 'lock-hint'; this.lockHint.textContent = 'Click to look around';
     this.breakCanvas = this.el('canvas', '', this.hud);
     this.breakCanvas.id = 'break-progress';
     this.breakCanvas.width = 46; this.breakCanvas.height = 46;
@@ -321,6 +322,8 @@ export class UI {
     slp.className = 'sleep-inner';
     this.sleepTitle = this.el('div', 'sleep-title', slp, 'Tha sleeps...');
     this.sleepText = this.el('div', 'sleep-sub', slp, '');
+    const wake = this.el('button', 'mc sleep-wake', slp, 'Get up');   // keyboard-free exit (touch can't press N/Esc)
+    wake.addEventListener('click', () => this.game.cancelSleep('Up an’ about again, then.'));
 
     // ---------- loading ----------
     this.loadingScreen = this.el('div', 'overlay hidden', body);

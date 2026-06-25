@@ -3970,6 +3970,13 @@ class Game {
 
       // mining / repeat placing / fishing
       if (this.touch) this.touch.tick();
+      // Playing but pointer-lock didn't take — closing a board/menu can hit the browser's re-lock
+      // cooldown (it blocks requestPointerLock for ~1s after an exit), leaving the crosshair dead
+      // with no obvious way back. Show a click-to-resume hint; a canvas click re-locks (mousedown).
+      const _locked = document.pointerLockElement === this.renderer.domElement;
+      if (this.state === 'playing' && !this.touch?.active && !_locked) this._unlockT = (this._unlockT || 0) + dt;
+      else this._unlockT = 0;
+      if (this.ui.lockHint) this.ui.lockHint.classList.toggle('show', this._unlockT > 0.5);
       this.updateMining(dt);
       this.updateFishing(dt);
       const repHeld = this.player.heldItem();
