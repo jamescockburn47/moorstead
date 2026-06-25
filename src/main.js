@@ -39,6 +39,7 @@ import { boardingFolk } from './trainfolk.js';
 import { FestiveMusic } from './festiveMusic.js';
 import { RosterClient } from './roster.js';
 import { TouchControls } from './touch.js';
+import { startUpdateCheck } from './update-check.js';
 
 const RAIL_VMAX = 11;  // blocks a second flat out — t' pace of a heritage steamer
 const RAIL_ACC = 0.18; // gentle acceleration: she works up to speed an' brakes early
@@ -171,6 +172,9 @@ class Game {
     // the thread drops to see WHY (close-reason taxonomy, drop counts, RTT, recent log).
     if (typeof window !== 'undefined') window.netDiag = () => this.netDiag();
     this.renderer.setAnimationLoop(() => this.frame());
+    // Watch for a newer deploy: silent unless the dev bumped package.json "version"
+    // (Notify toast) or raised "minClientVersion" (Force auto-reload). See update-check.js.
+    startUpdateCheck(this);
   }
 
   // Pretty-print the shared-moor connection report to the console an' return it.

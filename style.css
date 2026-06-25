@@ -290,6 +290,23 @@ input.seed {
 }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } }
 
+/* Update toast: a tappable variant of .toast (same panel/anim) with a gold edge
+   and a close affordance. Tap anywhere reloads; the × dismisses for the session. */
+.toast.update-toast {
+  display: flex; align-items: center; gap: 10px;
+  border-color: var(--gold); cursor: pointer;
+  pointer-events: auto;
+}
+.toast.update-toast:hover { background: rgba(216, 185, 90, 0.14); }
+.toast.update-toast .update-msg b { color: var(--gold); }
+.toast.update-toast .update-x {
+  flex: none; margin-left: 2px; width: 20px; height: 20px; line-height: 18px;
+  padding: 0; border-radius: 4px; cursor: pointer;
+  background: rgba(10, 10, 8, 0.4); border: 1px solid var(--panel-border);
+  color: #cfc8b6; font-size: 15px; font-family: inherit;
+}
+.toast.update-toast .update-x:hover { color: var(--gold); border-color: var(--gold); }
+
 #hurt-vignette {
   position: fixed; inset: 0; pointer-events: none; z-index: 15;
   background: radial-gradient(ellipse at center, transparent 45%, rgba(200, 20, 10, 0.55) 100%);
