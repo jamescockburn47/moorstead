@@ -38,7 +38,7 @@ import { cellInstances } from './flora-placement.js';
 import { startLiveWeather } from './weather-live.js';
 import { temperatureTarget, stepTemperature } from './temperature.js';
 import { boardingFolk } from './trainfolk.js';
-import { FestiveMusic } from './festiveMusic.js';
+import { CarolBox } from './carolBox.js';
 import { RosterClient } from './roster.js';
 import { TouchControls } from './touch.js';
 import { startUpdateCheck } from './update-check.js';
@@ -414,7 +414,7 @@ class Game {
     if (this.seasonalLayer) { this.seasonalLayer.clear(); this.seasonalLayer = null; }
     if (this.fireLayer) { this.fireLayer.dispose(); this.fireLayer = null; }
     if (this.footprints) { this.footprints.clear(); this.footprints = null; }
-    if (this.festiveMusic) { this.festiveMusic.stop(); this.festiveMusic = null; }
+    if (this.carolBox) { this.carolBox.dispose(); this.carolBox = null; }
     this.entities.clear();
     for (const c of this.world.chunks.values()) {
       if (c.meshes) for (const m of c.meshes) { this.scene.remove(m); m.geometry.dispose(); }
@@ -4175,11 +4175,13 @@ class Game {
       }
     }
 
-    // festive brass music: lazy-init once AudioEngine has a ctx (user gesture has occurred)
-    if (this.audio.ctx && !this.festiveMusic) {
-      this.festiveMusic = new FestiveMusic(this.audio.ctx);
+    // village carol: real public-domain MIDI through a sampled church organ.
+    // Lazy-init once AudioEngine has a ctx (a user gesture has occurred), so it
+    // shares the same gesture-gated context as the rest of the audio.
+    if (this.audio.ctx && !this.carolBox) {
+      this.carolBox = new CarolBox(this.audio.ctx);
     }
-    if (this.festiveMusic && this.world) {
+    if (this.carolBox && this.world) {
       const geo = this.world.gen && this.world.gen.geo;
       let nearestVillageDist = 1e9;
       if (geo) {
@@ -4189,17 +4191,11 @@ class Game {
           if (d < nearestVillageDist) nearestVillageDist = d;
         }
       }
-      // the carol (recording of "In the Bleak Midwinter") fades up as you near a
-      // village in winter, full within ~village, silent beyond ~60 blocks / outside winter.
-      const festVol = yuletide(this.season)
-        ? Math.max(0, 1 - nearestVillageDist / 60) * 0.55
-        : 0;
-      if (festVol > 0) {
-        this.festiveMusic.start();
-      } else {
-        this.festiveMusic.stop();
-      }
-      this.festiveMusic.setVolume(festVol);
+      // audible only in Christmastide and near a village; the carol fades up as
+      // you approach, full within ~village, silent beyond ~60 blocks. The day-seed
+      // (the in-game day) makes the rotation order shared across clients + daily.
+      const audible = yuletide(this.season) && nearestVillageDist < 60;
+      this.carolBox.setActive(audible, nearestVillageDist, this.sky.day);
     }
 
     // audio ambience
