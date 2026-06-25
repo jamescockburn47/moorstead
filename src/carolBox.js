@@ -37,6 +37,7 @@ export class CarolBox {
     this._seed = null;            // the day-seed that built _order
     this._idx = 0;                // position within the day's order
     this._advanceTimer = null;    // setTimeout handle for the next carol
+    this._fetchSeq = 0;           // incremented each time a new fetch cycle starts
     this._disposed = false;
     this._buildBus();
   }
@@ -45,16 +46,16 @@ export class CarolBox {
     const ac = this.ctx;
     // organ feeds in here; everything downstream is the village-air colour
     this.busIn = ac.createGain();
-    const lp = ac.createBiquadFilter();
-    lp.type = 'lowpass'; lp.frequency.value = 4200;   // take the fizz off the samples
-    const conv = ac.createConvolver(); conv.buffer = this._makeIR(2.4, 3);
-    const wet = ac.createGain(); wet.gain.value = 0.26;   // a touch of stone-church air
-    const dry = ac.createGain(); dry.gain.value = 1;
+    this._lp = ac.createBiquadFilter();
+    this._lp.type = 'lowpass'; this._lp.frequency.value = 4200;   // take the fizz off the samples
+    this._conv = ac.createConvolver(); this._conv.buffer = this._makeIR(2.4, 3);
+    this._wet = ac.createGain(); this._wet.gain.value = 0.26;   // a touch of stone-church air
+    this._dry = ac.createGain(); this._dry.gain.value = 1;
     // master starts silent — main.js ramps it up by proximity once a carol plays
     this.master = ac.createGain(); this.master.gain.value = 0;
-    this.busIn.connect(lp);
-    lp.connect(dry).connect(this.master);
-    lp.connect(conv).connect(wet).connect(this.master);
+    this.busIn.connect(this._lp);
+    this._lp.connect(this._dry).connect(this.master);
+    this._lp.connect(this._conv).connect(this._wet).connect(this.master);
     this.master.connect(ac.destination);
   }
 
@@ -111,10 +112,14 @@ export class CarolBox {
 
     // a new day → rebuild the shared order and resume from its head
     const seed = Math.floor(daySeed) | 0;
-    if (this._order === null || seed !== this._seed) {
+    const newDay = (this._order === null || seed !== this._seed);
+    if (newDay) {
       this._order = rotationOrder(seed);
       this._seed = seed;
       this._idx = 0;
+      // cancel any in-flight advance so the next _playCurrent uses index 0
+      this._clearTimer();
+      this._running = false;
     }
 
     if (!this._running) {
@@ -139,7 +144,9 @@ export class CarolBox {
     const carol = this._carolFor(this._idx);
     if (!carol) { this._running = false; return; }
 
+    const seq = ++this._fetchSeq;
     Midi.fromUrl(CAROL_BASE + carol.file).then(midi => {
+      if (seq !== this._fetchSeq) return;   // superseded by stop() or a newer cycle
       if (!this._running || this._disposed || !this.inst) return;
       const t0 = this.ctx.currentTime + 0.3;
       let end = t0;
@@ -182,6 +189,7 @@ export class CarolBox {
   stop() {
     this._clearTimer();
     this._running = false;
+    this._fetchSeq++;
     if (this.inst) { try { this.inst.stop(); } catch (e) { /* nowt playing */ } }
     if (this.master && this.ctx) {
       const t = this.ctx.currentTime;
@@ -196,6 +204,10 @@ export class CarolBox {
     if (this.inst) { try { this.inst.stop(); } catch (e) { /* ignore */ } }
     try { if (this.master) this.master.disconnect(); } catch (e) { /* ignore */ }
     try { if (this.busIn) this.busIn.disconnect(); } catch (e) { /* ignore */ }
+    try { if (this._lp)   this._lp.disconnect();   } catch (e) { /* ignore */ }
+    try { if (this._conv) this._conv.disconnect();  } catch (e) { /* ignore */ }
+    try { if (this._wet)  this._wet.disconnect();   } catch (e) { /* ignore */ }
+    try { if (this._dry)  this._dry.disconnect();   } catch (e) { /* ignore */ }
     this.inst = null;
   }
 }
