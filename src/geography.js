@@ -7,6 +7,7 @@
 // and the village of Moorstead near where tha wakes up.
 import { fbm2, hash2i, mulberry32 } from './noise.js';
 import { buildRailPath, samplePos as rpSample, railInfo as rpInfo } from './railpath.js';
+import { buildRoadNet, roadInfo as rdInfo } from './roadpath.js';
 import { HEIGHT, WATER_LEVEL } from './defs.js';
 
 function smoothstep(t) { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); }
@@ -425,6 +426,21 @@ export class Geography {
   // Nearest point on t' line: {d, along, deck} | null (within ~2.6 blocks)
   railInfo(x, z) {
     return rpInfo(this.railPath(), x, z);
+  }
+
+  // ---------- t' parish lanes ----------
+  // The road network (villages ↔ neighbours + station), built once frae the layout an'
+  // cached, t' same way as t' rail path. Roads shadow t' line where it runs parallel an'
+  // strike across t' moor to t' remote spots, threading round t' buildings. The stylised
+  // world carries no rivers, so buildRoadNet just lays no bridges there (it degrades, never
+  // throws). See src/roadpath.js.
+  roadPaths() {
+    return (this._roadNet || (this._roadNet = buildRoadNet(this))).edges;
+  }
+
+  // Nearest road across all lanes: {d, along, deck} | null (within ~4 blocks)
+  roadInfo(x, z) {
+    return rdInfo(this._roadNet || (this._roadNet = buildRoadNet(this)), x, z);
   }
 
   // ---------- waymarks ----------

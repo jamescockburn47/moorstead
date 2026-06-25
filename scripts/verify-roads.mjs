@@ -168,6 +168,24 @@ const villageNodes = net.nodes.filter(n => n.kind === 'village');
   else bad(`roadInfo non-null (d=${offInfo.d.toFixed(2)}) far off any road`);
 }
 
+// ---- 8. exposed on geo: roadPaths() routed + cached, roadInfo() delegates ----
+{
+  const rp1 = geo.roadPaths();
+  const rp2 = geo.roadPaths();
+  if (Array.isArray(rp1) && rp1.length && rp1[0].path && rp1[0].path.pts) ok(`geo.roadPaths() returns ${rp1.length} routed edges`);
+  else bad('geo.roadPaths() did not return routed edges');
+  if (rp1 === rp2) ok('geo.roadPaths() is cached (same ref on 2nd call)');
+  else bad('geo.roadPaths() not cached (different ref on 2nd call)');
+  // geo.roadInfo delegates to the same net — on a known on-track point it is non-null
+  const e = rp1.find(ed => ed.path && ed.path.pts.length > 4);
+  const onPt = e.path.pts[Math.floor(e.path.pts.length / 2)];
+  const gi = geo.roadInfo(Math.round(onPt.x), Math.round(onPt.z));
+  if (gi && gi.d <= 2) ok(`geo.roadInfo() delegates (on-track d=${gi.d.toFixed(2)})`);
+  else bad(`geo.roadInfo() returned ${gi ? 'd=' + gi.d.toFixed(2) : 'null'} on a known on-track point`);
+  if (geo.roadInfo(Math.round(onPt.x) + 5000, Math.round(onPt.z) + 5000) === null) ok('geo.roadInfo() null well off any road');
+  else bad('geo.roadInfo() non-null far off any road');
+}
+
 console.log(`\n${asserts} assertions`);
 console.log(failed ? 'RESULT: FAIL' : 'RESULT: PASS');
 process.exit(failed ? 1 : 0);

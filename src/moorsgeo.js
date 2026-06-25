@@ -6,6 +6,7 @@ import { HEIGHT, WATER_LEVEL } from './defs.js';
 import { fbm2 } from './noise.js';
 import { bilinear, blockToGrid } from './geo-grid.js';
 import { buildRailPath, samplePos as rpSample, railInfo as rpInfo } from './railpath.js';
+import { buildRoadNet, roadInfo as rdInfo } from './roadpath.js';
 import { WORKS } from './economy.js';
 
 function smoothstep(t) { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); }
@@ -479,6 +480,19 @@ export class MoorsGeography {
     return best;
   }
   nearStation(x, z, r = 8) { return this.data.stations.find(s => Math.hypot(s.x - x, s.z - z) < r) || null; }
+
+  // ---------- the parish lanes ----------
+  // The road network (towns ↔ neighbours + station), built once from the layout and cached —
+  // the road analogue of railPaths(). Lanes shadow the line where it runs parallel and strike
+  // across the moor to the remote dales, threading round the town buildings, with flat-plank
+  // bridges over the becks and plank crossings over the rail. See src/roadpath.js.
+  roadPaths() {
+    return (this._roadNet || (this._roadNet = buildRoadNet(this))).edges;
+  }
+  // nearest road across all lanes: { d, along, deck } | null (within ~4 blocks)
+  roadInfo(x, z) {
+    return rdInfo(this._roadNet || (this._roadNet = buildRoadNet(this)), x, z);
+  }
 
   // ---------- villages (markers in slice 0) ----------
   inVillage(x, z, pad = 0) { return this.villages.some(v => Math.hypot(x - v.x, z - v.z) < v.radius + pad); }
