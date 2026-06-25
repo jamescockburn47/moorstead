@@ -365,7 +365,7 @@ class Game {
     this.floraLayer = new FloraLayer(this.scene, this.world);
     if (this.seasonalLayer) this.seasonalLayer.clear();
     this.seasonalLayer = new SeasonalLayer(this.scene, this.world);
-    if (this.fireLayer) this.fireLayer.clear();
+    if (this.fireLayer) this.fireLayer.dispose();
     this.fireLayer = new FireLayer(this.scene, this.world);
     if (this.footprints) this.footprints.clear();
     this.footprints = new Footprints(this.scene, this.world);
