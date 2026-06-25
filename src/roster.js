@@ -427,7 +427,10 @@ export class RosterClient {
   _atPlatform(m, ride) {
     const pp = platformPoint(this.world, this.geo, ride.line, ride.from);
     if (!pp) return true;
-    return (m.pos.x - pp.x) ** 2 + (m.pos.z - pp.z) ** 2 < 6;
+    // board if NEAR the dwelling train, not pixel-perfect on the platform: some villages (the coast
+    // ones especially) sit right on the platform, so a body milling there is a few blocks off — a
+    // strict ~2-block gate made it miss the train it was plainly stood beside. 8 blocks.
+    return (m.pos.x - pp.x) ** 2 + (m.pos.z - pp.z) ** 2 < 64;
   }
 
   // The visible ride couldn't be delivered (720s stuck): drop the ride and place her at whatever
