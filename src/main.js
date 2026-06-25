@@ -26,7 +26,7 @@ import { buildTrain } from './train.js';
 import { Rails } from './rails.js';
 import { RoadLayer } from './roads.js';
 import { FloraLayer } from './floraLayer.js';
-import { FestiveLayer } from './festiveLayer.js';
+import { SeasonalLayer } from './seasonalLayer.js';
 import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase } from './season.js';
 import { activeForageables, hostForageFor, fruitSpeciesAt, fruitTreeRipe } from './forage.js';
@@ -342,8 +342,8 @@ class Game {
     this.roads = new RoadLayer(this.scene, this.world, this.world.gen.geo); // t' parish lanes — needs the chunk world for surfaceHeight
     if (this.floraLayer) this.floraLayer.clear();
     this.floraLayer = new FloraLayer(this.scene, this.world);
-    if (this.festiveLayer) this.festiveLayer.clear();
-    this.festiveLayer = new FestiveLayer(this.scene, this.world);
+    if (this.seasonalLayer) this.seasonalLayer.clear();
+    this.seasonalLayer = new SeasonalLayer(this.scene, this.world);
     if (this.footprints) this.footprints.clear();
     this.footprints = new Footprints(this.scene, this.world);
     // seed snow cover + season so a world loaded in winter is snowy at once and
@@ -388,7 +388,7 @@ class Game {
     if (this.rails) { this.rails.dispose(); this.rails = null; }
     if (this.roads) { this.roads.dispose(); this.roads = null; }
     if (this.floraLayer) { this.floraLayer.clear(); this.floraLayer = null; }
-    if (this.festiveLayer) { this.festiveLayer.clear(); this.festiveLayer = null; }
+    if (this.seasonalLayer) { this.seasonalLayer.clear(); this.seasonalLayer = null; }
     if (this.footprints) { this.footprints.clear(); this.footprints = null; }
     if (this.festiveMusic) { this.festiveMusic.stop(); this.festiveMusic = null; }
     this.entities.clear();
@@ -3297,7 +3297,7 @@ class Game {
         const parts = ['scarf', 'hat', 'nose', 'arms', 'smile'];
         this._smPart = ((this._smPart || 0) + 1) % parts.length;
         this.world.recordSnowman(sx, sy, sz, cycleSnowman(sm.cfg, parts[this._smPart]), sm.day);
-        if (this.festiveLayer) this.festiveLayer.center = null;
+        if (this.seasonalLayer) this.seasonalLayer.center = null;
         this.ui.toast('Dressed t’ snowman.'); return;
       }
 
@@ -3319,7 +3319,7 @@ class Game {
           this.world.getBlock(sx, sy, sz) === B.AIR) {
         this.player.removeItem(I.SNOWBALL, 3);
         this.world.recordSnowman(sx, sy, sz, { ...DEFAULT_SNOWMAN }, this.sky.day);
-        if (this.festiveLayer) this.festiveLayer.center = null;
+        if (this.seasonalLayer) this.seasonalLayer.center = null;
         this.ui.toast('Built a snowman — right-click to dress it.'); return;
       }
     }
@@ -3894,13 +3894,13 @@ class Game {
         this.deedTick();
         const beforeMelt = this.world.snowmanLedger.size;
         this.world.meltSnowmen(this.season);
-        if (this.world.snowmanLedger.size < beforeMelt && this.festiveLayer) this.festiveLayer.center = null;
+        if (this.world.snowmanLedger.size < beforeMelt && this.seasonalLayer) this.seasonalLayer.center = null;
       }
 
       // sky & weather (season already computed + cached above for player ice physics)
       const season = this.season;
       if (this.floraLayer) this.floraLayer.update(dt, this.player.pos, season);
-      if (this.festiveLayer) this.festiveLayer.update(dt, this.player.pos, season, this.snowAccum);
+      if (this.seasonalLayer) this.seasonalLayer.update(dt, this.player.pos, season, this.snowAccum);
       if (this.footprints && this.snowAccum > 0.1) {
         const fpNow = performance.now() / 1000;
         const walkers = [{ x: this.player.pos.x, z: this.player.pos.z }];
