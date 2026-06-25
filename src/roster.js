@@ -76,6 +76,29 @@ export function townAnchor(name, geo) {
   return { x: v.x, y: (v.ground != null ? v.ground : geo.height(v.x, v.z)) + 1, z: v.z };
 }
 
+// The parish lane between two town anchors, oriented from->to, or null if no lane joins them.
+// A road edge's path endpoints (path.pts[0]/[last]) ARE the two node centres (nudged out of the
+// buildings), so we match the two anchors against each edge's two ends and take the best-fitting
+// edge within tolerance. Returns the edge's pts re-ordered to run FROM `from` TO `to` (reversed if
+// the edge was stored to->from), so a walker can follow them in order. Pure; geo caches the net.
+const ROAD_MATCH_TOL = 36;     // an anchor must sit within this of an edge end to count as that end
+export function roadWaypoints(from, to, geo) {
+  if (!from || !to || typeof geo.roadPaths !== 'function') return null;
+  let best = null;
+  for (const e of geo.roadPaths()) {
+    const pts = e.path && e.path.pts;
+    if (!pts || pts.length < 2) continue;
+    const p0 = pts[0], p1 = pts[pts.length - 1];
+    const d00 = Math.hypot(p0.x - from.x, p0.z - from.z), d11 = Math.hypot(p1.x - to.x, p1.z - to.z);
+    const d01 = Math.hypot(p0.x - to.x, p0.z - to.z), d10 = Math.hypot(p1.x - from.x, p1.z - from.z);
+    const fwd = Math.max(d00, d11), rev = Math.max(d01, d10);   // worst-end fit for each orientation
+    const fit = Math.min(fwd, rev);
+    if (fit <= ROAD_MATCH_TOL && (!best || fit < best.fit)) best = { pts, reversed: rev < fwd, fit };
+  }
+  if (!best) return null;
+  return best.reversed ? best.pts.slice().reverse() : best.pts;
+}
+
 // stable FNV-1a over the id — deterministic run-to-run (Math.imul keeps it 32-bit).
 export function idHash(id) {
   let h = 2166136261;
@@ -345,7 +368,28 @@ export class RosterClient {
       if (grp && !grp.visible) grp.visible = true;
       if (s && s.kind === 'walk') {
         const from = townAnchor(s.from, this.geo), to = townAnchor(s.to, this.geo);
-        if (from && to) steerWalk(m, from, to, s.started, s.eta, nowEff, this.world, this.geo, dt);
+        if (from && to) {
+          // reset the lane index when a NEW walk leg starts (changed from/to/started), so she
+          // never resumes a stale waypoint from her last errand.
+          const legKey = s.from + '>' + s.to + '@' + s.started;
+          if (e._roadLeg !== legKey) { e._roadLeg = legKey; e._roadI = 0; }
+          const lane = roadWaypoints(from, to, this.geo);
+          if (lane) {
+            // follow the lane: steer to the current waypoint; advance once within a couple of blocks;
+            // past the last waypoint, make for the final `to` anchor (the lane ends near it).
+            let i = e._roadI | 0;
+            if (i < lane.length) {
+              const wp = lane[i];
+              const goal = { x: wp.x, y: surfaceHeight(this.world, this.geo, wp.x, wp.z), z: wp.z };
+              if ((m.pos.x - wp.x) ** 2 + (m.pos.z - wp.z) ** 2 < 4) { e._roadI = ++i; }   // ~2 blocks -> next
+              steerWalk(m, from, goal, s.started, s.eta, nowEff, this.world, this.geo, dt);
+            } else {
+              steerWalk(m, from, to, s.started, s.eta, nowEff, this.world, this.geo, dt);
+            }
+          } else {
+            steerWalk(m, from, to, s.started, s.eta, nowEff, this.world, this.geo, dt);   // no lane -> direct (unchanged)
+          }
+        }
       } else {                                              // 'at': potter about her patch
         const p = npcVoxelPos(e.data, nowEff, this.geo);
         if (p) this._potterAt(m, p, nowEff, dt);

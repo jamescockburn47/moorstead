@@ -3,7 +3,7 @@
 import assert from 'node:assert';
 import { Gen, MOORS_SEED } from '../src/worldgen.js';
 import { B } from '../src/defs.js';
-import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity, surfaceHeight, __resetSurfCache, idHash, waiterRank, waitMode, PLATFORM_CAP, WAIT_LEAD, platformPoint } from '../src/roster.js';
+import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity, surfaceHeight, __resetSurfCache, idHash, waiterRank, waitMode, PLATFORM_CAP, WAIT_LEAD, platformPoint, roadWaypoints } from '../src/roster.js';
 
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
 const geo = new Gen(MOORS_SEED).geo;
@@ -160,6 +160,27 @@ __resetSurfCache();
   ok(approaching.length === PLATFORM_CAP, `at most ${PLATFORM_CAP} approach a busy platform (got ${approaching.length})`);
   const overflow = ids.filter(id => waiterRank(id, ids) >= PLATFORM_CAP);
   ok(overflow.every(id => waitMode(5, waiterRank(id, ids)) === 'potter'), 'overflow folk potter in town instead');
+}
+
+// --- roadWaypoints: a road-linked village pair yields an oriented lane; an unlinked pair, null ---
+{
+  // Castleton <-> Danby are joined by a parish lane; Castleton / Egton are not (no shared edge).
+  const A = townAnchor('Castleton', geo), B = townAnchor('Danby', geo);
+  const lane = roadWaypoints(A, B, geo);
+  ok(Array.isArray(lane) && lane.length >= 2, 'roadWaypoints returns a lane for a road-linked pair (Castleton->Danby)');
+  // oriented from->to: first waypoint hugs the `from` anchor, last hugs the `to` anchor
+  ok(Math.hypot(lane[0].x - A.x, lane[0].z - A.z) < Math.hypot(lane[0].x - B.x, lane[0].z - B.z),
+    'roadWaypoints is oriented from->to (first waypoint nearest the from anchor)');
+  ok(Math.hypot(lane[lane.length - 1].x - B.x, lane[lane.length - 1].z - B.z) <
+     Math.hypot(lane[lane.length - 1].x - A.x, lane[lane.length - 1].z - A.z),
+    'roadWaypoints last waypoint nearest the to anchor');
+  // the reverse leg re-orients (first waypoint now nearest the new from = Danby)
+  const rev = roadWaypoints(B, A, geo);
+  ok(rev && Math.hypot(rev[0].x - B.x, rev[0].z - B.z) < Math.hypot(rev[0].x - A.x, rev[0].z - A.z),
+    'roadWaypoints re-orients for the reverse leg');
+  // an unconnected pair -> null (she falls back to a direct walk, no phantom lane)
+  ok(roadWaypoints(townAnchor('Castleton', geo), townAnchor('Egton', geo), geo) === null,
+    'roadWaypoints null for an unconnected village pair (Castleton / Egton)');
 }
 
 console.log(`verify-roster: ${n} assertions OK`);
