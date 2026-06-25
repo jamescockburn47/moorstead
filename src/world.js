@@ -58,9 +58,10 @@ export class World {
       colorsDirty: true,
     };
     this.chunks.set(k, c);
-    // register owt that burns (lanterns an' torches both ward an' light)
+    // register owt that burns (lanterns, torches an' pit safety-lamps — all
+    // ward an' light, an' all get a flame in fireLayer)
     for (let i = 0; i < data.length; i++) {
-      if (data[i] === B.LANTERN || data[i] === B.TORCH) {
+      if (data[i] === B.LANTERN || data[i] === B.TORCH || data[i] === B.SAFETY_LAMP) {
         const y = Math.floor(i / (CHUNK * CHUNK));
         const r = i % (CHUNK * CHUNK);
         this.lanterns.add(`${cx * CHUNK + (r % CHUNK)},${y},${cz * CHUNK + Math.floor(r / CHUNK)}`);
@@ -99,8 +100,8 @@ export class World {
     c.modified = true;
     c.dirty = true;
     c.colorsDirty = true;
-    if (old === B.LANTERN || old === B.TORCH) { this.lanterns.delete(`${x},${y},${z}`); this.lightsDirty = true; }
-    if (id === B.LANTERN || id === B.TORCH) { this.lanterns.add(`${x},${y},${z}`); this.lightsDirty = true; }
+    if (old === B.LANTERN || old === B.TORCH || old === B.SAFETY_LAMP) { this.lanterns.delete(`${x},${y},${z}`); this.lightsDirty = true; }
+    if (id === B.LANTERN || id === B.TORCH || id === B.SAFETY_LAMP) { this.lanterns.add(`${x},${y},${z}`); this.lightsDirty = true; }
     // plant on top falls off when its block is dug out
     const above = this.getBlock(x, y + 1, z);
     if (id === B.AIR && BLOCKS[above] && BLOCKS[above].kind === 'cutout') {

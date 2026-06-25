@@ -27,6 +27,7 @@ import { Rails } from './rails.js';
 import { RoadLayer } from './roads.js';
 import { FloraLayer } from './floraLayer.js';
 import { SeasonalLayer } from './seasonalLayer.js';
+import { FireLayer } from './fireLayer.js';
 import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase } from './season.js';
 import { activeForageables, hostForageFor, fruitSpeciesAt, fruitTreeRipe } from './forage.js';
@@ -364,6 +365,8 @@ class Game {
     this.floraLayer = new FloraLayer(this.scene, this.world);
     if (this.seasonalLayer) this.seasonalLayer.clear();
     this.seasonalLayer = new SeasonalLayer(this.scene, this.world);
+    if (this.fireLayer) this.fireLayer.clear();
+    this.fireLayer = new FireLayer(this.scene, this.world);
     if (this.footprints) this.footprints.clear();
     this.footprints = new Footprints(this.scene, this.world);
     // seed snow cover + season so a world loaded in winter is snowy at once and
@@ -409,6 +412,7 @@ class Game {
     if (this.roads) { this.roads.dispose(); this.roads = null; }
     if (this.floraLayer) { this.floraLayer.clear(); this.floraLayer = null; }
     if (this.seasonalLayer) { this.seasonalLayer.clear(); this.seasonalLayer = null; }
+    if (this.fireLayer) { this.fireLayer.clear(); this.fireLayer = null; }
     if (this.footprints) { this.footprints.clear(); this.footprints = null; }
     if (this.festiveMusic) { this.festiveMusic.stop(); this.festiveMusic = null; }
     this.entities.clear();
@@ -3921,6 +3925,7 @@ class Game {
       const season = this.season;
       if (this.floraLayer) this.floraLayer.update(dt, this.player.pos, season);
       if (this.seasonalLayer) this.seasonalLayer.update(dt, this.player.pos, season, this.snowAccum);
+      if (this.fireLayer) this.fireLayer.update(dt, this.player.pos, this.camera);
       if (this.footprints && this.snowAccum > 0.1) {
         const fpNow = performance.now() / 1000;
         const walkers = [{ x: this.player.pos.x, z: this.player.pos.z }];
