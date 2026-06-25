@@ -264,6 +264,17 @@ __resetSurfCache();
   rc._despawnMount(e);
   ok(removed.length === 1, '_despawnMount is idempotent (a second call is a no-op — no leak, no throw)');
 
+  // arrival dismount: seated up on the saddle, then on arrival she's grounded back onto the surface
+  // (DEM+1 on this flat stub world) and well below the seat height — she's off the pony, not floating.
+  __resetSurfCache();
+  const e3 = { data: { id: 'rider-3', role: 'gentry' }, mob: { pos: { x: 200, y: 90, z: 200 }, yaw: 0, model: { group: fakeGroup() } } };
+  const p3 = rc._spawnMount(e3, e3.mob.pos);
+  p3.pos.y = 90; rc._seatRider(e3);
+  const seatedY = e3.mob.pos.y;
+  rc._despawnMount(e3);
+  e3.mob.pos.y = surfaceHeight(fakeWorld, geo, e3.mob.pos.x, e3.mob.pos.z);
+  ok(e3._pony === null && e3.mob.pos.y < seatedY, 'on arrival the rider is dismounted and grounded below the saddle');
+
   // leak guard: _remove (rider streams out mid-ride) despawns her pony too — no orphan ponies.
   const e2 = { data: { id: 'rider-2', role: 'farmer' }, mob: { pos: { x: 1, y: 64, z: 1 }, model: { group: fakeGroup() } } };
   rc._spawnMount(e2, e2.mob.pos);

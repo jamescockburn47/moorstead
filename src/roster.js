@@ -481,7 +481,18 @@ export class RosterClient {
           } else {
             steerWalk(drv, from, to, s.started, s.eta, nowEff, this.world, this.geo, dt, pace);   // no lane -> direct (still mounted)
           }
-          if (e._pony) { this._strideMount(e._pony, dt); this._seatRider(e); }   // pose pony legs + seat the rider
+          if (e._pony) {
+            // arrival: the moment the pony reaches the destination anchor she's dismounted on the
+            // spot — the rider swings down at the town edge and the pony's gone (no waiting on the
+            // next brain poll to drop her). Otherwise: stride the legs + keep the rider seated.
+            if ((e._pony.pos.x - to.x) ** 2 + (e._pony.pos.z - to.z) ** 2 < 4) {
+              this._seatRider(e);                            // last seated frame at the anchor
+              this._despawnMount(e);                         // ...then down she gets, pony away
+              m.pos.y = surfaceHeight(this.world, this.geo, m.pos.x, m.pos.z);   // stand on the ground, not the saddle
+            } else {
+              this._strideMount(e._pony, dt); this._seatRider(e);
+            }
+          }
         }
       } else {                                              // 'at': potter about her patch — afoot, drop any leg pony
         if (e._pony) this._despawnMount(e);
