@@ -13,6 +13,8 @@ import { buildChristmas } from './festivals/christmas.js';
 import { buildBonfire } from './festivals/bonfire.js';
 import { buildHarvest } from './festivals/harvest.js';
 import { buildEaster } from './festivals/easter.js';
+import { buildMayDay } from './festivals/mayday.js';
+import { buildMidsummer } from './festivals/midsummer.js';
 
 const RADIUS = 48;
 const REBUILD_MOVE = 8;
@@ -20,7 +22,7 @@ const REBUILD_MOVE = 8;
 // Registry of festival-id → dressing builder. Later slices add more entries
 // (mayday, harvest…); the host calls whichever matches the active festival
 // window, so nowt is drawn outside its calendar window.
-const FESTIVAL_BUILDERS = { yule: buildChristmas, bonfire: buildBonfire, harvest: buildHarvest, easter: buildEaster };
+const FESTIVAL_BUILDERS = { yule: buildChristmas, bonfire: buildBonfire, harvest: buildHarvest, easter: buildEaster, mayday: buildMayDay, midsummer: buildMidsummer };
 
 export class SeasonalLayer {
   constructor(scene, world) {
