@@ -483,7 +483,9 @@ export class RosterClient {
     if (idx < 0) { this._callCache.set(key, { at: nowMs, due: null }); return null; }
     const now = Date.now() / 1000;
     let due = null;
-    for (let dt = 0; dt < 900; dt += 3) { const s = schedFn(now + dt); if (s.mode === 'dwell' && s.i === idx) { due = dt; break; } }
+    // scan a FULL pingpong cycle (~2x one-way): a TERMINUS is only dwelt at once per round trip,
+    // so a 900s window missed it (-> due=null -> the NPC pottered forever and never boarded).
+    for (let dt = 0; dt < 1900; dt += 3) { const s = schedFn(now + dt); if (s.mode === 'dwell' && s.i === idx) { due = dt; break; } }
     this._callCache.set(key, { at: nowMs, due });
     return due;
   }
