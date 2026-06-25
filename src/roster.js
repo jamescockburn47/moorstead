@@ -188,13 +188,18 @@ export function npcActivity(d, ride) {
 // solid column (a building, a drystone wall, or a tree) — those they walk AROUND. They don't
 // cross open water (a later phase adds fords / level crossings). Trees + buildings are
 // voxel-world blocks (not in geo), so this needs the chunk `world`, not just geo terrain.
-export function walkableStep(world, geo, x, z, fromG) {
+export function walkableStep(world, geo, x, z, fromY) {
   const rx = Math.round(x), rz = Math.round(z);
-  const g = geo.height(rx, rz);
-  if (g == null || Math.abs(g - fromG) > 1.3) return false;          // off-map or too steep a step
-  if (world.getBlock(rx, g, rz) === B.WATER) return false;            // not across open water
-  const a1 = world.getBlock(rx, g + 1, rz), a2 = world.getBlock(rx, g + 2, rz);
-  if (a1 !== B.AIR && a2 !== B.AIR) return false;                     // 2-high solid -> go around
+  if (geo.height(rx, rz) == null) return false;                      // off the map
+  // Judge walkability at the REAL surface, not the DEM. geo.height was blind to built/raised ground,
+  // tree trunks and carved rivers, so folk stepped straight INTO them (the tree/river clipping). A
+  // step of more than ~1 block up or down is a wall, trunk, cliff or river bank to walk AROUND; water
+  // underfoot is a river/ford; a solid just overhead is a low branch or eave. Any of those -> go round.
+  const s = surfaceHeight(world, geo, rx, rz);
+  if (Math.abs(s - fromY) > 1.3) return false;
+  if (world.getBlock(rx, s, rz) === B.WATER || world.getBlock(rx, s - 1, rz) === B.WATER) return false;
+  const head = world.getBlock(rx, s + 1, rz);
+  if (head !== B.AIR && head !== B.WATER) return false;
   return true;
 }
 
@@ -209,13 +214,13 @@ export function steerWalk(mob, from, to, started, eta, now, world, geo, dt) {
   const remain = Math.max(1, eta - now);
   const speed = Math.max(1.2, Math.min(3.0, dist / remain));         // blocks/sec, paced to the eta
   const goal = Math.atan2(dx, dz);
-  const fromG = geo.height(Math.round(mob.pos.x), Math.round(mob.pos.z));
+  const fromY = surfaceHeight(world, geo, Math.round(mob.pos.x), Math.round(mob.pos.z));  // her real standing height
   // context steering: take the most direct heading (fanned out from the goal) that's walkable
   let best = null;
   for (const off of [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4]) {
     const h = goal + off;
     const lx = mob.pos.x + Math.sin(h) * 1.6, lz = mob.pos.z + Math.cos(h) * 1.6;  // look-ahead
-    if (walkableStep(world, geo, lx, lz, fromG)) { best = h; break; }
+    if (walkableStep(world, geo, lx, lz, fromY)) { best = h; break; }
   }
   if (best == null) best = goal;          // boxed in -> head at the goal; rescue recovers later
   const step = speed * dt;

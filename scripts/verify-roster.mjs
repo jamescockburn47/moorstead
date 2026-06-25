@@ -49,12 +49,15 @@ const d0 = Math.hypot(goalB.x - mob.pos.x, goalB.z - mob.pos.z);
 for (let i = 0; i < 80; i++) steerWalk(mob, startA, goalB, 0, 10000, i * 0.5, openWorld, geo, 0.5);
 ok(Math.hypot(goalB.x - mob.pos.x, goalB.z - mob.pos.z) < d0 - 5, 'steerWalk makes progress toward the goal');
 
-// a 2-high solid column (building / wall / tree) is NOT standable; open ground IS
-const gAt = (x, z) => geo.height(Math.round(x), Math.round(z));
-const solidWorld = { getBlock: (x, y, z) => (y > gAt(x, z) ? B.COBBLE : B.GRASS), chunkAt: () => ({}) };
-const fg = gAt(startA.x, startA.z);
-ok(!walkableStep(solidWorld, geo, startA.x + 4, startA.z, fg), 'walkableStep rejects a 2-high solid (no walking through buildings/trees)');
-ok(walkableStep(openWorld, geo, startA.x + 4, startA.z, fg), 'walkableStep accepts open walkable ground');
+// walkability is judged at the REAL surface (surfaceHeight): open ground IS standable; a tree/wall
+// (a 2-high solid that lifts the surface) and river water are NOT.
+const tx = Math.round(startA.x) + 4, tz = Math.round(startA.z);
+const fromY = geo.height(tx, tz) + 1;                                 // a body on open ground at the test column
+const grassWith = fill => ({ chunkAt: () => ({}), getBlock: (x, y, z) => { const g = geo.height(Math.round(x), Math.round(z)); return y <= g ? B.GRASS : (y <= g + 2 ? fill : B.AIR); } });
+ok(walkableStep(openWorld, geo, tx, tz, fromY), 'walkableStep accepts open walkable ground');
+ok(!walkableStep(grassWith(B.LOG), geo, tx, tz, fromY), 'walkableStep rejects a tree/wall (2-high solid lifts the surface -> too steep a step)');
+const riverWorld = { chunkAt: () => ({}), getBlock: (x, y, z) => (y <= geo.height(Math.round(x), Math.round(z)) ? B.WATER : B.AIR) };
+ok(!walkableStep(riverWorld, geo, tx, tz, fromY), 'walkableStep rejects standing in river water');
 
 // --- npcActivity: a truthful account of what an NPC is doing (marker `short` + chat `full`) ---
 const homeAct = npcActivity({ role: 'herbwife', home: 'Lealholm', intent: 'drying my herbs',
