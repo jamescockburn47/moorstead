@@ -915,6 +915,15 @@ class Game {
       }
       const real = ui.el('button', 'mc', srow, 'Real time');
       real.addEventListener('click', () => { this.debug.setSeason(null); });
+
+      // ---- festival switch (solo world only; jumps the year to a festival's
+      // window so its dressing shows near villages — 'Real time' above resumes) ----
+      ui.el('div', 'r-needs', panel, 'Festival:');
+      const frow = ui.el('div', 'admin-btns', panel);
+      for (const f of FESTIVALS) {
+        const b = ui.el('button', 'mc', frow, f.name);
+        b.addEventListener('click', () => { this.debug.festival(f.id); });
+      }
     }
 
     // ---- shared-moor connection health (so the dropped-thread gremlin is visible) ----
