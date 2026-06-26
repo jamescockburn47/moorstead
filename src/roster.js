@@ -1,6 +1,6 @@
 // Phase B.1 — render the brain's living roster. The brain owns logical state; this file
 // owns ALL geometry: it maps {at|walk|rail} to a voxel position the client can draw.
-import { rosterState } from './npc.js';
+import { rosterState, talkGeneric } from './npc.js';
 import { B, CHUNK, WATER_LEVEL } from './defs.js';
 
 const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
@@ -338,17 +338,18 @@ export class RosterClient {
 
   _nowEff() { return this.serverNow + (performance.now() / 1000 - this.recvAt); }
 
-  // Thin the served roster to ~RENDER_FRACTION, dropping the anonymous 'pop-' crowd first so the
-  // named/curated deep cast always renders. Deterministic by id-hash → the SAME folk hidden every
-  // poll and on every client (no flicker, consistent world). Cuts render + per-frame steer/road/pony
-  // work — the lever for "the world's too heavy". Never touches non-'pop-' ids (the characters).
+  // Thin the served roster to lighten the world — but ONLY the anonymous 'pop-' crowd that's AT HOME
+  // (idle in a village). EVERY traveller (walking, riding, or on a rail leg) is kept, so the boarding/
+  // walking/riding activity always shows; the named/curated cast is kept too. Stable id-hash gate →
+  // the SAME at-home folk hidden every poll an' on every client (no churn). Tunable via RENDER_FRACTION.
   _thin(list) {
-    const drop = Math.round(list.length * (1 - RENDER_FRACTION));
-    if (drop <= 0) return list;
-    const pop = list.filter(d => d.id && d.id.startsWith('pop-')).sort((a, b) => idHash(a.id) - idHash(b.id));
-    if (!pop.length) return list;
-    const cut = new Set(pop.slice(0, Math.min(drop, pop.length)).map(d => d.id));
-    return list.filter(d => !cut.has(d.id));
+    if (RENDER_FRACTION >= 1) return list;
+    const cut = Math.round((1 - RENDER_FRACTION) * 100);   // % of the at-home crowd to hide
+    return list.filter(d => {
+      if (!d.id || !d.id.startsWith('pop-')) return true;                 // named/curated cast — always shown
+      if (d.state && d.state.kind && d.state.kind !== 'at') return true;  // travellers (walk/rail) — always shown
+      return (idHash(d.id) % 100) >= cut;                                 // thin the idle at-home crowd, stable per id
+    });
   }
 
   _sync(fullList) {
@@ -534,6 +535,74 @@ export class RosterClient {
         const p = npcVoxelPos(e.data, nowEff, this.geo);
         if (p) this._potterAt(m, p, nowEff, dt);
       }
+    }
+    this._maybeBanter(dt);                                  // ambient NPC↔NPC natter when a player's nearby
+  }
+
+  // ---- ambient NPC↔NPC banter (LLM-voiced, but gated to keep the brain cool) ----
+  // James: "llm chat when a player is near, one convo at a time." So it fires ONLY when a player is
+  // within earshot, never more than ONE exchange in flight, with a cooldown after. Two idle neighbours
+  // trade a line or two through the brain's existing generic passer-by voice (no new endpoint, no
+  // stored memory). The hard gates mean at most ~2 generic calls per ~30s while watched — negligible
+  // load on the box, exactly what James asked for.
+  _maybeBanter(dt) {
+    if (this._banterCool > 0) this._banterCool -= dt;
+    if (this._banterBusy) return;                          // one convo at a time
+    this._banterScan = (this._banterScan || 0) - dt;
+    if (this._banterScan > 0 || this._banterCool > 0) return;
+    this._banterScan = 2.5;                                 // hunt for a pair every ~2.5s
+    const pl = this.game.player; if (!pl || !pl.pos) return;
+    const NEAR_PL2 = 22 * 22, NEAR_EACH2 = 14;             // within earshot of the player; ~3.7 blocks apart
+    const cands = [];
+    for (const [, e] of this.npcs) {
+      const m = e.mob, s = e.data && e.data.state;
+      if (!m || m.chatting || m.bubble) continue;           // not mid player-chat, not already speaking
+      if (s && s.kind !== 'at') continue;                   // only idle, at-home folk natter
+      if ((m.pos.x - pl.pos.x) ** 2 + (m.pos.z - pl.pos.z) ** 2 > NEAR_PL2) continue;
+      cands.push(e);
+    }
+    for (let i = 0; i < cands.length; i++) {
+      for (let j = i + 1; j < cands.length; j++) {
+        const a = cands[i].mob, b = cands[j].mob;
+        if ((a.pos.x - b.pos.x) ** 2 + (a.pos.z - b.pos.z) ** 2 <= NEAR_EACH2) {
+          this._runBanter(cands[i], cands[j]);
+          return;
+        }
+      }
+    }
+  }
+
+  _faceEachOther(m, other) {
+    const dx = other.pos.x - m.pos.x, dz = other.pos.z - m.pos.z;
+    if (dx * dx + dz * dz > 0.01) m.yaw = Math.atan2(dx, dz);
+  }
+
+  _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  // Run ONE short exchange between two neighbours through the generic brain voice. A opens; B replies
+  // to what A actually said (so it reads as a real natter, not two monologues). Fully guarded — a brain
+  // hiccup or a despawn just ends it, and the lock + cooldown are always released in `finally`.
+  async _runBanter(eA, eB) {
+    this._banterBusy = true;
+    try {
+      const A = eA.mob, B = eB.mob;
+      const home = e => e.data.home || (e.data.state && e.data.state.place) || 'the village';
+      const pa = { name: eA.data.name, role: eA.data.role, village: home(eA), mood: 'content' };
+      const pb = { name: eB.data.name, role: eB.data.role, village: home(eB), mood: 'content' };
+      this._faceEachOther(A, B); this._faceEachOther(B, A);
+      const ctxA = `You are ${pa.name}, a ${pa.role} in ${pa.village}. You meet your neighbour ${pb.name}, a ${pb.role}. Greet them or pass ONE brief neighbourly remark — a single short sentence, in character, North York Moors about 1900. No stage directions, no asterisks.`;
+      const r1 = await talkGeneric(pa, `${pb.name} the ${pb.role} stops beside you.`, null, ctxA);
+      if (this._stopped || A.dead || B.dead || !r1 || !r1.reply) return;
+      this.game.entities.speak(A, r1.reply, 6);
+      await this._sleep(2800);
+      if (this._stopped || A.dead || B.dead) return;
+      const ctxB = `You are ${pb.name}, a ${pb.role} in ${pb.village}. Your neighbour ${pa.name} just said: "${r1.reply}". Reply briefly in character — a single short sentence, North York Moors about 1900. No stage directions, no asterisks.`;
+      const r2 = await talkGeneric(pb, r1.reply, null, ctxB);
+      if (!this._stopped && !B.dead && r2 && r2.reply) { this._faceEachOther(B, A); this.game.entities.speak(B, r2.reply, 6); }
+    } catch { /* brain didn't answer — let the natter lapse quietly */ }
+    finally {
+      this._banterBusy = false;
+      this._banterCool = 25 + Math.random() * 25;           // a breather before the next one
     }
   }
 

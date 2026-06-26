@@ -501,19 +501,31 @@ function makeNameplate(text, sub) {
   c.width = 256; c.height = sub ? 96 : 64;
   const x = c.getContext('2d');
   x.textAlign = 'center'; x.textBaseline = 'middle';
+  const MAXW = 240;   // keep text within the 256px plate (room for the outline) so nowt clips at the edges
+  // Largest font (down to a floor) that fits MAXW; only ellipsise if it STILL won't fit at the floor.
+  // The activity line runs long ("walking over to Robin Hood's Bay") — without this it clipped both ends.
+  const fit = (str, size, floor, weight) => {
+    const f = s => `${weight}${s}px "Segoe UI", sans-serif`;
+    let fs = size; x.font = f(fs);
+    while (fs > floor && x.measureText(str).width > MAXW) { fs--; x.font = f(fs); }
+    let out = str;
+    if (x.measureText(out).width > MAXW) { while (out.length > 1 && x.measureText(out + '…').width > MAXW) out = out.slice(0, -1); out += '…'; }
+    return { out, font: f(fs) };
+  };
   const nameY = sub ? 26 : 32;
-  x.font = 'bold 30px "Segoe UI", sans-serif';
+  const nm = fit(text, 30, 18, 'bold ');
+  x.font = nm.font;
   x.strokeStyle = 'rgba(0,0,0,0.85)'; x.lineWidth = 6;
-  x.strokeText(text, 128, nameY);
+  x.strokeText(nm.out, 128, nameY);
   x.fillStyle = '#ffe9b0';
-  x.fillText(text, 128, nameY);
+  x.fillText(nm.out, 128, nameY);
   if (sub) {
-    const s = sub.length > 30 ? sub.slice(0, 29) + '…' : sub;
-    x.font = '20px "Segoe UI", sans-serif';
+    const sb = fit(sub, 20, 13, '');
+    x.font = sb.font;
     x.strokeStyle = 'rgba(0,0,0,0.85)'; x.lineWidth = 5;
-    x.strokeText(s, 128, 66);
+    x.strokeText(sb.out, 128, 66);
     x.fillStyle = '#cfe8ff';                       // soft blue, so the activity reads as separate from the name
-    x.fillText(s, 128, 66);
+    x.fillText(sb.out, 128, 66);
   }
   const tex = new THREE.CanvasTexture(c);
   const spr = new THREE.Sprite(new THREE.SpriteMaterial({
