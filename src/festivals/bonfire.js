@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import { B } from '../defs.js';
 import { Fire } from '../fire.js';
+import { greenPlacement } from '../festivalKit.js';
 
 const RADIUS = 48; // match the host's village cull radius
 
@@ -140,41 +141,5 @@ function buildGuy() {
   return g;
 }
 
-// Return a deterministic open green cell near village centre for the bonfire.
-// Lifted frae the fir's old placement (before Slice 4 moved it to the chapel):
-// scans expanding rings r=2..10 × 16 angles. Pass 1 prefers green/closes/path
-// (open communal ground); pass 2 accepts any non-building open column so every
-// village style still gets a bonfire.
-function greenPlacement(world, v) {
-  const gen = world.gen;
-  const isPreferred = kind => kind === 'green' || kind === 'closes' || kind === 'path';
-  const isOpen = (x, z, col) => {
-    if (!col || col.kind === 'building') return false;
-    const sy = gen.height(x, z);
-    return world.getBlock(x, sy + 1, z) === B.AIR;
-  };
-  for (let r = 2; r <= 10; r++) {
-    for (let ai = 0; ai < 16; ai++) {
-      const angle = (ai / 16) * Math.PI * 2;
-      const x = v.x + Math.round(r * Math.cos(angle));
-      const z = v.z + Math.round(r * Math.sin(angle));
-      if (x === v.x && z === v.z) continue; // skip the stone cross
-      const col = gen.geo.villageColumn(x, z);
-      if (!col || !isPreferred(col.kind)) continue;
-      if (!isOpen(x, z, col)) continue;
-      return { x, z };
-    }
-  }
-  for (let r = 2; r <= 10; r++) {
-    for (let ai = 0; ai < 16; ai++) {
-      const angle = (ai / 16) * Math.PI * 2;
-      const x = v.x + Math.round(r * Math.cos(angle));
-      const z = v.z + Math.round(r * Math.sin(angle));
-      if (x === v.x && z === v.z) continue;
-      const col = gen.geo.villageColumn(x, z);
-      if (!isOpen(x, z, col)) continue;
-      return { x, z };
-    }
-  }
-  return null;
-}
+// (greenPlacement now lives in festivalKit.js — shared with mayday + with a real-Moors open-ground
+// fallback, since geo.villageColumn returns null there and the old green-only gate built nothing.)

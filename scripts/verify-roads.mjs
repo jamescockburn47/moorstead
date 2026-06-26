@@ -7,7 +7,6 @@
 //   3. each routed edge's ends sit near the two node centres
 //   4. a shadow edge's mid-point sits near the rail
 //   5. NO road point lies inside any inflated building bbox  (the avoidance guard)
-//   6. every `bridges` span straddles a river (geo.riverColumn truthy)
 //   7. roadInfo non-null on a known on-track point, null well off it
 import { MoorsGeography } from '../src/moorsgeo.js';
 import { buildRoadNet, roadInfo } from '../src/roadpath.js';
@@ -132,26 +131,6 @@ const villageNodes = net.nodes.filter(n => n.kind === 'village');
   }
   if (inside) bad(`${inside} road points lie inside an inflated building bbox (e.g. (${worst.x.toFixed(1)},${worst.z.toFixed(1)}) in a ${worst.b.type || 'building'})`);
   else ok(`no road point inside any inflated building bbox (${allBuildings.length} buildings checked)`);
-}
-
-// ---- 6. every bridge span straddles a river ----
-{
-  let badSpans = 0, totalSpans = 0;
-  for (const e of net.edges) {
-    for (const br of (e.bridges || [])) {
-      totalSpans++;
-      // sample the path between s0 and s1 — at least one column must be over a river
-      let straddles = false;
-      for (const p of e.path.pts) {
-        if (p.s >= br.s0 - 0.01 && p.s <= br.s1 + 0.01) {
-          if (geo.riverColumn(Math.round(p.x), Math.round(p.z))) { straddles = true; break; }
-        }
-      }
-      if (!straddles) { badSpans++; }
-    }
-  }
-  if (badSpans) bad(`${badSpans}/${totalSpans} bridge spans do not straddle a river`);
-  else ok(`every bridge span straddles a river (${totalSpans} spans)`);
 }
 
 // ---- 7. roadInfo on-track non-null, off-track null ----

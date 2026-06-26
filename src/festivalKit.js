@@ -4,9 +4,48 @@
 // it to `scene`. The userData flags (sharedMaterial/ownGeometry) drive teardown
 // in SeasonalLayer.clear(), so they MUST be preserved byte-for-byte.
 import * as THREE from 'three';
-import { TILE } from './defs.js';
+import { TILE, B } from './defs.js';
 import { tileUV } from './textures.js';
 import { getMaterials } from './mesher.js';
+
+// --- village open-ground placement (shared by every festival builder) -------------------------
+// Centrepieces + scatter (bonfire pile, maypole, corn stooks, pace-eggs, greenery) sit on open
+// communal ground near a village. The STYLISED world classifies cells via geo.villageColumn
+// (green/closes/path); the REAL-Moors world returns NULL there, so every "kind === green" gate
+// rejected the whole village and nothing built. Fall back to the village's BUILDING FOOTPRINTS
+// (populated on v.buildings by SeasonalLayer): open ground = clear sky above the surface AND not
+// inside any footprint AND not the stone cross dead-centre. Works in both worlds. `col` is the
+// villageColumn result if the caller already has it (else pass null).
+export function isOpenGround(world, v, x, z, col = null) {
+  if (col && col.kind === 'building') return false;                 // stylised: explicit building cell
+  if (x === v.x && z === v.z) return false;                         // the stone cross sits dead-centre
+  const boxes = v.buildings || [];
+  for (const b of boxes) if (x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1) return false;
+  const sy = world.gen.height(x, z);
+  return world.getBlock(x, sy + 1, z) === B.AIR;                    // open sky above the surface
+}
+
+// Deterministic open cell near a village centre for a centrepiece. Pass 1 prefers a classified
+// green/closes/path (stylised world); pass 2 takes ANY open ground (the real-Moors fallback).
+// `salt` rotates the scan so two centrepieces in one village don't pick the exact same cell.
+export function greenPlacement(world, v, salt = 0) {
+  const geo = world.gen.geo;
+  const isPreferred = k => k === 'green' || k === 'closes' || k === 'path';
+  for (let pass = 0; pass < 2; pass++) {
+    for (let r = 2; r <= 12; r++) {
+      for (let ai = 0; ai < 16; ai++) {
+        const angle = (ai / 16) * Math.PI * 2 + salt;
+        const x = v.x + Math.round(r * Math.cos(angle));
+        const z = v.z + Math.round(r * Math.sin(angle));
+        const col = typeof geo.villageColumn === 'function' ? geo.villageColumn(x, z) : null;
+        if (pass === 0 && !(col && isPreferred(col.kind))) continue;  // pass 1: classified greens only
+        if (!isOpenGround(world, v, x, z, col)) continue;
+        return { x, z };
+      }
+    }
+  }
+  return null;
+}
 
 // Build a flat cutout quad for TILE tile and add it to the scene + objects.
 // Reuses floraLayer's crossGeom approach: two crossed quads with the atlas UV,

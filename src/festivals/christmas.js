@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import { hash2i } from '../noise.js';
 import { B, TILE } from '../defs.js';
-import { addBillboard, addWindowGlow } from '../festivalKit.js';
+import { addBillboard, addWindowGlow, isOpenGround } from '../festivalKit.js';
 
 const RADIUS = 48;
 
@@ -154,9 +154,8 @@ export function buildChristmas(ctx) {
         const x = v.x + Math.round(r * Math.cos((a / 12) * Math.PI * 2));
         const z = v.z + Math.round(r * Math.sin((a / 12) * Math.PI * 2));
         const col = gen.geo.villageColumn(x, z);
-        if (!col || (col.kind !== 'green' && col.kind !== 'closes')) continue;
+        if (!isOpenGround(world, v, x, z, col)) continue;   // green/closes in the stylised world; any open ground in the real moor
         const sy = gen.height(x, z);
-        if (world.getBlock(x, sy + 1, z) !== B.AIR) continue;
         // deterministic sparse gate — different offsets for holly vs robin
         const hval = hash2i(x, z, gen.geo.seed ^ 0xb4c7);
         if (hollyCount < 5 && hval < 0.22) {

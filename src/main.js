@@ -905,8 +905,13 @@ class Game {
       if (Number.isFinite(x) && Number.isFinite(z)) this.adminTeleport(x, z, `${x}, ${z}`);
     });
 
-    // ---- season switch (solo world only — shared moor uses the shared clock) ----
-    if (!this.netActive) {
+    // ---- season + festival switch (a WARDEN PREVIEW lever) ----
+    // seasonOverride is purely client-side render state (season/snow/festival dressing); it writes
+    // NOTHING to the relay and syncs nothing, so it's safe on the shared moor too — it only changes
+    // THIS warden's own view, and 'Real time' resumes the shared clock. (Was solo-only, which is why
+    // the warden couldn't switch festivals on the live shared world they actually play.)
+    {
+      if (this.netActive) ui.el('div', 'r-needs', panel, 'Season / Festival — preview (just thi own view; “Real time” resumes t’ shared clock):');
       ui.el('div', 'r-needs', panel, 'Season:');
       const srow = ui.el('div', 'admin-btns', panel);
       for (const [label, phase] of [['Spring', 0.125], ['Summer', 0.375], ['Autumn', 0.625], ['Winter', 0.875]]) {
@@ -916,8 +921,7 @@ class Game {
       const real = ui.el('button', 'mc', srow, 'Real time');
       real.addEventListener('click', () => { this.debug.setSeason(null); });
 
-      // ---- festival switch (solo world only; jumps the year to a festival's
-      // window so its dressing shows near villages — 'Real time' above resumes) ----
+      // jumps the year to a festival's window so its dressing shows near villages — 'Real time' resumes
       ui.el('div', 'r-needs', panel, 'Festival:');
       const frow = ui.el('div', 'admin-btns', panel);
       for (const f of FESTIVALS) {

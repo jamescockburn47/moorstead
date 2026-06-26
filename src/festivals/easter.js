@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { hash2i } from '../noise.js';
 import { B, TILE } from '../defs.js';
-import { addBillboard } from '../festivalKit.js';
+import { addBillboard, isOpenGround } from '../festivalKit.js';
 
 const RADIUS = 48;
 
@@ -43,9 +43,8 @@ export function buildEaster(ctx) {
         const x = v.x + Math.round(r * Math.cos(angle));
         const z = v.z + Math.round(r * Math.sin(angle));
         const col = gen.geo.villageColumn(x, z);
-        if (!col || (col.kind !== 'green' && col.kind !== 'closes')) continue;
+        if (!isOpenGround(world, v, x, z, col)) continue;   // green/closes in the stylised world; any open ground in the real moor
         const sy = gen.height(x, z);
-        if (world.getBlock(x, sy + 1, z) !== B.AIR) continue;
         // Sparse gate: place when hash <= 0.30, skip otherwise — ~30% of qualifying cells
         if (hash2i(x, z, gen.geo.seed ^ 0x7be4) > 0.30) continue;
         // Pick colour deterministically from the palette

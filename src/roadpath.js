@@ -2,19 +2,17 @@
 // computed from the village/station layout: each village joined to its two nearest
 // neighbours and its nearest station, routed either by SHADOWING the rail (offset a few
 // blocks off the engineered corridor) or by striking fresh across the open MOOR. Every
-// route is nudged clear of the buildings, and the river/rail meetings are catalogued as
-// flat-plank bridge + crossing spans. Pure, headless, cached on `geo` (see geography.js).
+// route is nudged clear of the buildings. Pure, headless, cached on `geo` (see geography.js).
+// The lane DRAPES onto the real voxel surface at render time (roads.js lays a row of tiles, one per
+// column) — no vertical profile, bridge or crossing spans are baked here; walkers ford on foot.
 //
-//   buildRoadNet(geo) -> { nodes:[{id,kind,name,x,z,radius?}], edges:[{from,to,kind,path,bridges,crossings}] }
-//   roadInfo(net, x, z) -> { d, along, deck } | null   (nearest road within ~4 blocks)
+//   buildRoadNet(geo) -> { nodes:[{id,kind,name,x,z,radius?}], edges:[{from,to,kind,path}] }
+//   roadInfo(net, x, z) -> { d, along } | null   (nearest road within ~4 blocks)
 //
-// The road analogue keeps railpath's data shapes: path = { pts:[{x,z,s,deck}], length, cells }.
-import { WATER_LEVEL } from './defs.js';
+// path = { pts:[{x,z,s}], length, cells }.
 
 const ROAD_OFFSET = 6;     // shadow lanes sit this far off the rail centreline (clear o' the four-foot ≥5)
 const RAIL_NEAR = 40;      // a village within this o' the rail counts as "rail-served"
-const ROAD_GRADE = 1 / 6;  // roads climb steeper than rail (1-in-6 vs 1-in-8)
-const RAIL_CROSS = 2;      // a path column within this o' the rail centreline is a level-crossing
 const ROAD_REACH = 4;      // roadInfo answers within this many blocks (mirrors flora's 4-foot skip)
 const MIN_STATION_LANE = 12; // a village's station lane goes to the nearest station ≥ this far (no zero-length lane to a halt sat on the town)
 const BUILD_PAD = 1;       // building bbox inflation for the avoidance guard (matches the test)
@@ -27,11 +25,6 @@ function buildingsOf(geo, v) {
     try { return geo._townBuildings(v) || []; } catch { return v.buildings || []; }
   }
   return v.buildings || [];
-}
-
-// surface height under a column, kept dry (mirrors railpath's deck floor)
-function deckAt(geo, x, z) {
-  return Math.max(geo.height(Math.round(x), Math.round(z)), WATER_LEVEL + 1);
 }
 
 // nearest rail path + chainage at a point, scanning every line so a lane can shadow whichever
@@ -135,9 +128,7 @@ export function buildRoadNet(geo) {
     const path = routeEdge(geo, a, b);
     nudgeOutOfBuildings(path.pts, geo, villages);
     remeasure(path);
-    bakeDeck(path, geo);
-    const { bridges, crossings } = annotate(path, geo);
-    edges.push({ from: re.from, to: re.to, kind: path.kind, path, bridges, crossings });
+    edges.push({ from: re.from, to: re.to, kind: path.kind, path });
   }
 
   const net = { nodes, edges };
@@ -158,7 +149,7 @@ function routeEdge(geo, a, b) {
 
 // SHADOW: sample the rail path between the two chainages, offset perpendicular (-tz,tx) by
 // ROAD_OFFSET to one side, then graft short free legs onto the actual node centres so the lane
-// still reaches the green / the platform. `deck` left for bakeDeck.
+// still reaches the green / the platform.
 function shadowRoute(geo, a, b, railA, railB) {
   const path = railA.path;
   let s0 = railA.along, s1 = railB.along;
@@ -210,8 +201,8 @@ function smoothJoins(pts, j0, j1) {
   soft(j1 - 3, j1 + 3);
 }
 
-// MOOR: a Catmull-Rom alignment through the two ends, terrain-following via bakeDeck. Plain
-// straight-ish lane in plan; the vertical road-grade clamp is applied in bakeDeck.
+// MOOR: a Catmull-Rom alignment through the two ends. Plain straight-ish lane in plan; it drapes
+// onto the real voxel surface at render time (roads.js), so no vertical profile is baked here.
 function moorRoute(geo, a, b) {
   // a couple of intermediate control points so the spline can bend round the worst water/steps
   const ctrl = [{ x: a.x, z: a.z }];
@@ -301,87 +292,13 @@ export function nudgeOutOfBuildings(pts, geo, villages) {
   for (const p of pts) escapePoint(p, boxes);
 }
 
-// ---------- vertical profile (deck) ----------
-// terrain under the lane, smoothed, road-grade-clamped (1-in-6), kept dry. Mirrors railpath's
-// profile but with the steeper road grade and no platform levelling.
-function bakeDeck(path, geo) {
-  const pts = path.pts;
-  const deck = pts.map(p => deckAt(geo, p.x, p.z));
-  // smooth twice (short window — lanes hug the ground more than the rail)
-  for (let pass = 0; pass < 2; pass++) {
-    const w = 6, sm = deck.slice();
-    for (let i = 0; i < deck.length; i++) {
-      let acc = 0, cnt = 0;
-      for (let j = Math.max(0, i - w); j <= Math.min(deck.length - 1, i + w); j++) { acc += deck[j]; cnt++; }
-      sm[i] = acc / cnt;
-    }
-    for (let i = 0; i < deck.length; i++) deck[i] = sm[i];
-  }
-  // grade-clamp forward + back to 1-in-6
-  for (let i = 1; i < deck.length; i++) {
-    const ds = pts[i].s - pts[i - 1].s || 0.001;
-    deck[i] = Math.min(deck[i], deck[i - 1] + ROAD_GRADE * ds);
-    deck[i] = Math.max(deck[i], deck[i - 1] - ROAD_GRADE * ds);
-  }
-  for (let i = deck.length - 2; i >= 0; i--) {
-    const ds = pts[i + 1].s - pts[i].s || 0.001;
-    deck[i] = Math.min(deck[i], deck[i + 1] + ROAD_GRADE * ds);
-    deck[i] = Math.max(deck[i], deck[i + 1] - ROAD_GRADE * ds);
-  }
-  for (let i = 0; i < deck.length; i++) deck[i] = Math.max(deck[i], WATER_LEVEL + 1);
-  for (let i = 0; i < pts.length; i++) pts[i].deck = deck[i];
-}
-
-// ---------- bridge + crossing spans, river-deck flattening ----------
-// scan the path by chainage: a contiguous run over a river -> a {s0,s1} bridge (its pts.deck
-// flattened to a level plank = max bank height +1); a column within RAIL_CROSS of the rail
-// centreline -> a {s} crossing.
-function annotate(path, geo) {
-  const pts = path.pts;
-  const bridges = [];
-  const crossings = [];
-  const hasRiver = typeof geo.riverColumn === 'function';
-  const hasRail = typeof geo.railInfo === 'function';
-  // rivers: find contiguous over-water runs
-  if (hasRiver) {
-    let run = null;
-    const flush = () => {
-      if (!run) return;
-      // flat plank deck = max bank (just off each end) +1
-      const i0 = run.i0, i1 = run.i1;
-      const bank0 = i0 > 0 ? pts[i0 - 1].deck : pts[i0].deck;
-      const bank1 = i1 < pts.length - 1 ? pts[i1 + 1].deck : pts[i1].deck;
-      const plank = Math.max(bank0, bank1, WATER_LEVEL + 1) + 1;
-      for (let i = i0; i <= i1; i++) pts[i].deck = plank;
-      bridges.push({ s0: pts[i0].s, s1: pts[i1].s });
-      run = null;
-    };
-    for (let i = 0; i < pts.length; i++) {
-      const over = !!geo.riverColumn(Math.round(pts[i].x), Math.round(pts[i].z));
-      if (over) {
-        if (!run) run = { i0: i, i1: i };
-        else run.i1 = i;
-      } else if (run) flush();
-    }
-    flush();
-  }
-  // rail crossings: a column that sits on the rail centreline (de-duped so one crossing isn't
-  // logged for every dense sample over it)
-  if (hasRail) {
-    let lastCrossS = -Infinity;
-    for (let i = 0; i < pts.length; i++) {
-      const ri = geo.railInfo(Math.round(pts[i].x), Math.round(pts[i].z));
-      if (ri && ri.d < RAIL_CROSS && pts[i].s - lastCrossS > 6) {
-        crossings.push({ s: pts[i].s });
-        lastCrossS = pts[i].s;
-      }
-    }
-  }
-  return { bridges, crossings };
-}
-
 // ---------- spatial index + lookup (mirrors railpath cells/railInfo) ----------
 function buildCells(net) {
+  // Per-edge cell maps (kept for any edge-local callers) AND one GLOBAL grid
+  // across every edge's segments. roadInfo() uses the global grid so a query
+  // touches only the handful of segments near (x,z) instead of looping ALL
+  // edges in the parish — the difference between ~110µs and ~2µs per cell.
+  const grid = new Map();
   for (const e of net.edges) {
     const pts = e.path.pts;
     const cells = new Map();
@@ -389,32 +306,34 @@ function buildCells(net) {
       const k = `${Math.floor(pts[i].x / 8)},${Math.floor(pts[i].z / 8)}`;
       if (!cells.has(k)) cells.set(k, []);
       cells.get(k).push(i);
+      let g = grid.get(k); if (!g) grid.set(k, g = []);
+      g.push({ pts, i });          // segment [i, i+1] of this edge, indexed by pts[i]'s cell
     }
     e.path.cells = cells;
   }
+  net.grid = grid;
 }
 
 // nearest road across ALL edges: { d, along, deck } | null (within ROAD_REACH blocks)
 export function roadInfo(net, x, z) {
   let best = null;
   const cx = Math.floor(x / 8), cz = Math.floor(z / 8);
-  for (const e of net.edges) {
-    const path = e.path;
-    if (!path.cells) continue;
-    for (let gx = cx - 1; gx <= cx + 1; gx++) {
-      for (let gz = cz - 1; gz <= cz + 1; gz++) {
-        const idxs = path.cells.get(`${gx},${gz}`);
-        if (!idxs) continue;
-        for (const i of idxs) {
-          const a = path.pts[i], b = path.pts[Math.min(i + 1, path.pts.length - 1)];
-          const dx = b.x - a.x, dz = b.z - a.z;
-          const L2 = dx * dx + dz * dz || 0.001;
-          let t = ((x - a.x) * dx + (z - a.z) * dz) / L2;
-          t = Math.max(0, Math.min(1, t));
-          const d = Math.hypot(x - (a.x + dx * t), z - (a.z + dz * t));
-          if (d < ROAD_REACH && (!best || d < best.d)) {
-            best = { d, along: a.s + Math.sqrt(L2) * t, deck: a.deck + (b.deck - a.deck) * t };
-          }
+  const grid = net.grid;
+  if (!grid) return best;                       // net not indexed (shouldn't happen post-buildCells)
+  for (let gx = cx - 1; gx <= cx + 1; gx++) {
+    for (let gz = cz - 1; gz <= cz + 1; gz++) {
+      const segs = grid.get(`${gx},${gz}`);
+      if (!segs) continue;
+      for (const seg of segs) {
+        const pts = seg.pts, i = seg.i;
+        const a = pts[i], b = pts[Math.min(i + 1, pts.length - 1)];
+        const dx = b.x - a.x, dz = b.z - a.z;
+        const L2 = dx * dx + dz * dz || 0.001;
+        let t = ((x - a.x) * dx + (z - a.z) * dz) / L2;
+        t = Math.max(0, Math.min(1, t));
+        const d = Math.hypot(x - (a.x + dx * t), z - (a.z + dz * t));
+        if (d < ROAD_REACH && (!best || d < best.d)) {
+          best = { d, along: a.s + Math.sqrt(L2) * t };
         }
       }
     }

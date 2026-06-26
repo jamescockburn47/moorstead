@@ -1,30 +1,72 @@
-// The parish lanes made visible: a packed-earth ribbon draped along the road
-// alignment (roadpath.js), dressed in a window round the player and struck when
-// tha's far frae the lane — same as the permanent way (rails.js), only earth not
-// steel. Where a lane meets a beck it gets a flat plank bridge; where it crosses
-// the line, a plank level-crossing. The track DRAPES on the real voxel surface
-// (surfaceHeight) so it hugs the moor instead of clipping through the hills.
+// The parish lanes made visible: a narrow row of packed-earth voxel tiles laid along the road
+// alignment (roadpath.js) — ONE flat tile per column at GROUND level, an' it CARVES the lane clear:
+// trees, moor foliage an' drystone walls in the column are removed (LOCALLY — a per-client setBlock,
+// never sent to the relay, so no shared-world write an' no epoch) so nowt pokes through, while
+// BUILDINGS are skirted (never tiled, never carved). Voxel-aligned an' flush to the moor. (The old swept-ribbon
+// version warped into shards on slopes an' near buildings; per-column tiles can't — each tile is a
+// flat slab on a single block.) A windowed scene-overlay round the player, struck when she's far frae
+// the lane — same lifecycle as the permanent way (rails.js). PURE OVERLAY: no world-data writes.
+// Where the lane meets a beck the tiles stop at the bank (NPCs ford it on foot); it crosses the line
+// at grade (tiles laid straight over the rail columns). No plank bridges, no level crossings.
 import * as THREE from 'three';
-import { surfaceHeight } from './roster.js';
+import { B, CHUNK, HEIGHT } from './defs.js';
 
-const WINDOW = 220;        // chainage either side o' t' player kept dressed (lanes are shorter than lines)
+const WINDOW = 220;        // chainage either side o' t' player kept dressed
 const REBUILD_MOVE = 80;   // rebuild when t' player's drifted this far
-const TRACK_W = 1.25;      // half-width o' the lane ribbon — a ~2.5-block packed-earth track
-const BRIDGE_W = 1.25;     // half-width o' a plank bridge deck (~2.5 wide, bank to bank)
-const CROSS_W = 1.6;       // half-width o' a plank level-crossing (a touch wider than the four-foot)
+const STRIDE = 0.4;        // rasterise the centreline this fine so diagonals stay a connected row
+
+// Block sets for the lane. SOFT = natural soil the lane beds onto. BUILDING = structures the lane
+// must SKIRT (never tiled, never cleared). CLEAR = what the lane CARVES out of its column so nowt
+// pokes through the track: trees, moor foliage, drystone walls (cobble/loose stone), an' field
+// barriers. (Useful placed props — signposts, lamps, benches — are left be: scanned past, not cleared.)
+const SOFT = new Set([B.GRASS, B.DIRT, B.PEAT, B.GRAVEL, B.SAND, B.BOG]);
+const BUILDING = new Set([
+  B.PLANKS, B.THATCH, B.STONEBRICK, B.WINDOW, B.BOARD, B.SLATE, B.ST_CREAM, B.ST_RED, B.RBRICK,
+  B.TER_MINT, B.TER_BLUE, B.TER_PINK, B.TER_YELLOW, B.WOOL, B.RANGE, B.MINE_ENTRANCE, B.WINCH,
+]);
+const CLEAR = new Set([
+  B.LOG, B.LEAVES, B.MONKEY_LEAVES, B.ORCHARD_LEAVES, B.FERN, B.BRACKEN, B.HEATHER, B.TUSSOCK,
+  B.GORSE, B.BILBERRY_BUSH, B.FOXGLOVE, B.DOG_ROSE, B.ELDER, B.BRAMBLE, B.HOLLY, B.BLACKTHORN,
+  B.HAZEL, B.COTTONGRASS, B.COBBLE, B.STONE, B.FENCE, B.GATE,
+]);
+
+// Bed a road tile at (x,z) AND clear the lane above it. Scans down to the soil the lane sits on,
+// CLEARING any trees/foliage/walls standing on it (local setBlock → no recordEdit, no net.send, so
+// it never reaches the relay: a per-client visual carve, deterministic so every client matches, no
+// epoch). Returns the ground's top face, or null for a BUILDING column (skirt — no tile, no carve).
+// Unloaded chunk → DEM fallback (no voxel info yet; it'll carve when the chunk loads + rebuilds).
+function clearAndGround(world, geo, x, z) {
+  const rx = Math.round(x), rz = Math.round(z);
+  const dem = geo.height(rx, rz);
+  if (!world.chunkAt(Math.floor(rx / CHUNK), Math.floor(rz / CHUNK))) return dem + 1;
+  let softY = null, topSolid = null;
+  for (let y = dem + 24; y >= dem - 16 && y > 1; y--) {
+    const b = world.getBlock(rx, y, rz);
+    if (b === B.AIR || b === B.WATER) continue;
+    if (BUILDING.has(b)) return null;              // a building/structure — skirt it
+    if (topSolid === null) topSolid = y;           // first solid (could be foliage/wall over soil)
+    if (SOFT.has(b)) { softY = y; break; }         // the soil the lane beds onto
+  }
+  const groundY = softY != null ? softY : topSolid;
+  if (groundY == null) return dem + 1;
+  for (let y = groundY + 1; y <= groundY + 9 && y < HEIGHT; y++) {   // carve the lane's headroom clear
+    if (CLEAR.has(world.getBlock(rx, y, rz))) world.setBlock(rx, y, rz, B.AIR);
+  }
+  return groundY + 1;
+}
 
 export class RoadLayer {
   constructor(scene, world, geo) {
     this.scene = scene;
-    this.world = world;          // chunk world — surfaceHeight needs it for the REAL (built/raised) surface
+    this.world = world;          // chunk world — surfaceHeight needs it for the REAL (built) surface
     this.geo = geo;
     this.meshes = [];
     this.timer = 0;
     this.lastPos = null;
     this.earthMat = new THREE.MeshLambertMaterial({ color: 0x6e5a3e });  // packed-earth lane
-    this.plankMat = new THREE.MeshLambertMaterial({ color: 0x8a6a44 });  // oak planking (bridges + crossings)
-    this.railMat = new THREE.MeshLambertMaterial({ color: 0x5a4632 });   // slim bridge handrail
-    this.railGeom = new THREE.BoxGeometry(0.08, 0.1, 1);
+    // one shared flat tile: a 1-block-wide packed-earth slab, a touch under a full block so adjacent
+    // tiles show a hairline seam (reads as a row o' blocks, not a poured ribbon).
+    this.tileGeom = new THREE.BoxGeometry(0.98, 0.16, 0.98);
   }
 
   // nearest chainage on a given path to a point — coarse stride scan, only for t' window
@@ -36,12 +78,6 @@ export class RoadLayer {
       if (d < bd) { bd = d; best = i; }
     }
     return { s: pts[best].s, d: bd };
-  }
-
-  // is chainage s inside any bridge span on this edge? (its deck is already the flat plank)
-  onBridge(edge, s) {
-    for (const b of edge.bridges) if (s >= b.s0 - 0.01 && s <= b.s1 + 0.01) return true;
-    return false;
   }
 
   update(dt, playerPos) {
@@ -66,132 +102,48 @@ export class RoadLayer {
     let i1 = i0; while (i1 < pts.length - 1 && pts[i1].s < s1) i1++;
     if (i1 - i0 < 2) return;
 
-    // --- the packed-earth track: a continuous ribbon swept along the alignment, each edge
-    //     vertex sat on the REAL voxel surface so the lane drapes over the ground (never the
-    //     DEM, which is blind to embankments/built ground and would sink the track into hills).
-    //     Bridge spans are skipped here — the plank deck below covers them at the flat level.
-    {
-      const pos = [];
-      const vert = p => pos.push(p[0], p[1], p[2]);
-      const Y = 0.06;   // a whisker proud o' the surface so the ribbon never z-fights the ground
-      for (let i = i0; i < i1; i++) {
-        const a = pts[i], b = pts[i + 1];
-        if (this.onBridge(edge, (a.s + b.s) / 2)) continue;  // planks cover the beck, not earth
-        const ds = Math.max(b.s - a.s, 0.001);
-        const nx = (b.z - a.z) / ds, nz = -(b.x - a.x) / ds;   // unit perpendicular in plan
-        const ay = surfaceHeight(this.world, this.geo, a.x, a.z) + Y;
-        const by = surfaceHeight(this.world, this.geo, b.x, b.z) + Y;
-        const aL = [a.x + nx * TRACK_W, ay, a.z + nz * TRACK_W], aR = [a.x - nx * TRACK_W, ay, a.z - nz * TRACK_W];
-        const bL = [b.x + nx * TRACK_W, by, b.z + nz * TRACK_W], bR = [b.x - nx * TRACK_W, by, b.z - nz * TRACK_W];
-        vert(aL); vert(bL); vert(bR);
-        vert(aL); vert(bR); vert(aR);
+    // rasterise the lane centreline to the integer columns it runs through (deduped) — a 1-wide row.
+    const cols = new Map();
+    for (let i = i0; i < i1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const dx = b.x - a.x, dz = b.z - a.z;
+      const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / STRIDE));
+      for (let k = 0; k <= steps; k++) {
+        const t = k / steps;
+        const x = Math.round(a.x + dx * t), z = Math.round(a.z + dz * t);
+        cols.set(x + ',' + z, { x, z });
       }
-      if (pos.length) this._addRibbon(pos, this.earthMat);
     }
 
-    // --- plank bridges: a flat plank deck across each beck span, sat at the span's flat plank
-    //     `deck` (roadpath flattened pts.deck within [s0,s1]), bank to bank, with two slim
-    //     handrail lines either side so she reads as a footbridge, not a slab.
-    for (const span of edge.bridges) {
-      // gather the samples inside the span (inclusive of the flanking bank points for a clean join)
-      let j0 = 0; while (j0 < pts.length - 1 && pts[j0].s < span.s0) j0++;
-      let j1 = j0; while (j1 < pts.length - 1 && pts[j1].s < span.s1) j1++;
-      j0 = Math.max(0, j0 - 1); j1 = Math.min(pts.length - 1, j1 + 1);
-      if (j1 - j0 < 1) continue;
-      const pos = [];
-      const vert = p => pos.push(p[0], p[1], p[2]);
-      const railL = [], railR = [];
-      for (let i = j0; i < j1; i++) {
-        const a = pts[i], b = pts[i + 1];
-        const ds = Math.max(b.s - a.s, 0.001);
-        const nx = (b.z - a.z) / ds, nz = -(b.x - a.x) / ds;
-        const ay = a.deck + 1.04, by = b.deck + 1.04;   // plank top a block proud o' the flattened deck floor
-        const aL = [a.x + nx * BRIDGE_W, ay, a.z + nz * BRIDGE_W], aR = [a.x - nx * BRIDGE_W, ay, a.z - nz * BRIDGE_W];
-        const bL = [b.x + nx * BRIDGE_W, by, b.z + nz * BRIDGE_W], bR = [b.x - nx * BRIDGE_W, by, b.z - nz * BRIDGE_W];
-        vert(aL); vert(bL); vert(bR);
-        vert(aL); vert(bR); vert(aR);
-        railL.push({ x: a.x + nx * BRIDGE_W, y: ay, z: a.z + nz * BRIDGE_W, b: { x: b.x + nx * BRIDGE_W, y: by, z: b.z + nz * BRIDGE_W } });
-        railR.push({ x: a.x - nx * BRIDGE_W, y: ay, z: a.z - nz * BRIDGE_W, b: { x: b.x - nx * BRIDGE_W, y: by, z: b.z - nz * BRIDGE_W } });
-      }
-      if (pos.length) this._addRibbon(pos, this.plankMat);
-      this._addHandrails([...railL, ...railR]);
+    // one flat tile per column, sat on THAT column's real surface (voxel-aligned → always flush).
+    // Skip river columns: the lane fords the beck on foot, so no deck over the water.
+    const hasRiver = typeof this.geo.riverColumn === 'function';
+    const place = [];
+    for (const { x, z } of cols.values()) {
+      if (hasRiver && this.geo.riverColumn(x, z)) continue;   // ford — no tile over the beck
+      const y = clearAndGround(this.world, this.geo, x, z);
+      if (y == null) continue;                                 // building/structure column — skirt (no tile)
+      place.push([x, y, z]);
     }
+    if (!place.length) return;
 
-    // --- level crossings: a single plank plane laid across the rail at the RAIL deck height
-    //     (sampled off the line, not the lane), so road and rail meet flush.
-    for (const cr of edge.crossings) {
-      const rp = this._railDeckAt(cr.s, pts);
-      if (!rp) continue;
-      // orient the plank to the LANE's heading at this chainage so it spans across the rails
-      const sp = this.geo.samplePosOn(path, cr.s);   // {x,z,tx,tz,deck}
-      const tx = sp.tx, tz = sp.tz;                  // unit tangent o' the lane
-      const nx = -tz, nz = tx;                       // perpendicular (across the lane = along nowt useful)
-      const y = rp.deck + 1.04;
-      const half = 2.2;   // span the crossing a couple o' blocks along the lane so it covers both rails + cess
-      const aX = sp.x - tx * half, aZ = sp.z - tz * half;
-      const bX = sp.x + tx * half, bZ = sp.z + tz * half;
-      const aL = [aX + nx * CROSS_W, y, aZ + nz * CROSS_W], aR = [aX - nx * CROSS_W, y, aZ - nz * CROSS_W];
-      const bL = [bX + nx * CROSS_W, y, bZ + nz * CROSS_W], bR = [bX - nx * CROSS_W, y, bZ - nz * CROSS_W];
-      const pos = [];
-      const vert = p => pos.push(p[0], p[1], p[2]);
-      vert(aL); vert(bL); vert(bR);
-      vert(aL); vert(bR); vert(aR);
-      this._addRibbon(pos, this.plankMat);
+    const mesh = new THREE.InstancedMesh(this.tileGeom, this.earthMat, place.length);
+    const m = new THREE.Matrix4();
+    for (let n = 0; n < place.length; n++) {
+      const [x, y, z] = place[n];
+      m.makeTranslation(x + 0.5, y - 0.04, z + 0.5);   // top a whisker proud o' the surface, base sunk in
+      mesh.setMatrixAt(n, m);
     }
-  }
-
-  // rail deck under the lane at chainage s — the road crosses the line here, so the plank
-  // sits at the LINE's deck. Scans every line for the one nearest the lane column.
-  _railDeckAt(s, pts) {
-    let lo = 0; while (lo < pts.length - 1 && pts[lo].s < s) lo++;
-    const p = pts[Math.min(lo, pts.length - 1)];
-    if (typeof this.geo.railPaths !== 'function') return null;
-    let best = null;
-    for (const { path } of this.geo.railPaths()) {
-      const info = nearestOnPath(path, p.x, p.z);   // railInfo is single-path; scan every line directly
-      if (info && (!best || info.d < best.d)) best = info;
-    }
-    return best;
-  }
-
-  _addRibbon(pos, mat) {
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geom.computeVertexNormals();
-    const mesh = new THREE.Mesh(geom, mat);
-    mesh.userData.ownGeometry = true;
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.frustumCulled = false;
     this.scene.add(mesh);
     this.meshes.push(mesh);
-  }
-
-  // two slim handrail lines from a list of {x,y,z,b:{x,y,z}} segment ends, raised a touch
-  _addHandrails(segs) {
-    if (!segs.length) return;
-    const rails = new THREE.InstancedMesh(this.railGeom, this.railMat, segs.length);
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ');
-    const HAND = 0.5;   // handrail height above the deck
-    let n = 0;
-    for (const s of segs) {
-      const dx = s.b.x - s.x, dy = s.b.y - s.y, dz = s.b.z - s.z;
-      const len = Math.hypot(dx, dy, dz) + 0.04;
-      const yaw = Math.atan2(dx, dz), pitch = -Math.atan2(dy, Math.hypot(dx, dz) || 0.001);
-      e.set(pitch, yaw, 0); q.setFromEuler(e);
-      m.compose(
-        new THREE.Vector3((s.x + s.b.x) / 2, (s.y + s.b.y) / 2 + HAND, (s.z + s.b.z) / 2),
-        q, new THREE.Vector3(1, 1, len));
-      rails.setMatrixAt(n++, m);
-    }
-    rails.count = n;
-    rails.instanceMatrix.needsUpdate = true;
-    this.scene.add(rails);
-    this.meshes.push(rails);
   }
 
   clear() {
     for (const mesh of this.meshes) {
       this.scene.remove(mesh);
-      if (mesh.userData.ownGeometry) mesh.geometry.dispose();
-      else if (mesh.dispose) mesh.dispose();
+      mesh.dispose();   // frees the per-instance buffers; the shared tileGeom + earthMat live on
     }
     this.meshes = [];
     this.lastPos = null;
@@ -200,26 +152,6 @@ export class RoadLayer {
   dispose() {
     this.clear();
     this.earthMat.dispose();
-    this.plankMat.dispose();
-    this.railMat.dispose();
-    this.railGeom.dispose();
+    this.tileGeom.dispose();
   }
-}
-
-// nearest point on a single rail path to (x,z): {x,z,deck,d} | null — a coarse stride scan,
-// only used to find the deck height for a level crossing (not a hot path).
-function nearestOnPath(path, x, z) {
-  const pts = path.pts;
-  let best = null;
-  for (let i = 0; i < pts.length - 1; i += 2) {
-    const a = pts[i], b = pts[i + 1];
-    const dx = b.x - a.x, dz = b.z - a.z;
-    const L2 = dx * dx + dz * dz || 0.001;
-    let t = ((x - a.x) * dx + (z - a.z) * dz) / L2;
-    t = Math.max(0, Math.min(1, t));
-    const px = a.x + dx * t, pz = a.z + dz * t;
-    const d = Math.hypot(x - px, z - pz);
-    if (!best || d < best.d) best = { x: px, z: pz, deck: a.deck + (b.deck - a.deck) * t, d };
-  }
-  return best;
 }

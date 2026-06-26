@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 import { hash2i } from '../noise.js';
 import { B, TILE } from '../defs.js';
-import { addBillboard } from '../festivalKit.js';
+import { addBillboard, isOpenGround } from '../festivalKit.js';
 import { Fire } from '../fire.js';
 
 const RADIUS       = 48;  // village cull
@@ -99,9 +99,8 @@ export function buildMidsummer(ctx) {
         const z = v.z + Math.round(r * Math.sin(angle));
         if (x === v.x && z === v.z) continue;
         const col = gen.geo.villageColumn(x, z);
-        if (!col || (col.kind !== 'green' && col.kind !== 'closes')) continue;
+        if (!isOpenGround(world, v, x, z, col)) continue;   // green/closes in the stylised world; any open ground in the real moor
         const sy = gen.height(x, z);
-        if (world.getBlock(x, sy + 1, z) !== B.AIR) continue;
         // Sparse deterministic gate — ~20%
         if (hash2i(x, z, gen.geo.seed ^ 0x4d72) > 0.20) continue;
         const yaw = hash2i(x, z, 0x8f3b) * Math.PI * 2;

@@ -257,6 +257,15 @@ __resetSurfCache();
   ok(rider.pos.y > pony.pos.y && rider.pos.y - pony.pos.y < 1.6, 'the rider sits a small lift ABOVE the pony (on her back, not floating)');
   ok(rider.yaw === pony.yaw, 'the seated rider faces the way the pony trots');
 
+  // the DRIVEN pony faces its travel heading, NOT heading+π. pony.yaw is steerWalk's atan2(dx,dz) —
+  // the SAME convention a wild pony is drawn in (entities.js: rotation.y = atan2(vel)), and makePony
+  // is modelled head-to-+Z — so the model is posed at exactly pony.yaw. (The +π in the player-ride
+  // path corrects the *camera* yaw, a different source; copying it here trotted the pony — and the
+  // rider on her back — backwards.)
+  pony.walkPhase = 0; pony._lastPos = { x: pony.pos.x, y: pony.pos.y, z: pony.pos.z };
+  rc._strideMount(pony, 0.1);
+  ok(pony.model.group.rotation.y === pony.yaw, 'the driven pony faces its travel heading, not reversed');
+
   // despawn: pony leaves the scene, e._pony cleared, and it's idempotent (no double-remove / no leak).
   rc._despawnMount(e);
   ok(removed.length === 1 && removed[0] === pony.model.group, '_despawnMount removes the pony group from the scene');

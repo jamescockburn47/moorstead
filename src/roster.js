@@ -1,9 +1,15 @@
 // Phase B.1 — render the brain's living roster. The brain owns logical state; this file
 // owns ALL geometry: it maps {at|walk|rail} to a voxel position the client can draw.
 import { rosterState } from './npc.js';
-import { B, CHUNK } from './defs.js';
+import { B, CHUNK, WATER_LEVEL } from './defs.js';
 
 const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
+
+// How much of the brain's served roster to actually render. The world got heavy (frames stalling),
+// so the crowd is thinned: the cut falls on the anonymous 'pop-' background FIRST (deterministic by
+// id-hash → the SAME folk hidden every poll and on every client, no flicker), and the curated/named
+// deep cast is always kept. 0.6 = render ~60% (a 40% cut). Live-tunable dial; 1 = render everyone.
+export const RENDER_FRACTION = 0.6;
 
 // The true voxel surface at (x,z): one block ABOVE the top non-air/non-water block, so a body
 // stands ON the platform deck / building floor rather than sunk into it. geo.height is DEM-only
@@ -237,16 +243,18 @@ export function npcActivity(d, ride) {
 // solid column (a building, a drystone wall, or a tree) — those they walk AROUND. They don't
 // cross open water (a later phase adds fords / level crossings). Trees + buildings are
 // voxel-world blocks (not in geo), so this needs the chunk `world`, not just geo terrain.
-export function walkableStep(world, geo, x, z, fromY) {
+export function walkableStep(world, geo, x, z, fromY, ford = false) {
   const rx = Math.round(x), rz = Math.round(z);
   if (geo.height(rx, rz) == null) return false;                      // off the map
   // Judge walkability at the REAL surface, not the DEM. geo.height was blind to built/raised ground,
   // tree trunks and carved rivers, so folk stepped straight INTO them (the tree/river clipping). A
   // step of more than ~1 block up or down is a wall, trunk, cliff or river bank to walk AROUND; water
   // underfoot is a river/ford; a solid just overhead is a low branch or eave. Any of those -> go round.
+  // `ford` (a road-walker crossing a beck or the line on foot): allow water underfoot AND a bigger
+  // bank step, so she wades the lane straight across instead of refusing the river/embankment.
   const s = surfaceHeight(world, geo, rx, rz);
-  if (Math.abs(s - fromY) > 1.3) return false;
-  if (world.getBlock(rx, s, rz) === B.WATER || world.getBlock(rx, s - 1, rz) === B.WATER) return false;
+  if (Math.abs(s - fromY) > (ford ? 3.2 : 1.3)) return false;
+  if (!ford && (world.getBlock(rx, s, rz) === B.WATER || world.getBlock(rx, s - 1, rz) === B.WATER)) return false;
   const head = world.getBlock(rx, s + 1, rz);
   if (head !== B.AIR && head !== B.WATER) return false;
   return true;
@@ -258,7 +266,7 @@ export function walkableStep(world, geo, x, z, fromY) {
 // its locomotion. Server keeps the LOGICAL leg + eta; the client owns HOW it walks there.
 // `pace` (blocks/sec), when given, overrides the eta-paced speed — a mounted NPC trots at a fixed
 // ride pace rather than dawdling to an eta. Omitted -> unchanged eta pacing (all walk call sites).
-export function steerWalk(mob, from, to, started, eta, now, world, geo, dt, pace) {
+export function steerWalk(mob, from, to, started, eta, now, world, geo, dt, pace, ford = false) {
   const dx = to.x - mob.pos.x, dz = to.z - mob.pos.z;
   const dist = Math.hypot(dx, dz);
   if (dist < 1.2) { mob.pos.x = to.x; mob.pos.z = to.z; mob.pos.y = to.y; return; } // arrived
@@ -271,13 +279,18 @@ export function steerWalk(mob, from, to, started, eta, now, world, geo, dt, pace
   for (const off of [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4]) {
     const h = goal + off;
     const lx = mob.pos.x + Math.sin(h) * 1.6, lz = mob.pos.z + Math.cos(h) * 1.6;  // look-ahead
-    if (walkableStep(world, geo, lx, lz, fromY)) { best = h; break; }
+    if (walkableStep(world, geo, lx, lz, fromY, ford)) { best = h; break; }
   }
   if (best == null) best = goal;          // boxed in -> head at the goal; rescue recovers later
   const step = speed * dt;
   const nx = mob.pos.x + Math.sin(best) * step, nz = mob.pos.z + Math.cos(best) * step;
   mob.pos.x = nx; mob.pos.z = nz;
-  mob.pos.y = surfaceHeight(world, geo, nx, nz);                     // follow the built surface, not just DEM
+  let ny = surfaceHeight(world, geo, nx, nz);                        // follow the built surface, not just DEM
+  // fording a beck on a road leg: wade at the water surface, not submerged along the riverbed
+  if (ford && typeof geo.riverColumn === 'function' && geo.riverColumn(Math.round(nx), Math.round(nz))) {
+    ny = Math.max(ny, WATER_LEVEL + 0.3);
+  }
+  mob.pos.y = ny;
   mob.yaw = best;
 }
 
@@ -325,7 +338,21 @@ export class RosterClient {
 
   _nowEff() { return this.serverNow + (performance.now() / 1000 - this.recvAt); }
 
-  _sync(list) {
+  // Thin the served roster to ~RENDER_FRACTION, dropping the anonymous 'pop-' crowd first so the
+  // named/curated deep cast always renders. Deterministic by id-hash → the SAME folk hidden every
+  // poll and on every client (no flicker, consistent world). Cuts render + per-frame steer/road/pony
+  // work — the lever for "the world's too heavy". Never touches non-'pop-' ids (the characters).
+  _thin(list) {
+    const drop = Math.round(list.length * (1 - RENDER_FRACTION));
+    if (drop <= 0) return list;
+    const pop = list.filter(d => d.id && d.id.startsWith('pop-')).sort((a, b) => idHash(a.id) - idHash(b.id));
+    if (!pop.length) return list;
+    const cut = new Set(pop.slice(0, Math.min(drop, pop.length)).map(d => d.id));
+    return list.filter(d => !cut.has(d.id));
+  }
+
+  _sync(fullList) {
+    const list = this._thin(fullList);
     const seen = new Set();
     for (const d of list) {
       seen.add(d.id);
@@ -378,15 +405,18 @@ export class RosterClient {
   }
 
   // Draw + animate the driven pony (the entities AI skips a `ridden` mob, so we own its model).
-  // Mirrors updateMount (main.js): group sits a touch below the standing pos, faces yaw+PI, and the
-  // legs stride from a walkPhase advanced by how far she moved this frame.
+  // group sits a touch below the standing pos; the legs stride from a walkPhase advanced by how far
+  // she moved this frame. FACING: pony.yaw is steerWalk's atan2(dx,dz) — the SAME convention a wild
+  // pony is drawn in (entities.js: rotation.y = atan2(vel), no offset) and makePony is head-to-+Z —
+  // so the model is posed at exactly pony.yaw. (updateMount adds +π because it poses off the PLAYER's
+  // *camera* yaw, a different source; copying that here trotted the pony, and the rider, backwards.)
   _strideMount(pony, dt) {
     const g = pony.model.group;
     const lp = pony._lastPos || pony.pos;
     const sp = Math.hypot(pony.pos.x - lp.x, pony.pos.z - lp.z) / Math.max(dt, 0.001);
     pony._lastPos = { x: pony.pos.x, y: pony.pos.y, z: pony.pos.z };
     g.position.set(pony.pos.x, pony.pos.y - 0.15, pony.pos.z);
-    g.rotation.y = pony.yaw + Math.PI;
+    g.rotation.y = pony.yaw;
     pony.walkPhase = (pony.walkPhase || 0) + Math.min(sp, 8) * dt * 0.9;
     const swing = Math.sin(pony.walkPhase) * Math.min(1, sp / 3) * 0.5;
     if (pony.model.legs) pony.model.legs.forEach((l, i) => { l.rotation.x = (i % 2 === 0 ? swing : -swing); });
@@ -458,6 +488,10 @@ export class RosterClient {
           const legKey = s.from + '>' + s.to + '@' + s.started;
           if (e._roadLeg !== legKey) {
             e._roadLeg = legKey; e._roadI = 0;
+            // resolve the lane ONCE per leg — it's stable for the whole leg. (It was being recomputed
+            // every frame for every walker, and a reverse-stored edge re-allocated a full copy of its
+            // path each time: needless work + GC churn across the moor.)
+            e._roadLane = roadWaypoints(from, to, this.geo);
             if (ridesThisLeg(e.data, s.from, s.to, this.geo)) this._spawnMount(e, m.pos);
             else this._despawnMount(e);
           }
@@ -465,21 +499,22 @@ export class RosterClient {
           // afoot -> drive the rider mob herself, exactly as before.
           const drv = e._pony || m;
           const pace = e._pony ? RIDE_PACE : undefined;
-          const lane = roadWaypoints(from, to, this.geo);
+          const lane = e._roadLane;
           if (lane) {
             // follow the lane: steer to the current waypoint; advance once within a couple of blocks;
-            // past the last waypoint, make for the final `to` anchor (the lane ends near it).
+            // past the last waypoint, make for the final `to` anchor (the lane ends near it). `ford`=true
+            // so she wades the beck + steps over the line on foot rather than refusing the crossing.
             let i = e._roadI | 0;
             if (i < lane.length) {
               const wp = lane[i];
               const goal = { x: wp.x, y: surfaceHeight(this.world, this.geo, wp.x, wp.z), z: wp.z };
               if ((drv.pos.x - wp.x) ** 2 + (drv.pos.z - wp.z) ** 2 < 4) { e._roadI = ++i; }   // ~2 blocks -> next
-              steerWalk(drv, from, goal, s.started, s.eta, nowEff, this.world, this.geo, dt, pace);
+              steerWalk(drv, from, goal, s.started, s.eta, nowEff, this.world, this.geo, dt, pace, true);
             } else {
-              steerWalk(drv, from, to, s.started, s.eta, nowEff, this.world, this.geo, dt, pace);
+              steerWalk(drv, from, to, s.started, s.eta, nowEff, this.world, this.geo, dt, pace, true);
             }
           } else {
-            steerWalk(drv, from, to, s.started, s.eta, nowEff, this.world, this.geo, dt, pace);   // no lane -> direct (still mounted)
+            steerWalk(drv, from, to, s.started, s.eta, nowEff, this.world, this.geo, dt, pace, true);   // no lane -> direct (still mounted)
           }
           if (e._pony) {
             // arrival: the moment the pony reaches the destination anchor she's dismounted on the

@@ -84,6 +84,20 @@ export class SeasonalLayer {
     this.clear();
     const gen = this.world.gen;
 
+    // The real-Moors world keeps its building footprints LAZILY on geo._townBuildings(v); v.buildings
+    // is []. Every festival builder decorates via v.buildings[].type (chapel decking, wreaths, window
+    // glow, parlour trees, the chapel-fir). Without this, NO building dressing builds in the real
+    // world — which is why festivals looked empty live. Materialise v.buildings from the lazy source
+    // for the villages we're about to dress (cached on the village; only nearby ones, on rebuild).
+    if (gen.geo && typeof gen.geo._townBuildings === 'function') {
+      for (const v of (gen.geo.villages || [])) {
+        if (Math.abs(v.x - cx) > RADIUS || Math.abs(v.z - cz) > RADIUS) continue;
+        if (!v.buildings || !v.buildings.length) {
+          try { v.buildings = gen.geo._townBuildings(v) || []; } catch { /* leave empty — builders skip it */ }
+        }
+      }
+    }
+
     // -- Snowmen: rendered across the whole cold season, independent of any
     // festival. Auto-snowmen on greens need the deepest snow; player snowmen
     // from the ledger render whenever it's wintry. --
