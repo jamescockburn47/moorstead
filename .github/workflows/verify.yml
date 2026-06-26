@@ -1,0 +1,23 @@
+name: verify
+
+# Server-side safety net: runs the full verify suite + production build on every
+# push to main and on every PR. Independent of local discipline — catches
+# regressions (incl. the perf canaries) even if someone deploys past the gate.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'      # matches the Vercel project's nodeVersion
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run verify
+      - run: npm run build
