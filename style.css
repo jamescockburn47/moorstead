@@ -9,14 +9,18 @@
   --slot-border: #5a544a;
 }
 
-html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0c10; }
+html, body {
+  width: 100%; height: 100%; overflow: hidden; background: #0a0c10;
+  overscroll-behavior: none;        /* kill the two-finger swipe-to-go-back + pull-to-refresh */
+  -webkit-touch-callout: none;      /* no iOS long-press callout */
+}
 body {
   font-family: 'Segoe UI', system-ui, sans-serif;
   color: var(--text);
 }
 
 #app { position: fixed; inset: 0; }
-#app canvas.game { display: block; }
+#app canvas.game { display: block; touch-action: none; }  /* swipes on the game area never scroll/navigate */
 
 /* ---------- generic overlay ---------- */
 .overlay {

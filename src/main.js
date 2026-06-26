@@ -43,6 +43,11 @@ import { CarolBox } from './carolBox.js';
 import { RosterClient } from './roster.js';
 import { TouchControls } from './touch.js';
 import { startUpdateCheck } from './update-check.js';
+import { installKiosk } from './kiosk.js';
+
+// Harden the page against stray browser gestures (two-finger swipe-back, long-press menu, text drag)
+// an' take it fullscreen on first interaction — so a passing child can't navigate away from the game.
+installKiosk();
 
 const RAIL_VMAX = 11;  // blocks a second flat out — t' pace of a heritage steamer
 const RAIL_ACC = 0.18; // gentle acceleration: she works up to speed an' brakes early
