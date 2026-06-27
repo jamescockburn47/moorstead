@@ -23,6 +23,13 @@ for (const seedStr of ['t-shared-moor:bairns', 't-shared-moor', '42']) {
 
   const wh = geo.height(WAINSTONES.x, WAINSTONES.z);
   (protectedAt(geo, null, WAINSTONES.x, wh + 1, WAINSTONES.z, B.STONE) ? ok : bad)('the Wainstones crag is protected');
+
+  // player build at a landmark coordinate is NEVER protected (even inside the radius)
+  const fakeWorld = { editLedger: new Map([[`${ab.x},${h + 1},${ab.z}`, { cat: 'build', day: 1, by: 'player', was: 0 }]]) };
+  (!protectedAt(geo, fakeWorld, ab.x, h + 1, ab.z, B.STONEBRICK) ? ok : bad)('player build edit at abbey is not protected');
+  // a non-build edit (e.g. break) at the same coord does NOT exempt the block
+  const fakeBreakWorld = { editLedger: new Map([[`${ab.x},${h + 1},${ab.z}`, { cat: 'break', day: 1, by: 'player', was: B.STONEBRICK }]]) };
+  (protectedAt(geo, fakeBreakWorld, ab.x, h + 1, ab.z, B.STONEBRICK) ? ok : bad)('non-build edit at abbey does not bypass protection');
 }
 
 console.log('\nRESULT: ' + (failed ? 'FAIL' : 'PASS'));

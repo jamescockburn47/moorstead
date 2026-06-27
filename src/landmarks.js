@@ -13,6 +13,11 @@ export function protectedAt(geo, world, x, y, z, id) {
   if (!isBuiltMaterial(id)) return false;
   if (y < geo.height(x, z)) return false; // dig underneath owt tha likes
 
+  // A player's own placed block is never landmark fabric — don't let landmark protection
+  // freeze a build the player made near a landmark (they must be able to undo their own work).
+  const e = world && world.editLedger && world.editLedger.get(`${x},${y},${z}`);
+  if (e && e.cat === 'build') return false;
+
   // big named landmarks (centres + radii echo locationName)
   if (Math.hypot(x - ROSEBERRY.x, z - ROSEBERRY.z) < 30) return true;   // t' lone peak + its crag
   if (Math.hypot(x - WAINSTONES.x, z - WAINSTONES.z) < 16) return true; // t' gritstone tors
