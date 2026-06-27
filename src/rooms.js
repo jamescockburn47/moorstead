@@ -37,4 +37,5 @@ export const FREE_STARTER = [
   { id: B.PLANKS, n: 32 },
   { id: B.LOG, n: 16 },
   { id: B.TORCH, n: 8 },
+  { id: I.CLAIM_TOKEN, n: 1 },
 ];

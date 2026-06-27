@@ -3310,7 +3310,9 @@ class Game {
     // stands. Free, one-use — consumed only on a successful stake.
     const held0 = this.player.heldItem();
     if (held0 && held0.id === I.CLAIM_TOKEN) {
-      if (this.stakeClaim(8, true)) this.player.consumeHeld();
+      const staked = this.stakeClaim(8, true);
+      if (staked && !this.freeWorld()) this.player.consumeHeld();
+      if (staked && this.freeWorld()) this.ui.toast(‘Homestead claimed — keep thi stock here an’ breed t’ animals. Token keeps for t’ next plot.’, 5000);
       return;
     }
     if (held0 && held0.id === I.MINE_LICENCE) {
