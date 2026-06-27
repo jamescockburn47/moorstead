@@ -45,6 +45,13 @@ h1.title {
   font-weight: 800;
 }
 .subtitle { font-size: 15px; color: #b8b2a0; font-style: italic; margin-top: -8px; }
+.title-credit {
+  display: inline-block; margin: 8px 0 2px; padding: 7px 14px;
+  font-size: 14px; color: var(--gold); line-height: 1.35;
+  background: rgba(216, 185, 90, 0.10); border: 1px solid rgba(216, 185, 90, 0.5);
+  border-radius: 8px; box-shadow: 0 2px 14px rgba(0,0,0,0.35); max-width: 46ch;
+}
+.title-credit b { color: #f0dca0; }
 
 button.mc {
   display: block; width: 320px; margin: 5px auto;
