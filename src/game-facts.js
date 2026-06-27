@@ -57,8 +57,8 @@ export const GAME_FACTS = [
   // --- deeds, claims & decay ---
   { topic: 'deeds', keywords: ['deed', 'claim', 'stake', 'upkeep', 'weekly', 'protect', 'decay'],
     text: 'Stake a claim to hold a plot for a fee and weekly upkeep. Active claims protect your builds from decay. Unclaimed builds decay after 30 days.' },
-  { topic: 'deeds', keywords: ['decay', 'lapse', 'lapsed', 'crumble', 'reclaim', 'bairn', 'bairns'],
-    text: 'If a claim lapses, its builds crumble gradually over time. In the bairns world, claims and builds decay twice as slow.' },
+  { topic: 'deeds', keywords: ['decay', 'lapse', 'lapsed', 'crumble', 'reclaim', 'bairn', 'bairns', 'free'],
+    text: 'If a claim lapses, its builds crumble gradually over time. In the bairns world, claims and builds decay twice as slow. On the Free Moor, builds never crumble at all and you need no claim or licence.' },
   { topic: 'deeds', keywords: ['breeding', 'baby', 'breed', 'stock', 'birth', 'born'],
     text: 'If you keep 2 or more of the same animal species in an active claim, they may breed a tamed baby offspring over time.' },
 

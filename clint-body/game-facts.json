@@ -275,9 +275,10 @@
       "crumble",
       "reclaim",
       "bairn",
-      "bairns"
+      "bairns",
+      "free"
     ],
-    "text": "If a claim lapses, its builds crumble gradually over time. In the bairns world, claims and builds decay twice as slow."
+    "text": "If a claim lapses, its builds crumble gradually over time. In the bairns world, claims and builds decay twice as slow. On the Free Moor, builds never crumble at all and you need no claim or licence."
   },
   {
     "topic": "deeds",

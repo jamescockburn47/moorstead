@@ -385,7 +385,7 @@ export class UI {
 <ul>
 <li><b>Land Claims:</b> Stake a claim deed at the parish notice board to hold a circular plot (8m round) for a charter fee. Unclaimed building edits expire after 30 days.</li>
 <li><b>Decay Durations:</b> If a claim's weekly upkeep lapses, its builds crumble gradually over 14 days after a 7-day grace period. Inside active claims, builds never decay.</li>
-<li><b>Mode Scaling:</b> In the children's world mode, claims and builds decay twice as slow.</li>
+<li><b>Mode Scaling:</b> In the children's world, claims and builds decay twice as slow. On the <b>Free Moor</b>, builds never crumble, no claim or licence is needed, and deep digging needs only the right pick.</li>
 <li><b>Breeding:</b> Keeping two or more animals of the same species inside an active claim allows them to breed tamed baby offspring.</li>
 </ul>`,
 
