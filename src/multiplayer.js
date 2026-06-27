@@ -261,23 +261,34 @@ export class Net {
     const mob = this.game.entities.spawnVillager(pid, name || 'rambler', p.x, p.y, p.z);
     mob.isRemotePlayer = true;
     mob.t.speed = 0; // we drive it frae t' network
-    this.remotes.set(pid, { name, mob, target: p });
+    this.remotes.set(pid, { name, mob, target: p, mount: null });
     return true;
   }
 
   removeRemote(pid) {
     const r = this.remotes.get(pid);
     if (r) {
+      this._clearRemoteMount(r);
       this.game.entities.scene.remove(r.mob.model.group);
       r.mob.dead = true;
       this.remotes.delete(pid);
     }
   }
 
+  // Spawn a pony under a remote rider, or clear one when they dismount.
+  // The pony is flagged ridden+rosterMount so the entities AI leaves it alone.
+  _clearRemoteMount(r) {
+    if (r.mount) {
+      this.game.entities.scene.remove(r.mount.model.group);
+      r.mount.dead = true;
+      r.mount = null;
+    }
+  }
+
   update(dt) {
     if (!this.connected) return;
     const g = this.game;
-    // smooth remote players toward their last reported spot
+    // smooth remote players toward their last reported spot; manage mount ponies
     for (const r of this.remotes.values()) {
       if (!r.target) continue;
       const m = r.mob;
@@ -291,16 +302,43 @@ export class Net {
         if (m.yaw === undefined) m.yaw = r.target.yaw;
         else { let dy = r.target.yaw - m.yaw; while (dy > Math.PI) dy -= Math.PI * 2; while (dy < -Math.PI) dy += Math.PI * 2; m.yaw += dy * Math.min(1, dt * 6); }
       }
+      // mount sync: if the remote player is riding, show a pony under them
+      const wantMount = r.target.mount || null; // e.g. 'pony', or null/undefined
+      if (wantMount && !r.mount) {
+        // spawn a pony mob — mark ridden+rosterMount so AI never touches it
+        const pony = g.entities.spawnMob('pony', m.pos.x, m.pos.y - 1.0, m.pos.z);
+        if (pony) {
+          pony.ridden = true;        // no AI/gravity/despawn
+          pony.rosterMount = true;   // not hijackable as a player mount
+          if (pony.label) pony.label.material.opacity = 0; // no "right-click to ride" prompt
+          r.mount = pony;
+        }
+      } else if (!wantMount && r.mount) {
+        this._clearRemoteMount(r);
+      }
+      // keep the pony glued under the remote player each frame
+      if (r.mount) {
+        const SEAT_LIFT = 1.0; // blocks: rider sits this far above the pony's standing pos
+        r.mount.pos.x = m.pos.x;
+        r.mount.pos.z = m.pos.z;
+        r.mount.pos.y = m.pos.y - SEAT_LIFT;
+        r.mount.yaw = m.yaw;
+        r.mount.model.group.position.set(r.mount.pos.x, r.mount.pos.y, r.mount.pos.z);
+        r.mount.model.group.rotation.y = r.mount.yaw;
+      }
     }
-    // send our position ~5Hz when it's changed
+    // send our position ~5Hz when it's changed; include mount when riding
     this.posTimer -= dt;
     if (this.posTimer <= 0) {
       this.posTimer = 0.2;
       const p = g.player.pos;
-      const s = `${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)},${g.player.yaw.toFixed(2)}`;
+      const mountType = g.mount ? 'pony' : null;
+      const s = `${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)},${g.player.yaw.toFixed(2)},${mountType || ''}`;
       if (s !== this.lastSent) {
         this.lastSent = s;
-        this.send({ type: 'pos', x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), yaw: +g.player.yaw.toFixed(2) });
+        const msg = { type: 'pos', x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), yaw: +g.player.yaw.toFixed(2) };
+        if (mountType) msg.mount = mountType; // only include when riding (keeps messages small for dismounted players)
+        this.send(msg);
       }
     }
     // (the shared clock is kept honest by the keepalive's timeq, on a real timer)
