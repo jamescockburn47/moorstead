@@ -45,6 +45,9 @@ export class Player {
     this.milestonesSteered = false; // whether t' "go see t' village folk" nudge's fired
     this.bairnFresh = false; // bairns'-world one-time bare-handed reset already done
     this.freeStarter = false; // free-world one-time starter pack already granted
+    this.onboarded = false; // first-visit handbook already shown
+    this.villagerMarkerHinted = false; // ❓ marker hint already shown
+    this.stationSellHinted = false; // station sell hint already shown
     this.farmStatus = { registered: false }; // registered-farm status (Slice 2 gate to droving)
   }
 
@@ -362,6 +365,7 @@ export class Player {
       name: this.name, npcRewards: this.npcRewards,
       milestonesDone: this.milestonesDone, milestonesSteered: this.milestonesSteered,
       bairnFresh: this.bairnFresh, freeStarter: this.freeStarter,
+      onboarded: this.onboarded, villagerMarkerHinted: this.villagerMarkerHinted, stationSellHinted: this.stationSellHinted,
       pets: this.pets || [],
       farmStatus: this.farmStatus,
       miningSkill: this.miningSkill || 0,
@@ -387,6 +391,9 @@ export class Player {
     this.milestonesSteered = !!d.milestonesSteered;
     this.bairnFresh = !!d.bairnFresh;
     this.freeStarter = !!d.freeStarter;
+    this.onboarded = !!d.onboarded;
+    this.villagerMarkerHinted = !!d.villagerMarkerHinted;
+    this.stationSellHinted = !!d.stationSellHinted;
     this.pets = d.pets || [];
     this.farmStatus = d.farmStatus || { registered: false };
     this.miningSkill = d.miningSkill || 0;
