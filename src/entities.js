@@ -1971,6 +1971,22 @@ export class Entities {
       mob.vel.x += (wishX * speed - mob.vel.x) * Math.min(1, 10 * dt);
       mob.vel.z += (wishZ * speed - mob.vel.z) * Math.min(1, 10 * dt);
 
+      // ground-animal separation: stop beasts merging into one blob. A quick scan
+      // of nearby ground mobs — skip flyers, cobles, villagers an' remote/streamed folk.
+      // O(n) in practice (capped by dist²); a gentle nudge, nowt jittery.
+      if (!t.fly && mob.type !== 'coble' && mob.type !== 'villager' && !mob.streamed && !mob.isRemotePlayer && !mob.chatting) {
+        const SEP_R2 = 0.64; // 0.8² — separation radius in blocks²
+        const SEP_FORCE = 6;  // nudge strength
+        let sx = 0, sz = 0;
+        for (const o of this.mobs) {
+          if (o === mob || o.dead || o.t.fly || o.type === 'coble' || o.type === 'villager' || o.streamed || o.isRemotePlayer) continue;
+          const ox = mob.pos.x - o.pos.x, oz = mob.pos.z - o.pos.z;
+          const dd = ox * ox + oz * oz;
+          if (dd < SEP_R2 && dd > 0.0001) { const d = Math.sqrt(dd); sx += ox / d; sz += oz / d; }
+        }
+        if (sx !== 0 || sz !== 0) { mob.vel.x += sx * SEP_FORCE * dt; mob.vel.z += sz * SEP_FORCE * dt; }
+      }
+
       // t' lineside fence: shove any beast that wanders onto t' track back off it
       if (!t.fly && mob.type !== 'coble') {
         const ri = geo.railInfo(mob.pos.x, mob.pos.z);
@@ -2256,6 +2272,21 @@ export class Entities {
     if (!this.world.isLoaded(Math.floor(mob.pos.x), Math.floor(mob.pos.z))) {
       mob.model.group.position.set(mob.pos.x, mob.pos.y, mob.pos.z);
       return;
+    }
+    // snap to the real voxel surface (not DEM-only) so a villager whose chunk
+    // just loaded sits on the ground/platform, not floating or buried
+    {
+      const rx = Math.round(mob.pos.x), rz = Math.round(mob.pos.z);
+      const dem = this.world.gen.height(rx, rz);
+      let surf = null;
+      for (let y = dem + 24; y >= dem - 16 && y > 1; y--) {
+        const b = this.world.getBlock(rx, y, rz);
+        if (b === B.AIR || b === B.WATER) continue;
+        const below = this.world.getBlock(rx, y - 1, rz);
+        if (below !== B.AIR && below !== B.WATER) { surf = y; break; }
+      }
+      const wantY = (surf != null ? surf : dem) + 1;
+      if (Math.abs(mob.pos.y - wantY) > 0.05) { mob.pos.y = wantY; mob.vel.y = 0; }
     }
     // GLOBAL POLICY: folk sleep out of sight at neet — they vanish at dusk an' are back at
     // dawn, rather than trekkin' home or standin' about i' t' dark (so no houses are needed).
