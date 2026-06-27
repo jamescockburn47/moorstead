@@ -247,6 +247,10 @@ export class Net {
     } else if (m.type === 'where') {
       // warden's map o' who's where (t' relay only answers wardens)
       if (this.onWhere) this.onWhere(m.players || []);
+    } else if (m.type === 'gift') {
+      // another player is giving us goods — validate an' hand 'em to the game
+      const fromName = (m.from && this.remotes.get(m.from)?.name) || m.fromName || 'A generous soul';
+      if (g.receiveGift) g.receiveGift(fromName, m.goods);
     } else if (m.type === 'fx') {
       // a flourish frae a warden nearby (landing thump an' t' like)
       if (g.remoteFx) g.remoteFx(m);

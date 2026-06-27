@@ -650,7 +650,18 @@ class Game {
         if (e.code === 'KeyF' && this.boat) { this.leaveBoat(); return; }
         if (e.code === 'KeyF' && this.mount) { this.dismountPony(); return; }
         if (e.code === 'KeyE') this.openInventory();
-        if (e.code === 'KeyQ') this.openBoard(false);
+        if (e.code === 'KeyQ') {
+          if (!this.player.dead) {
+            const held = this.player.heldItem();
+            if (held) {
+              this.dropAtPlayer(held.id, held.n);
+              this.player.slots[this.player.hotbar] = null;
+              this.ui.invDirty = true;
+              return;
+            }
+          }
+          this.openBoard(false);
+        }
         if (e.code === 'KeyT') {
           e.preventDefault();
           const vv = this.villagerInView();
@@ -1203,6 +1214,10 @@ class Game {
       : 'T&rsquo; villages stand quiet &mdash; t&rsquo; brain in&rsquo;t answering (yet).', 8000);
     if (online) this.refreshStanding(false);
     else this.scheduleRosterRetry(3);
+    if (!this.player.villagerMarkerHinted) {
+      this.player.villagerMarkerHinted = true;
+      setTimeout(() => this.ui.toast('Villagers wi’ a ❓ above their head have summat to say — press <b>T</b> or right-click to talk.', 7000), 5000);
+    }
   }
 
   // T' brain can be slow to wake (cold tunnel, model loading): keep trying
@@ -1668,6 +1683,35 @@ class Game {
     this.ui.renderChatLog();
   }
 
+  giveToRemote(mob, held) {
+    if (!this.net || !this.net.connected) {
+      this.ui.toast('Not connected to t’ shared moor — can’t send a gift right now.'); return;
+    }
+    let targetPid = null;
+    for (const [pid, r] of this.net.remotes.entries()) {
+      if (r.mob === mob) { targetPid = pid; break; }
+    }
+    if (!targetPid) { this.ui.toast('Can’t find that soul on t’ relay.'); return; }
+    const goods = [[held.id, held.n]];
+    this.net.send({ type: 'gift', to: targetPid, goods });
+    this.player.slots[this.player.hotbar] = null;
+    this.ui.invDirty = true;
+    this.ui.toast(`Tha hands <b>${held.n}× ${itemName(held.id)}</b> to <b>${mob.displayName}</b>.`, 4000);
+  }
+
+  receiveGift(fromName, goods) {
+    if (!Array.isArray(goods) || goods.length === 0) return;
+    const items = goods.filter(g => Array.isArray(g) && g.length === 2 && Number.isFinite(g[0]) && Number.isFinite(g[1]) && g[1] > 0 && g[1] <= 999);
+    if (!items.length) return;
+    for (const [id, n] of items) {
+      const left = this.player.addItem(id, n);
+      if (left > 0) this.dropAtPlayer(id, left);
+    }
+    this.ui.invDirty = true;
+    const desc = items.map(([id, n]) => `${n}× ${itemName(id)}`).join(', ');
+    this.ui.toast(`<b>${fromName}</b> gave thee <b>${desc}</b>!`, 6000);
+  }
+
   readSignpost() {
     const geo = this.world.gen.geo;
     const p = this.player.pos;
@@ -2015,11 +2059,22 @@ class Game {
       if (which !== k) b.addEventListener('click', () => this.openStation(st, k));
     };
     mkTab('departures', '🚂 Departures');
-    mkTab('market', '🏪 Goods Market');
+    mkTab('market', '💰 Sell Goods Here');
+
+        if (!this.player.stationSellHinted) {
+      this.player.stationSellHinted = true;
+      const hint = ui.el('div', 'r-needs', ui.boardPanel);
+      hint.style.cssText = 'background:rgba(216,185,90,0.12);border:1px solid rgba(216,185,90,0.4);border-radius:4px;padding:7px 10px;margin-bottom:8px;';
+      hint.innerHTML = '💡 <b>Every station on t’ line buys goods</b> — open <b>Sell Goods Here</b> to ship thi harvest, stone, or ore to wherever pays best.';
+    }
 
     if (which === 'market') {
-      ui.el('div', 'inv-title', ui.boardPanel, `${st.name} — Goods Market`);
-      ui.el('div', 'r-needs', ui.boardPanel, 'Ship goods down t’ line to t’ market that pays best — t’ brass lands when t’ train brings ’em in.');
+      ui.el('div', 'inv-title', ui.boardPanel, `${st.name} — Sell Goods Here`);
+      const shippableHint = this.economy.tradeableHeld();
+      const bestNote = shippableHint.length > 0
+        ? 'Best prices shown — t’ brass lands when t’ train delivers.'
+        : 'Ship goods down t’ line to t’ market that pays best — t’ brass lands when t’ train brings ’em in.';
+      ui.el('div', 'r-needs', ui.boardPanel, `<b>Sell at this station.</b> ${bestNote}`);
       const shippable = this.economy.tradeableHeld();
       const inTransit = this.player.shipments;
       if (inTransit.length) {
@@ -3344,7 +3399,15 @@ class Game {
         if (!m.owner && m.t && m.t.tameable && fh && m.t.tameFood && m.t.tameFood.includes(fh.id)) { this.feedTame(m, fh); return; }
         if (m.type === 'pony' && !this.mount) { this.mountPony(m); return; }
         if (m.type === 'villager') {
-          if (m.isRemotePlayer) { this.ui.toast(`That\u2019s <b>${m.displayName}</b> \u2014 another living soul. Press <b>T</b> to talk to t\u2019 moor.`, 4500); return; }
+          if (m.isRemotePlayer) {
+            const held = this.player.heldItem();
+            if (held) {
+              this.giveToRemote(m, held);
+            } else {
+              this.ui.toast(`That's <b>${m.displayName}</b> — another living soul. Hold summat in hand an' right-click to give it, or press <b>T</b> to chat.`, 5000);
+            }
+            return;
+          }
           this.openChat(m); return;
         }
         if (m.owner) { this.petInteract(m); return; }
@@ -3927,6 +3990,17 @@ class Game {
         this.ui.toast('Punch a tree for wood, or dig owt wi&rsquo; thi hands.', 6000);
         this.spawnVillagers();
         if (this.netActive) this.connectNet();
+        if (!this.player.onboarded) {
+          this.player.onboarded = true;
+          if (this.saveNow) this.saveNow(false);
+          setTimeout(() => {
+            this.ui.toast('👋 <b>Welcome to Moorstead!</b> Punch a tree for wood — then press <b>E</b> to open thi pack.', 8000);
+          }, 2500);
+          setTimeout(() => {
+            this.ui.toast('📋 Find a <b>notice board</b> for jobs, or walk up to a villager an’ press <b>T</b> to talk.', 8500);
+          }, 7000);
+          setTimeout(() => { this.ui.openHow('First Day'); }, 12000);
+        }
       }
       return;
     }
