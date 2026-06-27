@@ -26,7 +26,7 @@ export const GAME_FACTS = [
   { topic: 'trade', keywords: ['coal', 'fish', 'wool', 'price', 'pit', 'coast', 'cheap', 'dear', 'inland'],
     text: 'Coal is cheap at the pit villages and dearer at the coast; sea fish is worth more the further inland it travels; wool sells well at Whitby and Pickering. Carrying goods from where they are cheap to where they are dear is the whole game of trade.' },
   { topic: 'rail-trade', keywords: ['rail', 'ship', 'shipment', 'market', 'goods', 'sell', 'best', 'full', 'good', 'price', 'wagon', 'deliver', 'board'],
-    text: 'For the full price, right-click a station notice board and choose the Goods Market tab. It shows what you carry, which town down the line pays best, and books a rail shipment. A wagon holds 96 at once, and the brass arrives with the train about half a day later.' },
+    text: 'For the full price, right-click a station notice board and choose the Goods Market tab. It shows what you carry, which town down the line pays best, and books a rail shipment. A wagon holds 48 at once, and the brass arrives with the train about half a day later.' },
 
   // --- the railway ---
   { topic: 'railway', keywords: ['train', 'railway', 'ride', 'station', 'platform', 'board', 'timetable', 'travel', 'fare', 'departures', 'line'],

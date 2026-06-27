@@ -3312,7 +3312,7 @@ class Game {
     if (held0 && held0.id === I.CLAIM_TOKEN) {
       const staked = this.stakeClaim(8, true);
       if (staked && !this.freeWorld()) this.player.consumeHeld();
-      if (staked && this.freeWorld()) this.ui.toast(‘Homestead claimed — keep thi stock here an’ breed t’ animals. Token keeps for t’ next plot.’, 5000);
+      if (staked && this.freeWorld()) this.ui.toast("Homestead claimed — keep thi stock here an’ breed t’ animals. Token keeps for t’ next plot.", 5000);
       return;
     }
     if (held0 && held0.id === I.MINE_LICENCE) {
@@ -3584,7 +3584,7 @@ class Game {
       if (now - this._lastCast < 2) {
         if (!this._castCooldownToast || now - this._castCooldownToast > 3) {
           this._castCooldownToast = now;
-          this.ui.toast('Let t' line settle first.', 1800);
+          this.ui.toast('Let t’ line settle first.', 1800);
         }
         return;
       }
@@ -3606,11 +3606,11 @@ class Game {
     const bob = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 5), new THREE.MeshBasicMaterial({ color: 0xd83a2a }));
     bob.position.set(w.x + 0.5, sy + 1.02, w.z + 0.5);
     this.scene.add(bob);
-    this.fishing = { active: true, state: ‘waiting’, bob, x: w.x, y: sy + 1, z: w.z, coast, deep,
+    this.fishing = { active: true, state: 'waiting', bob, x: w.x, y: sy + 1, z: w.z, coast, deep,
       t: 0, biteAt: 2.5 + Math.random() * (coast ? 4 : 6), biteWindow: 0, baseY: sy + 1.02 };
     this._lastCast = performance.now() / 1000;
     this.audio.place && this.audio.place();
-    this.ui.toast(‘Line’s in t’ watter — wait for a bite…’, 2500);
+    this.ui.toast('Line’s in t’ watter — wait for a bite…', 2500);
   }
 
   updateFishing(dt) {
