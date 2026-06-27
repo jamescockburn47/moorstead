@@ -1927,14 +1927,14 @@ class Game {
     return { mode: 'dwell', i: idx(n - 1), dwellLeft: 1, dir, s: path.stationS[idx(n - 1)] };
   }
 
-  // seconds till t' train next calls at station i
+  // seconds till t' train next calls at station i (Infinity if not found in t' next 30 min)
   nextCallAt(i) {
     const now = Date.now() / 1000;
     for (let dt = 0; dt < 1800; dt += 2) {
       const s = this.trainSchedule(now + dt);
       if (s.mode === 'dwell' && s.i === i) return dt;
     }
-    return 0;
+    return Infinity;
   }
 
   fmtMins(s) {
@@ -2058,9 +2058,12 @@ class Game {
     const sched = this.trainSchedule();
     const hereNow = sched.mode === 'dwell' && sched.i === stIdx;
     ui.el('div', 'inv-title', ui.boardPanel, `${st.name} Station \u2014 T\u2019 Moors Railway`);
+    const eta = this.nextCallAt(stIdx);
     ui.el('div', 'r-needs', ui.boardPanel, hereNow
       ? `<b style="color:#9ec27a">She\u2019s stood at t\u2019 platform now</b> \u2014 ${Math.round(sched.dwellLeft)}s afore she\u2019s away. Book on an\u2019 tha\u2019s straight aboard.`
-      : `Next train calls in <b style="color:#d8b95a">${this.fmtMins(this.nextCallAt(stIdx))}</b>. Book on, then be stood on t\u2019 platform when she comes in.`);
+      : !isFinite(eta)
+        ? `No train due on this line in t\u2019 next half-hour.`
+        : `Next train calls in <b style="color:#d8b95a">${this.fmtMins(eta)}</b>. Book on, then be stood on t\u2019 platform when she comes in.`);
     const list = ui.el('div', 'recipes board-list', ui.boardPanel);
     // honest distances: chainage along t' actual alignment, curves an' all
     const stS = this.world.gen.geo.railPath().stationS;
