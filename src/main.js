@@ -614,7 +614,7 @@ class Game {
     });
     ui.btnQuit.addEventListener('click', () => this.quitToTitle());
     ui.btnRespawn.addEventListener('click', () => {
-      this.player.respawn(this.spawn);
+      this.player.respawn(this.pickRespawn());
       this.state = 'playing';
       ui.show(null);
       this.lockPointer();
@@ -2301,6 +2301,20 @@ class Game {
     }
     this.ui.invDirty = true;
     this.ui.toast('Tha kept thi tools an’ beasts — but half thi materials an’ brass are gone.', 6000);
+  }
+
+  // Respawn somewhere fresh, not where tha fell.
+  pickRespawn() {
+    const gen = this.world.gen;
+    if (this.netActive && gen.geo.villages && gen.geo.villages.length > 1) {
+      const base = this.spawn && this.spawn.village
+        ? gen.geo.villages.findIndex(v => v.name === this.spawn.village) : 0;
+      const next = gen.findSpawnAt((base < 0 ? 0 : base) + 1 + Math.floor(Math.random() * (gen.geo.villages.length - 1)));
+      return next;
+    }
+    // solo: offset from the home spawn so you don't drop on the same tile
+    const s = this.spawn || gen.findSpawn();
+    return { ...s, x: s.x + (Math.random() * 24 - 12), z: s.z + (Math.random() * 24 - 12) };
   }
 
   deedTick() {
