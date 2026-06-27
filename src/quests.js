@@ -7,6 +7,7 @@ import { ROSEBERRY, WAINSTONES, KILNS, HORCUM, DRACULA_MOOR } from './geography.
 import { loreFor } from './lore.js';
 import * as npc from './npc.js';
 import { buildActivityDigest } from './activity.js';
+import { isChildrensWorld } from './rooms.js';
 
 const STANDINGS = ['Newcomer', 'Known', 'Welcomed', 'Respected', 'Treasured'];
 const STANDING_THRESHOLDS = [0, 5, 20, 50, 100];
@@ -529,9 +530,10 @@ export class Quests {
     this.game = game;
     this.geo = game.world.gen.geo;
     this.arc = buildArc(this.geo);
-    // The Dracula arc is too dark for the bairns' (children's) world. The kids' world now
-    // uses the real-Moors seed, which would otherwise enable the arc — so keep it out by room.
-    this.dracArc = (this.game.netRoom === 'bairns') ? {} : buildDraculaArc(this.geo);
+    // The Dracula arc is too dark for any children's world (bairns AND the free kids' world),
+    // both of which use the real-Moors seed that would otherwise enable it. Shard-aware via
+    // rooms.js so e.g. bairns-2 / bairns-free-2 are covered too.
+    this.dracArc = isChildrensWorld(this.game.netRoom) ? {} : buildDraculaArc(this.geo);
     // v2 folklore library — only ever offered in the moors world (see refreshFolkloreOffers)
     this.folklore = this.geo.realWorld ? buildFolkloreQuests(this.geo) : [];
     this.active = [];

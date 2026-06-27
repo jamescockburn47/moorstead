@@ -22,6 +22,12 @@ export function isBairnsRoom(room) {
   return baseRoom(room) === 'bairns';
 }
 
+// Is this a children's world (bairns OR the free kids' world)? Used to keep dark content
+// (e.g. the Dracula horror arc) out of every room a child might be in, shards included.
+export function isChildrensWorld(room) {
+  return isBairnsRoom(room) || isFreeRoom(room);
+}
+
 // One-time free-world starter pack: enough to dig, chop, build and light up straight away, not
 // so much that gathering is pointless. player.addItem sets tool durability automatically.
 export const FREE_STARTER = [

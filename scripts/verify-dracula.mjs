@@ -378,4 +378,15 @@ for (const key of ['WOLFSBANE', 'SILVER_TOKEN', 'GRAVE_EARTH']) {
   ok(Object.keys(new Quests(mk('moor')).dracArc).length === ORDER.length, 'adult moors world still gets the full Dracula arc');
 }
 
+// --- the dark Dracula arc must be EXCLUDED on every children's world (bairns + bairns-free) ---
+{
+  const geo = new Gen(MOORS_SEED).geo;
+  const roomStub = (room) => ({ world: { gen: { geo } }, sky: { day: 1 }, seed: MOORS_SEED, standingData: null, rosterClient: null, netRoom: room });
+  const arcFor = (room) => new Quests(roomStub(room)).dracArc;
+  ok(Object.keys(arcFor('bairns')).length === 0, 'Dracula arc excluded on bairns');
+  ok(Object.keys(arcFor('bairns-free')).length === 0, 'Dracula arc excluded on bairns-free (the free kids\' world)');
+  ok(Object.keys(arcFor('bairns-free-2')).length === 0, 'Dracula arc excluded on a bairns-free shard');
+  ok(Object.keys(arcFor('moor')).length > 0, 'Dracula arc PRESENT on the adult moor');
+}
+
 console.log(`verify-dracula: ${n} assertions OK`);

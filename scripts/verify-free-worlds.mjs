@@ -1,5 +1,5 @@
 // Free Worlds backbone check — run wi': node scripts/verify-free-worlds.mjs
-import { baseRoom, isFreeRoom, isBairnsRoom, FREE_STARTER } from '../src/rooms.js';
+import { baseRoom, isFreeRoom, isBairnsRoom, isChildrensWorld, FREE_STARTER } from '../src/rooms.js';
 import { B, I, TOOLS } from '../src/defs.js';
 import { isExpired, mayDigDeep } from '../src/editledger.js';
 
@@ -46,6 +46,13 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
   (mayDigDeep(grade - 15, grade, null, 'stone', [], true).allowed === true ? ok : bad)('free world: right pick + no fixture needed = allowed');
   (mayDigDeep(grade - 5, grade, null, 'wood', [], false).reason === 'nomine' ? ok : bad)('survival world: deep-dig with no mine is still refused');
   (mayDigDeep(grade - 5, grade, { depth: 20 }, 'wood', [], false).allowed === true ? ok : bad)('survival world: dig within an active mine depth envelope is allowed');
+}
+
+// --- children's-world classification (keeps dark content out of bairns AND bairns-free) ---
+{
+  (isChildrensWorld('bairns') && isChildrensWorld('bairns-2') ? ok : bad)('bairns (and shards) is a children\'s world');
+  (isChildrensWorld('bairns-free') && isChildrensWorld('bairns-free-2') ? ok : bad)('the free world (and shards) is a children\'s world');
+  (!isChildrensWorld('moor') && !isChildrensWorld('dale') ? ok : bad)('adult worlds are not children\'s worlds');
 }
 
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));
