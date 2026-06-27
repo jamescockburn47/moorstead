@@ -100,27 +100,30 @@ export function depthBandFor(depthBelowGrade) {
 
 // Checks if a deep break is permitted under the 1-block-deep rule
 // allowedFixtures is an array of block IDs currently present inside the mine's cylinder
-export function mayDigDeep(y, grade, mineDeed, heldPickType, allowedFixtures = []) {
+export function mayDigDeep(y, grade, mineDeed, heldPickType, allowedFixtures = [], free = false) {
   if (y >= grade - 1) return { allowed: true }; // within 1-block surface skim
-  if (!mineDeed) return { allowed: false, reason: 'nomine' };
-  
+
   const depth = grade - y;
-  if (depth > mineDeed.depth) return { allowed: false, reason: 'depthlimit', limit: mineDeed.depth };
-  
+
+  if (!free) {
+    if (!mineDeed) return { allowed: false, reason: 'nomine' };
+    if (depth > mineDeed.depth) return { allowed: false, reason: 'depthlimit', limit: mineDeed.depth };
+  }
+
   const band = depthBandFor(depth);
-  
-  // Verify pick requirements
+
+  // Verify pick requirements — kept in the free world too, as gentle progression.
   const pickOrder = { none: 0, wood: 1, stone: 2, iron: 3 };
   const playerPickPower = pickOrder[heldPickType || 'none'] || 0;
   const reqPickPower = pickOrder[band.pick];
   if (playerPickPower < reqPickPower) {
     return { allowed: false, reason: 'pick', pickNeeded: band.pick, fixtureNeeded: band.fixture };
   }
-  
-  // Verify fixture requirements
-  if (band.fixture && !allowedFixtures.includes(band.fixture)) {
+
+  // Verify fixture requirements — dropped in the free world (no props/lamp/winch faff).
+  if (!free && band.fixture && !allowedFixtures.includes(band.fixture)) {
     return { allowed: false, reason: 'fixture', pickNeeded: band.pick, fixtureNeeded: band.fixture };
   }
-  
+
   return { allowed: true };
 }

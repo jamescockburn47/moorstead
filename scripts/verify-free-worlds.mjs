@@ -1,7 +1,7 @@
 // Free Worlds backbone check — run wi': node scripts/verify-free-worlds.mjs
 import { baseRoom, isFreeRoom, isBairnsRoom, FREE_STARTER } from '../src/rooms.js';
 import { B, I, TOOLS } from '../src/defs.js';
-import { isExpired } from '../src/editledger.js';
+import { isExpired, mayDigDeep } from '../src/editledger.js';
 
 let failed = false;
 const ok = m => console.log('  ok    ' + m);
@@ -35,6 +35,16 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
   (isExpired(oldDig, 999, [], 1, 0, 0, 0, null, true) === false ? ok : bad)('free world: a dig never backfills');
   (isExpired(oldHarvest, 999, [], 1, 0, 0, 0, null, true) === true ? ok : bad)('free world: harvested resources still regrow');
   (isExpired(oldBuild, 999, [], 1, 0, 0, 0, null, false) === true ? ok : bad)('survival world: an unclaimed build still crumbles');
+}
+
+// --- deep digging in a free world: no mine/fixtures needed, but pick tier still gates depth ---
+{
+  const grade = 50;
+  // signature: mayDigDeep(y, grade, mineDeed, heldPickType, allowedFixtures, free)
+  (mayDigDeep(grade - 5, grade, null, 'wood', [], true).allowed === true ? ok : bad)('free world: shallow deep-dig allowed with a wood pick, no mine');
+  (mayDigDeep(grade - 15, grade, null, 'wood', [], true).allowed === false ? ok : bad)('free world: too weak a pick for the depth is still refused (pick tier kept)');
+  (mayDigDeep(grade - 15, grade, null, 'stone', [], true).allowed === true ? ok : bad)('free world: right pick + no fixture needed = allowed');
+  (mayDigDeep(grade - 5, grade, null, 'wood', [], false).reason === 'nomine' ? ok : bad)('survival world: deep-dig with no mine is still refused');
 }
 
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));
