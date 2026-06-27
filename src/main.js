@@ -3576,6 +3576,17 @@ class Game {
       else this.endFishing('Tha reeled in early — nowt bit.');
       return;
     }
+    // recast cooldown on non-free worlds: let the line settle (2 s)
+    if (!this.freeWorld() && this._lastCast) {
+      const now = performance.now() / 1000;
+      if (now - this._lastCast < 2) {
+        if (!this._castCooldownToast || now - this._castCooldownToast > 3) {
+          this._castCooldownToast = now;
+          this.ui.toast('Let t' line settle first.', 1800);
+        }
+        return;
+      }
+    }
     if (this.season && this.season.warmth < -0.4) {
       this.ui.toast('T’ beck’s froze over — nowt’s biting while it’s this cold.', 2500);
       return;
@@ -3593,10 +3604,11 @@ class Game {
     const bob = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 5), new THREE.MeshBasicMaterial({ color: 0xd83a2a }));
     bob.position.set(w.x + 0.5, sy + 1.02, w.z + 0.5);
     this.scene.add(bob);
-    this.fishing = { active: true, state: 'waiting', bob, x: w.x, y: sy + 1, z: w.z, coast, deep,
+    this.fishing = { active: true, state: ‘waiting’, bob, x: w.x, y: sy + 1, z: w.z, coast, deep,
       t: 0, biteAt: 2.5 + Math.random() * (coast ? 4 : 6), biteWindow: 0, baseY: sy + 1.02 };
+    this._lastCast = performance.now() / 1000;
     this.audio.place && this.audio.place();
-    this.ui.toast('Line’s in t’ watter — wait for a bite…', 2500);
+    this.ui.toast(‘Line’s in t’ watter — wait for a bite…’, 2500);
   }
 
   updateFishing(dt) {
@@ -3631,11 +3643,13 @@ class Game {
     } else {
       const fish = f.coast ? (Math.random() < 0.8 ? I.SEA_FISH : I.RAW_TROUT)   // mackerel an' cod off t' coast
                            : (Math.random() < 0.85 ? I.RAW_TROUT : I.SEA_FISH); // trout in t' becks an' tarns
-      const n = (f.deep && Math.random() < 0.4) ? 2 : 1; // a fuller net out at sea
+      const dbl = this.freeWorld() ? 0.4 : 0.2; // free world keeps the generous haul; survival nerfs it
+      const n = (f.deep && Math.random() < dbl) ? 2 : 1; // a fuller net out at sea
       this.player.addItem(fish, n);
       this.ui.toast(`Tha’s landed <b>${n > 1 ? 'a fine haul o’ sea fish' : (fish === I.SEA_FISH ? 'a fine sea fish' : 'a bonny brown trout')}</b>!`, 3000);
     }
     this.ui.invDirty = true;
+    this._lastCast = performance.now() / 1000;
     this.audio.pickup && this.audio.pickup();
     this.endFishing();
   }

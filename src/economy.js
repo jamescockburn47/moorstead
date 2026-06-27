@@ -90,7 +90,7 @@ export function priceOf(itemId, village, side, standingIdx = 0) {
 // save still arrives after reload. Never wall-clock (performance.now/Date.now): milliseconds
 // would make delivery effectively instant and refill a purse to full every frame.
 export const DROP_IN_PENALTY = 0.6;   // a drop-in pays this fraction of the local sell price
-export const FREIGHT_ALLOWANCE = 96;  // max units a merchant may ship at once (Slice A fixed; SP5 upgrades it)
+export const FREIGHT_ALLOWANCE = 48;  // max units a merchant may ship at once (Slice A fixed; SP5 upgrades it)
 export const DELIVERY_DELAY = 0.5;    // game-days a shipment takes to arrive (half a day)
 export const PURSE_MAX = 120;         // a village vendor's drop-in purse cap, in pence
 export const PURSE_REFILL = 120;      // pence a purse recovers per game-day, toward PURSE_MAX (≈ one day to refill)
