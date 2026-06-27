@@ -1127,37 +1127,41 @@ export class Gen {
     const inside = !onPerim;
     if (inside) {
       const fx = x - b.x0, fz = z - b.z0;
+      // guard: no lantern in t' doorway column (x===midX) at the first interior row
+      // — keeps the threshold clear an' lets folk see the door is open.
+      const doorFx = midX - b.x0;
+      const blocksThreshold = (testFx, testFz) => testFx === doorFx && testFz <= 1;
       if (b.type === 'pub') {
-        if (fx === 1 && fz === 1) data[IDX(lx, g + 1, lz)] = B.LANTERN;
+        if (fx === 1 && fz === 1 && !blocksThreshold(1, 1)) data[IDX(lx, g + 1, lz)] = B.LANTERN;
         if (fx === 2 && fz === 4) data[IDX(lx, g + 1, lz)] = B.BENCH;
         if (fx === 7 && fz === 1) data[IDX(lx, g + 1, lz)] = B.RANGE;
         if (fx === 5 && fz === 4) data[IDX(lx, g + 1, lz)] = B.LANTERN;
       } else if (b.type === 'farm') {
-        if (fx === 1 && fz === 1) data[IDX(lx, g + 1, lz)] = B.LANTERN;
+        if (fx === 1 && fz === 1 && !blocksThreshold(1, 1)) data[IDX(lx, g + 1, lz)] = B.LANTERN;
         if (fx === 9 && fz === 5) data[IDX(lx, g + 1, lz)] = B.RANGE;
         if (fx === 5 && fz === 5) data[IDX(lx, g + 1, lz)] = B.BENCH;
       } else if (b.type === 'chapel') {
-        if (fx === 1 && fz === 1) data[IDX(lx, g + 1, lz)] = B.LANTERN;
-        if (fx === 5 && fz === 1) data[IDX(lx, g + 1, lz)] = B.LANTERN;
+        if (fx === 1 && fz === 1 && !blocksThreshold(1, 1)) data[IDX(lx, g + 1, lz)] = B.LANTERN;
+        if (fx === 5 && fz === 1 && !blocksThreshold(5, 1)) data[IDX(lx, g + 1, lz)] = B.LANTERN;
       } else if (b.type === 'cottage') {
-        if (fx === 1 && fz === 1) data[IDX(lx, g + 1, lz)] = B.LANTERN;
+        if (fx === 1 && fz === 1 && !blocksThreshold(1, 1)) data[IDX(lx, g + 1, lz)] = B.LANTERN;
       } else if (b.type === 'shop') {
         // counter, light, an' a bench or range so t' shops are useful
-        if (fx === 1 && fz === 1) data[IDX(lx, g + 1, lz)] = B.LANTERN;
+        if (fx === 1 && fz === 1 && !blocksThreshold(1, 1)) data[IDX(lx, g + 1, lz)] = B.LANTERN;
         if (fx === 2 && fz === 3) data[IDX(lx, g + 1, lz)] = ((b.x0 + b.z0) % 2 === 0) ? B.BENCH : B.RANGE;
         if (fx === 4 && fz === 1) data[IDX(lx, g + 1, lz)] = B.BOARD;
       } else if (b.type === 'museum') {
-        if (fx === 1 && fz === 1) data[IDX(lx, g + 1, lz)] = B.LANTERN;
-        if (fx === 3 && fz === 1) data[IDX(lx, g + 1, lz)] = B.LANTERN;
+        if (fx === 1 && fz === 1 && !blocksThreshold(1, 1)) data[IDX(lx, g + 1, lz)] = B.LANTERN;
+        if (fx === 3 && fz === 1 && !blocksThreshold(3, 1)) data[IDX(lx, g + 1, lz)] = B.LANTERN;
         if (fx === 5 && fz === 2) data[IDX(lx, g + 1, lz)] = B.BOARD;
         if (fx === 2 && fz === 4) data[IDX(lx, g + 1, lz)] = B.BOARD;
         if (fx === 6 && fz === 4) data[IDX(lx, g + 1, lz)] = B.BOARD;
       } else if (b.type === 'fishchip') {
-        if (fx === 1 && fz === 1) data[IDX(lx, g + 1, lz)] = B.LANTERN;
+        if (fx === 1 && fz === 1 && !blocksThreshold(1, 1)) data[IDX(lx, g + 1, lz)] = B.LANTERN;
         if (fx === 3 && fz === 2) data[IDX(lx, g + 1, lz)] = B.RANGE;
-        if (fx === 5 && fz === 1) data[IDX(lx, g + 1, lz)] = B.BENCH;
+        if (fx === 5 && fz === 1 && !blocksThreshold(5, 1)) data[IDX(lx, g + 1, lz)] = B.BENCH;
       } else if (b.type === 'fossilshop') {
-        if (fx === 1 && fz === 1) data[IDX(lx, g + 1, lz)] = B.LANTERN;
+        if (fx === 1 && fz === 1 && !blocksThreshold(1, 1)) data[IDX(lx, g + 1, lz)] = B.LANTERN;
         if (fx === 4 && fz === 2) data[IDX(lx, g + 1, lz)] = B.BENCH;
         if (fx === 2 && fz === 1) data[IDX(lx, g + 1, lz)] = B.BOARD;
       } else if (b.type === 'barn') {
