@@ -53,7 +53,7 @@ export class TouchControls {
     this.root = null;
     this.zones = {};      // joystick / look zone elements
     this.btns = {};       // button elements by name
-    this._mode = localStorage.getItem(MODE_KEY) || 'auto';
+    try { this._mode = localStorage.getItem(MODE_KEY) || 'auto'; } catch { this._mode = 'auto'; /* storage blocked */ }
   }
 
   // Should the touch HUD be on right now? (mode override vs device detection)
@@ -70,7 +70,7 @@ export class TouchControls {
 
   cycleMode() {   // pause-menu toggle: auto -> on -> off -> auto
     this._mode = this._mode === 'auto' ? 'on' : this._mode === 'on' ? 'off' : 'auto';
-    localStorage.setItem(MODE_KEY, this._mode);
+    try { localStorage.setItem(MODE_KEY, this._mode); } catch { /* storage blocked — mode stays for this session only */ }
     this.sync();
     return this._mode;
   }

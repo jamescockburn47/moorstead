@@ -160,7 +160,8 @@ class Game {
     this.scene.add(this.camera);
 
     this.bindEvents();
-    this.auth = JSON.parse(localStorage.getItem('moorcraft-auth') || 'null');
+    try { this.auth = JSON.parse(localStorage.getItem('moorcraft-auth') || 'null'); }
+    catch { this.auth = null; /* storage blocked (Safari private mode / cookies off) — don't abort boot */ }
     this.refreshAdmin();
     this.ui.setLoggedIn(this.auth);
     this.recordVisit('landing');
@@ -1187,12 +1188,17 @@ class Game {
   // Identity. Invited players: account-based (follows them across devices).
   // Ramblers: per-browser UUID. Both scoped per world seed for NPC memory.
   devicePid() {
-    let pid = localStorage.getItem('moorcraft-pid');
-    if (!pid) {
-      pid = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
-      localStorage.setItem('moorcraft-pid', pid);
+    try {
+      let pid = localStorage.getItem('moorcraft-pid');
+      if (!pid) {
+        pid = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
+        localStorage.setItem('moorcraft-pid', pid);
+      }
+      return pid;
+    } catch {
+      // storage blocked — keep a stable id for this session so multiplayer/memory still work
+      return (this._ephemeralPid ||= (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36)));
     }
-    return pid;
   }
 
   // Once-per-session landing ping so the parish ledger can count site visits.
@@ -4363,8 +4369,9 @@ class Game {
   updateLanterns() {
     const p = this.player.pos;
     const near = [];
-    for (const k of this.world.lanterns) {
-      const [x, y, z] = k.split(',').map(Number);
+    // reuse world's cached parsed-lantern array instead of re-splitting every key each frame
+    for (const a of this.world.lightsArr()) {
+      const x = a[0], y = a[1], z = a[2];
       const d = (x - p.x) ** 2 + (y - p.y) ** 2 + (z - p.z) ** 2;
       if (d < 50 * 50) near.push([d, x, y, z]);
     }

@@ -998,7 +998,8 @@ export class Entities {
       try { makeWizardExtras(model, look.scale, isFC); } catch (err) { /* fail safe — default avatar still rendered */ }
     }
     this.scene.add(model.group);
-    const displayName = isMerlin && isFC ? 'Father Christmas' : name.replace(/\b\w/g, c => c.toUpperCase());
+    // roster NPCs can arrive nameless (the brain serves name:null for un-named folk) — fall back so the .replace never throws
+    const displayName = isMerlin && isFC ? 'Father Christmas' : (name || 'traveller').replace(/\b\w/g, c => c.toUpperCase());
     const plate = makeNameplate(displayName);
     plate.position.y = Math.max(0.9, 1.65 * look.scale) + 0.55;
     model.group.add(plate);

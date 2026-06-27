@@ -311,15 +311,22 @@ export class World {
 
   solidAt(x, y, z) { return isSolid(this.getBlock(Math.floor(x), Math.floor(y), Math.floor(z))); }
 
-  // Is there a burning light (lantern/torch) within r of this spot?
-  // Dark things won't come near flame.
-  nearLight(x, z, r) {
+  // Parsed [x,y,z] of every burning light, cached and only rebuilt when lanterns change.
+  // Shared by nearLight() and the per-frame lantern-light placement so neither re-parses the
+  // "x,y,z" key Set every call.
+  lightsArr() {
     if (this.lightsDirty || !this._lightsArr) {
       this._lightsArr = [...this.lanterns].map(k => k.split(',').map(Number));
       this.lightsDirty = false;
     }
+    return this._lightsArr;
+  }
+
+  // Is there a burning light (lantern/torch) within r of this spot?
+  // Dark things won't come near flame.
+  nearLight(x, z, r) {
     const r2 = r * r;
-    for (const [lx, , lz] of this._lightsArr) {
+    for (const [lx, , lz] of this.lightsArr()) {
       const dx = lx - x, dz = lz - z;
       if (dx * dx + dz * dz < r2) return true;
     }

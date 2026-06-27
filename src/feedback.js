@@ -1,12 +1,18 @@
 // Feedback & bug reports to the parish ledger (POST /dash/feedback).
 
+let _ephemeralPid = null;
 export function devicePid() {
-  let pid = localStorage.getItem('moorcraft-pid');
-  if (!pid) {
-    pid = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
-    localStorage.setItem('moorcraft-pid', pid);
+  try {
+    let pid = localStorage.getItem('moorcraft-pid');
+    if (!pid) {
+      pid = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
+      localStorage.setItem('moorcraft-pid', pid);
+    }
+    return pid;
+  } catch {
+    // storage blocked (private mode / cookies off) — stable per-session fallback
+    return (_ephemeralPid ||= (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36)));
   }
-  return pid;
 }
 
 /** Snapshot useful context for triage — page, browser, optional in-game state. */
