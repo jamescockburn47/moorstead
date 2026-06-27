@@ -1745,8 +1745,9 @@ class Game {
     // t' warden may walk onto any world — bairns or adults, not just their own
     if (this.isAdmin()) room = (await this.ui.pickWorld(room)) || room;
     this.netRoom = room;
-    const seedStr = room === 'moor' ? 't-shared-moor'
-      : room === 'moors1900' ? 't-moors-1900'
+    // the shared moor AND the bairns' world now play the real c.1900 NYM world
+    // (James's call, 2026-06-27); the adult side-worlds keep their own stylised seeds
+    const seedStr = (room === 'moor' || room === 'bairns' || room === 'moors1900') ? 't-moors-1900'
       : 't-shared-moor:' + room;
     this.startWorld(ss(seedStr), null, new Map());
     // folk wake spread across t' villages, same one each visit
