@@ -529,7 +529,9 @@ export class Quests {
     this.game = game;
     this.geo = game.world.gen.geo;
     this.arc = buildArc(this.geo);
-    this.dracArc = buildDraculaArc(this.geo);
+    // The Dracula arc is too dark for the bairns' (children's) world. The kids' world now
+    // uses the real-Moors seed, which would otherwise enable the arc — so keep it out by room.
+    this.dracArc = (this.game.netRoom === 'bairns') ? {} : buildDraculaArc(this.geo);
     // v2 folklore library — only ever offered in the moors world (see refreshFolkloreOffers)
     this.folklore = this.geo.realWorld ? buildFolkloreQuests(this.geo) : [];
     this.active = [];
@@ -614,6 +616,7 @@ export class Quests {
       if (this.completed.includes(id)) continue;
       if (this.active.some(q => q.id === id)) return null;
       const def = this.dracArc[id];
+      if (!def) return null;   // no arc here (e.g. the bairns' world) — nowt to offer
       if (def.needs && !this.completed.includes(def.needs)) return null;
       return def;
     }

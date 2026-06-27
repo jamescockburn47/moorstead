@@ -366,4 +366,16 @@ for (const key of ['WOLFSBANE', 'SILVER_TOKEN', 'GRAVE_EARTH']) {
   ok(q3.draculaLogTaken === false, 'deserialize() of an old save defaults draculaLogTaken to false');
 }
 
+// --- the Dracula arc is kept OUT of the bairns' (children's) world, even though it
+//     now uses the real-Moors seed (which would otherwise enable the arc) ---
+{
+  const geo = new Gen(MOORS_SEED).geo;
+  const mk = (room) => ({ world: { gen: { geo } }, sky: { day: 1 }, seed: MOORS_SEED, standingData: null, rosterClient: null, netRoom: room });
+  const q = new Quests(mk('bairns'));
+  ok(Object.keys(q.dracArc).length === 0, 'bairns world: the Dracula arc is empty (no chapters)');
+  ok(q.draculaNext() === null, 'bairns world: draculaNext() returns null (no crash on the empty arc)');
+  ok(q.museumOffer() === null, 'bairns world: no Dracula chapter is ever offered');
+  ok(Object.keys(new Quests(mk('moor')).dracArc).length === ORDER.length, 'adult moors world still gets the full Dracula arc');
+}
+
 console.log(`verify-dracula: ${n} assertions OK`);
