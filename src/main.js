@@ -13,7 +13,7 @@ import { Player } from './player.js';
 import * as npc from './npc.js';
 import { Quests, wantGiants, wantWreck, wantHound } from './quests.js';
 import { Economy, bestMarket, FREIGHT_ALLOWANCE, farmRegisterCheck, CHARTER_FEE, livestockPrice, droveValue, convertAt, marketTownName } from './economy.js';
-import { deedFee, weeklyUpkeep, isLapsed, DEED, findActiveDeed, findLapsedDeed, inDeed, makeDeed } from './deeds.js';
+import { deedFee, weeklyUpkeep, isLapsed, DEED, findActiveDeed, findLapsedDeed, inDeed, makeDeed, lapsesUnderUpkeep } from './deeds.js';
 import { gatherContext, submitFeedback } from './feedback.js';
 import { miningDigGuide } from './mining-guide.js';
 import { mayDigDeep, categoryOf } from './editledger.js';
@@ -2266,9 +2266,15 @@ class Game {
   }
 
   deedTick() {
-    const decayScale = this.bairnLocked() ? 2 : 1;
+    const bairns = this.bairnLocked();
+    const decayScale = bairns ? 2 : 1;
+    let revived = false;
     for (const d of this.world.deeds) {
-      if (!d.lapsedDay && isLapsed(d, this.sky.day, DEED.grace * decayScale)) {
+      // a child's land claim never lapses (no weekly upkeep to manage); revive any that
+      // lapsed under the old rules so the kids get their homestead back
+      if (bairns && d.kind === 'claim') {
+        if (d.lapsedDay) { d.lapsedDay = null; d.paidUntilDay = this.sky.day + DEED.week; revived = true; }
+      } else if (!d.lapsedDay && lapsesUnderUpkeep(d, bairns) && isLapsed(d, this.sky.day, DEED.grace * decayScale)) {
         d.lapsedDay = this.sky.day;
       }
 
@@ -2309,6 +2315,7 @@ class Game {
         }
       }
     }
+    if (revived && this.net) this.net.sendDeeds(this.world.deeds);  // persist revived kids' claims to the shared moor
   }
 
   // ---- moorland ponies: a rideable mount 'twixt shanks's pony an' t' railway ----

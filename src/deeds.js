@@ -36,6 +36,13 @@ export function weeklyUpkeep(kind, radius = 0, depth = 0) {
   return Math.max(1, radius * DEED.claimUpkeepPerR);
 }
 
+// Is this deed subject to upkeep-lapse? A child's land CLAIM never lapses — kids can't
+// manage weekly upkeep and shouldn't lose their homestead. Mines (and everything in the
+// adult world) still lapse if neglected, so the decay economy stays intact elsewhere.
+export function lapsesUnderUpkeep(deed, bairns) {
+  return !(bairns && deed && deed.kind === 'claim');
+}
+
 export function findActiveDeed(deeds, x, z, kind = null) {
   return (deeds || []).find(d => d && !d.lapsedDay && (!kind || d.kind === kind) &&
     (x - d.cx) ** 2 + (z - d.cz) ** 2 <= d.radius * d.radius);

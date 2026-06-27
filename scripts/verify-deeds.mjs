@@ -1,5 +1,5 @@
 // Deeds backbone check — run wi': node scripts/verify-deeds.mjs
-import { deedFee, weeklyUpkeep, inDeed, isLapsed, DEED, makeDeed } from '../src/deeds.js';
+import { deedFee, weeklyUpkeep, inDeed, isLapsed, DEED, makeDeed, lapsesUnderUpkeep } from '../src/deeds.js';
 
 let failed = false;
 const ok = m => console.log('  ok    ' + m);
@@ -52,6 +52,14 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
   const a = makeDeed('claim', 'x', 0, 0, 1, { radius: 4 });
   const b = makeDeed('claim', 'x', 0, 0, 1, { radius: 4, seq: 1 });
   (a.id !== b.id ? ok : bad)('makeDeed: distinct ids when seq differs (no collision in a batch)');
+}
+
+// --- lapsesUnderUpkeep: a child's land claim never lapses (no weekly upkeep to manage) ---
+{
+  (lapsesUnderUpkeep({ kind: 'claim' }, false) === true ? ok : bad)('adult world: a claim lapses under upkeep');
+  (lapsesUnderUpkeep({ kind: 'mine' }, false) === true ? ok : bad)('adult world: a mine lapses under upkeep');
+  (lapsesUnderUpkeep({ kind: 'claim' }, true) === false ? ok : bad)('bairns world: a claim NEVER lapses (kids keep their land)');
+  (lapsesUnderUpkeep({ kind: 'mine' }, true) === true ? ok : bad)('bairns world: a mine still lapses under upkeep');
 }
 
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));
