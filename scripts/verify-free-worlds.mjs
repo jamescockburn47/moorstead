@@ -1,6 +1,7 @@
 // Free Worlds backbone check — run wi': node scripts/verify-free-worlds.mjs
 import { baseRoom, isFreeRoom, isBairnsRoom, FREE_STARTER } from '../src/rooms.js';
 import { B, I, TOOLS } from '../src/defs.js';
+import { isExpired } from '../src/editledger.js';
 
 let failed = false;
 const ok = m => console.log('  ok    ' + m);
@@ -22,6 +23,18 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
   (Array.isArray(FREE_STARTER) && FREE_STARTER.length > 0 ? ok : bad)('starter pack is a non-empty manifest');
   (FREE_STARTER.every(it => ids.has(it.id) && it.n > 0) ? ok : bad)('every starter item is a real id with a positive count');
   (FREE_STARTER.some(it => TOOLS[it.id]) ? ok : bad)('starter pack includes at least one tool');
+}
+
+// --- build/dig decay OFF in a free world; harvest still regrows (gather loop stays) ---
+{
+  const oldBuild = { cat: 'build', day: 0, was: B.AIR };
+  const oldDig = { cat: 'dig', day: 0, was: B.STONE };
+  const oldHarvest = { cat: 'harvest', day: 0, was: B.LOG };
+  // signature: isExpired(edit, nowDay, deeds, decayScale, x, y, z, heightFunc, free)
+  (isExpired(oldBuild, 999, [], 1, 0, 0, 0, null, true) === false ? ok : bad)('free world: a build never crumbles');
+  (isExpired(oldDig, 999, [], 1, 0, 0, 0, null, true) === false ? ok : bad)('free world: a dig never backfills');
+  (isExpired(oldHarvest, 999, [], 1, 0, 0, 0, null, true) === true ? ok : bad)('free world: harvested resources still regrow');
+  (isExpired(oldBuild, 999, [], 1, 0, 0, 0, null, false) === true ? ok : bad)('survival world: an unclaimed build still crumbles');
 }
 
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));

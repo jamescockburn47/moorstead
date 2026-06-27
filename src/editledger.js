@@ -39,17 +39,21 @@ export function coordHash(x, y, z) {
 
 // An edit is { cat, day, by, was }. Expired once `nowDay` has passed its lifespan.
 // Claims protect builds; Mines protect digs inside their licensed depth envelopes.
-export function isExpired(edit, nowDay, deeds = [], decayScale = 1, x = 0, y = 0, z = 0, heightFunc = null) {
+export function isExpired(edit, nowDay, deeds = [], decayScale = 1, x = 0, y = 0, z = 0, heightFunc = null, free = false) {
   const life = lifespanOf(edit.cat, edit.was);
-  
+
   if (edit.cat === 'harvest') {
+    // Resources regrow in every world — the gather loop is the fun even in a free world.
     return (nowDay - edit.day) >= life;
   }
-  
+
   if (edit.cat === 'build') {
+    // Free world: builds never crumble — no claim needed to keep what you make.
+    if (free) return false;
+
     // Protected if inside any active land claim
     if (findActiveDeed(deeds, x, z, 'claim')) return false;
-    
+
     // Lapsed claim: gradual coordinator-hash-based crumbling
     const lapsed = findLapsedDeed(deeds, x, z, 'claim');
     if (lapsed) {
@@ -58,23 +62,26 @@ export function isExpired(edit, nowDay, deeds = [], decayScale = 1, x = 0, y = 0
       const h = coordHash(x, y, z);
       return (nowDay - lapsed.lapsedDay) > (grace + h * decayDuration);
     }
-    
+
     // Outside any claim: decays after 30 days
     return (nowDay - edit.day) >= 30;
   }
-  
+
   if (edit.cat === 'dig') {
+    // Free world: digs never backfill — deep workings stay open.
+    if (free) return false;
+
     // Protected if inside an active mine and within its depth envelope
     const mine = findActiveDeed(deeds, x, z, 'mine');
     if (mine && heightFunc) {
       const grade = heightFunc(x, z);
       if (y <= grade && y >= grade - mine.depth) return false;
     }
-    
+
     // Outside mines/in public quarries/lapsed mines: backfills after 24 days
     return (nowDay - edit.day) >= 24;
   }
-  
+
   return false;
 }
 
