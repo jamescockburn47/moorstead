@@ -266,8 +266,9 @@ export class UI {
     this.deathScreen = this.el('div', 'overlay hidden', body); this.deathScreen.id = 'death-screen';
     this.el('h1', '', this.deathScreen, 'Tha&rsquo;s Deead!');
     this.deathCause = this.el('div', '', this.deathScreen); this.deathCause.id = 'death-cause';
+    this.deathLossNote = this.el('div', 'muted-note death-loss hidden', this.deathScreen);
     this.el('div', 'muted-note', this.deathScreen,
-      'Tha keeps thi things. Tip: <b>Moorstead is safe ground</b> &mdash; nowt dark follows thee onto t&rsquo; green,<br>' +
+      'Tip: <b>Moorstead is safe ground</b> &mdash; nowt dark follows thee onto t&rsquo; green,<br>' +
       'an&rsquo; a gritstone sword (bench: 2 cobble + 1 stick) evens t&rsquo; odds out on t&rsquo; moor at neet.');
     this.btnRespawn = this.el('button', 'mc', this.deathScreen, 'Si Thee Agean (Respawn)');
     this.btnDeathQuit = this.el('button', 'mc', this.deathScreen, 'Quit to Title');
@@ -345,7 +346,7 @@ export class UI {
 <li>Check the <b>parish notice board</b> by the village cross (or press <b>Q</b> with empty hands) and take a job or two.</li>
 <li>When the light turns amber—twilight—<b>return to the village</b>. No dark creatures can set foot on Moorstead's hallowed ground. Out on the open moor at night, you are fair game.</li>
 </ol>
-<p class="how-note">If you die, you keep all your items and wake up safely on the village green. Only your pride is harmed.</p>`,
+<p class="how-note"><b>If tha falls:</b> thi tools an' thi animals are always safe. On t' open moor tha'll lose half thi materials an' half thi brass, an' wake somewhere fresh — so mind thissen. (On t' Free Moor tha keeps everything.)</p>`,
 
       'Controls': `
 <div class="controls-list">
@@ -1757,8 +1758,14 @@ export class UI {
     this.show('rangeScreen');
   }
 
-  showDeath(cause) {
+  showDeath(cause, lossNote = '') {
     this.deathCause.textContent = cause;
+    if (lossNote) {
+      this.deathLossNote.textContent = lossNote;
+      this.deathLossNote.classList.remove('hidden');
+    } else {
+      this.deathLossNote.classList.add('hidden');
+    }
     this.show('deathScreen');
   }
 }
