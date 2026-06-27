@@ -2287,6 +2287,22 @@ class Game {
     return true;
   }
 
+  // On death: keep pets (they live on player.pets) and tools; lose half of every material stack
+  // and half your brass. Relaxed worlds (free) lose nothing. The kids' agreed rule.
+  applyDeathPenalty() {
+    if (this.freeWorld()) return;            // free world is relaxed — no loss
+    const p = this.player;
+    p.brass = Math.floor((p.brass || 0) / 2);
+    for (let i = 0; i < p.slots.length; i++) {
+      const s = p.slots[i];
+      if (!s || TOOLS[s.id]) continue;       // keep tools
+      const keep = Math.floor(s.n / 2);
+      if (keep <= 0) p.slots[i] = null; else s.n = keep;
+    }
+    this.ui.invDirty = true;
+    this.ui.toast('Tha kept thi tools an’ beasts — but half thi materials an’ brass are gone.', 6000);
+  }
+
   deedTick() {
     const bairns = this.bairnLocked();
     const decayScale = bairns ? 2 : 1;
@@ -4111,6 +4127,7 @@ class Game {
         this.mouseDown = [false, false, false];
         document.exitPointerLock?.();
         this.audio.hurt();
+        this.applyDeathPenalty();
         this.ui.showDeath(this.player.deathCause);
       }
     }
