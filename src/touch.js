@@ -37,11 +37,14 @@ export function isTouchPrimary(mm, nav) {
   return (nav.maxTouchPoints || 0) > 0 && !fine;
 }
 
-// Resolve the stored mode ('auto'|'on'|'off') against detection.
+// Resolve the stored mode ('auto'|'on'|'off') against detection. A touch device may
+// opt out ('off'); a COMPUTER (non-touch-primary) is auto-detect ONLY — a stored 'on'
+// can't force the HUD on, so a stray setting (or a synced profile) never lumbers a
+// desktop player with on-screen sticks.
 export function touchMode(stored, isPrimary) {
-  if (stored === 'on') return true;
   if (stored === 'off') return false;
-  return !!isPrimary;
+  if (stored === 'on') return !!isPrimary;  // 'on' is honoured only on a touch device
+  return !!isPrimary;                         // auto
 }
 
 const MODE_KEY = 'moorcraft-touch';   // localStorage: 'auto' | 'on' | 'off'
@@ -60,6 +63,12 @@ export class TouchControls {
   wanted() {
     const primary = isTouchPrimary(q => window.matchMedia(q), navigator);
     return touchMode(this._mode, primary);
+  }
+
+  // Only a touch-primary device gets the manual on/off toggle. A computer is
+  // auto-detect only, so we hide the toggle there entirely.
+  manualToggleAllowed() {
+    return isTouchPrimary(q => window.matchMedia(q), navigator);
   }
 
   // Build (or tear down) the HUD to match wanted(). Idempotent — safe to call repeatedly.

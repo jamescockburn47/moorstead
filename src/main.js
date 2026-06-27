@@ -759,6 +759,8 @@ class Game {
     this.input = { keys: this.keys, jumpTapped: false };
     this.touch = new TouchControls(this);
     this.touch.sync();
+    // a computer is auto-detect only — hide the manual touch toggle so it can't be forced on
+    if (this.ui.btnTouch) this.ui.btnTouch.classList.toggle('hidden', !this.touch.manualToggleAllowed());
     window.addEventListener('resize', () => this.touch.sync());
   }
 
@@ -825,6 +827,7 @@ class Game {
     if (survival && this.player) {
       this.player.creative = false;
       this.player.flying = false;
+      this.player.god = false;   // god mode is a warden power — never on a survival (non-warden) player
     }
     // One-time pocket wipe so t' BAIRNS genuinely start bare-handed. Runs once
     // per account (t' flag persists), so owt they EARN after this stays put.

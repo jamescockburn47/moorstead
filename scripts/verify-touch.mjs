@@ -29,8 +29,9 @@ const mmTrue = (q) => ({ matches: q.includes('coarse') || q.includes('none') });
 ok(isTouchPrimary(mmTrue, { maxTouchPoints: 5 }) === true, 'coarse + no-hover -> touch primary');
 ok(isTouchPrimary((q) => ({ matches: q.includes('fine') }), { maxTouchPoints: 0 }) === false, 'fine pointer, no touch -> not primary');
 
-// touchMode: explicit on/off override auto.
-ok(touchMode('on', false) === true, 'mode on -> always touch');
+// touchMode: a touch device may opt on/off; a computer is auto-detect only (can't force the HUD on).
+ok(touchMode('on', true) === true, 'mode on -> touch on a touch device');
+ok(touchMode('on', false) === false, 'mode on -> NOT forced on a computer (auto-detect only)');
 ok(touchMode('off', true) === false, 'mode off -> never touch');
 ok(touchMode('auto', true) === true && touchMode('auto', false) === false, 'mode auto -> follows detection');
 
