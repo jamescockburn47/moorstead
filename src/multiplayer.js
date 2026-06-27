@@ -349,7 +349,8 @@ export class Net {
   }
 
   send(obj) {
-    if (this.connected && this.ws.readyState === 1) this.ws.send(JSON.stringify(obj));
+    if (this.connected && this.ws.readyState === 1) { this.ws.send(JSON.stringify(obj)); return true; }
+    return false;
   }
 
   sendEdit(x, y, z, id, was = 0, cat = 'build', day = 0, by = '') {
