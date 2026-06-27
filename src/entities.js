@@ -556,6 +556,29 @@ function makeRideLabel() {
   return spr;
 }
 
+// A small "❓" marker above a persona villager who has summat to say.
+// One canvas created once — no per-frame allocation.
+let _questMarkerTex = null;
+function makeQuestMarker() {
+  if (!_questMarkerTex) {
+    const c = document.createElement('canvas');
+    c.width = 64; c.height = 64;
+    const x = c.getContext('2d');
+    x.font = 'bold 42px sans-serif';
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.strokeStyle = 'rgba(0,0,0,0.85)'; x.lineWidth = 6;
+    x.strokeText('❓', 32, 32);
+    x.fillText('❓', 32, 32);
+    _questMarkerTex = new THREE.CanvasTexture(c);
+  }
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: _questMarkerTex, transparent: true, depthTest: false, opacity: 0,
+  }));
+  spr.scale.set(0.55, 0.55, 1);
+  spr.renderOrder = 51;
+  return spr;
+}
+
 // A spoken line floating ower a villager's head.
 function makeBubble(text) {
   const c = document.createElement('canvas');
@@ -1003,10 +1026,18 @@ export class Entities {
     const plate = makeNameplate(displayName);
     plate.position.y = Math.max(0.9, 1.65 * look.scale) + 0.55;
     model.group.add(plate);
+    // Quest marker: persona villagers (not pop-* crowd) get a ❓ above their head
+    const isPersona = charId && !(typeof charId === 'string' && charId.startsWith('pop-'));
+    let questMarker = null;
+    if (isPersona) {
+      questMarker = makeQuestMarker();
+      questMarker.position.y = Math.max(0.9, 1.65 * look.scale) + 1.05;
+      model.group.add(questMarker);
+    }
     const v = {
       type: 'villager',
       t: { hostile: false, speed: 1.1, name },
-      model, charId, plate,
+      model, charId, plate, questMarker,
       displayName,
       isMerlin, merlinFC: isFC, // track so we can swap outfit on season change
       pos: { x, y, z }, vel: { x: 0, y: 0, z: 0 },
@@ -2304,6 +2335,12 @@ export class Entities {
     // nameplate fades in as tha gets near
     const target = distP < 9 && !mob.chatting ? Math.min(1, (9 - distP) / 4) : 0;
     mob.plate.material.opacity += (target - mob.plate.material.opacity) * Math.min(1, dt * 8);
+    // quest marker: show for persona villagers (not chatting) between ~3m and 18m; gentle pulse
+    if (mob.questMarker) {
+      const qTarget = (!mob.chatting && distP > 2.5 && distP < 18)
+        ? 0.62 + 0.38 * Math.sin(performance.now() * 0.003) : 0;
+      mob.questMarker.material.opacity += (qTarget - mob.questMarker.material.opacity) * Math.min(1, dt * 6);
+    }
     // spoken bubble fades an' goes
     if (mob.bubble) {
       mob.bubbleT -= dt;
