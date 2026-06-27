@@ -814,7 +814,9 @@ class Game {
   }
 
   // A relaxed-survival free world (e.g. the bairns-free kids' world): builds never crumble,
-  // no deeds/licences, deep digging gated only by pick tier, a starter pack on entry.
+  // no deeds/licences, deep digging gated only by pick tier, a starter pack on entry. Deliberately
+  // admin-agnostic — the world's rules (decay-off etc.) hold no matter who's stood on it; the
+  // warden-specific exemptions live at the individual call sites (e.g. the starter pack below).
   freeWorld() {
     return this.netActive && isFreeRoom(this.netRoom);
   }
@@ -851,7 +853,7 @@ class Game {
     // Free world: relaxed survival. No bare-hands wipe (that's bairns-only above); instead a
     // one-time starter pack so a young player isn't stuck. Fills empty slots only (addItem),
     // so anything earned is kept. Persisted via player.freeStarter, like bairnFresh.
-    if (this.freeWorld() && this.player && !this.player.freeStarter) {
+    if (this.freeWorld() && !this.isAdmin() && this.player && !this.player.freeStarter) {
       this.player.freeStarter = true;
       for (const it of FREE_STARTER) this.player.addItem(it.id, it.n);
       this.ui.invDirty = true;
@@ -1775,7 +1777,9 @@ class Game {
     // the shared moor, the bairns' world AND the free kids' world all play the real c.1900 NYM
     // world. baseRoom() means shards (bairns-2, bairns-free-2) share their world's terrain too.
     const rb = baseRoom(room);
-    const seedStr = (rb === 'moor' || rb === 'bairns' || rb === 'bairns-free' || rb === 'moors1900') ? 't-moors-1900'
+    // moor, the bairns world, and every free world share the real c.1900 NYM seed; tying this to
+    // rooms.js (isBairnsRoom/isFreeRoom) means a future free room can't desync from its terrain.
+    const seedStr = (rb === 'moor' || isBairnsRoom(rb) || isFreeRoom(rb) || rb === 'moors1900') ? 't-moors-1900'
       : 't-shared-moor:' + rb;
     this.startWorld(ss(seedStr), null, new Map());
     // folk wake spread across t' villages, same one each visit
