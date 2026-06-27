@@ -848,6 +848,16 @@ class Game {
       if (this.saveNow) this.saveNow(false);
       this.ui.toast('A fresh start on t’ bairns’ world — bare hands, like everyone. Time to earn thi keep!', 6000);
     }
+    // Free world: relaxed survival. No bare-hands wipe (that's bairns-only above); instead a
+    // one-time starter pack so a young player isn't stuck. Fills empty slots only (addItem),
+    // so anything earned is kept. Persisted via player.freeStarter, like bairnFresh.
+    if (this.freeWorld() && this.player && !this.player.freeStarter) {
+      this.player.freeStarter = true;
+      for (const it of FREE_STARTER) this.player.addItem(it.id, it.n);
+      this.ui.invDirty = true;
+      if (this.saveNow) this.saveNow(false);
+      this.ui.toast('Welcome to t’ <b>Free Moor</b> — build what tha likes, nowt crumbles, no licences needed. Here’s a kit to start thee off!', 8000);
+    }
     this.ui.setCreativeButtonVisible(!survival);
   }
 
