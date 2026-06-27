@@ -1,5 +1,5 @@
 // Deeds backbone check — run wi': node scripts/verify-deeds.mjs
-import { deedFee, weeklyUpkeep, inDeed, isLapsed, DEED } from '../src/deeds.js';
+import { deedFee, weeklyUpkeep, inDeed, isLapsed, DEED, makeDeed } from '../src/deeds.js';
 
 let failed = false;
 const ok = m => console.log('  ok    ' + m);
@@ -35,6 +35,23 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
   const d = { paidUntilDay: 10 };
   (isLapsed(d, 16, 7) === false ? ok : bad)('within the grace window, not lapsed');
   (isLapsed(d, 18, 7) === true ? ok : bad)('past paidUntilDay + grace, lapsed');
+}
+
+// --- makeDeed: the shared deed-record builder (claim + mine) ---
+{
+  const claim = makeDeed('claim', 'Henry', 10, 20, 5, { radius: 8 });
+  (claim.kind === 'claim' && claim.by === 'Henry' && claim.cx === 10 && claim.cz === 20 ? ok : bad)('makeDeed claim: kind/by/cx/cz set');
+  (claim.radius === 8 && claim.depth === 0 ? ok : bad)('makeDeed claim: radius from opts, depth 0');
+  (claim.paidUntilDay === 5 + DEED.week && claim.lapsedDay === null ? ok : bad)('makeDeed claim: paid a week from now, not lapsed');
+  (typeof claim.id === 'string' && claim.id.length > 0 ? ok : bad)('makeDeed claim: has an id');
+
+  const mine = makeDeed('mine', 'Jimbob', 0, 0, 12, { depth: 10 });
+  (mine.kind === 'mine' && mine.radius === 5 && mine.depth === 10 ? ok : bad)('makeDeed mine: radius 5, depth from opts');
+  (mine.paidUntilDay === 12 + DEED.week ? ok : bad)('makeDeed mine: paid a week from now');
+
+  const a = makeDeed('claim', 'x', 0, 0, 1, { radius: 4 });
+  const b = makeDeed('claim', 'x', 0, 0, 1, { radius: 4, seq: 1 });
+  (a.id !== b.id ? ok : bad)('makeDeed: distinct ids when seq differs (no collision in a batch)');
 }
 
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));

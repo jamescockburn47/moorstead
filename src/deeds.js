@@ -11,6 +11,19 @@ export const DEED = {
   week: 7, grace: 7,                         // game-days: a week's upkeep; the lapse grace (Slice 3 scales it for bairns)
 };
 
+// Build a deed record — the one place claim/mine deeds are shaped, shared by every
+// staking path (paid board-stake AND free starting tokens). `opts.seq` (e.g. the
+// current deed count) keeps ids distinct within a single game-day batch.
+export function makeDeed(kind, by, cx, cz, day, opts = {}) {
+  const radius = kind === 'mine' ? 5 : (opts.radius ?? 8);
+  const depth = kind === 'mine' ? (opts.depth ?? 10) : 0;
+  return {
+    id: 'd' + Math.round(day * 1000) + '_' + (opts.seq || 0),
+    kind, by: by || '', cx, cz, radius, depth,
+    paidUntilDay: day + DEED.week, lapsedDay: null,
+  };
+}
+
 // The one-time stake fee, in pence, scaled by size (James: discourage land-grabs on the shared moor).
 export function deedFee(kind, radius = 0, depth = 0) {
   if (kind === 'mine') return DEED.mineFeeBase + depth * DEED.mineFeePerDepth;

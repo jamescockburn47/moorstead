@@ -89,6 +89,9 @@ export const I = {
   // Dracula flagship (Slice 1): moor-gathered defences against the night-walker.
   // Item-only, like HOLY_WATER — no placeable block, no atlas tile.
   WOLFSBANE: 126, SILVER_TOKEN: 127, GRAVE_EARTH: 128,
+  // Living Moor starting 'tokens': stake a land claim / register a mine licence
+  // wherever tha stands (free, one-use). Item-only, no placeable block.
+  CLAIM_TOKEN: 129, MINE_LICENCE: 130,
 };
 
 // Parish wardens: SHA-256 o' t' dash account id, never t' id itsen —
@@ -220,6 +223,8 @@ export const ITEM_NAMES = {
   [I.BLACKBERRY]: 'Blackberries', [I.ROSEHIP]: 'Rosehips', [I.SLOE]: 'Sloes', [I.ELDERBERRY]: 'Elderberries', [I.HAZELNUT]: 'Hazelnuts',
   [I.APPLE]: 'Apple', [I.PEAR]: 'Pear', [I.PLUM]: 'Plum',
   [I.SNOWBALL]: 'Snowball',
+  [I.CLAIM_TOKEN]: 'Claim Stake',
+  [I.MINE_LICENCE]: 'Mining Licence',
 };
 
 export function itemName(id) {
@@ -351,4 +356,5 @@ export const CREATIVE_ITEMS = [
   I.FISHING_ROD, I.RAW_TROUT, I.SEA_FISH, I.COOKED_FISH,
   I.HOLY_WATER, I.WOODEN_STAKE, I.HOLY_STAKE, I.DRACULA_JOURNAL,
   I.WOLFSBANE, I.SILVER_TOKEN, I.GRAVE_EARTH,
+  I.CLAIM_TOKEN, I.MINE_LICENCE,
 ];

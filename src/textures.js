@@ -1183,6 +1183,22 @@ const ITEM_ICON_PAINTERS = {
     ctx.save(); ctx.translate(16, 16); ctx.rotate(-Math.PI / 4);
     ctx.fillRect(-2, -12, 4, 24); ctx.restore();
   },
+  [I.CLAIM_TOKEN](ctx) {
+    // a surveyor's claim stake: a wooden post wi' a little board nailed near t' top
+    ctx.fillStyle = '#7a5a36'; ctx.fillRect(14, 8, 4, 20);          // the post
+    ctx.fillStyle = '#5a3f24'; ctx.fillRect(14, 8, 1, 20);          // shaded edge
+    ctx.fillStyle = '#d8c89a'; ctx.fillRect(9, 7, 14, 8);          // the board
+    ctx.fillStyle = '#7a5a36'; ctx.fillRect(9, 7, 14, 1); ctx.fillRect(9, 14, 14, 1);
+    ctx.fillStyle = '#3a2e1c'; ctx.fillRect(11, 10, 10, 1); ctx.fillRect(11, 12, 7, 1); // writ on it
+  },
+  [I.MINE_LICENCE](ctx) {
+    // a sealed licence: a scroll/paper wi' lines an' a red wax seal
+    ctx.fillStyle = '#ece2c4'; ctx.fillRect(7, 6, 18, 21);         // the paper
+    ctx.fillStyle = '#c9bd99'; ctx.fillRect(7, 6, 18, 1); ctx.fillRect(7, 26, 18, 1);
+    ctx.fillStyle = '#5a5240';
+    for (let y = 10; y <= 20; y += 3) ctx.fillRect(10, y, 12, 1);  // lines of text
+    ctx.fillStyle = '#a02828'; ctx.beginPath(); ctx.arc(20, 23, 3.5, 0, 7); ctx.fill(); // wax seal
+  },
   [I.COAL_LUMP](ctx) {
     ctx.fillStyle = '#1c1c1c'; ctx.beginPath(); ctx.arc(16, 17, 9, 0, 7); ctx.fill();
     ctx.fillStyle = '#383838'; ctx.fillRect(11, 12, 4, 4); ctx.fillRect(18, 18, 3, 3);

@@ -13,7 +13,7 @@ import { Player } from './player.js';
 import * as npc from './npc.js';
 import { Quests, wantGiants, wantWreck, wantHound } from './quests.js';
 import { Economy, bestMarket, FREIGHT_ALLOWANCE, farmRegisterCheck, CHARTER_FEE, livestockPrice, droveValue, convertAt, marketTownName } from './economy.js';
-import { deedFee, weeklyUpkeep, isLapsed, DEED, findActiveDeed, findLapsedDeed, inDeed } from './deeds.js';
+import { deedFee, weeklyUpkeep, isLapsed, DEED, findActiveDeed, findLapsedDeed, inDeed, makeDeed } from './deeds.js';
 import { gatherContext, submitFeedback } from './feedback.js';
 import { miningDigGuide } from './mining-guide.js';
 import { mayDigDeep, categoryOf } from './editledger.js';
@@ -605,7 +605,7 @@ class Game {
       ui.btnTouch.innerHTML = 'Touch controls: ' + mode.charAt(0).toUpperCase() + mode.slice(1);
     });
     ui.btnCreative.addEventListener('click', () => {
-      if (this.bairnLocked()) { ui.toast('Tha’s on t’ bairns’ world — it’s survival here. Tha has to earn thi blocks an’ tools!', 4000); return; }
+      if (this.creativeLocked()) { ui.toast('Tha’s on t’ shared moor — it’s survival here. Tha has to earn thi blocks an’ tools!', 4000); return; }
       this.player.creative = !this.player.creative;
       if (!this.player.creative) this.player.flying = false;
       ui.toast(this.player.creative ? 'Creative mode: tha can fly an&rsquo; all (double-tap Space).' : 'Survival mode: watch thissen.');
@@ -810,28 +810,35 @@ class Game {
     return this.netActive && this.netRoom === 'bairns' && !this.isAdmin();
   }
 
+  // Survival is enforced for EVERYONE on the shared world (any room) — only wardens
+  // (James) keep the creative cupboard. The bare-hands pocket-wipe below stays
+  // bairns-only; the adult shared rooms keep whatever folk have earned.
+  creativeLocked() {
+    return this.netActive && !this.isAdmin();
+  }
+
   // Force survival an' hide t' Creative toggle when t' lock's on. Called on world
   // entry AND after t' relay restores pockets — an owd save could carry a
   // creative flag frae afore t' lock existed, so we re-assert it.
   enforceBairnRules() {
-    const locked = this.bairnLocked();
-    if (locked && this.player) {
+    const survival = this.creativeLocked();   // no creative on any shared world (non-warden)
+    if (survival && this.player) {
       this.player.creative = false;
       this.player.flying = false;
-      // One-time pocket wipe so t' kids genuinely start bare-handed. Runs once
-      // per account (t' flag persists), so owt they EARN after this stays put.
-      // Survives t' "client re-saved its owd inventory" race: it clears in
-      // memory on load, afore t' next save, every load until t' flag sticks.
-      if (!this.player.bairnFresh) {
-        this.player.bairnFresh = true;
-        this.player.slots = new Array(36).fill(null);
-        this.player.hotbar = 0;
-        this.ui.invDirty = true;
-        if (this.saveNow) this.saveNow(false);
-        this.ui.toast('A fresh start on t’ bairns’ world — bare hands, like everyone. Time to earn thi keep!', 6000);
-      }
     }
-    this.ui.setCreativeButtonVisible(!locked);
+    // One-time pocket wipe so t' BAIRNS genuinely start bare-handed. Runs once
+    // per account (t' flag persists), so owt they EARN after this stays put.
+    // Survives t' "client re-saved its owd inventory" race: it clears in
+    // memory on load, afore t' next save, every load until t' flag sticks.
+    if (this.bairnLocked() && this.player && !this.player.bairnFresh) {
+      this.player.bairnFresh = true;
+      this.player.slots = new Array(36).fill(null);
+      this.player.hotbar = 0;
+      this.ui.invDirty = true;
+      if (this.saveNow) this.saveNow(false);
+      this.ui.toast('A fresh start on t’ bairns’ world — bare hands, like everyone. Time to earn thi keep!', 6000);
+    }
+    this.ui.setCreativeButtonVisible(!survival);
   }
 
   renderAdminPanel() {
@@ -2198,41 +2205,31 @@ class Game {
   }
 
   // ---- Living Moor Slice 2: deeds — stake a plot, keep it with upkeep (effects land in Slices 3-4) ----
-  stakeClaim(radius = 8) {
+  stakeClaim(radius = 8, free = false) {
     const fee = deedFee('claim', radius);
-    if (!this.economy.canAfford(fee)) { this.ui.toast(`A claim here is <b>${this.economy.format(fee)}</b> &mdash; tha&rsquo;s not the brass.`, 5000); return false; }
+    if (!free && !this.economy.canAfford(fee)) { this.ui.toast(`A claim here is <b>${this.economy.format(fee)}</b> &mdash; tha&rsquo;s not the brass.`, 5000); return false; }
     const p = this.player.pos, cx = Math.round(p.x), cz = Math.round(p.z);
     if (this.world.deeds.some(d => !d.lapsedDay && Math.hypot(d.cx - cx, d.cz - cz) < d.radius + radius)) {
       this.ui.toast('That overlaps a claim already staked here.', 4000); return false;
     }
-    this.economy.spend(fee);
-    this.world.deeds.push({ id: 'd' + Math.round(this.sky.day * 1000) + '_' + this.world.deeds.length, kind: 'claim', by: this.player.name || '', cx, cz, radius, depth: 0, paidUntilDay: this.sky.day + DEED.week, lapsedDay: null });
+    if (!free) this.economy.spend(fee);
+    this.world.deeds.push(makeDeed('claim', this.player.name || '', cx, cz, this.sky.day, { radius, seq: this.world.deeds.length }));
     if (this.net) this.net.sendDeeds(this.world.deeds);
-    this.ui.toast(`🪧 <b>Claim staked</b> &mdash; ${radius}m round, paid up a week. Mind t&rsquo; upkeep or it lapses.`, 6000);
+    this.ui.toast(`🪧 <b>Claim staked</b>${free ? ' wi&rsquo; thi starting token' : ''} &mdash; ${radius}m round, paid up a week. Mind t&rsquo; upkeep or it lapses.`, 6000);
     if (this.saveNow) this.saveNow(false);
     return true;
   }
 
-  stakeMine(cx, cz, depth = 10) {
+  stakeMine(cx, cz, depth = 10, free = false) {
     const fee = deedFee('mine', 5, depth);
-    if (!this.economy.canAfford(fee)) { this.ui.toast(`A mine license here is <b>${this.economy.format(fee)}</b> &mdash; tha&rsquo;s not the brass.`, 5000); return false; }
+    if (!free && !this.economy.canAfford(fee)) { this.ui.toast(`A mine license here is <b>${this.economy.format(fee)}</b> &mdash; tha&rsquo;s not the brass.`, 5000); return false; }
     if (this.world.deeds.some(d => d.kind === 'mine' && !d.lapsedDay && Math.hypot(d.cx - cx, d.cz - cz) < d.radius + 5)) {
       this.ui.toast('Too close to another active mine.', 4000); return false;
     }
-    this.economy.spend(fee);
-    this.world.deeds.push({
-      id: 'd' + Math.round(this.sky.day * 1000) + '_' + this.world.deeds.length,
-      kind: 'mine',
-      by: this.player.name || '',
-      cx,
-      cz,
-      radius: 5,
-      depth,
-      paidUntilDay: this.sky.day + DEED.week,
-      lapsedDay: null
-    });
+    if (!free) this.economy.spend(fee);
+    this.world.deeds.push(makeDeed('mine', this.player.name || '', cx, cz, this.sky.day, { depth, seq: this.world.deeds.length }));
     if (this.net) this.net.sendDeeds(this.world.deeds);
-    this.ui.toast(`🪧 <b>Mining licence registered</b> &mdash; 5m radius, depth ${depth}m. Deep digging cleared.`, 6000);
+    this.ui.toast(`🪧 <b>Mining licence registered</b>${free ? ' wi&rsquo; thi starting token' : ''} &mdash; 5m radius, depth ${depth}m. Deep digging cleared.`, 6000);
     if (this.saveNow) this.saveNow(false);
     return true;
   }
@@ -3246,6 +3243,20 @@ class Game {
 
   useItem() {
     if (this.player.dead) return;
+
+    // Starting 'tokens': stake a claim / register a mining licence wherever tha
+    // stands. Free, one-use — consumed only on a successful stake.
+    const held0 = this.player.heldItem();
+    if (held0 && held0.id === I.CLAIM_TOKEN) {
+      if (this.stakeClaim(8, true)) this.player.consumeHeld();
+      return;
+    }
+    if (held0 && held0.id === I.MINE_LICENCE) {
+      const p = this.player.pos;
+      if (this.stakeMine(Math.round(p.x), Math.round(p.z), 10, true)) this.player.consumeHeld();
+      return;
+    }
+
     const hit = this.targetBlock();
 
     // a villager to natter wi'?
