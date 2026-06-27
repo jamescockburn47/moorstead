@@ -16,7 +16,7 @@ export const DEED = {
 // current deed count) keeps ids distinct within a single game-day batch.
 export function makeDeed(kind, by, cx, cz, day, opts = {}) {
   const radius = kind === 'mine' ? 5 : (opts.radius ?? 8);
-  const depth = kind === 'mine' ? (opts.depth ?? 10) : 0;
+  const depth = kind === 'mine' ? (opts.depth ?? 20) : 0;
   return {
     id: 'd' + Math.round(day * 1000) + '_' + (opts.seq || 0),
     kind, by: by || '', cx, cz, radius, depth,

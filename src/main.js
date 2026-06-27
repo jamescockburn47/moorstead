@@ -2262,7 +2262,7 @@ class Game {
   upgradeMine(id) {
     const d = this.world.deeds.find(x => x.id === id);
     if (!d || d.kind !== 'mine') return false;
-    if (d.depth >= 40) { this.ui.toast("Mine is already at max depth (40m).", 4000); return false; }
+    if (d.depth >= 60) { this.ui.toast("Mine is already at max depth (60m).", 4000); return false; }
     const nextDepth = d.depth + 10;
     const upgradeCost = deedFee('mine', 5, nextDepth) - deedFee('mine', 5, d.depth);
     if (!this.economy.canAfford(upgradeCost)) { this.ui.toast(`An upgrade is <b>${this.economy.format(upgradeCost)}</b> &mdash; tha&rsquo;s not the brass.`, 5000); return false; }
@@ -3315,7 +3315,7 @@ class Game {
     }
     if (held0 && held0.id === I.MINE_LICENCE) {
       const p = this.player.pos;
-      if (this.stakeMine(Math.round(p.x), Math.round(p.z), 10, true)) this.player.consumeHeld();
+      if (this.stakeMine(Math.round(p.x), Math.round(p.z), 20, true)) this.player.consumeHeld();
       return;
     }
 
