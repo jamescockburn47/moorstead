@@ -14,6 +14,7 @@ import * as npc from './npc.js';
 import { Quests, wantGiants, wantWreck, wantHound } from './quests.js';
 import { Economy, bestMarket, FREIGHT_ALLOWANCE, farmRegisterCheck, CHARTER_FEE, livestockPrice, droveValue, convertAt, marketTownName } from './economy.js';
 import { deedFee, weeklyUpkeep, isLapsed, DEED, findActiveDeed, findLapsedDeed, inDeed, makeDeed, lapsesUnderUpkeep } from './deeds.js';
+import { isFreeRoom, isBairnsRoom, baseRoom, FREE_STARTER } from './rooms.js';
 import { gatherContext, submitFeedback } from './feedback.js';
 import { miningDigGuide } from './mining-guide.js';
 import { mayDigDeep, categoryOf } from './editledger.js';
@@ -809,7 +810,13 @@ class Game {
   // kids have to earn their blocks an' tools. Wardens (James) keep full run o'
   // t' place on every world.
   bairnLocked() {
-    return this.netActive && this.netRoom === 'bairns' && !this.isAdmin();
+    return this.netActive && isBairnsRoom(this.netRoom) && !this.isAdmin();
+  }
+
+  // A relaxed-survival free world (e.g. the bairns-free kids' world): builds never crumble,
+  // no deeds/licences, deep digging gated only by pick tier, a starter pack on entry.
+  freeWorld() {
+    return this.netActive && isFreeRoom(this.netRoom);
   }
 
   // Survival is enforced for EVERYONE on the shared world (any room) — only wardens
@@ -1755,10 +1762,11 @@ class Game {
     // t' warden may walk onto any world — bairns or adults, not just their own
     if (this.isAdmin()) room = (await this.ui.pickWorld(room)) || room;
     this.netRoom = room;
-    // the shared moor AND the bairns' world now play the real c.1900 NYM world
-    // (James's call, 2026-06-27); the adult side-worlds keep their own stylised seeds
-    const seedStr = (room === 'moor' || room === 'bairns' || room === 'moors1900') ? 't-moors-1900'
-      : 't-shared-moor:' + room;
+    // the shared moor, the bairns' world AND the free kids' world all play the real c.1900 NYM
+    // world. baseRoom() means shards (bairns-2, bairns-free-2) share their world's terrain too.
+    const rb = baseRoom(room);
+    const seedStr = (rb === 'moor' || rb === 'bairns' || rb === 'bairns-free' || rb === 'moors1900') ? 't-moors-1900'
+      : 't-shared-moor:' + rb;
     this.startWorld(ss(seedStr), null, new Map());
     // folk wake spread across t' villages, same one each visit
     const who = (this.auth && this.auth.acct) || this.devicePid();
