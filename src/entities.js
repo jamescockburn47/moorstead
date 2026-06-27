@@ -1983,7 +1983,7 @@ export class Entities {
 
       // land beasts shy off open water — they'll not walk out onto t' sea (which left
       // 'em paddling on t' surface). Turn back at t' water's edge an' pick a new way.
-      if (!t.fly && !mob.owner && (Math.abs(wishX) > 0.1 || Math.abs(wishZ) > 0.1)) {
+      if (!t.fly && (Math.abs(wishX) > 0.1 || Math.abs(wishZ) > 0.1)) {
         const ax = Math.floor(mob.pos.x + wishX * 1.1), az = Math.floor(mob.pos.z + wishZ * 1.1);
         // find the surface in the column ahead (the sea sits LOWER than the shore, so a
         // plain same-level check misses the ledge); turn back if she'd step onto water.
@@ -2014,7 +2014,7 @@ export class Entities {
       }
       // open water is a WALL for land beasts. The sea sits LOWER than the shore, so scan
       // the column below her feet for the first solid/liquid.
-      if (!t.fly && !mob.owner) {
+      if (!t.fly) {
         const fx = Math.floor(mob.pos.x), fz = Math.floor(mob.pos.z), fy0 = Math.floor(mob.pos.y + 0.2);
         const seaUnder = (cx, cz) => { for (let y = fy0; y > fy0 - 16; y--) { const b = this.world.getBlock(cx, y, cz); if (b !== B.AIR) return b === B.WATER; } return false; };
         if (seaUnder(fx, fz)) {
@@ -2022,10 +2022,12 @@ export class Entities {
             // she stepped FROM dry land out over the sea — shove her straight back
             mob.pos.x = preX; mob.pos.z = preZ; mob.vel.x = 0; mob.vel.z = 0; mob.waterT = 0;
           } else {
-            // genuinely adrift (fell in, or no dry land to step back to) — let her go so
-            // nowt's ever seen paddling on t' surface
+            // genuinely adrift (fell in, or no dry land to step back to)
             mob.waterT = (mob.waterT || 0) + dt;
-            if (mob.waterT > 1.0) { this.scene.remove(mob.model.group); mob.dead = true; continue; }
+            if (mob.waterT > 1.0) {
+              if (mob.owner) { this.rescueStuck(mob); mob.waterT = 0; } // tame stock are pulled out, not drowned
+              else { this.scene.remove(mob.model.group); mob.dead = true; continue; } // wild beasts let go so nowt's seen paddling
+            }
           }
         } else {
           mob.waterT = 0;

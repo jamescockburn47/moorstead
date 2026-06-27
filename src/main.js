@@ -85,6 +85,7 @@ function lerpAngle(a, b, t) {
   return a + d * t;
 }
 import { Entities, MOB_TYPES } from './entities.js';
+import { auditMobs } from './invariants.js';
 import { PET_BENEFIT, PET_KINDS, TAME_GOAL } from './pets.js';
 import { EXTRA_FOLK, moodWord } from './villagerlife.js';
 import { Sky } from './sky.js';
@@ -257,6 +258,17 @@ class Game {
         if (!G.train) return null;
         const cg = G.train.carriage.group;
         return { trainState: G.trainState ? { ...G.trainState } : null, carriagePos: fmt(cg.position), riding: !!G.ride };
+      },
+      // dev: scan the LIVE world for gameplay-invariant violations — e.g. a tame
+      // beast standing on a river (the thing tha can SEE but the old verify suite
+      // couldn't). Same catalogue runs headlessly in scripts/verify-invariants.mjs.
+      //   moorstead.debug.audit()
+      audit() {
+        if (!G.world || !G.entities) return 'no world loaded';
+        const violations = auditMobs(G.world, G.entities.mobs);
+        if (violations.length) console.warn(`[audit] ${violations.length} violation(s)`, violations);
+        else console.log('[audit] clean — no invariant violations');
+        return { count: violations.length, violations };
       },
       warp(target) {
         const geo = G.world && G.world.gen && G.world.gen.geo;
