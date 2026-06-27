@@ -332,6 +332,20 @@ input.seed {
 .inv-grid.creative-grid { grid-template-columns: repeat(9, 48px); max-height: 300px; overflow-y: auto; }
 .inv-title { font-size: 18px; color: var(--gold); margin: 10px 0 6px; font-weight: 700; }
 .inv-flex { display: flex; gap: 26px; align-items: flex-start; }
+.inv-bin {
+  display: inline-block; margin-top: 8px; padding: 5px 14px;
+  background: rgba(160,40,30,0.22); border: 1px dashed rgba(200,80,60,0.55);
+  border-radius: 5px; color: #c8796a; font-size: 13px; cursor: pointer;
+  user-select: none;
+}
+.inv-bin:hover { background: rgba(200,50,35,0.38); border-color: rgba(220,100,80,0.8); color: #f09080; }
+.inv-bin {
+  display: inline-block; margin-top: 8px; padding: 5px 14px;
+  background: rgba(160,40,30,0.22); border: 1px dashed rgba(200,80,60,0.55);
+  border-radius: 5px; color: #c8796a; font-size: 13px; cursor: pointer;
+  user-select: none;
+}
+.inv-bin:hover { background: rgba(200,50,35,0.38); border-color: rgba(220,100,80,0.8); color: #f09080; }
 
 .recipes { width: 320px; max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
 .recipe {

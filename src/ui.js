@@ -340,7 +340,7 @@ export class UI {
 <li><b>Punch a tree</b> (hold left-click on the trunk) to gather logs. Press <b>E</b> to open your pockets, craft <b>Planks</b>, then <b>Sticks</b>, and then a <b>Joiner’s Bench</b>. Place the bench (right-click) and stand near it to unlock advanced recipes.</li>
 <li>Dig a bit of gritstone with a <b>wooden pickaxe</b>, then make a <b>gritstone sword and pickaxe</b>. A sword is essential: 2 cobbles + 1 stick.</li>
 <li>Gather some food for your pockets. <b>Right-click</b> a glinting <b>bilberry bush</b> in late summer to pick the berries (the bush stays and fruits again), or hunt a sheep for mutton (but not inside the village bounds, or people will gossip).</li>
-<li>Check the <b>parish notice board</b> by the village cross (or press <b>Q</b>) and take a job or two.</li>
+<li>Check the <b>parish notice board</b> by the village cross (or press <b>Q</b> with empty hands) and take a job or two.</li>
 <li>When the light turns amber—twilight—<b>return to the village</b>. No dark creatures can set foot on Moorstead's hallowed ground. Out on the open moor at night, you are fair game.</li>
 </ol>
 <p class="how-note">If you die, you keep all your items and wake up safely on the village green. Only your pride is harmed.</p>`,
@@ -356,7 +356,7 @@ export class UI {
 <b>Shift</b> Sneak (prevents falling off edges)<br>
 <b>1&ndash;9 / mouse wheel</b> Select hotbar slot<br>
 <b>E</b> Open pockets (inventory & crafting)<br>
-<b>Q</b> Open venture journal (notice board)<br>
+<b>Q</b> Drop held item (throw it on t’ ground) — or open notice board when nowt’s in hand<br>
 <b>T</b> Talk in village chat (covers ~60m)<br>
 <b>N</b> Sleep (available at night under a roof, near a light source)<br>
 <b>M</b> Mute sound<br>
@@ -639,6 +639,15 @@ export class UI {
     for (const [k, b] of Object.entries(this.howTabBtns)) {
       b.classList.toggle('active', k === key);
     }
+  }
+
+  // Open the Ow Ter Play handbook to a named tab — called by onboarding / hints.
+  openHow(tabName) {
+    if (this.howTabBtns && this.howTabBtns[tabName]) {
+      this.howTabBtns[tabName].click();
+    }
+    this.show('howScreen');
+    if (this.game && this.game.state === 'playing') this.game.state = 'paused';
   }
 
   // ============ screens ============
@@ -1580,6 +1589,22 @@ export class UI {
       });
       s.addEventListener('contextmenu', e => e.preventDefault());
     }
+
+    // Bin: drag any stack here to drop it in the world (or press Q while holding summat)
+    const bin = this.el('div', 'inv-bin', left);
+    bin.title = 'Drag a stack here to throw it away (or press Q while holding summat)';
+    bin.innerHTML = '🗑 Bin';
+    bin.addEventListener('mousedown', e => {
+      e.preventDefault();
+      if (this.drag) {
+        this.game.dropAtPlayer(this.drag.id, this.drag.n);
+        this.drag = null;
+        this.refreshDrag();
+        this.invDirty = true;
+        this.openInventory(player, this.game.nearBench());
+      }
+    });
+    bin.addEventListener('contextmenu', e => e.preventDefault());
 
     if (!player.creative) {
       const right = this.el('div', '', flex);
