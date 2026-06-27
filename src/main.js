@@ -1692,11 +1692,13 @@ class Game {
       if (r.mob === mob) { targetPid = pid; break; }
     }
     if (!targetPid) { this.ui.toast('Can’t find that soul on t’ relay.'); return; }
-    const goods = [[held.id, held.n]];
-    this.net.send({ type: 'gift', to: targetPid, goods });
-    this.player.slots[this.player.hotbar] = null;
+    const sent = this.net.send({ type: 'gift', to: targetPid, goods: [[held.id, 1]] });
+    if (!sent) { this.ui.toast('Couldn’t send — try again.'); return; }
+    const slot = this.player.slots[this.player.hotbar];
+    if (slot) { slot.n -= 1; if (slot.n <= 0) this.player.slots[this.player.hotbar] = null; }
     this.ui.invDirty = true;
-    this.ui.toast(`Tha hands <b>${held.n}× ${itemName(held.id)}</b> to <b>${mob.displayName}</b>.`, 4000);
+    const more = slot && slot.n > 0 ? ' Right-click again to give more.' : '';
+    this.ui.toast(`Gave a <b>${itemName(held.id)}</b> to <b>${mob.displayName}</b>.${more}`, 4000);
   }
 
   receiveGift(fromName, goods) {
@@ -4238,7 +4240,8 @@ class Game {
         document.exitPointerLock?.();
         this.audio.hurt();
         this.applyDeathPenalty();
-        this.ui.showDeath(this.player.deathCause);
+        const lossNote = this.freeWorld() ? '' : 'Tha lost half thi materials an’ half thi brass — but thi tools an’ thi animals are safe.';
+        this.ui.showDeath(this.player.deathCause, lossNote);
       }
     }
 
