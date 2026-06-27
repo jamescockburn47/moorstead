@@ -41,7 +41,7 @@ import { startLiveWeather } from './weather-live.js';
 import { temperatureTarget, stepTemperature } from './temperature.js';
 import { boardingFolk } from './trainfolk.js';
 import { CarolBox } from './carolBox.js';
-import { RosterClient } from './roster.js';
+import { RosterClient, invalidateSurfCache } from './roster.js';
 import { TouchControls } from './touch.js';
 import { startUpdateCheck } from './update-check.js';
 import { installKiosk } from './kiosk.js';
@@ -367,6 +367,9 @@ class Game {
       this.rosterClient = new RosterClient(this);   // distinct from this.roster (the personas list)
       this.rosterClient.start();
     }
+    // Whenever a block changes, invalidate the roster surface-height cache for that column
+    // so NPC standing heights update within a frame or two of a platform rebuild.
+    this.world.onBlockSet = (x, _y, z) => invalidateSurfCache(x, z);
     this.sky = new Sky(this.scene, this.camera);
     this.storm = new Storm(this); // the Dracula boss-battle storm (scoped to the fight)
     this.spawn = this.world.gen.findSpawn();

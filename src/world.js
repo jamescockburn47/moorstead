@@ -16,6 +16,7 @@ export class World {
     this.gen = new Gen(seed);
     this.chunks = new Map();
     this.savedChunks = savedChunks || new Map(); // "cx,cz" -> Uint8Array
+    this.onBlockSet = null;      // optional callback(x, y, z, id) — wired by main.js to invalidate surface caches
     this.editLedger = new Map(); // "x,y,z" -> { cat, day, by, was } — harvest edits awaiting regrowth
     this.forageLedger = new Map(); // "x,y,z" -> pickedDay — picked forage cells awaiting regrowth
     this.snowmanLedger = new Map(); // "x,y,z" -> { cfg, day } — player-built snowmen; melt in the spring thaw
@@ -111,6 +112,7 @@ export class World {
     if (lx === CHUNK - 1) this.markDirty(cx + 1, cz);
     if (lz === 0) this.markDirty(cx, cz - 1);
     if (lz === CHUNK - 1) this.markDirty(cx, cz + 1);
+    if (this.onBlockSet) this.onBlockSet(x, y, z, id);
   }
 
   markDirty(cx, cz) {

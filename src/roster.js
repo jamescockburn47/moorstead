@@ -18,6 +18,12 @@ export const RENDER_FRACTION = 0.6;
 // Cached per column — built geometry is effectively static.
 const _surfCache = new Map();
 export function __resetSurfCache() { _surfCache.clear(); }   // test hook: stub worlds reuse columns
+// Invalidate the surface cache for a single column (call after any block edit near an NPC).
+// Passing no args clears the whole cache (safe; it just re-scans on next access).
+export function invalidateSurfCache(x, z) {
+  if (x === undefined) { _surfCache.clear(); return; }
+  _surfCache.delete(Math.round(x) + ',' + Math.round(z));
+}
 export function surfaceHeight(world, geo, x, z) {
   const rx = Math.round(x), rz = Math.round(z);
   const dem = geo.height(rx, rz);
@@ -145,8 +151,8 @@ export function ridesThisLeg(npc, from, to, geo) {
   return u < (RIDE_BASE + roleBonus + distBonus);
 }
 
-export const PLATFORM_CAP = 5;     // most NPCs allowed to gather on one platform at once
-export const WAIT_LEAD = 75;       // seconds before a train is due that a ranked NPC walks to the platform
+export const PLATFORM_CAP = 3;     // most NPCs allowed to gather on one platform at once (reduced from 5 to cut loitering)
+export const WAIT_LEAD = 45;       // seconds before a train is due that a ranked NPC walks to the platform (reduced from 75)
 
 // This id's rank (0 = first) among the ids waiting for the SAME (line, from). Deterministic by
 // id-hash, with the id string as a tiebreak, so the set of approachers is stable frame-to-frame.
@@ -722,8 +728,8 @@ export class RosterClient {
   // who are waiting for a train that isn't due yet (so they wait in town, not on the platform).
   _potterAt(m, anchor, nowEff, dt) {
     if (m._ambleT == null || nowEff > m._ambleT) {
-      m._ambleT = nowEff + 5 + Math.random() * 8;
-      const r = Math.random() * 2.2, ang = Math.random() * Math.PI * 2;
+      m._ambleT = nowEff + 4 + Math.random() * 7;
+      const r = Math.random() * 5.0, ang = Math.random() * Math.PI * 2;
       const cx = anchor.x + Math.cos(ang) * r, cz = anchor.z + Math.sin(ang) * r;
       const fromG = this.geo.height(Math.round(anchor.x), Math.round(anchor.z));
       if (walkableStep(this.world, this.geo, cx, cz, fromG)) { m._ambleDX = Math.cos(ang) * r; m._ambleDZ = Math.sin(ang) * r; }
