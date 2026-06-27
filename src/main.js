@@ -3108,7 +3108,7 @@ class Game {
             else if (held.id === I.I_PICK) pickType = 'iron';
           }
 
-          const check = mayDigDeep(hit.y, grade, mine, pickType, allowedFixtures);
+          const check = mayDigDeep(hit.y, grade, mine, pickType, allowedFixtures, this.freeWorld());
           if (!check.allowed) {
             this.breakProgress = 0;
             this.ui.drawBreakProgress(0);
@@ -3979,7 +3979,7 @@ class Game {
       if (regenDay !== this._lastExpireDay) {
         this._lastExpireDay = regenDay;
         const decayScale = this.bairnLocked() ? 2 : 1;
-        this.world.expireEdits(this.sky.day, decayScale);
+        this.world.expireEdits(this.sky.day, decayScale, this.freeWorld());
         this.world.expireForage(this.sky.day);
         this.world.growTrees(this.sky.day);
         this.deedTick();

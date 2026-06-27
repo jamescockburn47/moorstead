@@ -135,12 +135,12 @@ export class World {
   }
 
   // Revert expired edits: backfill holes, regrow plants/ores, and crumble unclaimed/lapsed builds.
-  expireEdits(nowDay, decayScale = 1) {
+  expireEdits(nowDay, decayScale = 1, free = false) {
     let n = 0;
     const heightFunc = (x, z) => this.gen.height(x, z);
     for (const [k, e] of this.editLedger) {
       const [x, y, z] = k.split(',').map(Number);
-      if (!isExpired(e, nowDay, this.deeds, decayScale, x, y, z, heightFunc)) continue;
+      if (!isExpired(e, nowDay, this.deeds, decayScale, x, y, z, heightFunc, free)) continue;
       if (!this.isLoaded(x, z)) continue;          // grows back next time its chunk is loaded
       
       const cur = this.getBlock(x, y, z);
