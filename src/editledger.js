@@ -103,6 +103,7 @@ export function depthBandFor(depthBelowGrade) {
 export function mayDigDeep(y, grade, mineDeed, heldPickType, allowedFixtures = [], free = false) {
   if (y >= grade - 1) return { allowed: true }; // within 1-block surface skim
 
+  // computed before the free/mine guards so both paths share the value
   const depth = grade - y;
 
   if (!free) {

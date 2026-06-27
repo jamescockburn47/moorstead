@@ -45,6 +45,7 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
   (mayDigDeep(grade - 15, grade, null, 'wood', [], true).allowed === false ? ok : bad)('free world: too weak a pick for the depth is still refused (pick tier kept)');
   (mayDigDeep(grade - 15, grade, null, 'stone', [], true).allowed === true ? ok : bad)('free world: right pick + no fixture needed = allowed');
   (mayDigDeep(grade - 5, grade, null, 'wood', [], false).reason === 'nomine' ? ok : bad)('survival world: deep-dig with no mine is still refused');
+  (mayDigDeep(grade - 5, grade, { depth: 20 }, 'wood', [], false).allowed === true ? ok : bad)('survival world: dig within an active mine depth envelope is allowed');
 }
 
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));
