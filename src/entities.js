@@ -2004,7 +2004,7 @@ export class Entities {
 
       // ground-animal separation: stop beasts merging into one blob. A quick scan
       // of nearby ground mobs — skip flyers, cobles, villagers an' remote/streamed folk.
-      // O(n) in practice (capped by dist²); a gentle nudge, nowt jittery.
+      // O(n²) in the worst case; the dist² early-out keeps it cheap for sparse worlds.
       if (!t.fly && mob.type !== 'coble' && mob.type !== 'villager' && !mob.streamed && !mob.isRemotePlayer && !mob.chatting) {
         const SEP_R2 = 0.64; // 0.8² — separation radius in blocks²
         const SEP_FORCE = 6;  // nudge strength
@@ -2013,7 +2013,8 @@ export class Entities {
           if (o === mob || o.dead || o.t.fly || o.type === 'coble' || o.type === 'villager' || o.streamed || o.isRemotePlayer) continue;
           const ox = mob.pos.x - o.pos.x, oz = mob.pos.z - o.pos.z;
           const dd = ox * ox + oz * oz;
-          if (dd < SEP_R2 && dd > 0.0001) { const d = Math.sqrt(dd); sx += ox / d; sz += oz / d; }
+          if (dd >= SEP_R2) continue; // early out — mobs are far apart, skip inner work
+          if (dd > 0.0001) { const d = Math.sqrt(dd); sx += ox / d; sz += oz / d; }
         }
         if (sx !== 0 || sz !== 0) { mob.vel.x += sx * SEP_FORCE * dt; mob.vel.z += sz * SEP_FORCE * dt; }
       }
