@@ -309,11 +309,13 @@ export class MoorsGeography {
       const T = this.coastCliffTop(x, z);
       const BEACH = 6, FLAT = 10, TAPER = 6;
       const RISE = Math.max(1, Math.floor(T) - 1);
-      const COAST_W = BEACH + RISE;
+      // stretch t' rise to 2 horizontal blocks per 1 vertical — walkable terrace
+      // instead o' a near-sheer wall; same total height, same beach/flat/taper.
+      const COAST_W = BEACH + RISE * 2;
       const cd = this._coastDist(x, z, COAST_W + FLAT + TAPER);
       if (cd < Infinity) {
         const prof = cd <= BEACH ? 1
-          : cd <= COAST_W ? 1 + (cd - BEACH)
+          : cd <= COAST_W ? 1 + (cd - BEACH) / 2
           : cd <= COAST_W + FLAT ? T
           : T * Math.max(0, 1 - (cd - COAST_W - FLAT) / TAPER);
         // SET on the shore (clean descent, real beach, no pre-cliff bump); raise-only inland.
