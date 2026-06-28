@@ -326,6 +326,7 @@ class Game {
     // (persistent, saved); a typed seed still makes a custom stylised world to explore.
     const seed = seedStr ? strSeed(seedStr) : strSeed('t-moors-1900');
     this.startWorld(seed, null, new Map());
+    this.ensureDaemon();   // thi daemon walks every world wi' thee, solo or shared
   }
 
   // The real-Moors world (c.1900), solo. Reachable via window.game.startMoorsWorld()
@@ -335,6 +336,7 @@ class Game {
     this.netActive = false;
     this.startWorld(strSeed('t-moors-1900'), null, new Map());
     this.moorsPreview = true; // a transient explore world: never persisted, never clobbers the solo save
+    this.ensureDaemon();
   }
 
   // The original stylised Moorstead, kept as a legacy option (any NON-moors seed; blank →
@@ -351,6 +353,7 @@ class Game {
       this.ui.toast('That world&rsquo;s from afore t&rsquo; moors moved &mdash; expect odd seams. A fresh world&rsquo;s best.', 7000);
     }
     this.startWorld(saved.meta.seed, saved.meta, saved.chunks);
+    this.ensureDaemon();   // thi daemon (first pet) is at thi heel in solo worlds an' all
   }
 
   startWorld(seed, meta, chunks) {
@@ -1314,7 +1317,7 @@ class Game {
         this.ui.loginErr.textContent = d.err || 'That didn\u2019t work.';
         return;
       }
-      this.auth = { code, name: d.name, acct: d.acct, room: d.room || 'moor', token: d.token || '' };
+      this.auth = { code, name: d.name, acct: d.acct, room: d.room || 'moor', token: d.token || '', daemon: d.daemon || null };
       localStorage.setItem('moorcraft-auth', JSON.stringify(this.auth));
       this.saveAccount(this.auth);
       this.refreshAdmin();
@@ -1415,7 +1418,7 @@ class Game {
       clearTimeout(t);
       const d = await res.json();
       if (d && d.ok) {
-        this.auth = { code: this.auth.code, name: d.name, acct: d.acct, room: d.room || 'moor', token: d.token || this.auth.token || '' };
+        this.auth = { code: this.auth.code, name: d.name, acct: d.acct, room: d.room || 'moor', token: d.token || this.auth.token || '', daemon: d.daemon || (this.auth && this.auth.daemon) || null };
         localStorage.setItem('moorcraft-auth', JSON.stringify(this.auth));
         this.saveAccount(this.auth);
         this.refreshAdmin();
@@ -1871,7 +1874,9 @@ class Game {
   // come epoch reset or no. The relay sends her on connect regardless of thi pocket's state; make
   // sure she's at thi heel even if the rest of the save was withheld or wiped.
   ensureDaemon() {
-    const d = this.net && this.net.daemon;
+    // Prefer the relay's authoritative daemon (shared moor); fall back to the one carried on the
+    // login token, so Bess is at thi heel in single-player ("Carry On"/"New") worlds too — any moor.
+    const d = (this.net && this.net.daemon) || (this.auth && this.auth.daemon);
     if (!d || !d.kind || !d.name) return;
     this.player.pets = this.player.pets || [];
     if (this.player.pets.some(p => p && p.name === d.name && p.kind === d.kind)) return; // already restored from the save
