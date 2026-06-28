@@ -26,6 +26,7 @@ export const TILE = {
   ORCHARD_LEAVES: 75, APPLE: 76, PEAR: 77, PLUM: 78,
   SNOWBALL: 79,
   WREATH: 80, ROBIN: 81, HOLLY_SPRIG: 82, COTTONGRASS: 83,
+  HOME_FLAG: 84,
 };
 
 // ---- Block ids ----
@@ -52,6 +53,7 @@ export const B = {
   BLACKTHORN: 56, HAZEL: 57,
   ORCHARD_LEAVES: 58,
   COTTONGRASS: 59, // white-tufted sedge of the wet moor flushes
+  HOME_FLAG: 60,   // a planted base flag — marks thi home; tha respawns here if tha falls
 };
 
 // ---- Item ids (blocks double as items; pure items start at 64) ----
@@ -139,6 +141,7 @@ D[B.WINDOW] = { name: 'Cottage Window', kind: 'solid', tex: { t: TILE.WINDOW, s:
 D[B.BOARD] = { name: 'Notice Board', kind: 'solid', tex: { t: TILE.PLANKS, s: TILE.BOARD, b: TILE.PLANKS }, hard: Infinity, drop: null };
 D[B.TORCH] = { name: 'Torch', kind: 'cutout', tex: { t: TILE.TORCH, s: TILE.TORCH, b: TILE.TORCH }, hard: 0.05, tool: null, drop: B.TORCH, light: true };
 D[B.SIGNPOST] = { name: 'Waymark Signpost', kind: 'cutout', tex: { t: TILE.SIGNPOST, s: TILE.SIGNPOST, b: TILE.SIGNPOST }, hard: 1.0, tool: 'axe', drop: B.SIGNPOST };
+D[B.HOME_FLAG] = { name: 'Base Flag', kind: 'cutout', tex: { t: TILE.HOME_FLAG, s: TILE.HOME_FLAG, b: TILE.HOME_FLAG }, hard: 0.6, tool: null, drop: B.HOME_FLAG };
 D[B.SAND] = { name: 'Bay Sand', kind: 'solid', tex: { t: TILE.SAND, s: TILE.SAND, b: TILE.SAND }, hard: 0.5, tool: 'shovel', drop: B.SAND };
 D[B.GORSE] = { name: 'Gorse', kind: 'cutout', tex: { t: TILE.GORSE, s: TILE.GORSE, b: TILE.GORSE }, hard: 0.05, tool: null, drop: B.GORSE };
 D[B.BRAMBLE] = { name: 'Bramble', kind: 'cutout', tex: { t: TILE.BRAMBLE, s: TILE.BRAMBLE, b: TILE.BRAMBLE }, hard: 0.1, tool: null, drop: B.BRAMBLE };
@@ -295,6 +298,8 @@ export const RECIPES = [
   { out: B.STONEBRICK, n: 4, needs: [[B.STONE, 4]], bench: true },
   { out: B.TORCH, n: 4, needs: [[I.STICK, 1], [I.COAL_LUMP, 1]] },
   { out: B.SIGNPOST, n: 1, needs: [[B.PLANKS, 3], [I.STICK, 1]] },
+  { out: B.HOME_FLAG, n: 1, needs: [[B.PLANKS, 2], [B.WOOL, 1]] }, // plant it to mark thi home base
+
   { out: B.LANTERN, n: 1, needs: [[I.IRON_INGOT, 1], [I.COAL_LUMP, 1]], bench: true },
   { out: I.FISHING_ROD, n: 1, needs: [[I.STICK, 3], [B.WOOL, 2]], bench: true },
   { out: I.AMULET, n: 1, needs: [[I.AMULET_L, 1], [I.AMULET_R, 1], [I.BELL_CLAPPER, 1], [I.JET_GEM, 1]], bench: true },
@@ -346,7 +351,7 @@ export const CREATIVE_ITEMS = [
   B.LOG, B.PLANKS, B.LEAVES, B.THATCH, B.WOOL, B.HEATHER, B.BRACKEN,
   B.TUSSOCK, B.BILBERRY_BUSH, B.FERN, B.FOXGLOVE, B.DOG_ROSE, B.ELDER, B.MONKEY_LEAVES,
   B.COAL_ORE, B.IRON_ORE, B.JET_ORE,
-  B.BENCH, B.RANGE, B.LANTERN, B.WINDOW, B.TORCH, B.SIGNPOST, B.BOARD,
+  B.BENCH, B.RANGE, B.LANTERN, B.WINDOW, B.TORCH, B.SIGNPOST, B.HOME_FLAG, B.BOARD,
   B.MINE_ENTRANCE, B.PIT_PROPS, B.SAFETY_LAMP, B.WINCH, B.ALUM_SHALE, B.POLYHALITE, B.ROCK_SALT,
   I.W_PICK, I.S_PICK, I.I_PICK, I.W_AXE, I.S_AXE, I.I_AXE,
   I.W_SHOVEL, I.S_SHOVEL, I.I_SHOVEL, I.W_SWORD, I.S_SWORD, I.I_SWORD,

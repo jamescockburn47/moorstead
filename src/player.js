@@ -47,6 +47,7 @@ export class Player {
     this.freeStarter = false; // free-world one-time starter pack already granted
     this.onboarded = false; // first-visit handbook already shown
     this.villagerMarkerHinted = false; // ❓ marker hint already shown
+    this.home = null; // {x,y,z} of thi planted base flag — where tha respawns if tha falls
     this.stationSellHinted = false; // station sell hint already shown
     this.farmStatus = { registered: false }; // registered-farm status (Slice 2 gate to droving)
   }
@@ -367,6 +368,7 @@ export class Player {
       bairnFresh: this.bairnFresh, freeStarter: this.freeStarter,
       onboarded: this.onboarded, villagerMarkerHinted: this.villagerMarkerHinted, stationSellHinted: this.stationSellHinted,
       pets: this.pets || [],
+      home: this.home,
       farmStatus: this.farmStatus,
       miningSkill: this.miningSkill || 0,
     };
@@ -400,6 +402,7 @@ export class Player {
     this.villagerMarkerHinted = !!d.villagerMarkerHinted;
     this.stationSellHinted = !!d.stationSellHinted;
     this.pets = d.pets || [];
+    this.home = (d.home && Number.isFinite(d.home.x) && Number.isFinite(d.home.y) && Number.isFinite(d.home.z)) ? d.home : null;
     this.farmStatus = d.farmStatus || { registered: false };
     this.miningSkill = d.miningSkill || 0;
   }

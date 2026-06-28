@@ -620,7 +620,9 @@ class Game {
     });
     ui.btnQuit.addEventListener('click', () => this.quitToTitle());
     ui.btnRespawn.addEventListener('click', () => {
-      this.player.respawn(this.pickRespawn());
+      const atHome = !!(this.player.home);
+      this.player.respawn(this.homeSpawn());
+      ui.toast(atHome ? 'Tha wakes at thi base. Welcome home.' : 'Tha wakes somewhere fresh on t&rsquo; moor.', 5000);
       this.state = 'playing';
       ui.show(null);
       this.lockPointer();
@@ -2400,6 +2402,22 @@ class Game {
     return { ...s, x: s.x + (Math.random() * 24 - 12), z: s.z + (Math.random() * 24 - 12) };
   }
 
+  // Plant a base flag → this becomes thi home; tha respawns here if tha falls.
+  setHomeBase(x, y, z) {
+    this.player.home = { x, y, z };
+    this.ui.toast('🚩 <b>Base flagged!</b> If tha falls, tha&rsquo;ll wake right here at thi base.', 6000);
+    if (this.saveNow) this.saveNow(false);
+  }
+
+  // Where to wake after death: thi flagged base if tha has one, else somewhere fresh.
+  homeSpawn() {
+    const h = this.player.home;
+    if (h && Number.isFinite(h.x) && Number.isFinite(h.y) && Number.isFinite(h.z)) {
+      return { x: h.x + 0.5, y: h.y + 1, z: h.z + 0.5 };
+    }
+    return this.pickRespawn();
+  }
+
   deedTick() {
     const bairns = this.bairnLocked();
     const decayScale = bairns ? 2 : 1;
@@ -3320,6 +3338,13 @@ class Game {
     if (hit.id === B.LOG) { this.fellTree(hit, noDrop); this.quests.onBlockBroken(hit.x, hit.y, hit.z, hit.id); return; }
     const def = BLOCKS[hit.id];
     this.world.setBlock(hit.x, hit.y, hit.z, B.AIR);
+    // breaking thi own base flag un-sets thi home (tha can plant a fresh un elsewhere)
+    if (hit.id === B.HOME_FLAG && this.player.home &&
+        this.player.home.x === hit.x && this.player.home.y === hit.y && this.player.home.z === hit.z) {
+      this.player.home = null;
+      this.ui.toast('Thi base flag&rsquo;s down &mdash; plant a new un to set thi home.', 5000);
+      if (this.saveNow) this.saveNow(false);
+    }
     this.entities.blockBurst(hit.x, hit.y, hit.z, hit.id);
     this.audio.breakBlock();
     if (!this.player.creative && !noDrop && def.drop !== null && def.drop !== undefined) {
@@ -3591,6 +3616,7 @@ class Game {
     if (BLOCKS[held.id].kind === 'cutout' && !isSolid(this.world.getBlock(px, py - 1, pz))) return;
 
     this.world.setBlock(px, py, pz, held.id);
+    if (held.id === B.HOME_FLAG) this.setHomeBase(px, py, pz); // planting a flag marks thi home
     this.entities.lastBuild = { x: px + 0.5, z: pz + 0.5, t: performance.now() }; // so nosy folk can come have a look
     if (!this.player.creative) this.player.consumeHeld();
     this.audio.place();

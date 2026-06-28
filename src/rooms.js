@@ -38,4 +38,5 @@ export const FREE_STARTER = [
   { id: B.LOG, n: 16 },
   { id: B.TORCH, n: 8 },
   { id: I.CLAIM_TOKEN, n: 1 },
+  { id: B.HOME_FLAG, n: 1 },   // plant it to mark thi home base — tha respawns here if tha falls
 ];

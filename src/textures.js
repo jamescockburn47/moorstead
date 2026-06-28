@@ -284,6 +284,16 @@ const TILE_PAINTERS = {
     p.rect(6, 9, 7, 1, '#e8e2d0');
     p.px(3, 9, '#6a4a28');
   },
+  [TILE.HOME_FLAG](p) {
+    p.clear();
+    // a planted pole wi' a bright pennant — easy for t' bairns to spot frae afar
+    p.rect(3, 1, 2, 15, '#5a452c');                 // pole
+    p.rect(5, 2, 9, 6, '#c0392b');                  // red flag cloth
+    p.rect(5, 2, 9, 1, '#e8e2d0');                  // cream top band
+    p.rect(5, 7, 9, 1, '#9a2820');                  // shaded bottom edge
+    p.rect(9, 4, 2, 2, '#e8e2d0');                  // a little cream emblem
+    p.px(14, 3, '#c0392b'); p.px(14, 6, '#c0392b'); // swallowtail flutter
+  },
   [TILE.GORSE](p) {
     p.clear();
     // a spiky dark bush ablaze wi' yellow flower

@@ -1321,6 +1321,17 @@ export class UI {
     ctx.moveTo(0, -7); ctx.lineTo(5, 6); ctx.lineTo(0, 3); ctx.lineTo(-5, 6); ctx.closePath();
     ctx.fill(); ctx.stroke();
     ctx.restore();
+    // thi home base flag, if planted an' within t' window — so tha can find thi way back
+    if (player.home && Number.isFinite(player.home.x)) {
+      const hx = (player.home.z - player.pos.z) * scale + size / 2;
+      const hy = -(player.home.x - player.pos.x) * scale + size / 2;
+      if (hx > 2 && hx < size - 2 && hy > 8 && hy < size - 2) {
+        ctx.fillStyle = '#5a452c'; ctx.fillRect(hx - 0.5, hy - 8, 1.4, 9);        // pole
+        ctx.fillStyle = '#c0392b'; ctx.strokeStyle = '#000'; ctx.lineWidth = 0.6;
+        ctx.beginPath(); ctx.moveTo(hx + 1, hy - 8); ctx.lineTo(hx + 7, hy - 6); ctx.lineTo(hx + 1, hy - 4); ctx.closePath();
+        ctx.fill(); ctx.stroke();                                                  // red pennant
+      }
+    }
     // north marker
     ctx.fillStyle = '#d8b95a'; ctx.font = 'bold 11px sans-serif';
     ctx.fillText('N', size / 2 - 3, 11);

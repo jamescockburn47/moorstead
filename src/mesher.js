@@ -165,8 +165,8 @@ export function buildChunkMeshes(world, chunk) {
         if (isCutout(id)) {
           const uvr = tileUV(def.tex.t);
           const [u0, v0, u1, v1] = uvr;
-          if (id === B.TORCH || id === B.SIGNPOST) {
-            // structural cutouts stay centred + upright (a torch/signpost shouldn't lean)
+          if (id === B.TORCH || id === B.SIGNPOST || id === B.HOME_FLAG) {
+            // structural cutouts stay centred + upright (a torch/signpost/flag shouldn't lean)
             for (const [ax, az, bx, bz] of [[0.15, 0.15, 0.85, 0.85], [0.85, 0.15, 0.15, 0.85]]) {
               cutout.quad(
                 [[lx + ax, y, lz + az, 0, 0], [lx + bx, y, lz + bz, 1, 0],
