@@ -649,8 +649,14 @@ export class UI {
     if (this.howTabBtns && this.howTabBtns[tabName]) {
       this.howTabBtns[tabName].click();
     }
+    // Release the pointer lock and route the close button back to the pause screen, so an
+    // opened handbook is always clickable/dismissable and never traps gameplay.
+    if (this.game && this.game.state === 'playing') {
+      this.game.state = 'paused';
+      this.game.howReturn = 'pauseScreen';
+      try { document.exitPointerLock?.(); } catch { /* not locked */ }
+    }
     this.show('howScreen');
-    if (this.game && this.game.state === 'playing') this.game.state = 'paused';
   }
 
   // ============ screens ============

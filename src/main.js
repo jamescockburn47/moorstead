@@ -4001,7 +4001,12 @@ class Game {
           setTimeout(() => {
             this.ui.toast('📋 Find a <b>notice board</b> for jobs, or walk up to a villager an’ press <b>T</b> to talk.', 8500);
           }, 7000);
-          setTimeout(() => { this.ui.openHow('First Day'); }, 12000);
+          // NB: do NOT auto-open the handbook here — it pauses the game while the pointer is still
+          // locked to the canvas, so the player can't click to close it (it traps gameplay). The
+          // welcome toasts above guide newcomers; the handbook stays one click away on "Ow Ter Play".
+          setTimeout(() => {
+            this.ui.toast('👉 New here? <b>Ow Ter Play</b> on the pause menu (<b>Esc</b>) has the full guide.', 8000);
+          }, 11500);
         }
       }
       return;
