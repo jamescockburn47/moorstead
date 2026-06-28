@@ -194,6 +194,7 @@ export class Net {
       return; // don't apply the (now-empty) init — we're going down for a reload
     }
     this.savedState = m.save || null;
+    this.daemon = m.daemon || null; // thi lifelong first-pet companion — sent every connect, come epoch reset or no
     g.world.netEdits = g.world.netEdits || new Map();
     for (const [x, y, z, id] of m.edits) {
       g.world.netEdits.set(`${x},${y},${z}`, id);
@@ -204,6 +205,14 @@ export class Net {
     }
     for (const [pid, p] of Object.entries(m.players)) this.addRemote(pid, p.name, p);
     g.sky.time = m.time;
+  }
+
+  // Register the player's first-ever pet as their daemon — a lifelong companion the relay keeps
+  // for good (first-wins, never overwritten) and returns on every connect, immune to world resets.
+  registerDaemon(pet) {
+    if (!pet || !pet.kind || !pet.name || this.daemon) return;
+    this.daemon = { kind: pet.kind, name: pet.name };
+    this.send({ type: 'daemon', pet: this.daemon });
   }
 
   handle(m) {

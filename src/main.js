@@ -1860,10 +1860,25 @@ class Game {
       } else {
         this.ui.toast('Tha\u2019s on t\u2019 shared moor. Whoever else is out here, tha\u2019ll see \u2019em.', 6000);
       }
+      this.ensureDaemon();      // thi lifelong first-pet companion is always at thi heel, any moor, any epoch
       this.enforceBairnRules(); // re-assert after t' relay restores pockets
     } catch {
       this.ui.toast('Couldn\u2019t reach t\u2019 shared moor \u2014 playing it alone for now.', 6000);
     }
+  }
+
+  // The daemon \u2014 thi first-ever companion \u2014 is bound to thi token and walks every moor with thee,
+  // come epoch reset or no. The relay sends her on connect regardless of thi pocket's state; make
+  // sure she's at thi heel even if the rest of the save was withheld or wiped.
+  ensureDaemon() {
+    const d = this.net && this.net.daemon;
+    if (!d || !d.kind || !d.name) return;
+    this.player.pets = this.player.pets || [];
+    if (this.player.pets.some(p => p && p.name === d.name && p.kind === d.kind)) return; // already restored from the save
+    const rec = { kind: d.kind, name: d.name, stay: false, daemon: true };
+    this.player.pets.unshift(rec);
+    this.entities.restorePets([rec], this.player); // spawn just the daemon, at thi heel
+    this.ui.toast(`<b>${d.name}</b> pads up to thi side. Thi <b>daemon</b> walks every moor with thee.`, 6000);
   }
 
   openNetChat() {
@@ -3596,6 +3611,13 @@ class Game {
       const rec = { kind: m.petKind, name: r.name, stay: farm };
       if (farm) { m.stay = true; m.home = { x: m.pos.x, y: m.pos.y, z: m.pos.z }; rec.home = { ...m.home }; }
       (this.player.pets || (this.player.pets = [])).push(rec);
+      // The first companion a player ever tames becomes their daemon — bound to their token,
+      // present on every moor, immune to world resets. First-wins (the relay keeps it for good).
+      if (this.net && !this.net.daemon && this.player.pets.length === 1) {
+        rec.daemon = true;
+        this.net.registerDaemon(rec);
+        this.ui.toast(`✨ <b>${r.name}</b> is thi <b>daemon</b> now — thi lifelong companion. She’ll find thee in any moor, always, come what may.`, 9000);
+      }
       if (farm) {
         this.ui.toast(`<b>${r.name}</b> is thine now — she’ll bide here an’ graze. <b>Fence her in</b> for a proper pen; sneak + right-click her to lead her elsewhere.`, 8000);
       } else {
