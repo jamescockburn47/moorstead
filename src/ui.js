@@ -201,11 +201,13 @@ export class UI {
 
     this.whoBox = this.el('div', 'login-who hidden', this.titleScreen, '');
 
-    // v2 is the main game: the real North York Moors, c.1900. "New Game" starts it
-    // (newWorld('') → the moors world, persistent).
-    this.btnNew = this.el('button', 'mc', this.titleScreen, '&#x1F689; Enter t&rsquo; Moors &mdash; New Game');
-    this.btnContinue = this.el('button', 'mc', this.titleScreen, 'Carry On Where Tha Left Off');
-    this.btnShared = this.el('button', 'mc', this.titleScreen, 'T&rsquo; Shared Moor: Play Wi&rsquo; Others');
+    // Three clearly-labelled ways in. MULTIPLAYER (shared moor) is the main, persistent world —
+    // thi real progress, folk an' beasts (an' thi daemon) live there — so it leads. The two
+    // SINGLE-PLAYER options are thi own private world: re-enter the saved one, or start fresh.
+    // (Button order here is the on-screen order; handlers are wired by variable name in main.js.)
+    this.btnShared = this.el('button', 'mc', this.titleScreen, '&#x1F310; Re-enter Multiplayer &mdash; T&rsquo; Shared Moor');
+    this.btnContinue = this.el('button', 'mc', this.titleScreen, '&#x1F3E1; Re-enter Single-Player');
+    this.btnNew = this.el('button', 'mc', this.titleScreen, '&#x2728; New Single-Player World');
     this.btnHow = this.el('button', 'mc', this.titleScreen, 'Ow Ter Play');
     this.el('div', 'moors-note', this.titleScreen, 'T&rsquo; real North York Moors, built to scale frae <b>Ordnance Survey</b> maps &mdash; t&rsquo; true landscape, dales, rivers an&rsquo; coast, t&rsquo; 1900 railways, livin&rsquo; folk an&rsquo; their tales (an&rsquo; mind t&rsquo; Count up on t&rsquo; East Cliff of a stormy neet).');
     this.el('div', 'muted-note', this.titleScreen, 'New to t&rsquo; moor? <b>Give &lsquo;Ow Ter Play&rsquo; a read</b>: learn how to build, ride, drive, and stay alive.');
