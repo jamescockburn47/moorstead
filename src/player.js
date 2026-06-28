@@ -374,9 +374,14 @@ export class Player {
 
   deserialize(d) {
     if (!d) return;
-    Object.assign(this.pos, d.pos);
-    this.yaw = d.yaw; this.pitch = d.pitch;
-    this.health = d.health; this.hunger = d.hunger; this.temperature = d.temperature ?? 20;
+    // Defensive: an incomplete or corrupt save must NEVER NaN-out the player (undefined yaw →
+    // NaN velocity → NaN position → black screen; undefined health → NaN hearts). Only apply a
+    // saved position if it's finite; otherwise keep the spawn the world already set.
+    const fin = (v) => typeof v === 'number' && Number.isFinite(v);
+    if (d.pos && fin(d.pos.x) && fin(d.pos.y) && fin(d.pos.z)) Object.assign(this.pos, d.pos);
+    this.yaw = fin(d.yaw) ? d.yaw : 0; this.pitch = fin(d.pitch) ? d.pitch : 0;
+    this.health = fin(d.health) ? d.health : 20; this.hunger = fin(d.hunger) ? d.hunger : 20;
+    this.temperature = d.temperature ?? 20;
     this.creative = !!d.creative; this.flying = !!d.flying;
     this.slots = d.slots || this.slots;
     this.hotbar = d.hotbar || 0;
