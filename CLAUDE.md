@@ -18,6 +18,9 @@ back up any file (`cp x x.bak-YYYYMMDD-tag`) before editing on the box.
 
 The brain is also mirrored under local git at `C:\Users\James\moorstead-evo-work`.
 
+Systemd units on the EVO: `moorstead-world` (relay), `moorstead-brain` (yorkshire_bot),
+`moorstead-dash` (dashboard), `llama-server-moorstead` (the model behind the brain).
+
 ## Build & verify
 
 - `npm run build` — production build (Vite).
@@ -25,6 +28,24 @@ The brain is also mirrored under local git at `C:\Users\James\moorstead-evo-work
   before deploy.** Most "visual" bugs here are scene-graph/material/camera state bugs that are
   testable headlessly (e.g. Three.js raycasting under Node) — add a verify script rather than
   relying on eyeballing.
+
+## Direct verification (run the change, don't just reason about it)
+
+Three layers, cheapest first — use the cheapest one that actually exercises the change:
+
+1. **Headless gate** — `npm run verify` (logic, scene-graph, materials; see above).
+2. **Live stack** — `npm run verify:live` (`scripts/verify-live.mjs`): network checks against
+   production — deployed version.json vs this checkout, brain `/status`, roster shape +
+   population, and a real relay WebSocket join + timeq round-trip. The relay accepts
+   token-free joins to `verify-*` scratch rooms only (all real worlds still require an
+   invite token — patched in `worldsvc/server.py`, backup `server.py.bak-20260702-verifyroom`).
+   `npm run deploy` runs this automatically post-deploy with `--expect-live` (warn-only).
+3. **In-browser** — start the dev server via the preview tools (`.claude/launch.json`,
+   config `moorcraft-dev`, port 5173) and drive the real game: `window.moorstead` is the
+   live Game handle (`.state`, `.player.pos`, `.world.chunks.size`, `netDiag()`), and
+   `moorstead.debug.*` has `warp('Whitby')`, `setSeason`, `festival(id)`, `viewProbe()`,
+   `lookingAt()`, `audit()`. Click "New Single-Player World" on the title to get in-game
+   without auth; dev proxies `/brain` + `/dash` to the EVO tunnel so villagers are real.
 
 ## Deploy
 

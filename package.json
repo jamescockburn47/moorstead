@@ -57,7 +57,8 @@
     "verify:update": "node scripts/verify-update.mjs",
     "verify:festivalrender": "node scripts/verify-festival-render.mjs",
     "verify:freeworlds": "node scripts/verify-free-worlds.mjs",
-    "verify:invariants": "node scripts/verify-invariants.mjs"
+    "verify:invariants": "node scripts/verify-invariants.mjs",
+    "verify:live": "node scripts/verify-live.mjs"
   },
   "dependencies": {
     "@tonejs/midi": "^2.0.28",

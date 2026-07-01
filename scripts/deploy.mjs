@@ -79,4 +79,11 @@ try { run(`git push origin ${branch}`); } catch { die('push failed — fix and r
 console.log('\n▶ vercel --prod');
 try { run('vercel --prod --yes'); } catch { die('vercel deploy failed (the release commit is already pushed).'); }
 
+// ---- 5. prove the deploy landed: live stack answers with the new version ----
+// Warn-only: the release is already shipped, so a flaky check must not fail the
+// run — but a red line here means go look (Vercel lag, relay/brain down, drift).
+console.log('\n▶ npm run verify:live -- --expect-live');
+try { run('node scripts/verify-live.mjs --expect-live'); }
+catch { console.error('\n⚠  live-stack check FAILED after deploy — the release is out, but verify the stack by hand (npm run verify:live).'); }
+
 console.log(`\n✓ Deployed${newVersion ? ' v' + newVersion : ''} to production.`);
