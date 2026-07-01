@@ -215,9 +215,18 @@ export class Net {
     this.send({ type: 'daemon', pet: this.daemon });
   }
 
+  // Defence-in-depth on relay-borne coordinates: the relay is ours and trusted, but a bad
+  // message (bug, compromise, protocol drift) must not smear NaNs or absurd positions
+  // through the scene graph. Real-map coords run to tens of thousands; ±200k is generous.
+  saneCoord(x, y, z) {
+    return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)
+      && Math.abs(x) < 200000 && Math.abs(z) < 200000 && y > -256 && y < 4096;
+  }
+
   handle(m) {
     const g = this.game;
     if (m.type === 'edit') {
+      if (!this.saneCoord(m.x, m.y, m.z) || !Number.isInteger(m.id) || m.id < 0 || m.id > 4095) return;
       g.world.netEdits = g.world.netEdits || new Map();
       g.world.netEdits.set(`${m.x},${m.y},${m.z}`, m.id);
       g.world.setBlock(m.x, m.y, m.z, m.id);
@@ -227,6 +236,7 @@ export class Net {
         g.ui.openBoard(true);
       }
     } else if (m.type === 'pos') {
+      if (!this.saneCoord(m.x, m.y, m.z)) return;
       const r = this.remotes.get(m.pid);
       if (r) { r.target = m; }
     } else if (m.type === 'join') {

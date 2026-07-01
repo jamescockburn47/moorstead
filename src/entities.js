@@ -1044,7 +1044,7 @@ export class Entities {
       home: { x, z },
       village: opts.village || null,   // which settlement they belong to
       house: opts.house || null,       // {b, out, inside} frae geo.npcHome
-      atHome: false, homeStuck: 0,
+      homeStuck: 0,
       hw: 0.28 * look.scale + 0.08, h: Math.max(0.5, 1.65 * look.scale), onGround: false,
       hp: Infinity, yaw: Math.random() * Math.PI * 2,
       state: 'idle', stateTimer: 1 + Math.random() * 4,
@@ -1165,7 +1165,7 @@ export class Entities {
       type = types[(Math.random() * types.length) | 0];
     }
     const t = MOB_TYPES[type];
-    if (t.hostile && day <= 2 && Math.random() < 0.5) return; // first neets: a taster, not a massacre
+    if (t.hostile && day <= 3 && Math.random() < 0.45) return; // first few neets: a taster, not a massacre
     const ang = Math.random() * Math.PI * 2;
     const dist = t.hostile ? 26 + Math.random() * 22 : 24 + Math.random() * 62; // grazers spread right across t' visible moor
     const x = Math.floor(player.pos.x + Math.cos(ang) * dist);
@@ -2390,8 +2390,6 @@ export class Entities {
       if (mob.stateTimer <= 0) mob.stateTimer = 1;
     } else {
       if (mob.state === 'greet') { mob.state = 'idle'; mob.stateTimer = 1 + Math.random() * 2; }
-      const skyT = this.game && this.game.sky ? this.game.sky.time : 0.5;
-      const homeTime = !!mob.house && (skyT > 0.76 || skyT < 0.16);
       const walkTo = (tgt, sp) => {
         const dx = tgt.x - mob.pos.x, dz = tgt.z - mob.pos.z;
         const d = Math.hypot(dx, dz);
@@ -2402,35 +2400,23 @@ export class Entities {
         return d;
       };
       const popTo = (tgt) => { // gie ower an' pop there — kinder than a neet stuck on a wall
+        // never mid-natter: teleporting away from the player tha's talking to is jarring —
+        // give 'em another spell o' walking an' pop later if still stuck
+        if (mob.chatting) { mob.homeStuck = 0; return; }
         mob.pos.x = tgt.x; mob.pos.z = tgt.z;
-        mob.pos.y = this.world.gen.height(Math.floor(tgt.x), Math.floor(tgt.z)) + 1.1;
+        const rx = Math.round(tgt.x), rz = Math.round(tgt.z);
+        const dem = this.world.gen.height(rx, rz);
+        let surf = null;
+        for (let y = dem + 24; y >= dem - 16 && y > 1; y--) {
+          const b = this.world.getBlock(rx, y, rz);
+          if (b === B.AIR || b === B.WATER) continue;
+          const below = this.world.getBlock(rx, y - 1, rz);
+          if (below !== B.AIR && below !== B.WATER) { surf = y; break; }
+        }
+        mob.pos.y = (surf != null ? surf : dem) + 1;
         mob.vel.x = mob.vel.z = 0; mob.homeStuck = 0;
       };
-      if (homeTime && mob.atHome) {
-        // settled in for t' neet — stand quiet by t' lantern, face t' door now an' then
-        mob.vel.x *= 0.8; mob.vel.z *= 0.8;
-        if (mob.stateTimer <= 0) {
-          mob.stateTimer = 4 + Math.random() * 6;
-          mob.yaw = Math.atan2(mob.house.out.x - mob.pos.x, mob.house.out.z - mob.pos.z);
-        }
-      } else if (homeTime) {
-        // dusk: mek for thi own door, then ower t' threshold
-        if (!mob.passedDoor) {
-          if (walkTo(mob.house.out, 1.5) < 1.2) mob.passedDoor = true;
-        } else if (walkTo(mob.house.inside, 1.2) < 0.9) {
-          mob.atHome = true; mob.homeStuck = 0; wishX = wishZ = speed = 0;
-        }
-        if (mob.homeStuck > 6) { popTo(mob.house.inside); mob.atHome = true; mob.passedDoor = true; }
-      } else if (mob.atHome || mob.leavingHome) {
-        // morning: out t' door afore owt else
-        mob.atHome = false; mob.leavingHome = true;
-        if (walkTo(mob.house.out, 1.2) < 1.2 || mob.homeStuck > 6) {
-          if (mob.homeStuck > 6) popTo(mob.house.out);
-          mob.leavingHome = false; mob.passedDoor = false; mob.homeStuck = 0;
-          wishX = wishZ = speed = 0;
-        }
-      } else {
-        // daytime routine: at their work of a morning an' afternoon, gathered round the
+      // daytime routine: at their work of a morning an' afternoon, gathered round the
         // green at midday — but each to their OWN spot, an' pottering about it, so folk
         // mill an' shift rather than stack on one tile an' stand like posts.
         // roamers (shepherds, pedlars, the constable) range out on the roads an' moor.
@@ -2458,7 +2444,6 @@ export class Entities {
           if (d < 1.2) { wishX = wishZ = 0; speed = 0; mob.vel.x *= 0.85; mob.vel.z *= 0.85; mob.homeStuck = 0; }
           else if (mob.homeStuck > 6) popTo(mob.potterGoal);
         }
-      }
     }
 
     mob.vel.x += (wishX * speed - mob.vel.x) * Math.min(1, 10 * dt);
@@ -2493,11 +2478,23 @@ export class Entities {
   }
 
   // ---------- drops ----------
+  // One SpriteMaterial (and texture) per item id, shared by every drop of that item —
+  // a fresh texture per drop leaked GPU memory for the life of the session.
+  dropMaterial(item) {
+    if (!this._dropMats) this._dropMats = new Map();
+    let mat = this._dropMats.get(item);
+    if (!mat) {
+      const tex = new THREE.TextureLoader().load(getIconURL(item));
+      tex.magFilter = THREE.NearestFilter;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      mat = new THREE.SpriteMaterial({ map: tex });
+      this._dropMats.set(item, mat);
+    }
+    return mat;
+  }
+
   spawnDrop(x, y, z, item, n, opts = {}) {
-    const tex = new THREE.TextureLoader().load(getIconURL(item));
-    tex.magFilter = THREE.NearestFilter;
-    tex.colorSpace = THREE.SRGBColorSpace;
-    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
+    const spr = new THREE.Sprite(this.dropMaterial(item));
     const s = opts.big ? 0.9 : 0.45;
     spr.scale.set(s, s, s);
     this.scene.add(spr);
@@ -2547,7 +2544,15 @@ export class Entities {
 
   // ---------- particles ----------
   burst(x, y, z, rgb, count = 12) {
-    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255) });
+    // materials cached per colour — bursts fire on every mined block, and a fresh
+    // material each time was churn the GC (and the GPU) had to eat
+    if (!this._burstMats) this._burstMats = new Map();
+    const key = rgb[0] + ',' + rgb[1] + ',' + rgb[2];
+    let mat = this._burstMats.get(key);
+    if (!mat) {
+      mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255) });
+      this._burstMats.set(key, mat);
+    }
     for (let i = 0; i < count; i++) {
       const m = new THREE.Mesh(this.particleGeom, mat);
       m.position.set(x + (Math.random() - 0.5) * 0.6, y + (Math.random() - 0.5) * 0.6, z + (Math.random() - 0.5) * 0.6);

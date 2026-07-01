@@ -41,12 +41,21 @@ export class Milestones {
     const text = MILESTONES[id];
     if (!text) return;
     p.milestonesDone.push(id);
-    this.game.ui.toast('⭐ <b>' + text + '</b>', 7000);
-    const a = this.game.audio;
-    if (a) { if (a.craft) a.craft(); else if (a.pickup) a.pickup(); }
+    // space celebrations out: chopping a log an' crafting planks in t' same breath
+    // used to stack three toasts ower t' HUD — queue 'em ~5s apart instead
+    const now = performance.now();
+    const at = Math.max(now, this._nextToastAt || 0);
+    this._nextToastAt = at + 5000;
+    const show = () => {
+      this.game.ui.toast('⭐ <b>' + text + '</b>', 7000);
+      const a = this.game.audio;
+      if (a) { if (a.craft) a.craft(); else if (a.pickup) a.pickup(); }
+    };
+    if (at - now < 50) show(); else setTimeout(show, at - now);
     if (STEERS.has(id) && !p.milestonesSteered) {
       p.milestonesSteered = true;
-      setTimeout(() => this.game.ui.toast(STEER_TEXT, 9000), 4500);
+      this._nextToastAt += 4500;
+      setTimeout(() => this.game.ui.toast(STEER_TEXT, 9000), (at - now) + 4500);
     }
     if (this.game.saveNow) this.game.saveNow(false);
   }

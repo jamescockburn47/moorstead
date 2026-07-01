@@ -49,13 +49,15 @@ export function moodWord(m) {
 
 const GREET = [
   "Now then.", "Ayup.", "Eh up, stranger.", "Grand day for it.",
-  "Mind how tha goes.", "Tha's about, then.",
+  "Mind how tha goes.", "Tha's about, then.", "Good to see a face.",
+  "Tha's out early.", "Fine weather for wanderin'.", "Keep thi wits about thee.",
 ];
 const NOSY = [
   "Where's tha headed, then?", "Tha's not frae round here, are tha?",
   "What's tha after, all this way out?", "Tha's a long way frae t' village.",
   "What's tha up to, eh?", "Owt worth seeing out yonder?",
-  "Tha keeps queer hours, I'll say that.",
+  "Tha keeps queer hours, I'll say that.", "Seen owt strange on t' moor?",
+  "Tha's been busy, by t' look of thee.", "Need a hand findin' summat?",
 ];
 // said when the visitor's been building near where the villager finds them
 const BUILD_WARM = [

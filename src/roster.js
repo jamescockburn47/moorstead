@@ -9,7 +9,7 @@ const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
 // so the crowd is thinned: the cut falls on the anonymous 'pop-' background FIRST (deterministic by
 // id-hash → the SAME folk hidden every poll and on every client, no flicker), and the curated/named
 // deep cast is always kept. 0.6 = render ~60% (a 40% cut). Live-tunable dial; 1 = render everyone.
-export const RENDER_FRACTION = 0.6;
+export const RENDER_FRACTION = 0.78;
 
 // The true voxel surface at (x,z): one block ABOVE the top non-air/non-water block, so a body
 // stands ON the platform deck / building floor rather than sunk into it. geo.height is DEM-only
@@ -151,7 +151,7 @@ export function ridesThisLeg(npc, from, to, geo) {
   return u < (RIDE_BASE + roleBonus + distBonus);
 }
 
-export const PLATFORM_CAP = 3;     // most NPCs allowed to gather on one platform at once (reduced from 5 to cut loitering)
+export const PLATFORM_CAP = 2;     // most NPCs allowed to gather on one platform at once (reduced to cut loitering)
 export const WAIT_LEAD = 45;       // seconds before a train is due that a ranked NPC walks to the platform (reduced from 75)
 
 // This id's rank (0 = first) among the ids waiting for the SAME (line, from). Deterministic by
@@ -323,10 +323,19 @@ export class RosterClient {
         this.serverNow = snap.now;
         this.recvAt = performance.now() / 1000;
         this.active = true;
+        this._misses = 0;
         this._sync(snap.npcs);
       } else if (this.active) {
-        this._teardown();        // brain went away -> drop streamed folk, fall back
-        this.active = false;
+        // don't mass-despawn ~80 folk on one dropped poll — a real outage is several
+        // in a row (~5s at the 1.5s cadence). Then fall back, and SAY so: quiet
+        // villagers with no explanation read as "the game's broken".
+        this._misses = (this._misses || 0) + 1;
+        if (this._misses >= 3) {
+          this._teardown();        // brain went away -> drop streamed folk, fall back
+          this.active = false;
+          this._misses = 0;
+          this.game.ui?.toast('T&rsquo; village brain&rsquo;s having a nap &mdash; folk&rsquo;ll walk but won&rsquo;t talk while it wakes.', 8000);
+        }
       }
       this._timer = setTimeout(poll, this._pollMs);
     };

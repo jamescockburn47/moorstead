@@ -1528,11 +1528,16 @@ class Game {
 
   async refreshStanding(announce) {
     try {
+      const prevTrust = this.standingData ? this.standingData.total_trust : null;
       const s = await npc.standing(this.playerId());
       this.standingData = s;
       const label = this.quests ? this.quests.standingLabel() : s.standing;
       if (announce && this.standing && label !== this.standing) {
         this.ui.toast(`Word\u2019s gone round Moorstead \u2014 tha\u2019s <b>${label}</b> in t\u2019 village now.`, 6000);
+      } else if (announce && prevTrust != null && s.total_trust > prevTrust) {
+        // standing rose but t' tier didn't turn over \u2014 still say so, or the whole
+        // reputation system reads as a black box
+        this.ui.toast('Word o\u2019 thi good turn\u2019s gone round \u2014 <b>thi standing\u2019s grown</b>.', 4000);
       }
       this.standing = label;
       this.quests.refreshOffers();
@@ -1621,15 +1626,12 @@ class Game {
       this.ui.chatWaiting = true;
       this.ui.renderChatLog();
       try {
-        const t0 = performance.now();
         const persona = { name: v.displayName || v.t.name, role: v.role, village: v.village, mood: moodWord(v.mood == null ? 0.5 : v.mood) };
         let ctx = this.quests.chatContext(v);
         if (this.entities.lastBuild && performance.now() - this.entities.lastBuild.t < 120000) {
           ctx += '\nThe visitor has been building something on the land near here.';
         }
         const res = await npc.talkGeneric(persona, text, this.player.name, ctx);
-        this.lastTalkMs = performance.now() - t0;
-        this.lastTalkAt = performance.now();
         this.brainUp = true;
         v.chatLog.push({ who: 'them', text: res.reply });
         if (v.memory) { v.memory.push(text.slice(0, 60)); if (v.memory.length > 4) v.memory.shift(); }
@@ -1644,10 +1646,7 @@ class Game {
     this.ui.chatWaiting = true;
     this.ui.renderChatLog();
     try {
-      const t0 = performance.now();
       const res = await npc.talk(v.charId, text, this.player.name, this.playerId(), this.quests.chatContext(v));
-      this.lastTalkMs = performance.now() - t0;
-      this.lastTalkAt = performance.now();
       this.brainUp = true;
       v.chatLog.push({ who: 'them', text: res.reply });
       v.tier = res.tier;
@@ -2009,6 +2008,7 @@ class Game {
   }
 
   fmtMins(s) {
+    if (!isFinite(s)) return 'no train due';
     return s >= 60 ? `${Math.floor(s / 60)}m ${Math.round(s % 60)}s` : `${Math.round(s)}s`;
   }
 
@@ -2429,6 +2429,21 @@ class Game {
         if (d.lapsedDay) { d.lapsedDay = null; d.paidUntilDay = this.sky.day + DEED.week; revived = true; }
       } else if (!d.lapsedDay && lapsesUnderUpkeep(d, bairns) && isLapsed(d, this.sky.day, DEED.grace * decayScale)) {
         d.lapsedDay = this.sky.day;
+        if (d.by && d.by === this.player.name) {
+          this.ui.toast(`Thi ${d.kind === 'mine' ? 'mine licence' : 'land claim'} has <b>lapsed</b> — its builds’ll crumble ower t’ next fortnight unless tha renews it at t’ notice board.`, 9000);
+        }
+      }
+
+      // upkeep owing but not yet lapsed: warn t' owner ONCE a session while t' grace
+      // runs — a claim that rots wi' no word ever said is a rage-quit, not a mechanic
+      if (!d.lapsedDay && lapsesUnderUpkeep(d, bairns) && d.by && d.by === this.player.name
+          && this.sky.day > d.paidUntilDay) {
+        if (!this._deedWarned) this._deedWarned = new Set();
+        if (!this._deedWarned.has(d.id)) {
+          this._deedWarned.add(d.id);
+          const left = Math.max(0, Math.ceil(d.paidUntilDay + DEED.grace * decayScale - this.sky.day));
+          this.ui.toast(`Upkeep’s owing on thi ${d.kind === 'mine' ? 'mine' : 'claim'} — <b>${left} day${left === 1 ? '' : 's'} o’ grace left</b>. Pay at t’ notice board.`, 8000);
+        }
       }
 
       // Kept-stock breeding (Slice 5)
@@ -4255,7 +4270,10 @@ class Game {
             : 'Neet&rsquo;s fallen. Summat&rsquo;s movin&rsquo; out on t&rsquo; moor...', 5000);
         }
         else if (msg.type === 'dusk' && !this.player.creative) {
-          this.ui.toast('Gloamin&rsquo;s drawin&rsquo; in. Mek for t&rsquo; village &mdash; <b>nowt dark sets foot on Moorstead ground</b>.', 7000);
+          const early = (this.sky.day || 1) <= 3;
+          this.ui.toast(early
+            ? 'Gloamin&rsquo;s drawin&rsquo; in. Mek for t&rsquo; village, or <b>keep a torch lit</b> &mdash; owt dark keeps its distance from the light.'
+            : 'Gloamin&rsquo;s drawin&rsquo; in. Mek for t&rsquo; village &mdash; <b>nowt dark sets foot on Moorstead ground</b>.', 7000);
         }
         else if (msg.text) this.ui.toast(msg.text, 4000);
       }
@@ -4419,8 +4437,10 @@ class Game {
 
     // villagers hail thee as tha passes (one brain call at a time, well spaced;
     // they pipe down entirely when t' brain's under load)
-    const brainBusy = (this.lastTalkMs || 0) > 15000 && performance.now() - (this.lastTalkAt || 0) < 600000;
-    if (playing && !this.player.dead && !this.hailInFlight && !brainBusy) {
+    // Only suppress passing hails after a slow *hail* — player-initiated chat (T) must not
+    // silence the whole parish for ten minutes.
+    const hailBusy = (this.lastHailMs || 0) > 15000 && performance.now() - (this.lastHailAt || 0) < 120000;
+    if (playing && !this.player.dead && !this.hailInFlight && !hailBusy) {
       for (const m of this.entities.mobs) {
         if (m.type !== 'villager' || !m.charId || m.chatting) continue;
         if ((m.hailCd || 0) > 0) continue;
@@ -4435,8 +4455,8 @@ class Game {
           this.player.name, this.playerId(), this.quests.chatContext(m)
         ).then(res => {
           this.hailInFlight = false;
-          this.lastTalkMs = performance.now() - t0;
-          this.lastTalkAt = performance.now();
+          this.lastHailMs = performance.now() - t0;
+          this.lastHailAt = performance.now();
           const dNow = Math.hypot(m.pos.x - this.player.pos.x, m.pos.z - this.player.pos.z);
           if (dNow < 26 && res.reply) {
             this.entities.speak(m, res.reply, 18);
