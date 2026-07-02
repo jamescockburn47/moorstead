@@ -316,6 +316,7 @@ export class TouchControls {
     item('<i class="ti ti-clipboard-list"></i> Departures board', () => g.openBoard(false));
     item('<i class="ti ti-zzz"></i> Sleep', () => g.trySleep());
     item('<i class="ti ti-signpost"></i> Find shelter', () => g.findShelter?.());   // the keyboard L
+    item('<i class="ti ti-camera"></i> Sketch t&rsquo; view', () => g.takeSketch?.());   // the keyboard P
     // sheepdog whistles: set g.herdCmd like the arrow-key path
     const whistles = [['Come bye', 'come-bye'], ['Away', 'away'], ['Walk on', 'walk-on'], ['Lie down', 'lie-down'], ['Heel', 'heel']];
     const row = document.createElement('div'); row.className = 'touch-whistles';

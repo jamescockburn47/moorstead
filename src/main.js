@@ -93,7 +93,7 @@ import { EXTRA_FOLK, moodWord } from './villagerlife.js';
 import { Sky } from './sky.js';
 import { Storm } from './storm.js';
 import { AudioEngine } from './audio.js';
-import { UI, bearingLabel, shelterToast, stationChipHTML } from './ui.js';
+import { UI, bearingLabel, shelterToast, stationChipHTML, composeSketch, sketchFilename } from './ui.js';
 import { raycast, boxCollides } from './physics.js';
 
 const REACH = 5.5;
@@ -738,6 +738,9 @@ class Game {
           }
           return;
         }
+        // T' Rambler's Sketchbook — frame whatever tha's looking at an' save it.
+        // (In creative, P is the rail-survey peg above — the sketchbook yields to t' dev tool.)
+        if (e.code === 'KeyP') { this.takeSketch(); return; }
         // sheepdog whistles (arrow keys) — work a flock wi' thi dog; H brings her to heel
         const whistle = commandFromKey(e.code);
         if (whistle || e.code === 'KeyH') {
@@ -1844,6 +1847,29 @@ class Game {
     }
     const moorstead = fog ? null : { label: bearingLabel(p.x, p.z, geo.village.x, geo.village.z) };
     this.ui.toast(shelterToast({ fog, shelter, village, moorstead }), 8000);
+  }
+
+  // ---------------- t' rambler's sketchbook (P) ----------------
+  // Frame t' view an' save it: the WebGL canvas is the scene alone (the HUD is
+  // separate DOM, so it never appears). preserveDrawingBuffer stays OFF (it costs
+  // perf every frame) — instead we render one fresh frame synchronously an' read
+  // the buffer before the browser clears it, the standard Three.js capture trick.
+  takeSketch() {
+    if (!this.world || !this.player || this.state !== 'playing') return;
+    try {
+      this.renderer.render(this.scene, this.camera);
+      const p = this.player.pos;
+      const place = this.world.gen.geo.locationName(p.x, p.z) || '';
+      const day = this.sky ? this.sky.day : 1;
+      const a = document.createElement('a');
+      a.href = composeSketch(this.renderer.domElement, place, day);
+      a.download = sketchFilename(place, day);
+      a.click();
+      this.ui.toast('\u{1F4F8} Tha’s sketched t’ view — saved to thi downloads.', 5000);
+    } catch (e) {
+      reportQuiet('sketch', e);
+      this.ui.toast('T’ sketchbook page tore — try again in a breath.', 4000);
+    }
   }
 
   // ---------------- sleeping ----------------

@@ -70,6 +70,96 @@ export function shelterToast({ fog, shelter, village, moorstead }) {
   return parts.join('<br>');
 }
 
+// ---- T' Rambler's Sketchbook (P) — pure caption/filename/frame maths, exported so
+// verify-sketchbook can run 'em headless. Only composeSketch (below) touches the DOM. ----
+
+// the caption strip: "<place> · Day <n> · MOORSTEAD" — place falls back to t' High Moor,
+// day is floored at 1 (owd saves an' garbage read as Day 1, never Day 0 or NaN)
+export function sketchCaption(place, day) {
+  const p = (place && String(place).trim()) || 'T’ High Moor';
+  const d = Math.max(1, Math.round(Number(day) || 1));
+  return `${p} · Day ${d} · MOORSTEAD`;
+}
+
+// download filename: moorstead-<place-slug>-day<n>.png — ascii-safe (apostrophes
+// straight an' curly drop clean, owt else non-alphanumeric collapses to a dash)
+export function sketchFilename(place, day) {
+  const p = (place && String(place).trim()) || 'T’ High Moor';
+  const slug = p.toLowerCase().replace(/[‘’']/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'moor';
+  const d = Math.max(1, Math.round(Number(day) || 1));
+  return `moorstead-${slug}-day${d}.png`;
+}
+
+// frame geometry for a w×h scene shot: a warm mount border all round, a deeper strip
+// below for the caption, and a thin double rule floating in the mount around the plate.
+// Pure numbers only — the verify script checks the nesting (photo inside inner rule
+// inside outer rule inside mount) without a canvas in sight.
+export function sketchFrameGeom(w, h) {
+  const border = Math.max(24, Math.round(Math.min(w, h) * 0.05)); // the sepia-cream mount
+  const capH = Math.max(34, Math.round(border * 1.4));            // caption strip below t' plate
+  const W = w + border * 2, H = h + border * 2 + capH;
+  const photo = { x: border, y: border, w, h };
+  const gapIn = Math.max(5, Math.round(border * 0.3));            // plate edge -> inner rule
+  const gapOut = gapIn + 4;                                       // ...and t' outer rule, 4px beyond
+  const ruleInner = { x: photo.x - gapIn, y: photo.y - gapIn, w: w + gapIn * 2, h: h + gapIn * 2 };
+  const ruleOuter = { x: photo.x - gapOut, y: photo.y - gapOut, w: w + gapOut * 2, h: h + gapOut * 2 };
+  const ruleBottom = photo.y + photo.h + gapOut;
+  const caption = { x: Math.round(W / 2), y: Math.round(ruleBottom + (H - ruleBottom) * 0.55) };
+  const fontPx = Math.max(13, Math.round(capH * 0.42));
+  return { W, H, border, capH, photo, ruleInner, ruleOuter, caption, fontPx };
+}
+
+// Composite the scene canvas into a period sketchbook plate: warm mount, gentle sepia
+// wash, vignette, thin double rule, serif small-caps caption. Returns a PNG data-URL.
+// DOM-only (needs a 2D canvas) — its maths live in sketchFrameGeom, verified headless.
+export function composeSketch(src, place, day) {
+  const g = sketchFrameGeom(src.width, src.height);
+  const c = document.createElement('canvas');
+  c.width = g.W; c.height = g.H;
+  const x = c.getContext('2d');
+  x.fillStyle = '#ece0c4';                                        // sepia-cream mount
+  x.fillRect(0, 0, g.W, g.H);
+  x.drawImage(src, g.photo.x, g.photo.y);
+  x.fillStyle = 'rgba(90,62,24,0.12)';                            // warm wash ower t' plate
+  x.fillRect(g.photo.x, g.photo.y, g.photo.w, g.photo.h);
+  const cx = g.W / 2, cy = g.photo.y + g.photo.h / 2;             // tasteful vignette
+  const v = x.createRadialGradient(cx, cy, Math.min(g.photo.w, g.photo.h) * 0.45,
+    cx, cy, Math.hypot(g.photo.w, g.photo.h) / 2);
+  v.addColorStop(0, 'rgba(30,18,6,0)');
+  v.addColorStop(1, 'rgba(30,18,6,0.34)');
+  x.fillStyle = v;
+  x.fillRect(g.photo.x, g.photo.y, g.photo.w, g.photo.h);
+  x.strokeStyle = '#6b5233';                                      // thin double rule
+  x.lineWidth = 1.5;
+  x.strokeRect(g.ruleOuter.x + 0.5, g.ruleOuter.y + 0.5, g.ruleOuter.w - 1, g.ruleOuter.h - 1);
+  x.lineWidth = 1;
+  x.strokeRect(g.ruleInner.x + 0.5, g.ruleInner.y + 0.5, g.ruleInner.w - 1, g.ruleInner.h - 1);
+  x.fillStyle = '#5a4632';
+  x.textAlign = 'center';
+  x.font = `small-caps 600 ${g.fontPx}px Georgia, 'Times New Roman', serif`;
+  x.fillText(sketchCaption(place, day), g.caption.x, g.caption.y);
+  return c.toDataURL('image/png');
+}
+
+// ---- T' Roll of Honour (notice board) — pure row builder, exported for verify-sketchbook.
+// Other ramblers' worn titles don't travel t' wire (remotes carry a name only), so the
+// roll lists t' local player alone — no protocol invented here. ----
+export const HONOURS_EMPTY = 'No honours yet — t’ moor’s waiting.';
+
+// From a quests-shaped object -> the rows the board renders. Each earned title becomes
+// { label: '★ <title>', value, worn }; a final '— none —' row lets t' player go plain.
+// No titles at all -> { rows: [], empty: HONOURS_EMPTY }. standing rides along for t' header.
+export function buildHonoursRows(q) {
+  const titles = (typeof q.earnedTitleList === 'function'
+    ? q.earnedTitleList() : (q.earnedTitles || [])).filter(Boolean);
+  const standing = typeof q.standingLabel === 'function' ? q.standingLabel() : '';
+  if (!titles.length) return { rows: [], empty: HONOURS_EMPTY, standing };
+  const rows = titles.map(t => ({ label: `★ ${t}`, value: t, worn: q.wornTitle === t }));
+  rows.push({ label: '— none —', value: null, worn: q.wornTitle == null });
+  return { rows, empty: null, standing };
+}
+
 function pixURL(pattern, fullColor, dim) {
   const rows = pattern.length, cols = pattern[0].length;
   const c = document.createElement('canvas');
@@ -422,6 +512,7 @@ export class UI {
 <b>N</b> Sleep (available at night under a roof, near a light source)<br>
 <b>L</b> Find shelter &mdash; bearing and distance to the nearest moor shelter and back to Moorstead<br>
 <b>M</b> Mute sound<br>
+<b>P</b> Sketch t&rsquo; view &mdash; a framed keepsake, saved to thi downloads<br>
 <b>Esc</b> Pause / Close screens<br>
 <b>Space &times;2</b> Toggle flying (creative mode only)
 </div>
@@ -886,29 +977,32 @@ export class UI {
       (q.wornTitle ? `, <i style="color:#c9b27a">${q.wornTitle}</i>` : '') +
       (q.shame > 0 ? ` &mdash; <span style="color:#d87a5a">but tha&rsquo;s in folk&rsquo;s bad books (${q.shame}). Good deeds&rsquo;ll mend it.</span>` : ''));
 
-    // ---- Honours: earned period titles; wear one (or none). Inert until one is earned. ----
+    // ---- Honours: t' roll of honour — earned period titles; wear one (or none).
+    // Rows come from buildHonoursRows (pure, verified headless). Other ramblers' worn
+    // titles aren't in t' wire protocol (remotes carry a name only), so the roll lists
+    // thee alone. Inert on the stylised world until a title's earned. ----
     {
-      const titles = q.earnedTitleList();
-      if (titles.length) {
-        this.el('div', 'inv-title', this.boardPanel, 'Honours');
+      const hon = buildHonoursRows(q);
+      if (hon.rows.length) {
+        this.el('div', 'inv-title', this.boardPanel, 'Honours &mdash; T&rsquo; Roll');
+        this.el('div', 'r-needs', this.boardPanel,
+          `Thee &mdash; <b style="color:#9ec27a">${hon.standing}</b> o&rsquo; t&rsquo; parish`);
         const hlist = this.el('div', 'recipes board-list', this.boardPanel);
-        const wearRow = (label, value, worn) => {
+        for (const hr of hon.rows) {
           const row = this.el('div', 'recipe quest-row', hlist);
-          row.innerHTML = `<div class="r-name"><b>${worn ? '★ ' : ''}${label}</b>` +
-            (worn ? '<br><span class="r-needs">worn now</span>' : '') + '</div>';
-          if (!worn) {
+          row.innerHTML = `<div class="r-name"><b>${hr.label}</b>` +
+            (hr.worn ? '<br><span class="r-needs">worn now</span>' : '') + '</div>';
+          if (!hr.worn) {
             const b = this.el('button', 'mc chat-btn', row, 'Wear');
-            b.addEventListener('click', () => { q.setWornTitle(value); this.openBoard(fromBoard); });
+            b.addEventListener('click', () => { q.setWornTitle(hr.value); this.openBoard(fromBoard); });
           }
-        };
-        for (const t of titles) wearRow(t, t, q.wornTitle === t);
-        wearRow('&mdash; none &mdash;', null, q.wornTitle === null);
+        }
       } else if (this.game.world && this.game.world.gen.geo.realWorld) {
         // Moors world: a faint period line where honours are earnable. The stylised world
         // earns none, so it stays exactly as before (no label, no box) — the inert path.
-        this.el('div', 'inv-title', this.boardPanel, 'Honours');
+        this.el('div', 'inv-title', this.boardPanel, 'Honours &mdash; T&rsquo; Roll');
         this.el('div', 'r-needs', this.boardPanel,
-          '<span style="opacity:.7">No honours yet &mdash; folk have no special name for thee.</span>');
+          `<span style="opacity:.7">${hon.empty}</span>`);
       }
     }
 
