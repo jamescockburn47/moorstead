@@ -19,6 +19,10 @@ relevant one(s) first:
   determinism, resource hygiene, the procedural-only identity…).
 - **`scripts/verify-_template.mjs`** — skeleton for a new verify script.
 - **[docs/FLOW.md](docs/FLOW.md)** — the game-flow/design backlog (not a rulebook).
+- **Graphics work?** [docs/superpowers/2026-07-02-graphics-wow-audit.md](docs/superpowers/2026-07-02-graphics-wow-audit.md)
+  (56 red-teamed upgrade proposals + wave plan) and its companion stack-map doc (verified
+  rendering-stack reference, file:line). **Do not read wholesale** — each has a master
+  index/TOC at the top; read that, then Grep the one item/section you need.
 
 ## The server side is reachable — verify it, don't disclaim it
 
