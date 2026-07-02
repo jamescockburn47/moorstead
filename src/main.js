@@ -1987,7 +1987,8 @@ class Game {
     }
     this.ui.invDirty = true;
     const desc = items.map(([id, n]) => `${n}× ${itemName(id)}`).join(', ');
-    this.ui.toast(`<b>${fromName}</b> gave thee <b>${desc}</b>!`, 6000);
+    // fromName is relay-borne (another player's name) — escape it, same as chat toasts
+    this.ui.toast(`<b>${escHtml(fromName)}</b> gave thee <b>${escHtml(desc)}</b>!`, 6000);
   }
 
   // ---- T' Tradin' Post (market stalls v1) ----
@@ -3941,7 +3942,7 @@ class Game {
             if (held) {
               this.giveToRemote(m, held);
             } else {
-              this.ui.toast(`That's <b>${m.displayName}</b> — another living soul. Hold summat in hand an' right-click to give it, or press <b>T</b> to chat.`, 5000);
+              this.ui.toast(`That's <b>${escHtml(m.displayName)}</b> — another living soul. Hold summat in hand an' right-click to give it, or press <b>T</b> to chat.`, 5000);
             }
             return;
           }
