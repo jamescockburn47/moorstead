@@ -4,6 +4,22 @@ Procedural sandbox game (Vite + Three.js). Public client: **www.moorstead.app** 
 This repo is the **client** source of truth. The backend (relay, NPC brain, dashboard) runs
 on a separate box ("the EVO") and is **not** in this repo — but it **is reachable**, see below.
 
+## Start here — the structure docs (read before changing code)
+
+These exist so you can change one thing without reading the whole codebase. Read the
+relevant one(s) first:
+
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — the module map: which file owns what,
+  what it exposes, which verify script guards it. Find your area here first.
+- **[docs/ADDING-A-FEATURE.md](docs/ADDING-A-FEATURE.md)** — the recipe every feature
+  follows (data table → builder → verify script → wire into gate → deploy). Prefer adding
+  a row to a table over new control flow.
+- **[docs/INVARIANTS.md](docs/INVARIANTS.md)** — the 9 load-bearing rules a change must not
+  break (additive protocol, append-only content, forward-refuse saves, Plain fallback,
+  determinism, resource hygiene, the procedural-only identity…).
+- **`scripts/verify-_template.mjs`** — skeleton for a new verify script.
+- **[docs/FLOW.md](docs/FLOW.md)** — the game-flow/design backlog (not a rulebook).
+
 ## The server side is reachable — verify it, don't disclaim it
 
 The relay (`worldsvc`), NPC brain (`yorkshire_bot`), and dashboard run on the EVO and are
