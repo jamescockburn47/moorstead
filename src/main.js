@@ -11,8 +11,8 @@ import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_HASHES } from './defs.js';
 import { strSeed } from './noise.js';
 import { protectedAt } from './landmarks.js';
-import { initMaterials, setSnowLevel, setFrozen, setGlintTime, getMaterials } from './mesher.js';
-import { stepAccumulation, accumulationTarget, isFrozen } from './snow.js';
+import { initMaterials, setSnowLevel, setFrozen, setGlintTime, setWaterTime, setRippleAmp, setFlowAmp, setGlitter, setFresnel, getMaterials } from './mesher.js';
+import { stepAccumulation, accumulationTarget, isFrozen, overcastGrey } from './snow.js';
 import { getIconURL, retintAtlasForSeason, getCutoutAtlas } from './textures.js';
 import { World } from './world.js';
 import { Player } from './player.js';
@@ -307,6 +307,14 @@ class Game {
   applyQuality(q) {
     this.gfxQuality = q;
     const fine = q === 'fine';
+    // [15]/[D0] living water: effect amps stamped per tier. Plain = all 0, so t' liquid
+    // shader terms multiply out to nowt an' t' output stays byte-identical flat water
+    // (t' aTop/aFlow attributes are inert data). uGlitter is re-driven every frame under
+    // Fine (dayness × clear sky); parked at 0 here so Plain never sparkles.
+    setRippleAmp(fine ? 0.05 : 0);
+    setFlowAmp(fine ? 0.05 : 0);
+    setGlitter(0);
+    setFresnel(fine ? 0.35 : 0);
     const r = this.renderer;
     if (fine) {
       r.toneMapping = THREE.ACESFilmicToneMapping;
@@ -4909,6 +4917,17 @@ class Game {
       setSnowLevel(this.snowAccum); // height-gated snow on the tops (cheap uniform)
       setFrozen(isFrozen(season));
       this._glintT = (this._glintT || 0) + dt; setGlintTime(this._glintT); // drive forage glint animation
+      setWaterTime(this._glintT); // [15]/[D0] water ripples + becks ride t' same clock — no new tick
+      // [15] sun-sparkle on t' water: full glitter at clear noon, nowt at neet or under
+      // cloud. dayness mirrors t' sky.js sun curve; overcast mirrors sky.js's overcastGrey
+      // call (eased snowAmount stands in for t' instantaneous snowfall). Fine only —
+      // applyQuality parks uGlitter at 0 an' Plain never touches it again.
+      if (this.gfxQuality === 'fine') {
+        const sunY = Math.sin((this.sky.time - 0.25) * Math.PI * 2);
+        const dayness = Math.max(0, Math.min(1, (sunY + 0.12) * 3));
+        const overcast = overcastGrey(this.sky.weather, this.sky.snowAmount || 0, this.sky.rainAmount);
+        setGlitter(dayness * (1 - overcast));
+      }
       const sbk = Math.floor(season.yearPhase * 40);
       if (sbk !== this._seasonBucket) { this._seasonBucket = sbk; retintAtlasForSeason(season); } // heather purple, bracken rust…
       // is there a roof overhead? (stops rain fallin' through ceilings + drives wetness)

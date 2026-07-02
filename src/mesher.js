@@ -44,15 +44,87 @@ function addSnow(mat, key = 'terrain-snow', glint = false) {
 
 const iceUniform = { uFrozen: { value: 0 } };
 export function setFrozen(frozen) { iceUniform.uFrozen.value = frozen ? 1 : 0; }
-function addIce(mat) {
+
+// [15]+[D0] living water: module uniforms shared by t' ONE liquid material (same
+// pattern as glintUniform). All default 0 = today's flat still water, so Plain is
+// byte-identical; applyQuality (main.js) stamps t' Fine amps an' setGlitter is
+// re-driven each frame frae dayness × clear-sky. setWaterTime rides t' existing
+// glint clock in main.js — no new tick.
+const waterUniforms = {
+  uWaterTime: { value: 0 },  // shared water clock (seconds)
+  uRippleAmp: { value: 0 },  // isotropic surface bob amplitude (sea/tarns), Fine ~0.05
+  uFlowAmp: { value: 0 },    // downstream wavelet amplitude (becks), Fine ~0.05
+  uGlitter: { value: 0 },    // sun-sparkle strength, driven per frame under Fine
+  uFresnel: { value: 0 },    // grazing-angle alpha lift (glassy water), Fine ~0.35
+};
+export function setWaterTime(t) { waterUniforms.uWaterTime.value = t; }
+export function setRippleAmp(v) { waterUniforms.uRippleAmp.value = v; }
+export function setFlowAmp(v) { waterUniforms.uFlowAmp.value = v; }
+export function setGlitter(v) { waterUniforms.uGlitter.value = v; }
+export function setFresnel(v) { waterUniforms.uFresnel.value = v; }
+
+// [D0] chainage wrap for aFlow.z: baked as s % FLOW_WRAP (K = 1 block⁻¹). 50π is
+// chosen so EVERY sinusoid the shader hangs off vFlowS completes whole cycles across
+// t' wrap — coefficients 1.6, 1.6·2.7 = 4.32 an' 2.2 give 80π, 216π an' 110π, all
+// even multiples o' π — so t' phase is seamless at t' wrap an' float32 never sees a
+// chainage beyond ~157 (t' Esk runs to thousands o' blocks; raw s would lose t'
+// sub-radian precision t' wavelets need).
+export const FLOW_WRAP = Math.PI * 50;
+const FLOW_ZERO = [0, 0, 0];
+
+// T' liquid shader: ice tint (winter freeze, unchanged semantics — uFrozen stays t'
+// binary addIce had; S2c will float it), plus [15] ripple/glitter an' [D0] downstream
+// wavelets/lace. ONE handler, one cache key — still exactly 3 terrain programs.
+//   aTop   — 1 on every corner carrying t' 0.12 top-drop (incl. side-face top edges,
+//            so edges ripple wi' t' surface an' no cracks open); 0 elsewhere.
+//   aFlow  — vec3(tx·bank, tz·bank, s % FLOW_WRAP): xy is t' downstream unit tangent
+//            scaled by bank (1 mid-channel → 0 at t' bank), so ONE attribute carries
+//            direction, strength an' phase; t' shader recovers bank as length(aFlow.xy).
+//            Zero-filled off-river an' in t' stylised world → collapses to [15].
+function addWater(mat) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uFrozen = iceUniform.uFrozen;
-    shader.vertexShader = 'attribute float aFreeze;\nvarying float vFreeze;\n' + shader.vertexShader
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vFreeze = aFreeze;');
-    shader.fragmentShader = 'uniform float uFrozen;\nvarying float vFreeze;\n' + shader.fragmentShader
-      .replace('#include <color_fragment>', '#include <color_fragment>\n  float ice = uFrozen * vFreeze;\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.88, 0.95), ice);');
+    shader.uniforms.uWaterTime = waterUniforms.uWaterTime;
+    shader.uniforms.uRippleAmp = waterUniforms.uRippleAmp;
+    shader.uniforms.uFlowAmp = waterUniforms.uFlowAmp;
+    shader.uniforms.uGlitter = waterUniforms.uGlitter;
+    shader.uniforms.uFresnel = waterUniforms.uFresnel;
+    shader.vertexShader = 'attribute float aFreeze;\nattribute float aTop;\nattribute vec3 aFlow;\nuniform float uFrozen;\nuniform float uWaterTime;\nuniform float uRippleAmp;\nuniform float uFlowAmp;\nvarying float vFreeze;\nvarying float vWX;\nvarying float vWZ;\nvarying float vFlowS;\nvarying vec2 vFlowDir;\n' + shader.vertexShader
+      .replace('#include <begin_vertex>',
+        '#include <begin_vertex>\n'
+        + '  vFreeze = aFreeze;\n'
+        // world pos via modelMatrix (t' addSnow idiom) so ripple phase never repeats per chunk
+        + '  vec4 wWaterPos = modelMatrix * vec4(transformed, 1.0);\n'
+        + '  vWX = wWaterPos.x; vWZ = wWaterPos.z;\n'
+        + '  vFlowS = aFlow.z; vFlowDir = aFlow.xy;\n'
+        // [15] isotropic bob, [D0] directional downstream wavelet; blended by bank
+        // strength (smoothstep, not a hard step, so t' beck meets t' sea wi'out a crack)
+        + '  float wIso = sin(uWaterTime * 1.3 + wWaterPos.x * 0.9) * cos(uWaterTime * 1.1 + wWaterPos.z * 0.7);\n'
+        + '  float wPh = aFlow.z * 1.6 - uWaterTime * 2.4;\n'
+        + '  float wDir = 0.8 * sin(wPh) + 0.2 * sin(wPh * 2.7);\n'
+        + '  float wFm = smoothstep(0.01, 0.06, length(aFlow.xy));\n'
+        + '  transformed.y += aTop * (1.0 - aFreeze * uFrozen) * mix(uRippleAmp * wIso, uFlowAmp * wDir, wFm);');
+    shader.fragmentShader = 'uniform float uFrozen;\nuniform float uWaterTime;\nuniform float uFlowAmp;\nuniform float uGlitter;\nuniform float uFresnel;\nvarying float vFreeze;\nvarying float vWX;\nvarying float vWZ;\nvarying float vFlowS;\nvarying vec2 vFlowDir;\n' + shader.fragmentShader
+      .replace('#include <color_fragment>',
+        '#include <color_fragment>\n'
+        + '  float ice = uFrozen * vFreeze;\n'
+        + '  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.88, 0.95), ice);\n'
+        // [15] world-space sun glitter (NOT a UV scroll), phase sheared downstream by
+        // dot(wpos.xz, flow) so sparkle streaks elongate along t' current ([D0])
+        + '  vec2 wGp = vec2(vWX, vWZ);\n'
+        + '  wGp -= vFlowDir * dot(wGp, vFlowDir) * 0.5;\n'
+        + '  float wG = pow(max(0.0, sin(wGp.x * 2.3 + uWaterTime * 0.8) * sin(wGp.y * 1.9 - uWaterTime * 0.6)), 8.0);\n'
+        + '  diffuseColor.rgb += wG * uGlitter * (1.0 - ice);\n'
+        // [D0] travelling lace bands running downstream, strongest mid-channel;
+        // 3×uFlowAmp keeps 'em subtle (max +0.15) an' Plain-safe (amp 0 → nowt)
+        + '  float wBank = length(vFlowDir);\n'
+        + '  float wLace = smoothstep(0.55, 0.95, 0.5 + 0.5 * sin(vFlowS * 2.2 - uWaterTime * 3.0)) * wBank;\n'
+        + '  diffuseColor.rgb += wLace * uFlowAmp * 3.0 * (1.0 - ice);\n'
+        // [15] Fine-only fresnel: grazing-angle water reads glassy (alpha lift)
+        + '  float wFres = pow(1.0 - abs(dot(normalize(vViewPosition), normalize(vNormal))), 3.0);\n'
+        + '  diffuseColor.a = min(1.0, diffuseColor.a + wFres * uFresnel);');
   };
-  mat.customProgramCacheKey = () => 'liquid-ice';
+  mat.customProgramCacheKey = () => 'liquid-ice-water';
   return mat;
 }
 
@@ -61,7 +133,7 @@ export function initMaterials() {
   materials = {
     opaque: addSnow(new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true }), 'snow-opaque'),
     cutout: addSnow(new THREE.MeshLambertMaterial({ map: getCutoutAtlas(), vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }), 'snow-cutout-glint', true),
-    liquid: addIce(new THREE.MeshLambertMaterial({
+    liquid: addWater(new THREE.MeshLambertMaterial({
       map: atlas, vertexColors: true, transparent: true, opacity: 0.78,
       depthWrite: false, side: THREE.DoubleSide,
     })),
@@ -121,8 +193,11 @@ export function topFaceVariation(wx, wz, amp = TOP_VARY_AMP) {
 }
 
 class GeoBuilder {
-  constructor() { this.pos = []; this.norm = []; this.uv = []; this.col = []; this.exp = []; this.frz = []; this.idx = []; this.n = 0; }
-  quad(corners, normal, uvRect, aos, light, exp = 1, frz = 0, tint = null) {
+  constructor() { this.pos = []; this.norm = []; this.uv = []; this.col = []; this.exp = []; this.frz = []; this.top = []; this.flow = []; this.idx = []; this.n = 0; }
+  // tops: per-corner aTop floats (liquid only); flow: per-quad [fx, fz, s] aFlow vec3
+  // (liquid only). Solid/cutout passes never push 'em, so build() skips t' attributes
+  // an' t' big opaque geometry carries nowt extra.
+  quad(corners, normal, uvRect, aos, light, exp = 1, frz = 0, tint = null, tops = null, flow = null) {
     const [u0, v0, u1, v1] = uvRect;
     for (const c of corners) {
       this.pos.push(c[0], c[1], c[2]);
@@ -131,6 +206,8 @@ class GeoBuilder {
       this.exp.push(exp);
     }
     this.frz.push(frz, frz, frz, frz);
+    if (tops) this.top.push(tops[0], tops[1], tops[2], tops[3]);
+    if (flow) for (let i = 0; i < 4; i++) this.flow.push(flow[0], flow[1], flow[2]);
     for (let i = 0; i < 4; i++) {
       const b = AO_LEVELS[aos[i]] * light;
       if (tint) this.col.push(b * tint.r, b * tint.g, b * tint.b);
@@ -153,6 +230,8 @@ class GeoBuilder {
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     g.setAttribute('aSnowExp', new THREE.Float32BufferAttribute(this.exp, 1));
     g.setAttribute('aFreeze', new THREE.Float32BufferAttribute(this.frz, 1));
+    if (this.top.length) g.setAttribute('aTop', new THREE.Float32BufferAttribute(this.top, 1));
+    if (this.flow.length) g.setAttribute('aFlow', new THREE.Float32BufferAttribute(this.flow, 3));
     g.setIndex(this.idx);
     g.computeBoundingSphere();
     return new THREE.Mesh(g, material);
@@ -184,6 +263,22 @@ export function buildChunkMeshes(world, chunk) {
     return world.getBlock(x0 + x, y, z0 + z);
   };
   const occludes = (x, y, z) => isOpaque(get(x, y, z));
+
+  // [D0] per-COLUMN river flow, memoised (t' y-loop is outermost, so each water column
+  // is visited many times). Moors world only — t' stylised geo has no riverFlow (t'
+  // worldgen.js typeof idiom), so t' attribute zero-fills an' behaviour collapses to [15].
+  const geo = world.gen.geo;
+  const flowMemo = new Map();
+  const flowAt = (lx, lz) => {
+    const k = lx + lz * CHUNK;
+    let f = flowMemo.get(k);
+    if (f === undefined) {
+      const rf = (typeof geo.riverFlow === 'function') ? geo.riverFlow(x0 + lx, z0 + lz) : null;
+      f = rf ? [rf.tx * rf.bank, rf.tz * rf.bank, rf.s % FLOW_WRAP] : FLOW_ZERO;
+      flowMemo.set(k, f);
+    }
+    return f;
+  };
 
   for (let y = 0; y < HEIGHT; y++) {
     for (let lz = 0; lz < CHUNK; lz++) {
@@ -228,6 +323,7 @@ export function buildChunkMeshes(world, chunk) {
         if (isLiquid(id)) {
           const uvr = tileUV(def.tex.t);
           const drop = 0.12;
+          const flow = flowAt(lx, lz);
           for (let f = 0; f < FACES.length; f++) {
             const { dir, corners } = FACES[f];
             const nb = get(lx + dir[0], y + dir[1], lz + dir[2]);
@@ -237,8 +333,11 @@ export function buildChunkMeshes(world, chunk) {
               const yy = (c[1] === 1) ? y + 1 - drop : y;
               return [lx + c[0], yy, lz + c[2], c[3], c[4]];
             });
-            const frz = freezableWater(id, world.gen.geo.coastT(x0 + lx, z0 + lz), B) ? 1 : 0;
-            liquid.quad(cs, dir, uvr, [3, 3, 3, 3], FACE_LIGHT[f], 1, frz);
+            const frz = freezableWater(id, geo.coastT(x0 + lx, z0 + lz), B) ? 1 : 0;
+            // aTop = 1 exactly where t' 0.12 top-drop applied (c[1] === 1) — INCLUDING
+            // side-face top edges, so edges ripple wi' t' surface an' no cracks open
+            liquid.quad(cs, dir, uvr, [3, 3, 3, 3], FACE_LIGHT[f], 1, frz,
+              null, corners.map(c => c[1]), flow);
           }
           continue;
         }

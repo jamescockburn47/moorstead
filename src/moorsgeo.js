@@ -886,6 +886,61 @@ export class MoorsGeography {
   // water surface level at a river column (for worldgen to fill), else null
   riverWaterLevel(x, z) { const rc = this.riverColumn(x, z); return rc ? rc.wl : null; }
 
+  // ---------- [D0] downstream flow (for the mesher's aFlow bake) ----------
+  // 8-block segment cell index (cloned from railpath.js buildRailPath's cells): each
+  // river segment i (res[i]→res[i+1]) is registered under BOTH endpoints' cells, so a
+  // 3×3 cell scan around a query point catches every segment whose nearest point lies
+  // within RIVER_HALF (≤3): the nearer endpoint sits within half-a-segment (<4) of that
+  // nearest point, i.e. within 7 (<8) blocks of the query. Built once, deterministic.
+  // Measured over 6 Esk chunks (2026-07-02): brute-force riverFlow cost +37% on
+  // buildChunkMeshes (2.25 → 3.08 ms/chunk) — over the 5% ruling — while the indexed
+  // call is free within noise (2.04 ms/chunk). generateChunk (13.1 ms) never calls this.
+  _flowIndex() {
+    if (this._fidx) return this._fidx;
+    const idx = new Map();
+    const put = (k, r, i) => { let a = idx.get(k); if (!a) idx.set(k, a = []); a.push([r, i]); };
+    for (const r of this._riverProfile()) {
+      for (let i = 0; i < r.res.length - 1; i++) {
+        const ka = Math.floor(r.res[i].x / 8) + ',' + Math.floor(r.res[i].z / 8);
+        const kb = Math.floor(r.res[i + 1].x / 8) + ',' + Math.floor(r.res[i + 1].z / 8);
+        put(ka, r, i);
+        if (kb !== ka) put(kb, r, i);
+      }
+    }
+    this._fidx = idx;
+    return idx;
+  }
+
+  // Flow at a water column → { tx, tz, s, bank } or null off-river.
+  //   tx,tz — unit tangent pointing DOWNSTREAM (res is downstream-ordered after the
+  //           reverse in _riverProfile, so res[i]→res[i+1] always descends);
+  //   s     — chainage from the source (same interpolation as riverColumn);
+  //   bank  — 1 mid-channel fading to 0 at the bank (1 - d/half).
+  riverFlow(x, z) {
+    const idx = this._flowIndex();
+    const ci = Math.floor(x / 8), cj = Math.floor(z / 8);
+    let best = null;
+    for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+      const cell = idx.get((ci + di) + ',' + (cj + dj));
+      if (!cell) continue;
+      for (const [r, i] of cell) {
+        const [d, t] = segDT(x, z, r.res[i].x, r.res[i].z, r.res[i + 1].x, r.res[i + 1].z);
+        if (!best || d < best.d) best = { d, r, i, t };
+      }
+    }
+    if (!best) return null;
+    const half = RIVER_HALF[best.r.size] || 2;
+    if (best.d >= half) return null;
+    const res = best.r.res, i = best.i;
+    const dx = res[i + 1].x - res[i].x, dz = res[i + 1].z - res[i].z;
+    const L = Math.hypot(dx, dz) || 1;
+    return {
+      tx: dx / L, tz: dz / L,
+      s: res[i].s + (res[i + 1].s - res[i].s) * best.t,
+      bank: 1 - best.d / half,
+    };
+  }
+
   // is (x,z) within `pad` blocks of a river bank? Keeps trees/boulders/structures clear.
   nearRiver(x, z, pad = 0) {
     for (const r of this._riverProfile()) {

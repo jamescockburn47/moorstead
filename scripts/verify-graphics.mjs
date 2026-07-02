@@ -175,4 +175,29 @@ ok(skySrc.includes('uFogBand'), 'dome holds the fog colour at the horizon band')
   ok(far <= 0.9 * R, `clear-weather fog (far ${far}) fully occludes inside the ${R}-block meshed radius`);
 }
 
+// ---- S2a: living water ([15]) + flowing becks ([D0]) — behavioural checks in verify-water.mjs ----
+const moorsgeoSrc = src('../src/moorsgeo.js');
+for (const u of ['uWaterTime', 'uRippleAmp', 'uFlowAmp', 'uGlitter', 'uFresnel'])
+  ok(mesherSrc.includes(`${u}: { value: 0 }`), `${u} module uniform exists, defaults 0 (Plain = today's flat water)`);
+ok(mesherSrc.includes("customProgramCacheKey = () => 'liquid-ice-water'"), 'liquid stays ONE compiled program — ice + water share the addWater handler/key');
+ok((mesherSrc.match(/customProgramCacheKey/g) || []).length === 2, 'no sibling onBeforeCompile handlers snuck in (exactly addSnow + addWater set keys)');
+ok(mesherSrc.includes('transformed.y += aTop'), 'water displacement gated by aTop — bed walls never move');
+ok(mesherSrc.includes('(1.0 - aFreeze * uFrozen)'), 'ripples freeze solid wi’ the winter ice (uFrozen semantics untouched — binary until S2c)');
+ok(mesherSrc.includes('vec4 wWaterPos = modelMatrix * vec4(transformed, 1.0)'), 'ripple/glitter phase in WORLD space via modelMatrix (addSnow idiom, no per-chunk repeat)');
+ok(mesherSrc.includes('normalize(vViewPosition)'), 'grazing-angle fresnel reads Lambert’s vViewPosition (Fine-only via uFresnel)');
+ok(mesherSrc.includes("setAttribute('aTop'") && mesherSrc.includes("setAttribute('aFlow'"), 'aTop/aFlow baked as buffer attributes (liquid pass only)');
+ok(mesherSrc.includes("typeof geo.riverFlow === 'function'"), 'stylised world guarded wi’ the worldgen typeof idiom — aFlow zero-fills there');
+ok(mesherSrc.includes('const FLOW_WRAP = Math.PI * 50'), 'chainage wrap constant documented + exported (50π: every vFlowS sinusoid completes whole cycles)');
+ok(mesherSrc.includes('rf.s % FLOW_WRAP'), 'baked chainage actually wrapped (float32-safe on the long Esk)');
+ok(moorsgeoSrc.includes('riverFlow(x, z)'), 'geo.riverFlow exists (downstream tangent + chainage + bank)');
+ok(moorsgeoSrc.includes('_flowIndex()'), '8-block segment cell index present (perf ruling: brute force cost +37% mesh time)');
+// Plain byte-identical: applyQuality stamps every amp to 0; glitter re-driven Fine-only
+ok(mainSrc.includes('setRippleAmp(fine ? 0.05 : 0)'), 'applyQuality: ripple amp 0.05 Fine / 0 Plain');
+ok(mainSrc.includes('setFlowAmp(fine ? 0.05 : 0)'), 'applyQuality: flow amp 0.05 Fine / 0 Plain');
+ok(mainSrc.includes('setFresnel(fine ? 0.35 : 0)'), 'applyQuality: fresnel 0.35 Fine / 0 Plain');
+ok(/setRippleAmp\(fine \? 0\.05 : 0\);\s*\n\s*setFlowAmp\(fine \? 0\.05 : 0\);\s*\n\s*setGlitter\(0\);/.test(mainSrc), 'applyQuality parks uGlitter at 0 (Plain never sparkles)');
+ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,500}?setGlitter\(dayness \* \(1 - overcast\)\);/.test(mainSrc), 'glitter driven per frame frae dayness × clear-sky, Fine only');
+ok(mainSrc.includes('setWaterTime(this._glintT)'), 'water clock rides the existing glint tick — no new per-client accumulator');
+ok(mainSrc.includes('overcastGrey(this.sky.weather'), 'overcast term mirrors sky.js’s own overcastGrey call');
+
 console.log(`verify-graphics: ${n} assertions OK`);
