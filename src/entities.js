@@ -482,7 +482,11 @@ function makeSeagull() {
 }
 
 // ---------- villagers ----------
-// Appearance derived from t' persona's name (matches yorkshire_bot's roster).
+// LEGACY look, kept verbatim for the two callers who must NOT pick up the new
+// wardrobe: remote PLAYERS (a player-customisation feature is coming — their
+// avatar stays exactly as it is today) and Merlin (his robes are built over the
+// plain base look by makeWizardExtras). Everyone else goes through
+// outfitSpecFor() below.
 function villagerLook(name) {
   const n = (name || '').toLowerCase();
   if (n.includes('glinda')) return { scale: 1.0, jumper: 0x8a8294, skirt: 0x4a4452, hair: 0xe8e8e8, cap: null, shawl: 0x6a5a6e };
@@ -492,6 +496,264 @@ function villagerLook(name) {
   if (n.includes('cc')) return { scale: 0.45, jumper: 0xc88ab0, skirt: 0xb07a9e, hair: 0xf2d878, cap: null, curls: true };
   if (n.includes('max')) return { scale: 0.32, jumper: 0xd8d0c0, skirt: 0xd8d0c0, hair: 0x9a7a4a, cap: null };
   return { scale: 1.0, jumper: 0x6a5a40, skirt: 0x4a4438, hair: 0x4a3a28, cap: 0x3a342e };
+}
+
+// ---------- NPC wardrobe: role dress + id-seeded variation ----------
+// ~100 souls wi' real names, trades an' LLM personalities all looked like the
+// same brown mannequin. Fix: a deterministic appearance system. A role maps to
+// an OUTFIT (period 1900, muted natural dyes — no chemical brights on a moor
+// wage) an' a stable id-hash seeds the person underneath it: skin, hair, build,
+// an' which shade o' the role's palette their coat were dyed. Same NPC, same
+// look, every session, every client — nowt is ever Math.random at build time.
+//
+// Budget: an outfit adds AT MOST 4 extra boxes over the base body (see
+// OUTFIT_BOXES), geometries are shared per size an' materials per colour
+// (mirrors the burst()-material cache), so 100 dressed folk cost barely more
+// than 100 plain ones. Enforced headlessly by scripts/verify-npclooks.mjs.
+
+// stable FNV-1a (same recipe as roster.js idHash — kept local, entities mustn't
+// pull in the roster module just for a hash)
+function lookHash(id) {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+// Period-plausible North-York-Moors skin (fair through weathered-outdoor tan)
+// and hair (blacks/browns/chestnut/sandy/ginger, plus grey an' white elders).
+export const SKIN_TONES = [0xf0d6b8, 0xe4c1a0, 0xd8ab8a, 0xc79b7a, 0xb08363];
+export const HAIR_TONES = [0x241c14, 0x3a2c1e, 0x4a3a28, 0x5c452e, 0x6e4f30, 0x8a5a30, 0x7c3f22, 0x8f8f88, 0xe8e8e8];
+
+// How many boxes each outfit part costs (the ≤4 budget is counted in these).
+export const OUTFIT_BOXES = {
+  cap: 1, hatwide: 2, topper: 2, helmet: 2, bonnet: 1,
+  shawl: 1, apron: 1, pinafore: 1, waistcoat: 1, collar: 1,
+  skirt: 1, coatskirt: 1, scarf: 1, beltrope: 1,
+};
+
+// role -> outfit spec. `jacket`/`legs` are palettes (the id-hash picks a shade —
+// that's the within-role hue jitter); extras are the parts that make the
+// silhouette read at distance. Every extras list sums to ≤4 boxes.
+export const WARDROBE = {
+  // the everyday parishioner: waistcoat an' flat cap in seeded homespun shades
+  villager:     { jacket: [0x6a5a40, 0x5f6350, 0x6b4f43, 0x565a66], legs: [0x4a4438, 0x413c34],
+                  extras: [{ kind: 'waistcoat', color: 0x3a342e }, { kind: 'cap', color: [0x3a342e, 0x32302a] }] },
+  // all black, white collar band, wide shovel hat
+  parson:       { jacket: [0x1d1d20], legs: [0x1a1a1d],
+                  extras: [{ kind: 'collar', color: 0xf0ead8 }, { kind: 'hatwide', color: 0x141416 }] },
+  monk:         { jacket: [0x4c3b28, 0x55432d], legs: [0x453724],
+                  extras: [{ kind: 'beltrope', color: 0x8a7a58 }] },
+  // dark blue serge an' the custodian helmet
+  constable:    { jacket: [0x25304c, 0x212b45, 0x293554], legs: [0x1e2740],
+                  extras: [{ kind: 'helmet', color: 0x1b2337 }] },
+  // shawl ower the shoulders, apron, proper skirt
+  fishwife:     { jacket: [0x5a6472, 0x6e5a5a, 0x616a5e], legs: [0x3f3a42, 0x46403a],
+                  extras: [{ kind: 'skirt', match: 'legs' }, { kind: 'shawl', color: [0x6e4a3c, 0x5a5244, 0x54604f] }, { kind: 'apron', color: 0xd9d2c0 }] },
+  herbwife:     { jacket: [0x5c6248, 0x66584a], legs: [0x453f33, 0x3f3a30],
+                  extras: [{ kind: 'skirt', match: 'legs' }, { kind: 'shawl', color: [0x4f5a40, 0x6a5a46] }, { kind: 'apron', color: 0xcfc6ae }] },
+  // crisp pinafore ower a dark dress, neat bonnet
+  postmistress: { jacket: [0x3c3646, 0x42353a], legs: [0x322e38],
+                  extras: [{ kind: 'skirt', match: 'legs' }, { kind: 'pinafore', color: 0xe4ddca }, { kind: 'bonnet', color: 0x2e2a34 }] },
+  // pale smock ower earth-tone legs — reads across a field
+  shepherd:     { jacket: [0xa89a7c, 0x9c8e72, 0xb0a284], legs: [0x5a4a34, 0x4f4531],
+                  extras: [{ kind: 'cap', color: 0x4a3f30 }, { kind: 'scarf', color: 0x7a4a38 }] },
+  drover:       { jacket: [0x77644a, 0x6d5c44], legs: [0x4a4034],
+                  extras: [{ kind: 'cap', color: 0x3c342a }, { kind: 'scarf', color: 0x5f4632 }] },
+  farmer:       { jacket: [0x6a5a40, 0x72604a, 0x5f523c], legs: [0x4a4438],
+                  extras: [{ kind: 'waistcoat', color: 0x3e352a }, { kind: 'cap', color: 0x3a342e }] },
+  // sooty jacket an' cap, a neckerchief for the flash o' colour
+  miner:        { jacket: [0x35302b, 0x2e2b28], legs: [0x2a2724],
+                  extras: [{ kind: 'cap', color: 0x232019 }, { kind: 'scarf', color: 0x71382e }] },
+  publican:     { jacket: [0x5c3f33, 0x64483a], legs: [0x3c342c],
+                  extras: [{ kind: 'waistcoat', color: 0x2f2a24 }, { kind: 'apron', color: 0xded6c2 }] },
+  // fine dark topcoat wi' skirts, an' the tall hat
+  gentry:       { jacket: [0x2c2c34, 0x33333c, 0x2a2f3a], legs: [0x26262e],
+                  extras: [{ kind: 'coatskirt', color: 0x232329 }, { kind: 'topper', color: 0x18181a }] },
+  railway:      { jacket: [0x2c3444, 0x2a3040], legs: [0x24293a],
+                  extras: [{ kind: 'waistcoat', color: 0x1f2534 }, { kind: 'cap', color: 0x1c2130 }] },
+  // the navy gansey
+  fisherman:    { jacket: [0x2c3a4e, 0x263243, 0x33424e], legs: [0x2e2a26],
+                  extras: [{ kind: 'cap', color: 0x20262e }] },
+  // leather apron trades (smith, cooper, wheelwright…)
+  craftsman:    { jacket: [0x4f463c, 0x574c40], legs: [0x3a342c],
+                  extras: [{ kind: 'apron', color: 0x5a4632 }, { kind: 'cap', color: 0x2e2a26 }] },
+  trader:       { jacket: [0x5a4a3a, 0x4e5242, 0x5e4438], legs: [0x3c362e],
+                  extras: [{ kind: 'waistcoat', color: 0x33302a }, { kind: 'apron', color: 0xcac2ae }] },
+  child:        { jacket: [0x7a6a4a, 0x5a6a7a, 0x8a5a4a, 0x8a7a5a], legs: [0x4a4438, 0x3f3f4a],
+                  extras: [], scaleBase: 0.6 },
+};
+
+// every role string the game (or the brain's roster sim) actually uses, mapped
+// to its outfit. Keys are normalised to letters only — "jet-cutter",
+// "station-master" an' "ship's chandler" all land. Unknown roles -> villager.
+const ROLE_ALIAS = {
+  vicar: 'parson', curate: 'parson', priest: 'parson', clergyman: 'parson', rector: 'parson',
+  brother: 'monk', friar: 'monk',
+  policeman: 'constable', sergeant: 'constable', bobby: 'constable',
+  midwife: 'herbwife', washerwoman: 'herbwife', gossip: 'herbwife', widow: 'herbwife', wisewoman: 'herbwife',
+  schoolmistress: 'postmistress', seamstress: 'postmistress',
+  gamekeeper: 'shepherd',
+  carter: 'drover', carrier: 'drover', ostler: 'drover',
+  peatcutter: 'farmer', waller: 'farmer', hedger: 'farmer',
+  ironstoneminer: 'miner', collier: 'miner', kilnman: 'miner', calciner: 'miner', quarryman: 'miner',
+  jetman: 'miner', jetcutter: 'miner', jetcarver: 'miner', alumworker: 'miner',
+  innkeeper: 'publican', alewife: 'publican', landlord: 'publican',
+  squire: 'gentry', doctor: 'gentry', magistrate: 'gentry',
+  platelayer: 'railway', porter: 'railway', signalman: 'railway', stationmaster: 'railway',
+  enginedriver: 'railway', fireman: 'railway', ganger: 'railway', driver: 'railway',
+  fisher: 'fisherman', cobleman: 'fisherman', harbourhand: 'fisherman', sailmaker: 'fisherman', netmender: 'fisherman',
+  blacksmith: 'craftsman', smith: 'craftsman', cooper: 'craftsman', wheelwright: 'craftsman',
+  cobbler: 'craftsman', saddler: 'craftsman', tailor: 'craftsman', joiner: 'craftsman', mason: 'craftsman',
+  markettrader: 'trader', market: 'trader', butcher: 'trader', baker: 'trader', draper: 'trader',
+  grocer: 'trader', pedlar: 'trader', tinker: 'trader', chandler: 'trader', shipschandler: 'trader',
+  lad: 'child', lass: 'child', boy: 'child', girl: 'child',
+  rambler: 'villager', labourer: 'villager',
+};
+
+export function canonicalRole(role) {
+  const r = String(role || '').toLowerCase().replace(/[^a-z]/g, '');
+  if (!r) return null;
+  if (WARDROBE[r]) return r;
+  return ROLE_ALIAS[r] || null;
+}
+
+// Many folk arrive wi'out a role field but wear it in their name ("fishwife
+// annie", "vicar ambrose", "jet-cutter amos") — read the trade off the name.
+function inferRole(key) {
+  for (const tok of String(key).split(/[|\s]+/)) {
+    const c = canonicalRole(tok);
+    if (c) return c;
+  }
+  return null;
+}
+
+// The named cast get priority polish: pinned colours (an' for the family, their
+// whole familiar look) that the seeded variation must never shuffle. `m` is a
+// word-boundary match against the "charid|name" key; `id` matches the charId
+// token exactly (so streamed "tom" is Tom Pennock but "owd tom" isn't).
+// `extraColors` re-pins a colour on a role-outfit part wi'out replacing the outfit.
+const CURATED_CAST = [
+  { m: /\bglinda\b/, role: 'herbwife', scale: 1.0, width: 1, jacket: 0x8a8294, legs: 0x4a4452, hair: 0xe8e8e8,
+    extras: [{ kind: 'shawl', color: 0x6a5a6e }, { kind: 'skirt', color: 0x4a4452 }] },       // granny: grey bun an' her shawl
+  { m: /\bjames\b/, role: 'farmer', scale: 1.05, width: 1.04, jacket: 0x4a5a3a, legs: 0x3a342a, hair: 0x5a4a36,
+    extras: [{ kind: 'cap', color: 0x32402a }, { kind: 'waistcoat', color: 0x2f3626 }] },
+  { m: /\bharry\b/, role: 'child', scale: 0.62, width: 1, jacket: 0x3a6a9a, legs: 0x3a342a, hair: 0x6a4a2a,
+    extras: [{ kind: 'cap', color: 0x4a3f30 }] },                                             // farm lad's flat cap
+  { m: /\bkaren\b/, role: 'child', scale: 0.62, width: 1, jacket: 0xa84a5a, legs: 0x7a3a4a, hair: 0x6a4a2a,
+    extras: [{ kind: 'skirt', color: 0x7a3a4a }] },
+  { m: /\bcc\b/, role: 'child', scale: 0.45, width: 1, jacket: 0xc88ab0, legs: 0xb07a9e, hair: 0xf2d878,
+    curls: true, extras: [] },
+  { m: /\bmax\b/, role: 'child', scale: 0.32, width: 1, jacket: 0xd8d0c0, legs: 0xd8d0c0, hair: 0x9a7a4a, extras: [] },
+  // the roster's deep six (streamed wi' their roles; we pin the person)
+  { id: 'amos', hair: 0x2a221c, jacket: 0x35302b },                          // jet-cutter, coal-dark
+  { id: 'mary', hair: 0x5c452e, extraColors: { shawl: 0x6e4a3c } },          // fishwife in the russet shawl
+  { id: 'jonty', hair: 0x3a2c1e, jacket: 0x6d5c44 },                         // drover
+  { id: 'edith', hair: 0x4a3a28 },                                           // postmistress
+  { id: 'tom', hair: 0x8f8f88 },                                             // owd platelayer, grey
+  { id: 'bess', hair: 0x8f8f88, extraColors: { shawl: 0x4f5a40 } },          // herbwife in herb-green
+];
+
+function curatedFor(key) {
+  const idTok = key.split('|')[0];
+  for (const c of CURATED_CAST) {
+    if (c.id ? c.id === idTok : c.m.test(key)) return c;
+  }
+  return null;
+}
+
+// The one resolver: (role, stable id) -> a fully resolved appearance spec.
+// Pure an' deterministic — same inputs, same spec, every session, every client
+// (the verify script an' any future wardrobe UI both lean on this). `id` is the
+// NPC's stable identity key; spawnVillager passes "charid|name" lowercased.
+export function outfitSpecFor(role, id) {
+  const key = String(id == null ? '' : id).toLowerCase();
+  const h = lookHash(key || 'a-body');
+  const cur = curatedFor(key);
+  const canon = (cur && cur.role) || canonicalRole(role) || inferRole(key) || 'villager';
+  const w = WARDROBE[canon] || WARDROBE.villager;
+  const pick = (arr, shift) => (Array.isArray(arr) ? arr[(h >>> shift) % arr.length] : arr);
+  const legsC = pick(w.legs, 28);
+  const spec = {
+    role: canon,
+    curated: !!cur,
+    scale: (w.scaleBase || 1) * (1 + (((h >>> 6) % 17) - 8) / 100),   // ±8% height
+    width: 1 + (((h >>> 11) % 21) - 10) / 100,                        // ±10% build
+    skin: SKIN_TONES[(h >>> 16) % SKIN_TONES.length],
+    hair: HAIR_TONES[(h >>> 20) % HAIR_TONES.length],
+    jacket: pick(w.jacket, 24),
+    legs: legsC,
+    curls: false,
+    extras: (w.extras || []).map(e => ({ kind: e.kind, color: e.match === 'legs' ? legsC : pick(e.color, 14) })),
+  };
+  if (cur) {
+    for (const k of ['scale', 'width', 'jacket', 'legs', 'hair', 'skin', 'curls']) {
+      if (cur[k] != null) spec[k] = cur[k];
+    }
+    if (cur.extras) spec.extras = cur.extras.map(e => ({ ...e }));
+    if (cur.extraColors) for (const e of spec.extras) { if (cur.extraColors[e.kind] != null) e.color = cur.extraColors[e.kind]; }
+  }
+  spec.boxes = spec.extras.reduce((n, e) => n + (OUTFIT_BOXES[e.kind] || 1), 0);
+  return spec;
+}
+
+// spec -> the `look` shape makeVillager eats (legacy cap/shawl fields stay null —
+// the spec's extras carry the dress).
+export function lookFromSpec(spec) {
+  return {
+    scale: spec.scale, width: spec.width,
+    jumper: spec.jacket, skirt: spec.legs, hair: spec.hair, skin: spec.skin,
+    cap: null, shawl: null, curls: spec.curls, extras: spec.extras,
+  };
+}
+
+// shared geometry (per size) + material (per colour) caches — villagers are
+// built at UNIT scale inside a scaled group, so every torso/hat/apron of a size
+// is the same BoxGeometry however tall its wearer. Nowt may MUTATE these
+// materials (makeWizardExtras re-ASSIGNS Merlin's, it doesn't recolour in place;
+// the hurt-flash traverse never runs on villagers — updateVillager owns them).
+const _npcGeos = new Map();
+const _npcMats = new Map();
+function npcGeo(w, h, d) {
+  const k = w + '|' + h + '|' + d;
+  let g = _npcGeos.get(k);
+  if (!g) { g = new THREE.BoxGeometry(w, h, d); _npcGeos.set(k, g); }
+  return g;
+}
+function npcMat(color) {
+  let m = _npcMats.get(color);
+  if (!m) { m = new THREE.MeshLambertMaterial({ color }); _npcMats.set(color, m); }
+  return m;
+}
+function nbox(w, h, d, color) { return new THREE.Mesh(npcGeo(w, h, d), npcMat(color)); }
+
+// one outfit part -> its box(es), built at unit scale into the body group
+function addOutfitPart(g, part) {
+  const c = part.color;
+  switch (part.kind) {
+    case 'cap': { const m = nbox(0.46, 0.07, 0.46, c); m.position.set(0, 1.6, 0.05); g.add(m); break; }
+    case 'hatwide': { // parson's shovel hat: wide brim, low crown
+      const brim = nbox(0.56, 0.05, 0.56, c); brim.position.y = 1.63; g.add(brim);
+      const crown = nbox(0.28, 0.16, 0.28, c); crown.position.y = 1.73; g.add(crown); break;
+    }
+    case 'topper': { // gentry: narrow brim, tall crown
+      const brim = nbox(0.48, 0.05, 0.48, c); brim.position.y = 1.63; g.add(brim);
+      const crown = nbox(0.3, 0.36, 0.3, c); crown.position.y = 1.83; g.add(crown); break;
+    }
+    case 'helmet': { // custodian: tall dome an' the wee crest
+      const dome = nbox(0.4, 0.26, 0.4, c); dome.position.y = 1.68; g.add(dome);
+      const crest = nbox(0.12, 0.1, 0.12, c); crest.position.y = 1.86; g.add(crest); break;
+    }
+    case 'bonnet': { const m = nbox(0.44, 0.16, 0.44, c); m.position.y = 1.6; g.add(m); break; }
+    case 'shawl': { const m = nbox(0.56, 0.2, 0.36, c); m.position.y = 1.08; g.add(m); break; }
+    case 'apron': { const m = nbox(0.4, 0.52, 0.05, c); m.position.set(0, 0.7, 0.16); g.add(m); break; }
+    case 'pinafore': { const m = nbox(0.46, 0.64, 0.05, c); m.position.set(0, 0.78, 0.16); g.add(m); break; }
+    case 'waistcoat': { const m = nbox(0.44, 0.5, 0.05, c); m.position.set(0, 0.88, 0.155); g.add(m); break; }
+    case 'collar': { const m = nbox(0.3, 0.09, 0.38, c); m.position.y = 1.17; g.add(m); break; }
+    case 'skirt': { const m = nbox(0.52, 0.5, 0.36, c); m.position.y = 0.33; g.add(m); break; }
+    case 'coatskirt': { const m = nbox(0.56, 0.34, 0.38, c); m.position.y = 0.5; g.add(m); break; }
+    case 'scarf': { const m = nbox(0.4, 0.1, 0.4, c); m.position.y = 1.17; g.add(m); break; }
+    case 'beltrope': { const m = nbox(0.54, 0.07, 0.34, c); m.position.y = 0.62; g.add(m); break; }
+  }
 }
 
 // Floating nameplate so tha can tell who's who from across t' green. `sub` (optional) adds a
@@ -619,50 +881,61 @@ function makeBubble(text) {
   return spr;
 }
 
+// Two-level group: the OUTER group carries position/rotation an' the
+// absolute-space attachments callers add at world scale (nameplate, bubbles,
+// quest marker, Merlin's robes), while the INNER group holds the unit-scale
+// body an' takes the whole height (y) an' build (x/z) scale. Unit-scale parts
+// are what lets the geometry cache actually share: every villager torso is the
+// SAME BoxGeometry however tall or broad its wearer.
 function makeVillager(look) {
+  const outer = new THREE.Group();
   const g = new THREE.Group();
-  const s = look.scale;
-  const skin = 0xd8ab8a;
+  const s = look.scale, w = look.width || 1;
+  g.scale.set(s * w, s, s * w);
+  outer.add(g);
+  const skin = look.skin || 0xd8ab8a;
   const legs = [];
   for (const x of [-0.11, 0.11]) {
-    const l = box(0.16 * s, 0.55 * s, 0.16 * s, look.skirt);
-    l.position.set(x * s * 1.6, 0.28 * s, 0);
+    const l = nbox(0.16, 0.55, 0.16, look.skirt);
+    l.position.set(x * 1.6, 0.28, 0);
     g.add(l); legs.push(l);
   }
-  const body = box(0.5 * s, 0.6 * s, 0.3 * s, look.jumper);
-  body.position.y = 0.85 * s; g.add(body);
+  const body = nbox(0.5, 0.6, 0.3, look.jumper);
+  body.position.y = 0.85; g.add(body);
   const arms = [];
   for (const x of [-0.33, 0.33]) {
-    const a = box(0.14 * s, 0.55 * s, 0.14 * s, look.jumper);
-    a.position.set(x * s, 0.85 * s, 0);
+    const a = nbox(0.14, 0.55, 0.14, look.jumper);
+    a.position.set(x, 0.85, 0);
     g.add(a); arms.push(a);
   }
-  const head = box(0.36 * s, 0.36 * s, 0.36 * s, skin);
-  head.position.y = 1.34 * s; g.add(head);
-  const hair = box(0.38 * s, 0.12 * s, 0.38 * s, look.hair);
-  hair.position.y = (1.34 + 0.2) * s; g.add(hair);
+  const head = nbox(0.36, 0.36, 0.36, skin);
+  head.position.y = 1.34; g.add(head);
+  const hair = nbox(0.38, 0.12, 0.38, look.hair);
+  hair.position.y = 1.34 + 0.2; g.add(hair);
   if (look.curls) {
     // a mop o' golden curls: bobbles round t' head
     for (const [cx, cz] of [[-0.2, 0], [0.2, 0], [0, -0.2], [-0.14, -0.16], [0.14, -0.16]]) {
-      const curl = box(0.14 * s, 0.14 * s, 0.14 * s, look.hair);
-      curl.position.set(cx * s, 1.42 * s, cz * s);
+      const curl = nbox(0.14, 0.14, 0.14, look.hair);
+      curl.position.set(cx, 1.42, cz);
       g.add(curl);
     }
   }
   if (look.cap) {
-    const cap = box(0.46 * s, 0.07 * s, 0.46 * s, look.cap);
-    cap.position.set(0, (1.34 + 0.26) * s, 0.04 * s); g.add(cap);
+    const cap = nbox(0.46, 0.07, 0.46, look.cap);
+    cap.position.set(0, 1.34 + 0.26, 0.04); g.add(cap);
   }
   if (look.shawl) {
-    const sh = box(0.56 * s, 0.2 * s, 0.36 * s, look.shawl);
-    sh.position.y = 1.08 * s; g.add(sh);
+    const sh = nbox(0.56, 0.2, 0.36, look.shawl);
+    sh.position.y = 1.08; g.add(sh);
   }
   // little dark eyes so tha knows they're looking at thee
   for (const x of [-0.08, 0.08]) {
-    const eye = box(0.05 * s, 0.05 * s, 0.02 * s, 0x222222);
-    eye.position.set(x * s, 1.38 * s, 0.19 * s); g.add(eye);
+    const eye = nbox(0.05, 0.05, 0.02, 0x222222);
+    eye.position.set(x, 1.38, 0.19); g.add(eye);
   }
-  return { group: g, legs: legs.concat(arms), body, head };
+  // the wardrobe: role dress + seeded trimmings (≤4 boxes, see OUTFIT_BOXES)
+  for (const part of (look.extras || [])) addOutfitPart(g, part);
+  return { group: outer, legs: legs.concat(arms), body, head };
 }
 
 // ---------- Merlin wizard extras ----------
@@ -681,12 +954,15 @@ function makeWizardExtras(model, s, isFC = false) {
   const BEARD   = 0xeae6dc;                    // near-white beard (same both ways)
   const GLOW    = isFC ? 0xa8e6c8 : 0xffe080;  // soft mint glow / warm gold glow
 
-  // 1) Re-robe the villager: recolour body, arms and legs so no brown shows.
-  //    The head (skin) stays as the face.  model.legs holds legs + arms.
+  // 1) Re-robe the villager: body, arms and legs so no brown shows. The head
+  //    (skin) stays as the face.  model.legs holds legs + arms. Materials are
+  //    RE-ASSIGNED (never recoloured in place) — villager materials are shared
+  //    per colour now, an' a setHex here would re-robe half the parish wi' him.
+  //    Base parts live in the unit-scale inner group, so the y test is unit y.
   try {
-    if (model.body) model.body.material.color.setHex(ROBE);
+    if (model.body) model.body.material = npcMat(ROBE);
     for (const part of (model.legs || [])) {
-      part.material.color.setHex(part.position.y > 0.6 * s ? ROBE : ROBE_DK);
+      part.material = npcMat(part.position.y > 0.6 ? ROBE : ROBE_DK);
     }
   } catch (e) { /* fail-safe — base avatar still renders */ }
 
@@ -1010,11 +1286,22 @@ export class Entities {
 
   // ---------- villagers ----------
   spawnVillager(charId, name, x, y, z, opts = {}) {
-    const look = villagerLook(name);
-    const model = makeVillager(look);
     // Merlin gets the wizard treatment — keyed on pid (charId) with name fallback.
     // In winter (wintry) he becomes Father Christmas: green robe, white fur trim.
     const isMerlin = charId === 'clint-body' || (name || '').toLowerCase() === 'merlin';
+    // Remote PLAYERS keep today's plain look untouched (their own wardrobe
+    // feature is coming). They're spawned by multiplayer.addRemote with no opts,
+    // an' isRemotePlayer is only set AFTER this returns — but their pid always
+    // ends "-s<seed>" (see Game.playerId), which no roster/brain/pop id does.
+    const isRemote = typeof charId === 'string' && /-s\d+$/.test(charId);
+    // Everyone else is dressed: role wardrobe (streamed roster folk an'
+    // EXTRA_FOLK carry opts.role; the rest wear their trade in their name) plus
+    // id-seeded person underneath. Seeded on the stable "charid|name" key so the
+    // same soul looks the same every session an' on every client.
+    const look = (isMerlin || isRemote)
+      ? villagerLook(name)
+      : lookFromSpec(outfitSpecFor(opts.role, ((charId || '') + '|' + (name || '')).toLowerCase()));
+    const model = makeVillager(look);
     const currentSeason = this.game && this.game.season;
     const isFC = isMerlin && wintry(currentSeason);
     if (isMerlin) {
