@@ -461,6 +461,9 @@ export class UI {
     this.btnSave = this.el('button', 'mc', pp, 'Save T&rsquo; World');
     this.btnCreative = this.el('button', 'mc', pp, 'Toggle Creative Mode');
     this.btnTouch = this.el('button', 'mc', pp, 'Touch controls: Auto');
+    // Fine (shadows, tone mapping, bloom) / Plain (today's fast pipeline) — wired in
+    // main.bindEvents, persisted in localStorage ('moorcraft-gfx'), label set by applyQuality
+    this.btnGfx = this.el('button', 'mc', pp, 'Graphics: Fine');
     this.adminPanel = this.el('div', 'admin-panel hidden', pp); // filled by t' game for parish wardens
     this.btnHow2 = this.el('button', 'mc', pp, 'Ow Ter Play');
     this.btnQuit = this.el('button', 'mc', pp, 'Give Up &amp; Go Home (Save &amp; Quit)');
@@ -616,6 +619,7 @@ export class UI {
 <li><b>Bogs</b> on the high moor are dark, dangerous pools of peat. They will trap and sink you. Skirt around them or sprint-jump across if you must.</li>
 <li><b>Nighttime</b> belongs to the <b>barghest</b> (a giant black hound with eyes like burning coals) and <b>boggarts</b> (mud creatures from the mires). They roam from dusk till dawn on the open moor. <b>Moorstead's ground is hallowed and safe; night monsters will not set foot on it.</b> You can sprint faster than a barghest, but only just.</li>
 <li><b>Monsters fear flame.</b> Craft <b>torches</b> (1 stick + 1 coal = 4, no bench needed). A <b>placed</b> torch or lantern wards off all but the strongest monsters within a 9-block radius and prevents them from spawning nearby. A torch <b>in your hand</b> lights your way and scares off boggarts, but a barghest is bolder.</li>
+<li><b>The storm lantern.</b> Craft one at a bench (2 iron ingots + 1 coal): a paraffin <b>hurricane lamp</b>, its flame safe behind a glass globe. Held in hand it throws a wide, warm light, and it counts as a <b>burning light</b>, not a mere torch &mdash; <b>boggarts AND the barghest</b> keep their distance, and nothing dark will rise near its flame. Wind and rain cannot blow it out; that is the whole point of a storm lantern.</li>
 <li><b>Caught out at night?</b> Stone <b>moor shelters</b> are scattered across the tops, lantern-lit and safe. <b>Right-click any waymark signpost</b> to find the direction and distance to the nearest shelter or back to Moorstead. You can craft signposts (3 planks + 1 stick) to mark your own routes.</li>
 <li><b>THE GREAT FOG.</b> Every few days, a thick fog descends on the <b>high tops</b> for half a day. Visibility drops to five yards, and <b>your map and bearings are disabled</b> (no minimap, no coordinates). Valleys and the coast remain clear. If caught on the tops: <b>stop</b>. Find a waymark stone or wall and follow it; signposts still show the way to shelters. Alternatively, place torches as breadcrumbs and wait it out.</li>
 <li><b>Sleep the night away.</b> Find a <b>roof and a light</b> (a villager's house, the pub, a shelter, or your own cottage with a torch inside) and press <b>N</b> to sleep until morning. You will wake up with <b>full health</b> and a small appetite. In multiplayer, the night only passes when <b>everyone</b> sleeps.</li>
@@ -2052,6 +2056,12 @@ export class UI {
             if (r.out === B.STRONGBOX && !player.strongboxHinted) {
               player.strongboxHinted = true;
               this.toast('Stash thi goods an&rsquo; brass at home &mdash; what&rsquo;s boxed doesn&rsquo;t fall wi&rsquo; thee.', 8000);
+            }
+            // first storm lantern ever crafted on this save: what it's FOR (same one-shot
+            // player-flag idiom as t' strongbox above — rides player.serialize)
+            if (r.out === I.STORM_LANTERN && !player.stormLanternHinted) {
+              player.stormLanternHinted = true;
+              this.toast('A storm lantern! <b>Hold it o&rsquo; nights</b> &mdash; boggarts an&rsquo; t&rsquo; barghest keep well clear o&rsquo; live flame, an&rsquo; no wind nor rain can douse it.', 9000);
             }
             this.invDirty = true;
             this.openInventory(player, nearBench); // re-render

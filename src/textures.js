@@ -1512,6 +1512,32 @@ const ITEM_ICON_PAINTERS = {
     const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
+  [I.STORM_LANTERN](ctx) {
+    // paraffin hurricane lantern, c.1900: tin fount an' crown, glass globe wi' a warm
+    // flame behind it, side frame tubes, an' a wire bail swung up ower t' top
+    const tin = '#8a8478', tinDark = '#5e5a50', tinLight = '#b2ac9e';
+    // wire bail (handle) — an arc up over the crown
+    ctx.strokeStyle = '#4a463e'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(16, 8, 7, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
+    // crown (domed top) + chimney cap
+    ctx.fillStyle = tin; ctx.beginPath(); ctx.ellipse(16, 10, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = tinDark; ctx.fillRect(14, 6, 4, 3);
+    ctx.fillStyle = tinLight; ctx.fillRect(11, 9, 10, 2);
+    // side frame tubes (what makes it a hurricane lamp)
+    ctx.fillStyle = tinDark; ctx.fillRect(8, 10, 2, 14); ctx.fillRect(22, 10, 2, 14);
+    // glass globe — pale, slightly blue, warm glow within
+    ctx.fillStyle = '#d8e2e8'; ctx.beginPath(); ctx.ellipse(16, 17, 5.5, 6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffd890'; ctx.beginPath(); ctx.ellipse(16, 18, 3.5, 4.2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffb45a'; ctx.beginPath(); ctx.ellipse(16, 19, 2.2, 3, 0, 0, Math.PI * 2); ctx.fill();
+    // flame tip + glass highlight
+    ctx.fillStyle = '#fff2c8'; ctx.fillRect(15, 16, 2, 3);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillRect(13, 13, 2, 5);
+    // fount (oil tank) at t' base + filler cap
+    ctx.fillStyle = tin; ctx.beginPath(); ctx.ellipse(16, 25, 7, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = tinDark; ctx.fillRect(9, 25, 14, 3);
+    ctx.fillStyle = tinLight; ctx.fillRect(10, 23, 12, 2);
+    ctx.fillStyle = tinDark; ctx.fillRect(21, 22, 3, 2);
+  },
 };
 
 function drawAmuletHalf(ctx, left) {

@@ -96,6 +96,11 @@ export const I = {
   // Living Moor starting 'tokens': stake a land claim / register a mine licence
   // wherever tha stands (free, one-use). Item-only, no placeable block.
   CLAIM_TOKEN: 129, MINE_LICENCE: 130,
+  // T' storm lantern: a paraffin hurricane lamp, c.1900 — warm flame behind glass,
+  // carried in t' fist. Held, it's a burning light: wards owt dark (boggarts AND
+  // t' barghest) an' no wind nor rain can douse it. Item-only, no placeable block;
+  // procedural icon in textures.js (ITEM_ICON_PAINTERS).
+  STORM_LANTERN: 131,
 };
 
 // Parish wardens: SHA-256 o' t' dash account id, never t' id itsen —
@@ -234,6 +239,7 @@ export const ITEM_NAMES = {
   [I.SNOWBALL]: 'Snowball',
   [I.CLAIM_TOKEN]: 'Claim Stake',
   [I.MINE_LICENCE]: 'Mining Licence',
+  [I.STORM_LANTERN]: 'Storm Lantern',
 };
 
 export function itemName(id) {
@@ -279,7 +285,7 @@ export const FOODS = {
 };
 
 export const STACK_SIZE = 64;
-export function maxStack(id) { return (TOOLS[id] || id === I.FISHING_ROD) ? 1 : STACK_SIZE; }
+export function maxStack(id) { return (TOOLS[id] || id === I.FISHING_ROD || id === I.STORM_LANTERN) ? 1 : STACK_SIZE; }
 
 // ---- Crafting recipes ----
 // { out, n, needs: [[itemId, count]...], bench: requires joiner's bench nearby }
@@ -307,6 +313,10 @@ export const RECIPES = [
   { out: B.HOME_FLAG, n: 1, needs: [[B.PLANKS, 2], [B.WOOL, 1]] }, // plant it to mark thi home base
 
   { out: B.LANTERN, n: 1, needs: [[I.IRON_INGOT, 1], [I.COAL_LUMP, 1]], bench: true },
+  // t' hand lamp: tinned iron body an' bail, coal-oil for t' wick — a proper hurricane
+  // lantern, glass-globed an' storm-proof (there's no plate glass on t' moors to craft
+  // wi', so t' globe comes wi' t' tinsmith's work, same as t' fixed lantern above)
+  { out: I.STORM_LANTERN, n: 1, needs: [[I.IRON_INGOT, 2], [I.COAL_LUMP, 1]], bench: true },
   { out: I.FISHING_ROD, n: 1, needs: [[I.STICK, 3], [B.WOOL, 2]], bench: true },
   { out: I.AMULET, n: 1, needs: [[I.AMULET_L, 1], [I.AMULET_R, 1], [I.BELL_CLAPPER, 1], [I.JET_GEM, 1]], bench: true },
   { out: I.WOODEN_STAKE, n: 1, needs: [[B.PLANKS, 2], [I.STICK, 2]], bench: true },
@@ -365,7 +375,7 @@ export const CREATIVE_ITEMS = [
   I.STICK, I.COAL_LUMP, I.RAW_IRON, I.CALCINED_IRONSTONE, I.PIG_IRON, I.IRON_INGOT, I.JET_GEM, I.CARVED_JET,
   I.RAW_MUTTON, I.COOKED_MUTTON, I.RAW_GROUSE, I.COOKED_GROUSE,
   I.RAW_BEEF, I.COOKED_BEEF, I.RAW_PORK, I.COOKED_PORK, I.BILBERRIES,
-  I.FISHING_ROD, I.RAW_TROUT, I.SEA_FISH, I.COOKED_FISH,
+  I.FISHING_ROD, I.RAW_TROUT, I.SEA_FISH, I.COOKED_FISH, I.STORM_LANTERN,
   I.HOLY_WATER, I.WOODEN_STAKE, I.HOLY_STAKE, I.DRACULA_JOURNAL,
   I.WOLFSBANE, I.SILVER_TOKEN, I.GRAVE_EARTH,
   I.CLAIM_TOKEN, I.MINE_LICENCE,

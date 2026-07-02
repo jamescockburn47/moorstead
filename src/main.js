@@ -2,10 +2,15 @@
 // (Storage keys an' t' save DB keep their owd 'moorcraft' names on purpose:
 // renaming them would orphan every player's saves an' login.)
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_HASHES } from './defs.js';
 import { strSeed } from './noise.js';
 import { protectedAt } from './landmarks.js';
-import { initMaterials, setSnowLevel, setFrozen, setGlintTime } from './mesher.js';
+import { initMaterials, setSnowLevel, setFrozen, setGlintTime, getMaterials } from './mesher.js';
 import { stepAccumulation, accumulationTarget, isFrozen } from './snow.js';
 import { getIconURL, retintAtlasForSeason } from './textures.js';
 import { World } from './world.js';
@@ -43,7 +48,7 @@ import { temperatureTarget, stepTemperature } from './temperature.js';
 import { boardingFolk } from './trainfolk.js';
 import { CarolBox } from './carolBox.js';
 import { RosterClient, invalidateSurfCache } from './roster.js';
-import { TouchControls } from './touch.js';
+import { TouchControls, isTouchPrimary } from './touch.js';
 import { startUpdateCheck } from './update-check.js';
 import { installKiosk } from './kiosk.js';
 
@@ -90,13 +95,45 @@ import { Entities, MOB_TYPES } from './entities.js';
 import { auditMobs } from './invariants.js';
 import { PET_BENEFIT, PET_KINDS, TAME_GOAL } from './pets.js';
 import { EXTRA_FOLK, moodWord } from './villagerlife.js';
-import { Sky } from './sky.js';
+import { Sky, resolveQuality, lanternFlicker } from './sky.js';
 import { Storm } from './storm.js';
 import { AudioEngine } from './audio.js';
 import { UI, bearingLabel, shelterToast, stationChipHTML, composeSketch, sketchFilename, offerShapeOk, hasStacks, countsFromSlots, describeStacks } from './ui.js';
 import { raycast, boxCollides } from './physics.js';
 
 const REACH = 5.5;
+
+// Final full-screen pass o' t' 'Fine' post stack (after tone mapping/OutputPass, so it
+// works in display sRGB): a gentle vignette, a period colour grade — slightly lifted
+// blacks, warm highlights / cool shadows, t' watercolour-plate feel, kept SUBTLE —
+// an' a one-LSB dither to kill t' banding in t' sky gradient.
+const GradeShader = {
+  name: 'MoorGradeShader',
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 } },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse;
+    uniform float uTime;
+    varying vec2 vUv;
+    float hash12(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    void main() {
+      vec3 c = texture2D(tDiffuse, vUv).rgb;
+      float lum = dot(c, vec3(0.299, 0.587, 0.114));
+      // cool shadows, warm highlights — a Victorian hand-tinted plate, not teal-an'-orange
+      c = mix(c, c * vec3(0.965, 0.99, 1.055), (1.0 - smoothstep(0.0, 0.45, lum)) * 0.5);
+      c = mix(c, c * vec3(1.045, 1.005, 0.955), smoothstep(0.55, 1.0, lum) * 0.5);
+      // gently lifted blacks
+      c = c * 0.965 + 0.014;
+      // vignette — soft, drawn in at t' corners only
+      vec2 q = vUv - 0.5;
+      c *= 1.0 - dot(q, q) * 0.42;
+      // ordered-ish temporal dither (±0.5 LSB) — kills sky banding
+      c += (hash12(vUv * vec2(3141.59, 2718.28) + fract(uTime) * 17.0) - 0.5) / 255.0;
+      gl_FragColor = vec4(c, 1.0);
+    }`,
+};
 
 class Game {
   constructor() {
@@ -129,7 +166,12 @@ class Game {
     this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.08, 600);
     this.camera.rotation.order = 'YXZ';
 
-    initMaterials();
+    this.atlas = initMaterials();
+    // cutout foliage casts leaf-shaped shadows, not quad-shaped ones: t' shadow-map
+    // depth pass needs its own alpha-tested depth material (shared, one instance)
+    this._cutoutDepth = new THREE.MeshDepthMaterial({
+      depthPacking: THREE.RGBADepthPacking, map: this.atlas, alphaTest: 0.5,
+    });
 
     this.audio = new AudioEngine();
     this.ui = new UI(this);
@@ -152,6 +194,12 @@ class Game {
     // held-torch light follows t' player
     this.torchLight = new THREE.PointLight(0xffa040, 0, 11, 1.5);
     this.scene.add(this.torchLight);
+    // t' storm lantern in thi fist: warm paraffin flame behind glass — wider an'
+    // steadier than a torch, wi' a gentle wick-flicker (see lanternFlicker in sky.js).
+    // Casts NO shadow (point shadows are too dear) but blooms naturally under 'Fine'.
+    this.stormLight = new THREE.PointLight(0xffb46b, 0, 18, 1.2); // ~18-block throw, soft falloff (tuned by eye at neet)
+    this.scene.add(this.stormLight);
+    this._stormHeld = false; // read by t' world.nearLight wrap (ward + spawn gating)
 
     // held item sprite (viewmodel)
     this.heldSprite = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false }));
@@ -163,6 +211,10 @@ class Game {
     this.scene.add(this.camera);
 
     this.bindEvents();
+    // graphics quality: 'fine' (ACES + shadows + post stack) or 'plain' (today's pipeline).
+    // Explicit choice persists in localStorage; else Fine on a computer, Plain on touch.
+    try { this.gfxStored = localStorage.getItem('moorcraft-gfx'); } catch { this.gfxStored = null; }
+    this.applyQuality(resolveQuality(this.gfxStored, !!(this.touch && this.touch.active)));
     try { this.auth = JSON.parse(localStorage.getItem('moorcraft-auth') || 'null'); }
     catch (e) { this.auth = null; reportQuiet('auth-parse', e); /* storage blocked (Safari private mode / cookies off) — don't abort boot; worth counting, it silently logs an invited player out */ }
     this.refreshAdmin();
@@ -187,6 +239,104 @@ class Game {
     // Watch for a newer deploy: silent unless the dev bumped package.json "version"
     // (Notify toast) or raised "minClientVersion" (Force auto-reload). See update-check.js.
     startUpdateCheck(this);
+  }
+
+  // ---------------- graphics quality (Fine / Plain) ----------------
+  // 'Fine': ACES filmic tone mapping, a single player-tracking sun/moon shadow rig,
+  // an' a post stack (bloom + period grade + dither). 'Plain': today's pipeline,
+  // renderer left exactly as it allus was — t' safety net for tablets an' owd kit.
+  applyQuality(q) {
+    this.gfxQuality = q;
+    const fine = q === 'fine';
+    const r = this.renderer;
+    if (fine) {
+      r.toneMapping = THREE.ACESFilmicToneMapping;
+      r.toneMappingExposure = 1.25; // tuned by eye on t' summer moor — 1.15 ran a touch murky at dawn
+      r.outputColorSpace = THREE.SRGBColorSpace;
+      r.shadowMap.enabled = true;
+      r.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.setupComposer();
+    } else {
+      // Plain path: leave t' renderer untouched (library defaults, no composer, no shadows)
+      r.toneMapping = THREE.NoToneMapping;
+      r.toneMappingExposure = 1;
+      r.outputColorSpace = THREE.SRGBColorSpace;
+      r.shadowMap.enabled = false;
+      if (this.composer) { this.composer.dispose(); this.composer = null; this.gradePass = null; this.bloomPass = null; }
+    }
+    if (this.sky) {
+      this.sky.gfx = q; // sky swaps in its ACES-retuned day/dusk/night curves under Fine
+      const sun = this.sky.sun;
+      sun.castShadow = fine;
+      if (fine) {
+        // one tight, cascaded-feeling orthographic frustum following t' camera (~70 m):
+        // 2048px PCFSoft; generous normalBias — voxel faces acne easily, an' t' baked
+        // per-vertex AO already owns contact darkening, so bias costs us nowt visible
+        const s = sun.shadow;
+        s.mapSize.set(2048, 2048);
+        s.camera.left = -70; s.camera.right = 70; s.camera.top = 70; s.camera.bottom = -70;
+        s.camera.near = 0.5; s.camera.far = 400;
+        s.bias = -0.0004; s.normalBias = 0.8;
+        s.camera.updateProjectionMatrix();
+        if (s.map) { s.map.dispose(); s.map = null; } // re-allocate at t' new size
+      }
+      this.sky.stars.material.size = fine ? 1.9 : 1.4; // brighter stars read at neet under Fine
+    }
+    // shadow/tone-mapping defines live in t' compiled programs — force a recompile
+    this.scene.traverse(o => {
+      const m = o.material;
+      if (!m) return;
+      for (const mm of Array.isArray(m) ? m : [m]) mm.needsUpdate = true;
+    });
+    this.applyShadowFlags(fine);
+    this._shadowFlagT = 0;
+    if (this.ui && this.ui.btnGfx) this.ui.btnGfx.innerHTML = 'Graphics: ' + (fine ? 'Fine' : 'Plain');
+  }
+
+  setupComposer() {
+    if (this.composer) return;
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    // subtle threshold — only genuine lights bloom: lantern flames, lit windows at
+    // dusk, t' sun itsen, an' a whisper on t' bright horizon at golden hour
+    const size = this.renderer.getSize(new THREE.Vector2());
+    this.bloomPass = new UnrealBloomPass(size, 0.32, 0.5, 0.85);
+    this.composer.addPass(this.bloomPass);
+    this.composer.addPass(new OutputPass()); // tone mapping + sRGB out
+    this.gradePass = new ShaderPass(GradeShader); // vignette + period grade + dither (display space)
+    this.composer.addPass(this.gradePass);
+  }
+
+  // Chunk meshes are built off-thread o' this file (world.js/mesher.js), so shadow
+  // flags are stamped by traversal: voxel opaque/cutout cast an' receive, liquid does
+  // neither (transparent), an' owt else Lambert-solid (villagers, t' train, station
+  // fabric) casts an' all. Sky dome, sprites, points an' fire glow are left be.
+  applyShadowFlags(on = this.gfxQuality === 'fine') {
+    const mats = getMaterials() || {};
+    const dome = this.sky && this.sky.dome;
+    this.scene.traverse(o => {
+      if (!o.isMesh || o === dome) return;
+      const m = o.material;
+      if (!m || Array.isArray(m)) return;
+      if (m === mats.liquid) { o.castShadow = false; o.receiveShadow = false; return; }
+      if (m === mats.cutout) {
+        o.castShadow = on; o.receiveShadow = on;
+        o.customDepthMaterial = on ? this._cutoutDepth : undefined;
+        return;
+      }
+      if (m === mats.opaque) { o.castShadow = on; o.receiveShadow = on; return; }
+      if (m.isMeshLambertMaterial && !m.transparent) { o.castShadow = on; o.receiveShadow = on; }
+    });
+  }
+
+  // T' one render call: through t' post stack under 'Fine', straight through under 'Plain'.
+  renderFrame(dt) {
+    if (this.composer && this.gfxQuality === 'fine') {
+      if (this.gradePass) this.gradePass.uniforms.uTime.value = (this.gradePass.uniforms.uTime.value + dt) % 64;
+      this.composer.render();
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
   // Pretty-print the shared-moor connection report to the console an' return it.
@@ -306,6 +456,12 @@ class Game {
         const fState = festivalState(effective != null ? effective : sState.yearPhase);
         return { phase: effective, season: sState.season, festival: fState.active };
       },
+      // dev: render one frame through t' live pipeline (post stack an' all) an'
+      // return t' canvas as a PNG data-URL — for saving proof shots headlessly.
+      snap() {
+        G.renderFrame(0);
+        return G.renderer.domElement.toDataURL('image/png');
+      },
       // dev: jump to a named festival (its .centre phase), or null to resume.
       // e.g. moorstead.debug.festival('yule')
       festival(id) {
@@ -378,6 +534,20 @@ class Game {
     this.moorsPreview = false; // cleared for normal worlds; set by startMoorsWorld()
     this.seed = seed;
     this.world = new World(this.scene, seed, chunks);
+    // T' held storm lantern counts as a BURNING light to owt that reads world.nearLight
+    // (entities.js: lightWarded + spawn gating) — so in thi fist it wards boggarts AND
+    // t' barghest, a step better than a torch, an' nowt dark rises close by its flame.
+    // (entities.js/world.js are steady ground — this wrap keeps t' rule in one place.)
+    {
+      const rawNearLight = this.world.nearLight.bind(this.world);
+      this.world.nearLight = (x, z, r) => {
+        if (this._stormHeld && this.player && !this.player.dead) {
+          const dx = x - this.player.pos.x, dz = z - this.player.pos.z;
+          if (dx * dx + dz * dz <= (r + 3) * (r + 3)) return true;
+        }
+        return rawNearLight(x, z, r);
+      };
+    }
     this.player = new Player(this.world);
     this.entities = new Entities(this.scene, this.world);
     if (this.world.gen.geo.realWorld) {
@@ -388,6 +558,7 @@ class Game {
     // so NPC standing heights update within a frame or two of a platform rebuild.
     this.world.onBlockSet = (x, _y, z) => invalidateSurfCache(x, z);
     this.sky = new Sky(this.scene, this.camera);
+    this.applyQuality(this.gfxQuality || 'plain'); // fresh sky each world: re-rig shadows + light curves
     this.storm = new Storm(this); // the Dracula boss-battle storm (scoped to the fight)
     this.spawn = this.world.gen.findSpawn();
     this.player.pos = { ...this.spawn };
@@ -651,6 +822,16 @@ class Game {
       const mode = this.touch.cycleMode();
       ui.btnTouch.innerHTML = 'Touch controls: ' + mode.charAt(0).toUpperCase() + mode.slice(1);
     });
+    ui.btnGfx.addEventListener('click', () => {
+      const next = this.gfxQuality === 'fine' ? 'plain' : 'fine';
+      try { localStorage.setItem('moorcraft-gfx', next); } catch { /* storage blocked — this session only */ }
+      this.gfxStored = next;
+      this.applyQuality(next);
+      ui.btnGfx.innerHTML = 'Graphics: ' + (next === 'fine' ? 'Fine' : 'Plain');
+      ui.toast(next === 'fine'
+        ? 'Fine graphics: long shadows, moonlit neets, lamplight glow — t&rsquo; full picture.'
+        : 'Plain graphics: fast an&rsquo; simple, easy on owd kit.', 3500);
+    });
     ui.btnCreative.addEventListener('click', () => {
       if (this.creativeLocked()) { ui.toast('Tha’s on t’ shared moor — it’s survival here. Tha has to earn thi blocks an’ tools!', 4000); return; }
       this.player.creative = !this.player.creative;
@@ -819,6 +1000,7 @@ class Game {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
+      if (this.composer) this.composer.setSize(window.innerWidth, window.innerHeight);
     });
 
     window.addEventListener('beforeunload', () => {
@@ -949,7 +1131,7 @@ class Game {
     const kit = ui.el('button', 'mc', row, 'Full Kit (iron tools an’ all)');
     kit.addEventListener('click', () => {
       const p = this.player;
-      [[I.I_PICK, 1], [I.I_AXE, 1], [I.I_SHOVEL, 1], [I.I_SWORD, 1],
+      [[I.I_PICK, 1], [I.I_AXE, 1], [I.I_SHOVEL, 1], [I.I_SWORD, 1], [I.STORM_LANTERN, 1],
        [I.COAL_LUMP, 64], [B.TORCH, 64], [B.LANTERN, 8], [B.PLANKS, 64],
        [B.STONEBRICK, 64], [I.COOKED_MUTTON, 16]].forEach(([id, n]) => p.addItem(id, n));
       ui.invDirty = true;
@@ -4396,7 +4578,12 @@ class Game {
         this.renderer.domElement.style.opacity = String(op);
         if (ready) document.getElementById('title-screen')?.classList.add('world-shown'); // reveal it behind the UI
       }
-      this.renderer.render(this.scene, this.camera);
+      // Fine: stamp shadow flags onto freshly-streamed title chunks an' all
+      if (this.gfxQuality === 'fine' && this.world) {
+        this._shadowFlagT = (this._shadowFlagT || 0) - dt;
+        if (this._shadowFlagT <= 0) { this._shadowFlagT = 0.6; this.applyShadowFlags(true); }
+      }
+      this.renderFrame(dt);
       return;
     }
 
@@ -4767,6 +4954,26 @@ class Game {
     this.bobPhase = (this.bobPhase || 0) + dt * speed * 1.6;
     this.heldSprite.position.y = -0.55 + Math.sin(this.bobPhase * Math.PI) * 0.02 * Math.min(1, speed / 3);
 
+    // t' storm lantern in thi fist: a warm point light held just ahead an' beside t'
+    // eye, breathing wi' a deterministic wick-flicker an' swaying wi' thi stride
+    const holdingStorm = !!(heldNow && heldNow.id === I.STORM_LANTERN) && playing && !this.player.dead;
+    this._stormHeld = holdingStorm;
+    if (holdingStorm) {
+      const t = this.clock.elapsedTime;
+      this.stormLight.intensity = 12 * lanternFlicker(t); // 14 blew out t' near ground
+      const yaw = this.player.yaw;
+      const fx = -Math.sin(yaw), fz = -Math.cos(yaw);   // forward on t' ground plane
+      const rx = Math.cos(yaw), rz = -Math.sin(yaw);    // right hand
+      const sway = Math.sin(this.bobPhase * Math.PI) * 0.06 * Math.min(1, speed / 3);
+      this.stormLight.position.set(
+        this.player.pos.x + fx * 0.7 + rx * 0.35,
+        this.player.pos.y + 1.35 + sway,
+        this.player.pos.z + fz * 0.7 + rz * 0.35
+      );
+    } else {
+      this.stormLight.intensity = 0;
+    }
+
     // villagers hail thee as tha passes (one brain call at a time, well spaced;
     // they pipe down entirely when t' brain's under load)
     // Only suppress passing hails after a slow *hail* — player-initiated chat (T) must not
@@ -4969,7 +5176,13 @@ class Game {
     else if (!wantMap && this.peekingMap) { this.peekingMap = false; this.ui.hideBigMap(); }
     else if (this.peekingMap) this.ui.drawBigMapDots(this.player, this.net);
 
-    this.renderer.render(this.scene, this.camera);
+    // Fine: newly-streamed chunk meshes an' fresh-spawned mobs need their shadow
+    // flags stamping (t' mesher doesn't know about quality) — a cheap sweep, ~0.6 s
+    if (this.gfxQuality === 'fine') {
+      this._shadowFlagT = (this._shadowFlagT || 0) - dt;
+      if (this._shadowFlagT <= 0) { this._shadowFlagT = 0.6; this.applyShadowFlags(true); }
+    }
+    this.renderFrame(dt);
   }
 
   updateLanterns() {

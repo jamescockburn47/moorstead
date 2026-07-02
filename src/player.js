@@ -47,6 +47,7 @@ export class Player {
     this.freeStarter = false; // free-world one-time starter pack already granted
     this.onboarded = false; // first-visit handbook already shown
     this.strongboxHinted = false; // first-strongbox-craft "stash thi goods" nudge already shown
+    this.stormLanternHinted = false; // first-storm-lantern-craft "hold it o' nights" nudge already shown
     this.villagerMarkerHinted = false; // ❓ marker hint already shown
     this.home = null; // {x,y,z} of thi planted base flag — where tha respawns if tha falls
     this.stationSellHinted = false; // station sell hint already shown
@@ -369,6 +370,7 @@ export class Player {
       bairnFresh: this.bairnFresh, freeStarter: this.freeStarter,
       onboarded: this.onboarded, villagerMarkerHinted: this.villagerMarkerHinted, stationSellHinted: this.stationSellHinted,
       strongboxHinted: this.strongboxHinted,
+      stormLanternHinted: this.stormLanternHinted,
       pets: this.pets || [],
       home: this.home,
       farmStatus: this.farmStatus,
@@ -404,6 +406,7 @@ export class Player {
     this.villagerMarkerHinted = !!d.villagerMarkerHinted;
     this.stationSellHinted = !!d.stationSellHinted;
     this.strongboxHinted = !!d.strongboxHinted;
+    this.stormLanternHinted = !!d.stormLanternHinted;
     this.pets = d.pets || [];
     this.home = (d.home && Number.isFinite(d.home.x) && Number.isFinite(d.home.y) && Number.isFinite(d.home.z)) ? d.home : null;
     this.farmStatus = d.farmStatus || { registered: false };

@@ -16,6 +16,25 @@ const WEATHER_MSG = {
 
 function lerpC(a, b, t) { return a.clone().lerp(b, t); }
 
+// ---- graphics quality (pure helpers — headless-testable, no DOM, no GL) ----
+// Two rigs: 'fine' (ACES tone mapping, sun/moon shadows, bloom + grade post stack)
+// and 'plain' (today's pipeline untouched — t' safety net for tablets an' owd kit).
+// An explicit stored choice allus wins; else default Fine on a computer, Plain
+// where t' touch adapter is t' primary input.
+export function resolveQuality(stored, touchPrimary) {
+  if (stored === 'fine' || stored === 'plain') return stored;
+  return touchPrimary ? 'plain' : 'fine';
+}
+
+// T' held storm lantern's flame: a gentle organic flicker — two summed slow sines
+// plus a tiny fast shimmer, NOT random jitter, so it breathes like a real wick.
+// Deterministic in t (seconds) and bounded well within [0.9, 1.1].
+export function lanternFlicker(t) {
+  const slow = Math.sin(t * 7.3) * 0.5 + Math.sin(t * 12.7 + 1.7) * 0.35;
+  const shimmer = Math.sin(t * 41.0) * Math.sin(t * 27.3 + 0.6) * 0.5;
+  return 1 + 0.08 * slow + 0.02 * shimmer;
+}
+
 const SKY = {
   night: new THREE.Color(0x070a14),
   dawn: new THREE.Color(0x9a6a52),
@@ -42,6 +61,8 @@ export class Sky {
     this.moorGate = 0;   // set by t' game: 1 on t' high moor, 0 in villages/coast
     this._gateS = 0;
     this.fogDebug = false; // dev: force t' Great Fog on
+    this.gfx = 'plain';  // 'fine' | 'plain' — set by t' game (applyQuality); 'fine' swaps
+                         // in ACES-retuned light curves an' a moonlit night below
 
     this.sun = new THREE.DirectionalLight(0xfff2dd, 1.0);
     scene.add(this.sun);
@@ -240,16 +261,40 @@ export class Sky {
     // sun position
     const ang = (this.time - 0.25) * Math.PI * 2; // sunrise at t=0.25... offset so noon t=0.5
     const sunY = Math.sin(ang), sunX = Math.cos(ang);
-    this.sun.position.set(playerPos.x + sunX * 60, sunY * 80, playerPos.z + 20);
-    this.sun.target.position.set(playerPos.x, playerPos.y, playerPos.z);
     const dayness = Math.max(0, Math.min(1, (sunY + 0.12) * 3));
     // lightning flash: decays fast (~200 ms from a full spike) and briefly floods
     // the scene lighting — spiked by the storm controller (sky.flash = 1).
     this.flash = Math.max(0, this.flash - dt / 0.22);
     const flashLift = this.flash * this.flash * 2.4; // eased, a sharp blue-white burst
-    this.sun.intensity = (0.25 + dayness * 1.0) * (1 - this.dread * 0.35) + flashLift;
-    this.ambient.intensity = (0.16 + dayness * 0.5) * (1 - this.dread * 0.25) + flashLift * 0.7;
-    this.sun.color.setHSL(0.1, dayness < 0.4 ? 0.6 : 0.25, 0.85);
+    const fine = this.gfx === 'fine';
+    if (fine) {
+      // 'Fine' rig: ACES filmic tone mapping darkens t' mids, so t' curves run hotter —
+      // an' ONE directional plays sun by day an' moon by night, so t' single shadow
+      // rig follows whichever lamp's up. Positions ride relative to t' player's height
+      // so a low sun stays a LOW sun (long dawn/dusk shadows reet across t' moor).
+      const moonUp = sunY < -0.02;
+      const moonHigh = Math.max(0, Math.min(1, (-sunY - 0.02) * 3));
+      if (moonUp) {
+        this.sun.position.set(playerPos.x - sunX * 70, playerPos.y + Math.max(8, -sunY * 85), playerPos.z - 24);
+        this.sun.intensity = (0.07 + 0.38 * moonHigh) * (1 - this.dread * 0.35) + flashLift;
+        this.sun.color.set(0x9cbcf0); // cool blue moonlight
+      } else {
+        this.sun.position.set(playerPos.x + sunX * 70, playerPos.y + Math.max(5, sunY * 85), playerPos.z + 20);
+        const golden = Math.max(0, 1 - sunY * 2.6); // 1 at t' horizon → 0 by mid-morning (a long golden hour)
+        this.sun.intensity = (0.34 + dayness * 1.72) * (1 - this.dread * 0.35) + flashLift;
+        this.sun.color.setHSL(0.07 + 0.045 * (1 - golden), 0.45 + golden * 0.45, 0.74 + (1 - golden) * 0.12);
+      }
+      // raised ambient floor: tha can navigate by moonlight, but tha'll still want a
+      // lamp for warmth, colour an' detail
+      this.ambient.intensity = (0.34 + dayness * 0.62 + moonHigh * 0.10) * (1 - this.dread * 0.25) + flashLift * 0.7;
+    } else {
+      // 'Plain': today's pipeline, untouched
+      this.sun.position.set(playerPos.x + sunX * 60, sunY * 80, playerPos.z + 20);
+      this.sun.intensity = (0.25 + dayness * 1.0) * (1 - this.dread * 0.35) + flashLift;
+      this.ambient.intensity = (0.16 + dayness * 0.5) * (1 - this.dread * 0.25) + flashLift * 0.7;
+      this.sun.color.setHSL(0.1, dayness < 0.4 ? 0.6 : 0.25, 0.85);
+    }
+    this.sun.target.position.set(playerPos.x, playerPos.y, playerPos.z);
 
     this.sunSprite.position.set(playerPos.x + sunX * 160, sunY * 150 + playerPos.y * 0.3, playerPos.z - 60);
     this.moonSprite.position.set(playerPos.x - sunX * 160, -sunY * 150 + playerPos.y * 0.3, playerPos.z + 60);
@@ -306,6 +351,12 @@ export class Sky {
       this.ambient.intensity *= (1 + w * 0.05);
       this.sun.intensity *= (1 + w * 0.04);
     }
+    if (fine) {
+      // moonlit lift: raise t' night sky off pitch black so silhouettes an' t'
+      // horizon read — t' grade pass's lifted blacks finish t' job
+      const nightness = Math.max(0, Math.min(1, -sunY * 2.5));
+      sky = sky.clone().lerp(new THREE.Color(0x18233a), nightness * 0.45);
+    }
     this.scene.background = sky;
     this.scene.fog.color.copy(sky);
 
@@ -330,7 +381,8 @@ export class Sky {
     const nearRatio = 0.25 + 0.35 * Math.max(0, Math.min(1, (55 - this.fogFar) / 35));
     this.scene.fog.near = Math.max(5, this.fogFar * nearRatio);
 
-    this.stars.material.opacity = Math.max(0, -sunY * 2) * (1 - grey * 0.8);
+    const starA = Math.max(0, -sunY * 2) * (1 - grey * 0.8);
+    this.stars.material.opacity = fine ? Math.min(1, starA * 1.6) : starA; // brighter stars ower a moonlit moor
     this.stars.position.set(playerPos.x, 0, playerPos.z);
 
     // drift t' dome clouds on t' wind; coverage frae t' weather, lit by day
