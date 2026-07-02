@@ -104,7 +104,7 @@ console.log('determinism');
   (mesh && mesh.children && mesh.children.length > 0 ? ok : bad)('buildPlayerLookMesh builds through makeVillager (a populated group)');
 }
 
-// ---------- 4. palette bounds + authority outfits excluded ----------
+// ---------- 4. palette bounds + all wardrobe outfits choosable ----------
 console.log('palette bounds');
 {
   const int24 = c => Number.isInteger(c) && c >= 0 && c <= 0xffffff;
@@ -115,9 +115,9 @@ console.log('palette bounds');
   (PLAYER_HAIRS.every(c => HAIR_TONES.includes(c)) ? ok : bad)('hair choices are within the period tone list');
   // every choosable outfit is a REAL wardrobe role
   (PLAYER_OUTFITS.every(r => WARDROBE[r]) ? ok : bad)('every choosable outfit maps to a real wardrobe role');
-  // authority figures must NOT be choosable (kids can't impersonate the bobby/vicar)
-  const banned = ['constable', 'parson', 'monk', 'gentry'];
-  (banned.every(r => !PLAYER_OUTFITS.includes(r)) ? ok : bad)('authority outfits (constable/parson/monk/gentry) are NOT choosable');
+  // it's a dressing-up game: authority outfits ARE choosable too (a bairn can be the bobby)
+  const authority = ['constable', 'parson', 'gentry', 'monk'];
+  (authority.every(r => PLAYER_OUTFITS.includes(r)) ? ok : bad)('authority outfits (constable/parson/gentry/monk) are choosable too');
   // the default is a valid, in-range look
   (eq(validatePlayerLook(DEF), DEF) ? ok : bad)('the default look is itself valid');
 }

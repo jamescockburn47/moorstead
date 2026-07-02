@@ -720,11 +720,12 @@ export function lookFromSpec(spec) {
 
 // The outfits a player may wear. Deliberately a subset of WARDROBE: the working
 // folk and cheerful trades that read as "a rambler on the moor", NOT the authority
-// figures (constable, parson, monk, gentry) — those must stay readable as who they
-// are, so a child can't dress up as the bobby or the vicar. All 1900-plausible.
+// figures included (constable, parson, gentry, monk) — it's a dressing-up game, so
+// let a bairn be the bobby if they fancy it. All 1900-plausible.
 export const PLAYER_OUTFITS = [
   'villager', 'farmer', 'shepherd', 'miner', 'fishwife',
   'herbwife', 'fisherman', 'railway', 'craftsman', 'trader', 'publican',
+  'constable', 'parson', 'gentry', 'monk',
 ];
 
 // Jacket/coat dye — the muted natural-dye moor palette (no chemical brights), with
