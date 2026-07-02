@@ -706,6 +706,128 @@ export function lookFromSpec(spec) {
   };
 }
 
+// ---------- PLAYER customisation ("Dress thissen") ----------
+// A player picks their OWN look from bounded, period-1900 choices — never freeform
+// hex (bounded = kid-safe, validates cleanly, and every client can trust a peer's
+// look message). The look is a small plain object of INDICES into the fixed tables
+// below: { outfit, jacket, hat, skin, hair }. It rides player.serialize (an
+// additive key — old saves default to a rambler) and the relay as an additive
+// `look` message (INVARIANTS rule 3: unknown types fall through on old clients).
+//
+// It resolves through lookToSpec() -> the SAME spec shape outfitSpecFor() returns,
+// so a player avatar is built by the SAME makeVillager/lookFromSpec path and shares
+// the same per-size/per-colour caches as every NPC. No parallel builder.
+
+// The outfits a player may wear. Deliberately a subset of WARDROBE: the working
+// folk and cheerful trades that read as "a rambler on the moor", NOT the authority
+// figures (constable, parson, monk, gentry) — those must stay readable as who they
+// are, so a child can't dress up as the bobby or the vicar. All 1900-plausible.
+export const PLAYER_OUTFITS = [
+  'villager', 'farmer', 'shepherd', 'miner', 'fishwife',
+  'herbwife', 'fisherman', 'railway', 'craftsman', 'trader', 'publican',
+];
+
+// Jacket/coat dye — the muted natural-dye moor palette (no chemical brights), with
+// a couple of cheerful-but-period dyes (madder red, woad blue, moss green) so a
+// child gets a bit of colour without breaking 1900.
+export const PLAYER_JACKETS = [
+  0x6a5a40, // homespun brown
+  0x565a66, // slate grey
+  0x4a5a3a, // moss green
+  0x2c3a4e, // navy gansey
+  0x6b4f43, // russet
+  0x5c3f33, // chestnut
+  0x7a3f36, // madder red
+  0x3a5566, // woad blue
+  0x5a5244, // oat
+  0x35302b, // sooty black
+];
+
+// Hat/cap choices. Index 0 = bare-headed; the rest reuse the wardrobe's own
+// silhouettes (flat cap, wide hat, bonnet, topper) so they build through
+// addOutfitPart with no new geometry. Colours are fixed period felt/wool shades.
+export const PLAYER_HATS = [
+  null,                                   // 0 — bare-headed
+  { kind: 'cap', color: 0x3a342e },       // 1 — flat cap, dark
+  { kind: 'cap', color: 0x4a3f30 },       // 2 — flat cap, brown
+  { kind: 'bonnet', color: 0x2e2a34 },    // 3 — bonnet
+  { kind: 'hatwide', color: 0x4a3f30 },   // 4 — wide brim
+  { kind: 'topper', color: 0x1a1a1e },    // 5 — tall hat (Sunday best)
+];
+
+// Choosable skin/hair — the same period-plausible tone lists the NPC seeder uses,
+// so a player look never falls outside what the moor already shows.
+export const PLAYER_SKINS = SKIN_TONES;
+export const PLAYER_HAIRS = HAIR_TONES;
+
+// A sensible rambler default: old saves and any junk look degrade to this.
+export const DEFAULT_PLAYER_LOOK = Object.freeze({ outfit: 0, jacket: 0, hat: 1, skin: 2, hair: 2 });
+
+// Coerce ANY input to a valid, bounded playerLook. Junk (out-of-range index,
+// non-integer, wrong type, unknown extra fields) is rejected field-by-field back to
+// the default — never trusted. Used on load AND on every inbound relay `look`
+// (relay-borne data is untrusted, INVARIANTS rule 3 corollary).
+export function validatePlayerLook(look) {
+  const idx = (v, len, def) =>
+    (Number.isInteger(v) && v >= 0 && v < len) ? v : def;
+  const src = (look && typeof look === 'object') ? look : {};
+  return {
+    outfit: idx(src.outfit, PLAYER_OUTFITS.length, DEFAULT_PLAYER_LOOK.outfit),
+    jacket: idx(src.jacket, PLAYER_JACKETS.length, DEFAULT_PLAYER_LOOK.jacket),
+    hat:    idx(src.hat,    PLAYER_HATS.length,    DEFAULT_PLAYER_LOOK.hat),
+    skin:   idx(src.skin,   PLAYER_SKINS.length,   DEFAULT_PLAYER_LOOK.skin),
+    hair:   idx(src.hair,   PLAYER_HAIRS.length,   DEFAULT_PLAYER_LOOK.hair),
+  };
+}
+
+// playerLook -> the resolved spec shape outfitSpecFor() returns. Pure and
+// deterministic: same indices, same spec, every client. The outfit supplies the
+// silhouette extras (from the WARDROBE table, minus its own hat — the player picks
+// their own headwear); jacket/hat/skin/hair are the player's explicit choices.
+export function lookToSpec(playerLook) {
+  const L = validatePlayerLook(playerLook);
+  const role = PLAYER_OUTFITS[L.outfit];
+  const w = WARDROBE[role] || WARDROBE.villager;
+  const jacket = PLAYER_JACKETS[L.jacket];
+  // Take the outfit's non-hat extras at their FIRST palette shade (deterministic,
+  // no id-seed for a player — their look is chosen, not seeded), then bolt on the
+  // player's chosen hat. Legs follow the outfit's first legs shade.
+  const HAT_KINDS = new Set(['cap', 'hatwide', 'topper', 'helmet', 'bonnet']);
+  const first = c => (Array.isArray(c) ? c[0] : c);
+  const legsC = first(w.legs);
+  const extras = (w.extras || [])
+    .filter(e => !HAT_KINDS.has(e.kind))                       // drop the outfit's own headwear
+    .map(e => ({ kind: e.kind, color: e.match === 'legs' ? legsC : first(e.color) }));
+  const hat = PLAYER_HATS[L.hat];
+  if (hat) extras.push({ kind: hat.kind, color: hat.color });
+  const spec = {
+    role, curated: false,
+    scale: (w.scaleBase || 1),
+    width: 1,
+    skin: PLAYER_SKINS[L.skin],
+    hair: PLAYER_HAIRS[L.hair],
+    jacket,
+    legs: legsC,
+    curls: false,
+    extras,
+  };
+  spec.boxes = spec.extras.reduce((n, e) => n + (OUTFIT_BOXES[e.kind] || 1), 0);
+  return spec;
+}
+
+// Convenience: playerLook -> the `look` object makeVillager eats.
+export function playerLookToVillagerLook(playerLook) {
+  return lookFromSpec(lookToSpec(playerLook));
+}
+
+// Build a standalone avatar mesh for a playerLook, through the SAME makeVillager
+// path/caches every NPC uses. Returns the outer THREE.Group (drop it into any
+// scene — the wardrobe preview does exactly this). No DOM, but it constructs GL
+// geometry, so callers guard it behind a typeof-THREE / try check like elsewhere.
+export function buildPlayerLookMesh(playerLook) {
+  return makeVillager(playerLookToVillagerLook(playerLook)).group;
+}
+
 // shared geometry (per size) + material (per colour) caches — villagers are
 // built at UNIT scale inside a scaled group, so every torso/hat/apron of a size
 // is the same BoxGeometry however tall its wearer. Nowt may MUTATE these
@@ -1298,9 +1420,17 @@ export class Entities {
     // EXTRA_FOLK carry opts.role; the rest wear their trade in their name) plus
     // id-seeded person underneath. Seeded on the stable "charid|name" key so the
     // same soul looks the same every session an' on every client.
-    const look = (isMerlin || isRemote)
+    //
+    // A REMOTE PLAYER now honours a chosen `look` (their playerLook, sent over the
+    // relay) if one's arrived — built through the SAME shared path as every NPC.
+    // Until their look lands they wear the legacy plain rambler (graceful default).
+    const look = isMerlin
       ? villagerLook(name)
-      : lookFromSpec(outfitSpecFor(opts.role, ((charId || '') + '|' + (name || '')).toLowerCase()));
+      : (isRemote && opts.look)
+        ? playerLookToVillagerLook(opts.look)
+        : isRemote
+          ? villagerLook(name)
+          : lookFromSpec(outfitSpecFor(opts.role, ((charId || '') + '|' + (name || '')).toLowerCase()));
     const model = makeVillager(look);
     const currentSeason = this.game && this.game.season;
     const isFC = isMerlin && wintry(currentSeason);
@@ -1350,6 +1480,30 @@ export class Entities {
     };
     this.mobs.push(v);
     return v;
+  }
+
+  // Re-dress a spawned REMOTE PLAYER when their chosen look arrives (or changes)
+  // over the relay. Rebuilds the body mesh through the SAME shared path, then moves
+  // the existing nameplate/quest marker onto the new group and swaps it into the
+  // scene at the current position/heading — so a peer's outfit changes live without
+  // a respawn. Materials/geometries are the shared caches, so nowt leaks; the old
+  // body's boxes reference shared caches too (never disposed — they're pooled).
+  redressRemote(mob, playerLook) {
+    if (!mob || !mob.model || !mob.isRemotePlayer) return;
+    const look = playerLookToVillagerLook(playerLook);
+    const model = makeVillager(look);
+    const old = mob.model;
+    // carry the floating sprites over (they were added to the old group)
+    for (const spr of [mob.plate, mob.questMarker]) {
+      if (spr && spr.parent === old.group) { old.group.remove(spr); model.group.add(spr); }
+    }
+    model.group.position.copy(old.group.position);
+    model.group.rotation.copy(old.group.rotation);
+    this.scene.remove(old.group);
+    this.scene.add(model.group);
+    mob.model = model;
+    mob.hw = 0.28 * look.scale + 0.08;
+    mob.h = Math.max(0.5, 1.65 * look.scale);
   }
 
   // ---------- mobs ----------

@@ -1,5 +1,6 @@
 import { escHtml } from './escape.js';
 import { epochDecision } from './epoch.js';
+import { validatePlayerLook } from './entities.js';
 
 // T' Shared Moor: one world for everyone, relayed through t' EVO.
 // Terrain is deterministic frae t' shared seed; t' server keeps block edits,
@@ -119,6 +120,11 @@ export class Net {
         // tab throttles us to ~once a minute, so we stop dropping (an' flapping).
         clearInterval(this.keepTimer);
         this.keepTimer = setInterval(() => this.keepalive(), 25000);
+        // Tell peers how we look. The relay may not store it (that's a server
+        // change, off-limits here) — so we broadcast our own look on every
+        // (re)connect, an' again whenever a fresh soul joins (see handle 'join').
+        // That way a peer is dressed correctly within a beat, server-storage or no.
+        this.sendLook();
       };
       this.ws.onmessage = e => {
         this.diag.lastMsgAt = Date.now();
@@ -251,6 +257,9 @@ export class Net {
       if (pend) { clearTimeout(pend); this.leaving.delete(m.pid); }
       const fresh = this.addRemote(m.pid, m.name, { x: 0, y: 40, z: 0 });
       if (fresh) g.ui.toast(`<b>${escHtml(m.name)}</b> has come up onto t’ moor.`, 4000);
+      // a newcomer hasn't seen our look yet (the relay doesn't carry it in presence,
+      // v1) — re-broadcast so they dress us right. Cheap: a tiny message per join.
+      this.sendLook();
     } else if (m.type === 'leave') {
       // hold off — idle tabs drop an' return constantly. Only let her go if she's
       // still away after a grace, so folk don't blink in an' out (nor re-announce).
@@ -297,7 +306,22 @@ export class Net {
       // client can undo its immediate escrow — nowt is ever stranded server-side.
       if (Array.isArray(m.give) && g.stallReturned) g.stallReturned({ give: m.give });
       if (m.text) g.ui.toast(escHtml(String(m.text)), 6000);
+    } else if (m.type === 'look') {
+      // a peer's chosen appearance ("Dress thissen"). Untrusted like all relay data:
+      // coerce to a bounded, valid look before we build owt from it. Store it on the
+      // remote (so a later respawn keeps it) an' re-dress the mesh now if it's up.
+      if (m.pid && m.pid === this.diag.pid) return; // our own look echoed back — ignore
+      const look = validatePlayerLook(m.look);
+      const r = this.remotes.get(m.pid);
+      if (r) { r.look = look; if (r.mob) g.entities.redressRemote(r.mob, look); }
     }
+  }
+
+  // Broadcast our own chosen look to the room. Additive message (INVARIANTS rule 3):
+  // old clients/relay ignore an unknown `type`. Sent on (re)connect an' on any join.
+  sendLook() {
+    const look = this.game.player && this.game.player.look;
+    if (look) this.send({ type: 'look', look });
   }
 
   requestWhere(cb) { this.onWhere = cb; this.send({ type: 'where' }); }
@@ -305,10 +329,13 @@ export class Net {
 
   addRemote(pid, name, p) {
     if (this.remotes.has(pid)) return false;
-    const mob = this.game.entities.spawnVillager(pid, name || 'rambler', p.x, p.y, p.z);
+    // if the relay ever carries a look in presence (init/join payload), honour it at
+    // spawn; otherwise the peer's own `look` broadcast dresses them within a beat.
+    const look = (p && p.look) ? validatePlayerLook(p.look) : null;
+    const mob = this.game.entities.spawnVillager(pid, name || 'rambler', p.x, p.y, p.z, look ? { look } : {});
     mob.isRemotePlayer = true;
     mob.t.speed = 0; // we drive it frae t' network
-    this.remotes.set(pid, { name, mob, target: p, mount: null });
+    this.remotes.set(pid, { name, mob, target: p, mount: null, look });
     return true;
   }
 

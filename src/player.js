@@ -4,6 +4,7 @@ import { HOT_FOODS } from './temperature.js';
 import { STARTING_BRASS } from './economy.js';
 import { moveEntity, boxCollides, unstick } from './physics.js';
 import { freezableWater, isFrozen } from './snow.js';
+import { validatePlayerLook, DEFAULT_PLAYER_LOOK } from './entities.js';
 
 const GRAVITY = 26;
 const JUMP_VEL = 8.6;
@@ -52,6 +53,7 @@ export class Player {
     this.home = null; // {x,y,z} of thi planted base flag — where tha respawns if tha falls
     this.stationSellHinted = false; // station sell hint already shown
     this.farmStatus = { registered: false }; // registered-farm status (Slice 2 gate to droving)
+    this.look = { ...DEFAULT_PLAYER_LOOK }; // "Dress thissen": chosen appearance (bounded indices) — shown to other players
   }
 
   eyePos() { return { x: this.pos.x, y: this.pos.y + this.eye, z: this.pos.z }; }
@@ -375,6 +377,7 @@ export class Player {
       home: this.home,
       farmStatus: this.farmStatus,
       miningSkill: this.miningSkill || 0,
+      look: this.look, // "Dress thissen" — additive; old saves lack it an' default to a rambler
     };
   }
 
@@ -411,5 +414,7 @@ export class Player {
     this.home = (d.home && Number.isFinite(d.home.x) && Number.isFinite(d.home.y) && Number.isFinite(d.home.z)) ? d.home : null;
     this.farmStatus = d.farmStatus || { registered: false };
     this.miningSkill = d.miningSkill || 0;
+    // additive + untrusted-input safe: an absent/old/junk look coerces to a rambler
+    this.look = validatePlayerLook(d.look);
   }
 }

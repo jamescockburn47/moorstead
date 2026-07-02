@@ -9,6 +9,19 @@ import { TitleFlyover } from './titlescene.js';
 import { escHtml } from './escape.js';
 import { parishQuarries, drawMinimapMarker } from './mining-guide.js';
 import { gazette } from './npc.js';
+import {
+  PLAYER_OUTFITS, PLAYER_JACKETS, PLAYER_HATS, PLAYER_SKINS, PLAYER_HAIRS,
+  validatePlayerLook,
+} from './entities.js';
+
+// pretty labels for the "Dress thissen" outfit list (period trades)
+const OUTFIT_LABELS = {
+  villager: 'Parishioner', farmer: 'Farmer', shepherd: 'Shepherd', miner: 'Miner',
+  fishwife: 'Fishwife', herbwife: 'Herb-wife', fisherman: 'Fisherman',
+  railway: 'Railwayman', craftsman: 'Craftsman', trader: 'Market trader', publican: 'Publican',
+};
+const HAT_LABELS = ['Bare-headed', 'Flat cap (dark)', 'Flat cap (brown)', 'Bonnet', 'Wide-brim', 'Tall hat'];
+const hex = c => '#' + (c >>> 0).toString(16).padStart(6, '0');
 
 const PIX = {
   heart: ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'],
@@ -460,6 +473,7 @@ export class UI {
     this.btnResume = this.el('button', 'mc', pp, 'Back to t&rsquo; Moor');
     this.btnSave = this.el('button', 'mc', pp, 'Save T&rsquo; World');
     this.btnCreative = this.el('button', 'mc', pp, 'Toggle Creative Mode');
+    this.btnWardrobe = this.el('button', 'mc', pp, 'Dress Thissen'); // player customisation
     this.btnTouch = this.el('button', 'mc', pp, 'Touch controls: Auto');
     // Fine (shadows, tone mapping, bloom) / Plain (today's fast pipeline) — wired in
     // main.bindEvents, persisted in localStorage ('moorcraft-gfx'), label set by applyQuality
@@ -467,6 +481,9 @@ export class UI {
     this.adminPanel = this.el('div', 'admin-panel hidden', pp); // filled by t' game for parish wardens
     this.btnHow2 = this.el('button', 'mc', pp, 'Ow Ter Play');
     this.btnQuit = this.el('button', 'mc', pp, 'Give Up &amp; Go Home (Save &amp; Quit)');
+
+    // ---------- dress thissen (player customisation) ----------
+    this.buildWardrobe(body);
 
     // ---------- ow ter play (tabbed handbook) ----------
     this.howScreen = this.el('div', 'overlay hidden', body);
@@ -902,9 +919,99 @@ export class UI {
     this.show('howScreen');
   }
 
+  // ============ dress thissen (player customisation) ============
+  // A bounded, touch-usable wardrobe: pick an outfit, jacket dye, hat, skin an'
+  // hair frae fixed period-1900 palettes. All choices are indices into the tables
+  // in entities.js (no freeform colour), so a look validates cleanly an' can be
+  // trusted when a peer sends theirs. The panel edits a working copy an' hands it
+  // back through onWardrobeApply(look) (wired in main.js) on Done.
+  buildWardrobe(body) {
+    this.wardrobeScreen = this.el('div', 'overlay hidden', body);
+    const wp = this.el('div', 'panel wardrobe-panel', this.wardrobeScreen);
+    this.el('div', 'inv-title', wp, 'Dress Thissen');
+    this.el('div', 'muted-note', wp, 'Choose how tha looks on t&rsquo; moor. Other folk see thi get-up an&rsquo; all.');
+
+    // --- live preview (a mini avatar; the game re-renders it as choices change) ---
+    this.wardrobePreviewCanvas = this.el('canvas', 'wardrobe-preview', wp);
+    this.wardrobePreviewCanvas.width = 220; this.wardrobePreviewCanvas.height = 260;
+
+    // --- outfit ---
+    this.el('div', 'wardrobe-lbl', wp, 'Outfit');
+    this.wardrobeOutfits = this.el('div', 'wardrobe-row', wp);
+    this._outfitBtns = PLAYER_OUTFITS.map((role, i) => {
+      const b = this.el('button', 'mc wardrobe-opt', this.wardrobeOutfits, OUTFIT_LABELS[role] || role);
+      b.addEventListener('click', () => { this._draftLook.outfit = i; this._syncWardrobe(); });
+      return b;
+    });
+
+    // --- jacket dye (swatches) ---
+    this.el('div', 'wardrobe-lbl', wp, 'Jacket');
+    this.wardrobeJackets = this.el('div', 'wardrobe-swatches', wp);
+    this._jacketBtns = PLAYER_JACKETS.map((c, i) => {
+      const b = this.el('button', 'wardrobe-swatch', this.wardrobeJackets);
+      b.style.background = hex(c); b.title = 'jacket';
+      b.addEventListener('click', () => { this._draftLook.jacket = i; this._syncWardrobe(); });
+      return b;
+    });
+
+    // --- hat ---
+    this.el('div', 'wardrobe-lbl', wp, 'Hat');
+    this.wardrobeHats = this.el('div', 'wardrobe-row', wp);
+    this._hatBtns = PLAYER_HATS.map((_, i) => {
+      const b = this.el('button', 'mc wardrobe-opt', this.wardrobeHats, HAT_LABELS[i] || ('Hat ' + i));
+      b.addEventListener('click', () => { this._draftLook.hat = i; this._syncWardrobe(); });
+      return b;
+    });
+
+    // --- skin (swatches) ---
+    this.el('div', 'wardrobe-lbl', wp, 'Skin');
+    this.wardrobeSkins = this.el('div', 'wardrobe-swatches', wp);
+    this._skinBtns = PLAYER_SKINS.map((c, i) => {
+      const b = this.el('button', 'wardrobe-swatch', this.wardrobeSkins);
+      b.style.background = hex(c); b.title = 'skin';
+      b.addEventListener('click', () => { this._draftLook.skin = i; this._syncWardrobe(); });
+      return b;
+    });
+
+    // --- hair (swatches) ---
+    this.el('div', 'wardrobe-lbl', wp, 'Hair');
+    this.wardrobeHairs = this.el('div', 'wardrobe-swatches', wp);
+    this._hairBtns = PLAYER_HAIRS.map((c, i) => {
+      const b = this.el('button', 'wardrobe-swatch', this.wardrobeHairs);
+      b.style.background = hex(c); b.title = 'hair';
+      b.addEventListener('click', () => { this._draftLook.hair = i; this._syncWardrobe(); });
+      return b;
+    });
+
+    this.btnWardrobeDone = this.el('button', 'mc', wp, 'Done');
+    this.btnWardrobeDone.addEventListener('click', () => {
+      if (this.onWardrobeApply) this.onWardrobeApply(validatePlayerLook(this._draftLook));
+    });
+  }
+
+  // open the wardrobe seeded from the player's current look
+  openWardrobe(currentLook) {
+    this._draftLook = validatePlayerLook(currentLook);
+    this._syncWardrobe();
+    this.show('wardrobeScreen');
+  }
+
+  // reflect the working look onto the buttons (selected class) — pure DOM, no build
+  _syncWardrobe() {
+    const L = this._draftLook;
+    const mark = (btns, sel) => btns.forEach((b, i) => b.classList.toggle('sel', i === sel));
+    mark(this._outfitBtns, L.outfit);
+    mark(this._jacketBtns, L.jacket);
+    mark(this._hatBtns, L.hat);
+    mark(this._skinBtns, L.skin);
+    mark(this._hairBtns, L.hair);
+    // live preview: re-dress the player's own avatar as they pick (main.js wires this)
+    if (this.onWardrobePreview) this.onWardrobePreview(validatePlayerLook(L));
+  }
+
   // ============ screens ============
   show(name) {
-    for (const s of [this.titleScreen, this.pauseScreen, this.howScreen, this.feedbackScreen, this.deathScreen, this.invScreen, this.rangeScreen, this.loadingScreen, this.chatScreen, this.boardScreen, this.museumScreen]) {
+    for (const s of [this.titleScreen, this.pauseScreen, this.howScreen, this.feedbackScreen, this.deathScreen, this.invScreen, this.rangeScreen, this.loadingScreen, this.chatScreen, this.boardScreen, this.museumScreen, this.wardrobeScreen]) {
       s.classList.add('hidden');
     }
     if (name) this[name].classList.remove('hidden');

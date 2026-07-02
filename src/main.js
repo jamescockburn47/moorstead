@@ -91,7 +91,7 @@ function lerpAngle(a, b, t) {
   if (d > Math.PI) d -= Math.PI * 2; else if (d < -Math.PI) d += Math.PI * 2;
   return a + d * t;
 }
-import { Entities, MOB_TYPES } from './entities.js';
+import { Entities, MOB_TYPES, buildPlayerLookMesh, validatePlayerLook } from './entities.js';
 import { auditMobs } from './invariants.js';
 import { PET_BENEFIT, PET_KINDS, TAME_GOAL } from './pets.js';
 import { EXTRA_FOLK, moodWord } from './villagerlife.js';
@@ -818,6 +818,11 @@ class Game {
     ui.btnHowClose.addEventListener('click', () => ui.show(this.howReturn || 'titleScreen'));
     ui.btnResume.addEventListener('click', () => this.resume());
     ui.btnSave.addEventListener('click', () => this.saveNow());
+    // "Dress thissen" — the wardrobe. Preview re-dresses a mini avatar; Done saves +
+    // tells peers. Returns to the pause menu it was opened from (or the title).
+    ui.btnWardrobe.addEventListener('click', () => { this.wardrobeReturn = 'pauseScreen'; this.openWardrobe(); });
+    ui.onWardrobePreview = (look) => this.previewPlayerLook(look);
+    ui.onWardrobeApply = (look) => this.applyPlayerLook(look);
     ui.btnTouch.addEventListener('click', () => {
       const mode = this.touch.cycleMode();
       ui.btnTouch.innerHTML = 'Touch controls: ' + mode.charAt(0).toUpperCase() + mode.slice(1);
@@ -1865,6 +1870,54 @@ class Game {
     this.state = 'playing';
     this.ui.show(null);
     this.lockPointer();
+  }
+
+  // ---------------- Dress Thissen (player customisation) ----------------
+  // Open the wardrobe seeded from the player's current look. Pauses input like the
+  // other menus. The panel edits a working copy; previewPlayerLook re-dresses a
+  // mini avatar as they pick; applyPlayerLook commits on Done.
+  openWardrobe() {
+    this.state = 'paused';
+    this.clearKeys();
+    try { document.exitPointerLock?.(); } catch { /* not locked */ }
+    this.ui.openWardrobe(this.player.look);
+  }
+
+  // Live preview: build a mini avatar frae the look into a small offscreen scene
+  // an' render it to the panel's canvas. Guarded — if GL's unavailable (or headless)
+  // it simply no-ops an' the player dresses-an'-sees on Done. Uses the SAME shared
+  // makeVillager builder, so the preview is exactly what peers will see.
+  previewPlayerLook(look) {
+    try {
+      if (!this.ui.wardrobePreviewCanvas || typeof WebGLRenderingContext === 'undefined') return;
+      if (!this._wardrobePrev) {
+        const cv = this.ui.wardrobePreviewCanvas;
+        const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
+        r.setSize(cv.width, cv.height, false);
+        const scene = new THREE.Scene();
+        const cam = new THREE.PerspectiveCamera(35, cv.width / cv.height, 0.1, 50);
+        cam.position.set(0, 1.1, 4.2); cam.lookAt(0, 0.95, 0);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+        const dir = new THREE.DirectionalLight(0xfff2d8, 0.9); dir.position.set(2, 4, 3); scene.add(dir);
+        this._wardrobePrev = { r, scene, cam, mesh: null };
+      }
+      const P = this._wardrobePrev;
+      if (P.mesh) { P.scene.remove(P.mesh); }
+      P.mesh = buildPlayerLookMesh(look);
+      P.mesh.rotation.y = Math.PI; // face the camera
+      P.scene.add(P.mesh);
+      P.r.render(P.scene, P.cam);
+    } catch (e) { /* GL unavailable — dress-an'-see on Done still works */ }
+  }
+
+  // Commit a chosen look: store on the player, persist (rides serialize), tell peers
+  // (additive relay message), an' close back to where the wardrobe was opened from.
+  applyPlayerLook(look) {
+    this.player.look = validatePlayerLook(look);
+    try { this.net && this.net.sendLook && this.net.sendLook(); } catch { /* not connected — sent on next connect */ }
+    this.saveNow(false);
+    this.ui.show(this.wardrobeReturn || 'pauseScreen');
+    this.ui.toast('Tha&rsquo;s dressed. Other folk&rsquo;ll see thi new get-up.', 3500);
   }
 
   setPlayerName() {

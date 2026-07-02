@@ -638,3 +638,21 @@ html.touch .game { touch-action: none; }
 }
 
 
+
+/* ---------- Dress Thissen (player customisation) ---------- */
+.wardrobe-panel { width: min(92vw, 520px); }
+.wardrobe-panel .muted-note { margin-bottom: 10px; }
+.wardrobe-lbl { font-size: 13px; color: var(--gold); font-weight: 700; margin: 12px 0 5px; letter-spacing: 0.4px; }
+.wardrobe-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.wardrobe-row button.mc.wardrobe-opt {
+  display: inline-block; width: auto; margin: 0; padding: 7px 12px; font-size: 13px;
+}
+.wardrobe-opt.sel { background: linear-gradient(#8a7a3a, #6a5e2c); border-color: #443a16; color: #f0dca0; }
+.wardrobe-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.wardrobe-swatch {
+  width: 40px; height: 40px; border-radius: 6px; cursor: pointer;
+  border: 2px solid #2c2920; box-shadow: inset 0 2px 0 rgba(255,255,255,0.12), 0 2px 0 #22201a;
+}
+.wardrobe-swatch.sel { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold), inset 0 2px 0 rgba(255,255,255,0.12); }
+.wardrobe-panel .btn-wardrobe-done, .wardrobe-panel button.mc:last-of-type { margin-top: 16px; width: 100%; }
+.wardrobe-preview { display: block; margin: 6px auto 4px; width: 220px; height: 260px; background: radial-gradient(ellipse at 50% 40%, rgba(120,130,110,0.18), rgba(0,0,0,0.15)); border: 2px solid var(--panel-border); border-radius: 8px; }
