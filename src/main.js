@@ -92,7 +92,7 @@ import { EXTRA_FOLK, moodWord } from './villagerlife.js';
 import { Sky } from './sky.js';
 import { Storm } from './storm.js';
 import { AudioEngine } from './audio.js';
-import { UI } from './ui.js';
+import { UI, bearingLabel, shelterToast } from './ui.js';
 import { raycast, boxCollides } from './physics.js';
 
 const REACH = 5.5;
@@ -430,6 +430,9 @@ class Game {
     this.ui.invDirty = true;
     this.state = 'loading';
     this.ui.show('loadingScreen');
+    // already backgrounded when t' world starts? visibilitychange won't fire — kick
+    // t' fallback loop off directly, so t' load finishes behind t' player's back
+    if (document.hidden) this.startBgLoading();
   }
 
   teardownWorld() {
@@ -675,6 +678,7 @@ class Game {
           return;
         }
         if (e.code === 'KeyN') this.trySleep();
+        if (e.code === 'KeyL') this.findShelter();
         if (e.code === 'KeyM') { this.audio.setMuted(!this.audio.muted); this.ui.toast(this.audio.muted ? 'Sound off.' : 'Sound on.'); }
         if (e.code === 'KeyG') { this.musterFlock(); return; }
         // --- rail SURVEY tool (creative): peg out a line by flying it, then export the pegs ---
@@ -734,6 +738,11 @@ class Game {
     // reference to it, and swapping it out left WASD dead after any focus
     // loss (which always happens at least once on t' web).
     window.addEventListener('blur', () => this.clearKeys());
+    // world generation mustn't stall in a backgrounded tab (rAF stops there) —
+    // hand t' loading steps to t' setTimeout fallback while hidden (see startBgLoading)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.state === 'loading') this.startBgLoading();
+    });
 
     const canvas = this.renderer.domElement;
     canvas.addEventListener('mousedown', e => {
@@ -1216,7 +1225,7 @@ class Game {
     this.brainUp = online; // tracks whether the village brain is actually answering
     this.ui.toast(online
       ? '<b>Right-click</b> t&rsquo; folk o&rsquo; t&rsquo; moors for a natter &mdash; every settlement&rsquo;s got its own. After dark, knock on their doors.'
-      : 'T&rsquo; villages stand quiet &mdash; t&rsquo; brain in&rsquo;t answering (yet).', 8000);
+      : 'T&rsquo; villages stand quiet &mdash; t&rsquo; brain in&rsquo;t answering (yet).', 8000, online ? null : 'warn');
     if (online) this.refreshStanding(false);
     else this.scheduleRosterRetry(3);
     if (!this.player.villagerMarkerHinted) {
@@ -1721,18 +1730,42 @@ class Game {
   readSignpost() {
     const geo = this.world.gen.geo;
     const p = this.player.pos;
-    const dirTo = (x, z) => {
-      const d = Math.hypot(x - p.x, z - p.z) | 0;
-      const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-      const ang = Math.atan2(x - p.x, -(z - p.z)) * 180 / Math.PI;
-      return `${dirs[Math.round(((ang + 360) % 360) / 45) % 8]} \u00b7 ${d}m`;
-    };
+    // bearingLabel matches t' minimap (north +x, east +z) \u2014 t' owd inline maths here
+    // read a quarter-turn off it
+    const dirTo = (x, z) => bearingLabel(p.x, p.z, x, z);
     const v = geo.village;
     let msg = `<b>MOORSTEAD</b> \u2014 ${dirTo(v.x, v.z)}`;
     const sh = geo.nearestShelter(p.x, p.z);
     if (sh && sh.dist > 10) msg += `<br><b>MOOR SHELTER</b> \u2014 ${dirTo(sh.x, sh.z)}`;
     else if (sh) msg = `<b>MOOR SHELTER</b> \u2014 tha\u2019s stood at it<br>` + msg;
     this.ui.toast(msg, 8000);
+  }
+
+  // "Find shelter" (L, or t' touch More menu): t' waymark-signpost bearings wi'out
+  // needing a signpost \u2014 free, works of a neet an' in ordinary murk. Only t' Great
+  // Fog takes it away, same rule as t' minimap blackout: bearings are part o' t' map.
+  findShelter() {
+    if (!this.world || this.state !== 'playing') return;
+    const fog = !!(this.sky && this.sky.moorFog > 0.6);
+    const geo = this.world.gen.geo;
+    const p = this.player.pos;
+    let shelter = null, village = null;
+    if (!fog) {
+      const sh = geo.nearestShelter(p.x, p.z);
+      if (sh) shelter = { at: sh.dist <= 10, label: bearingLabel(p.x, p.z, sh.x, sh.z) };
+      else {
+        // this world has no stone shelters marked (t' Moors) \u2014 t' nearest village is
+        // t' nearest roof instead
+        let best = null, bestD = Infinity;
+        for (const v of geo.villages || []) {
+          const d = Math.hypot(v.x - p.x, v.z - p.z);
+          if (d < bestD) { bestD = d; best = v; }
+        }
+        if (best && best !== geo.village) village = { name: best.name, label: bearingLabel(p.x, p.z, best.x, best.z) };
+      }
+    }
+    const moorstead = fog ? null : { label: bearingLabel(p.x, p.z, geo.village.x, geo.village.z) };
+    this.ui.toast(shelterToast({ fog, shelter, village, moorstead }), 8000);
   }
 
   // ---------------- sleeping ----------------
@@ -2385,7 +2418,7 @@ class Game {
       if (keep <= 0) p.slots[i] = null; else s.n = keep;
     }
     this.ui.invDirty = true;
-    this.ui.toast('Tha kept thi tools an’ beasts — but half thi materials an’ brass are gone.', 6000);
+    this.ui.toast('Tha kept thi tools an’ beasts — but half thi materials an’ brass are gone.', 6000, 'warn');
   }
 
   // Respawn somewhere fresh, not where tha fell.
@@ -2430,7 +2463,7 @@ class Game {
       } else if (!d.lapsedDay && lapsesUnderUpkeep(d, bairns) && isLapsed(d, this.sky.day, DEED.grace * decayScale)) {
         d.lapsedDay = this.sky.day;
         if (d.by && d.by === this.player.name) {
-          this.ui.toast(`Thi ${d.kind === 'mine' ? 'mine licence' : 'land claim'} has <b>lapsed</b> — its builds’ll crumble ower t’ next fortnight unless tha renews it at t’ notice board.`, 9000);
+          this.ui.toast(`Thi ${d.kind === 'mine' ? 'mine licence' : 'land claim'} has <b>lapsed</b> — its builds’ll crumble ower t’ next fortnight unless tha renews it at t’ notice board.`, 9000, 'warn');
         }
       }
 
@@ -2442,7 +2475,7 @@ class Game {
         if (!this._deedWarned.has(d.id)) {
           this._deedWarned.add(d.id);
           const left = Math.max(0, Math.ceil(d.paidUntilDay + DEED.grace * decayScale - this.sky.day));
-          this.ui.toast(`Upkeep’s owing on thi ${d.kind === 'mine' ? 'mine' : 'claim'} — <b>${left} day${left === 1 ? '' : 's'} o’ grace left</b>. Pay at t’ notice board.`, 8000);
+          this.ui.toast(`Upkeep’s owing on thi ${d.kind === 'mine' ? 'mine' : 'claim'} — <b>${left} day${left === 1 ? '' : 's'} o’ grace left</b>. Pay at t’ notice board.`, 8000, 'warn');
         }
       }
 
@@ -3952,6 +3985,56 @@ class Game {
     }
   }
 
+  // ---------------- loading ----------------
+  // One stride o' world generation while t' loading screen's up. Driven from frame()
+  // (rAF) when t' tab's visible, an' from t' setTimeout fallback below when it's hidden —
+  // t' browser parks requestAnimationFrame in a background tab, so wi'out this a kid who
+  // starts a world an' flicks to another tab comes back to a loading screen stood still.
+  stepLoading() {
+    if (this.state !== 'loading') return;
+    this.world.update(this.player.pos.x, this.player.pos.z);
+    // mesh aggressively while loading
+    for (let i = 0; i < 6; i++) this.world.update(this.player.pos.x, this.player.pos.z);
+    if (this.world.readyAround(this.player.pos.x, this.player.pos.z, 2)) {
+      this.state = 'playing';
+      this.ui.show(null);
+      this.ui.toast('Tha wakes on Moorstead green. Click to grab t&rsquo; mouse.', 6000);
+      this.ui.toast('Punch a tree for wood, or dig owt wi&rsquo; thi hands.', 6000);
+      this.spawnVillagers();
+      if (this.netActive) this.connectNet();
+      if (!this.player.onboarded) {
+        this.player.onboarded = true;
+        if (this.saveNow) this.saveNow(false);
+        setTimeout(() => {
+          this.ui.toast('👋 <b>Welcome to Moorstead!</b> Punch a tree for wood — then press <b>E</b> to open thi pack.', 8000);
+        }, 2500);
+        setTimeout(() => {
+          this.ui.toast('📋 Find a <b>notice board</b> for jobs, or walk up to a villager an’ press <b>T</b> to talk.', 8500);
+        }, 7000);
+        // NB: do NOT auto-open the handbook here — it pauses the game while the pointer is still
+        // locked to the canvas, so the player can't click to close it (it traps gameplay). The
+        // welcome toasts above guide newcomers; the handbook stays one click away on "Ow Ter Play".
+        setTimeout(() => {
+          this.ui.toast('👉 New here? <b>Ow Ter Play</b> on the pause menu (<b>Esc</b>) has the full guide.', 8000);
+        }, 11500);
+      }
+    }
+  }
+
+  // T' hidden-tab fallback: a modest 50ms tick that only steps while t' document's
+  // hidden AND we're still loading — t' moment t' tab's visible again (or loading's
+  // done) it stands down, so it can never double-step alongside t' rAF path.
+  startBgLoading() {
+    if (this._bgLoadTimer != null) return;   // one loop at a time
+    const tick = () => {
+      this._bgLoadTimer = null;
+      if (!document.hidden || this.state !== 'loading') return;
+      this.stepLoading();
+      if (this.state === 'loading') this._bgLoadTimer = setTimeout(tick, 50);
+    };
+    this._bgLoadTimer = setTimeout(tick, 50);
+  }
+
   // ---------------- per-frame ----------------
   frame() {
     const dt = Math.min(0.05, this.clock.getDelta());
@@ -4050,33 +4133,7 @@ class Game {
     }
 
     if (this.state === 'loading') {
-      this.world.update(this.player.pos.x, this.player.pos.z);
-      // mesh aggressively while loading
-      for (let i = 0; i < 6; i++) this.world.update(this.player.pos.x, this.player.pos.z);
-      if (this.world.readyAround(this.player.pos.x, this.player.pos.z, 2)) {
-        this.state = 'playing';
-        this.ui.show(null);
-        this.ui.toast('Tha wakes on Moorstead green. Click to grab t&rsquo; mouse.', 6000);
-        this.ui.toast('Punch a tree for wood, or dig owt wi&rsquo; thi hands.', 6000);
-        this.spawnVillagers();
-        if (this.netActive) this.connectNet();
-        if (!this.player.onboarded) {
-          this.player.onboarded = true;
-          if (this.saveNow) this.saveNow(false);
-          setTimeout(() => {
-            this.ui.toast('👋 <b>Welcome to Moorstead!</b> Punch a tree for wood — then press <b>E</b> to open thi pack.', 8000);
-          }, 2500);
-          setTimeout(() => {
-            this.ui.toast('📋 Find a <b>notice board</b> for jobs, or walk up to a villager an’ press <b>T</b> to talk.', 8500);
-          }, 7000);
-          // NB: do NOT auto-open the handbook here — it pauses the game while the pointer is still
-          // locked to the canvas, so the player can't click to close it (it traps gameplay). The
-          // welcome toasts above guide newcomers; the handbook stays one click away on "Ow Ter Play".
-          setTimeout(() => {
-            this.ui.toast('👉 New here? <b>Ow Ter Play</b> on the pause menu (<b>Esc</b>) has the full guide.', 8000);
-          }, 11500);
-        }
-      }
+      this.stepLoading();
       return;
     }
 
@@ -4271,9 +4328,15 @@ class Game {
         }
         else if (msg.type === 'dusk' && !this.player.creative) {
           const early = (this.sky.day || 1) <= 3;
-          this.ui.toast(early
+          // stood far from any village at dusk? point at t' find-shelter key
+          let vd = 1e9;
+          for (const v of this.world.gen.geo.villages || []) {
+            vd = Math.min(vd, Math.hypot(v.x - this.player.pos.x, v.z - this.player.pos.z));
+          }
+          const hint = vd > 80 ? ' Press <b>L</b> to find shelter.' : '';
+          this.ui.toast((early
             ? 'Gloamin&rsquo;s drawin&rsquo; in. Mek for t&rsquo; village, or <b>keep a torch lit</b> &mdash; owt dark keeps its distance from the light.'
-            : 'Gloamin&rsquo;s drawin&rsquo; in. Mek for t&rsquo; village &mdash; <b>nowt dark sets foot on Moorstead ground</b>.', 7000);
+            : 'Gloamin&rsquo;s drawin&rsquo; in. Mek for t&rsquo; village &mdash; <b>nowt dark sets foot on Moorstead ground</b>.') + hint, 7000, 'warn');
         }
         else if (msg.text) this.ui.toast(msg.text, 4000);
       }
@@ -4449,11 +4512,20 @@ class Game {
         m.hailCd = 240 + Math.random() * 120;
         this.hailInFlight = true;
         const t0 = performance.now();
-        npc.talk(
-          m.charId,
-          '(The visitor walks past within earshot. Call out ONE short greeting or remark to them \u2014 a single sentence, in your own voice. If there is something between you \u2014 a job afoot, news, owt they did \u2014 that is the thing to mention.)',
-          this.player.name, this.playerId(), this.quests.chatContext(m)
-        ).then(res => {
+        // short prompt on purpose \u2014 a hail's ambience, so t' brain must answer fast
+        const hailMsg = '(The visitor walks past within earshot. Call out ONE short greeting or remark to them \u2014 a single sentence, in your own voice. If there is something between you \u2014 a job afoot, news, owt they did \u2014 that is the thing to mention.)';
+        // same split as sendChat: curated personas keep t' registered path (memory +
+        // trust apply, so named folk don't greet thee like a stranger); procedural
+        // roster ids ("pop-\u2026") aren't registered \u2014 /api/talk would 404 \u2014 so they hail
+        // through t' brain's generic passer-by voice instead.
+        const personaHail = m.charId && !(typeof m.charId === 'string' && m.charId.startsWith('pop-'));
+        const call = personaHail
+          ? npc.talk(m.charId, hailMsg, this.player.name, this.playerId(), this.quests.chatContext(m))
+          : npc.talkGeneric(
+              { name: m.displayName || m.t.name, role: m.role, village: m.village, mood: moodWord(m.mood == null ? 0.5 : m.mood) },
+              hailMsg, this.player.name, this.quests.chatContext(m)
+            );
+        call.then(res => {
           this.hailInFlight = false;
           this.lastHailMs = performance.now() - t0;
           this.lastHailAt = performance.now();
@@ -4461,9 +4533,9 @@ class Game {
           if (dNow < 26 && res.reply) {
             this.entities.speak(m, res.reply, 18);
             m.chatLog.push({ who: 'them', text: res.reply });
-            m.tier = res.tier;
+            if (personaHail) m.tier = res.tier;
           }
-        }).catch(() => { this.hailInFlight = false; });
+        }).catch(() => { this.hailInFlight = false; }); // a failed hail passes in silence \u2014 no toast
         break;
       }
     }

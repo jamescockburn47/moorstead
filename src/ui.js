@@ -14,6 +14,41 @@ const PIX = {
   food: ['..BBB..', '.XXXXX.', 'XXXXXXX', 'XXXXXXX', 'XBBBBBX', '.XXXXX.'],
 };
 
+// ---- pure HUD-text helpers (exported so verify-uxflow can run 'em headless) ----
+
+// quest tracker lines -> the HUD chips' HTML. Pure: lines come from quests.trackerLines().
+export function trackerHTML(lines) {
+  let html = '';
+  for (const line of (lines || []).slice(0, 4)) {
+    const mark = line.dracArc ? '† ' : line.arc ? '★ ' : '';
+    html += `<div class="tq"><b>${mark}${line.title}</b><br>${line.text}</div>`;
+  }
+  return html;
+}
+
+// compass bearing + distance from (px,pz) to (x,z), e.g. "NW · 120m".
+// Convention matches the minimap an' quests.compassDir: north is +x, east is +z.
+export function bearingLabel(px, pz, x, z) {
+  const d = Math.hypot(x - px, z - pz) | 0;
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const ang = Math.atan2(z - pz, x - px) * 180 / Math.PI;
+  return `${dirs[Math.round(((ang + 360) % 360) / 45) % 8]} · ${d}m`;
+}
+
+// the "find shelter" (L) toast text. Pure — the caller feeds pre-computed labels:
+//   fog: true during the Great Fog map-blackout (bearings are lost, same as t' map)
+//   shelter: null | { at: bool, label } — nearest stone moor shelter, if this world has 'em
+//   village: null | { name, label }    — nearest village, the fallback roof when it hasn't
+//   moorstead: { label }               — always: the way home
+export function shelterToast({ fog, shelter, village, moorstead }) {
+  if (fog) return 'T’ fog’s too thick to take a bearing — find a <b>wall or waymark stone</b> an’ follow it, or hunker down till it lifts.';
+  const parts = [];
+  if (shelter) parts.push(shelter.at ? '<b>Moor shelter</b> — tha’s stood at it' : `<b>Nearest shelter</b> — ${shelter.label}`);
+  else if (village) parts.push(`<b>${village.name}</b> (nearest village) — ${village.label}`);
+  if (moorstead) parts.push(`<b>Moorstead</b> — ${moorstead.label}`);
+  return parts.join('<br>');
+}
+
 function pixURL(pattern, fullColor, dim) {
   const rows = pattern.length, cols = pattern[0].length;
   const c = document.createElement('canvas');
@@ -364,6 +399,7 @@ export class UI {
 <b>Q</b> Drop held item (throw it on t’ ground) — or open notice board when nowt’s in hand<br>
 <b>T</b> Talk in village chat (covers ~60m)<br>
 <b>N</b> Sleep (available at night under a roof, near a light source)<br>
+<b>L</b> Find shelter &mdash; bearing and distance to the nearest moor shelter and back to Moorstead<br>
 <b>M</b> Mute sound<br>
 <b>Esc</b> Pause / Close screens<br>
 <b>Space &times;2</b> Toggle flying (creative mode only)
@@ -1096,14 +1132,17 @@ export class UI {
   }
 
   // ============ HUD quest tracker ============
+  // Called every frame but throttled to ~2x/sec, an' the DOM's only touched when
+  // the text actually changes \u2014 bearings tick over, they don't churn layout.
   updateTracker() {
-    const q = this.game.quests;
-    if (!q || !q.active.length) { this.tracker.innerHTML = ''; return; }
-    let html = '';
-    for (const line of q.trackerLines().slice(0, 4)) {
-      const mark = line.dracArc ? '\u2020 ' : line.arc ? '\u2605 ' : '';
-      html += `<div class="tq"><b>${mark}${line.title}</b><br>${line.text}</div>`;
-    }
+    const g = this.game;
+    const now = performance.now();
+    if (now < (this._trackerNextAt || 0)) return;
+    this._trackerNextAt = now + 500;
+    const q = g.quests;
+    // out of the way when there's nowt tracked, tha's dead, or the big map's up
+    const hide = !q || !q.active.length || (g.player && g.player.dead) || g.peekingMap;
+    const html = hide ? '' : trackerHTML(q.trackerLines());
     if (this.tracker.innerHTML !== html) this.tracker.innerHTML = html;
   }
 
@@ -1142,10 +1181,16 @@ export class UI {
     this.whoBox.querySelectorAll('.who-forget').forEach(b => { b.onclick = e => { e.stopPropagation(); this.game.forgetAccount(b.dataset.forget); }; });
   }
 
-  toast(text, ms = 3500) {
+  // kind: 'warn' plays a soft wooden knock (bad news travels wi' a rap on t' door);
+  // 'info'/default stay silent — celebrations ring their own chime (see milestones).
+  toast(text, ms = 3500, kind = null) {
     const t = this.el('div', 'toast', this.toastBox, text);
     setTimeout(() => t.remove(), ms);
     while (this.toastBox.children.length > 4) this.toastBox.firstChild.remove();
+    if (kind === 'warn') {
+      const a = this.game && this.game.audio;
+      if (a && a.warnKnock) a.warnKnock();
+    }
   }
 
   // ============ HUD ============

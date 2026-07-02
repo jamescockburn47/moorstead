@@ -3,8 +3,10 @@
 // somewhere, not a grind. T' last rungs hand off to t' village quests.
 //
 // State lives on t' player (milestonesDone / milestonesSteered), so it rides t'
-// normal save — through IndexedDB an' t' relay per-player save alike. Only
-// active on t' bairns' world; adults play unbothered.
+// normal save — through IndexedDB an' t' relay per-player save alike. T' bairns'
+// world gets t' full ladder; every other world gets a light touch — just t'
+// first three rungs (log → planks → bench) an' one notice-board steer, so a
+// grown-up newcomer finds their feet wi'out being walked round by t' hand.
 import { B, I } from './defs.js';
 
 const MILESTONES = {
@@ -26,16 +28,22 @@ const MILESTONES = {
 };
 const STEERS = new Set(['iron_tools', 'first_neet']);
 const STEER_TEXT = 'T’ village folk have jobs for them as’ll do ’em — find a <b>notice board</b>, or have a word wi’ a villager who looks like they’ve summat on their mind.';
+// t' grown-up worlds' short ladder: enough to reach a bench, then t' steer hands off
+const ADULT_LITE = new Set(['first_log', 'first_planks', 'first_bench']);
 
 export class Milestones {
   constructor(game) { this.game = game; }
 
-  // only on t' bairns' world — t' kids' onboarding
-  active() { return this.game.bairnLocked(); }
+  // t' bairns' world runs t' full ladder; everywhere else only t' lite rungs fire
+  active(id) { return this.game.bairnLocked() || ADULT_LITE.has(id); }
+
+  // when does t' one-off notice-board steer ride along? bairns: after t' late rungs;
+  // adults: straight after t' bench, since that's t' end o' their ladder
+  steersAfter(id) { return this.game.bairnLocked() ? STEERS.has(id) : id === 'first_bench'; }
 
   fire(id) {
     const p = this.game.player;
-    if (!this.active() || !p) return;
+    if (!this.active(id) || !p) return;
     if (!p.milestonesDone) p.milestonesDone = [];
     if (p.milestonesDone.includes(id)) return;
     const text = MILESTONES[id];
@@ -52,7 +60,7 @@ export class Milestones {
       if (a) { if (a.craft) a.craft(); else if (a.pickup) a.pickup(); }
     };
     if (at - now < 50) show(); else setTimeout(show, at - now);
-    if (STEERS.has(id) && !p.milestonesSteered) {
+    if (this.steersAfter(id) && !p.milestonesSteered) {
       p.milestonesSteered = true;
       this._nextToastAt += 4500;
       setTimeout(() => this.game.ui.toast(STEER_TEXT, 9000), (at - now) + 4500);

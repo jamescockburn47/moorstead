@@ -474,6 +474,9 @@ button.mc.how-tab.active {
   position: absolute; top: 12px; left: 12px; max-width: 320px;
   display: flex; flex-direction: column; gap: 6px;
 }
+/* on touch the top-left corner belongs to the pack/More buttons and the talk pill —
+   drop the tracker below them so nowt stacks */
+html.touch #quest-tracker { top: calc(env(safe-area-inset-top) + 100px); max-width: 46vw; }
 #quest-tracker .tq {
   background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.14);
   border-left: 3px solid var(--gold);

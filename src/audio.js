@@ -613,6 +613,25 @@ export class AudioEngine {
     this.noiseBurst(t0, 0.1, 0.3, 2200, 'highpass');
     this.osc('square', 180, t0, 0.15, 0.12);
   }
+  // warning-toast cue: two soft low wooden knocks — a rap on t' door jamb, not a
+  // klaxon. Struck an' woody (pitch falls away fast, a dull tap on t' transient),
+  // kept quiet so it reads as "mind thissen", never a jump-scare for t' bairns.
+  warnKnock(vol = 0.14) {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime;
+    for (const [f, delay] of [[190, 0], [150, 0.17]]) {   // t' second knock sits lower
+      const o = this.ctx.createOscillator();
+      o.type = 'sine'; o.frequency.setValueAtTime(f, t0 + delay);
+      o.frequency.exponentialRampToValueAtTime(f * 0.55, t0 + delay + 0.1); // wood, not a tone
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0 + delay);
+      g.gain.exponentialRampToValueAtTime(vol, t0 + delay + 0.006);         // struck: instant attack
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + delay + 0.2);        // dies quick — a knock, no ring
+      o.connect(g).connect(this.master);
+      o.start(t0 + delay); o.stop(t0 + delay + 0.26);
+      this.noiseBurst(t0 + delay, 0.025, vol * 0.35, 650, 'lowpass');       // t' dull knuckle tap on top
+    }
+  }
   mobHurt(type) {
     if (type === 'greatbarghest' || type === 'dracula') { this.growl(0.45); return; }
     if (type === 'sheep' || type === 'lamb') this.baa(0.35);
