@@ -47,11 +47,16 @@ export function snowLineFor(amount) {
 // Split precipitation into snow (winter) vs rain (otherwise). `livePrecip` is the
 // live-feed amount [0,1] or null when offline; `fallback` is the deterministic
 // snow-clock value used only when offline. Returns { snow, rain }.
+// POOLED return ([19] hygiene): sky.update calls this every frame, and a fresh
+// object per call was a steady GC drip. The module-level object is mutated and
+// returned — read or destructure it straight away, never retain it across calls.
+const _precip = { snow: 0, rain: 0 };
 export function winterPrecip(season, livePrecip, fallback = 0) {
   const wintry = season && season.warmth < 0;
   const precip = (livePrecip != null) ? livePrecip : (wintry ? fallback : 0);
-  if (wintry) return { snow: precip, rain: 0 };
-  return { snow: 0, rain: (livePrecip != null ? livePrecip : 0) };
+  if (wintry) { _precip.snow = precip; _precip.rain = 0; }
+  else { _precip.snow = 0; _precip.rain = (livePrecip != null ? livePrecip : 0); }
+  return _precip;
 }
 
 // A water/bog cell freezes in deep winter if it's an inland beck or a bog — never

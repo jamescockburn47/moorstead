@@ -11,7 +11,7 @@ import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_HASHES } from './defs.js';
 import { strSeed } from './noise.js';
 import { protectedAt } from './landmarks.js';
-import { initMaterials, setSnowLevel, setFrozen, setGlintTime, setWaterTime, setRippleAmp, setFlowAmp, setGlitter, setFresnel, getMaterials } from './mesher.js';
+import { initMaterials, setSnowLevel, setFrozen, setGlintTime, setWaterTime, setRippleAmp, setFlowAmp, setGlitter, setFresnel, setCloudTime, setCloudShadow, getMaterials } from './mesher.js';
 import { stepAccumulation, accumulationTarget, isFrozen, overcastGrey } from './snow.js';
 import { getIconURL, retintAtlasForSeason, getCutoutAtlas } from './textures.js';
 import { World } from './world.js';
@@ -105,6 +105,16 @@ import { UI, bearingLabel, shelterToast, stationChipHTML, composeSketch, sketchF
 import { raycast, boxCollides } from './physics.js';
 
 const REACH = 5.5;
+
+// [16] The horizon sea ring (replaces t' owd UNFOGGED sea-plane backdrop, which
+// poked through t' S1d fog clamp as a hard blue streak at t' fog line, visible
+// even inland). One flat annulus o' sea round t' player wi' fog: true — THAT is
+// t' point: it inherits t' scene fog an' dissolves at t' fog line exactly like
+// t' chunk water, so t' sea still runs unbroken to t' horizon off Whitby an'
+// nowt shows inland frae t' tops. SEA_RING = false is t' kill switch.
+const SEA_RING = true;
+const SEA_RING_COL = 0x3a5e7a;            // base water colour (TILE.WATER's speckle base)
+const _seaRingCol = new THREE.Color();    // module scratch — no per-frame allocation
 
 // Final full-screen pass o' t' 'Fine' post stack (after tone mapping/OutputPass, so it
 // works in display sRGB): a gentle vignette, a period colour grade — slightly lifted
@@ -317,6 +327,9 @@ class Game {
     setFlowAmp(fine ? 0.05 : 0);
     setGlitter(0);
     setFresnel(fine ? 0.35 : 0);
+    // [0] cloud shadows parked at 0: on Plain t' shader branch never executes an'
+    // terrain stays byte-identical; Fine re-drives it every frame (frame loop).
+    setCloudShadow(0);
     const r = this.renderer;
     if (fine) {
       r.toneMapping = THREE.ACESFilmicToneMapping;
@@ -775,6 +788,7 @@ class Game {
     if (this.murmuration) { this.murmuration.dispose(); this.murmuration = null; }
     if (this.harbourLight) { this.harbourLight.dispose(); this.harbourLight = null; }
     if (this.carolBox) { this.carolBox.dispose(); this.carolBox = null; }
+    if (this.seaRing) { this.scene.remove(this.seaRing); this.seaRing.geometry.dispose(); this.seaRing.material.dispose(); this.seaRing = null; }
     this.entities.clear();
     for (const c of this.world.chunks.values()) {
       if (c.meshes) for (const m of c.meshes) { this.scene.remove(m); m.geometry.dispose(); }
@@ -3574,25 +3588,36 @@ class Game {
     }));
   }
 
-  // A SOLID sea-plane backdrop so the open sea reaches the horizon from the train. The chunk
-  // water is fogged (fades to sky by ~160) so from a moving/elevated viewpoint the sea melts
-  // into the haze and reads as "drained". This plane carries the sea on regardless: fog OFF so
-  // it stays sea-coloured all the way out, big (1400) so it fills past the view, at the surface,
-  // a backdrop (depthWrite off) so near chunk-water still renders over it with its real seabed.
-  // Moors only — stylised world untouched.
-  _updateSeaPlane() {
+  // [16] The horizon sea ring — see the SEA_RING constant up top for the why.
+  // Ring inner 90 sits just outside the meshed radius (96 worst-case, fog fully
+  // occluded by 84), outer 500 reaches the dome; near-field sea is real chunk
+  // water drawn over it (the ring writes no depth). Shown when the camera's high
+  // OR the player's over coastal ground (coastT > 0); hidden inland at ground
+  // level, so no streak from T' High Moor. Built ONCE, disposed in teardownWorld.
+  // Moors only — stylised world untouched (same gate as the old backdrop).
+  _updateSeaRing(dt) {
     const geo = this.world.gen.geo;
-    if (!geo.realWorld) { if (this.seaPlane) this.seaPlane.visible = false; return; }
-    if (!this.seaPlane) {
-      const mat = new THREE.MeshBasicMaterial({ color: 0x3a5e7a, fog: false, depthWrite: false });
-      this.seaPlane = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), mat);
-      this.seaPlane.rotation.x = -Math.PI / 2;
-      this.seaPlane.renderOrder = -0.5;     // after the sky dome (-1), before the chunks (0)
-      this.seaPlane.frustumCulled = false;
-      this.scene.add(this.seaPlane);
+    if (!SEA_RING || !geo.realWorld) { if (this.seaRing) this.seaRing.visible = false; return; }
+    if (!this.seaRing) {
+      // RingGeometry is XY-plane — rotate -PI/2 about X to lie flat (red-team catch)
+      const mat = new THREE.MeshBasicMaterial({ color: SEA_RING_COL, fog: true, depthWrite: false });
+      this.seaRing = new THREE.Mesh(new THREE.RingGeometry(90, 500, 48), mat);
+      this.seaRing.rotation.x = -Math.PI / 2;
+      this.seaRing.renderOrder = -0.5;     // after the sky dome (-1), before the chunks (0)
+      this.seaRing.frustumCulled = false;
+      this.scene.add(this.seaRing);
     }
-    this.seaPlane.visible = true;
-    this.seaPlane.position.set(this.player.pos.x, WATER_LEVEL + 0.9, this.player.pos.z);
+    const p = this.player.pos;
+    const camY = this.camera ? this.camera.position.y : p.y;
+    this.seaRing.visible = camY > 60 || geo.coastT(Math.round(p.x), Math.round(p.z)) > 0;
+    if (!this.seaRing.visible) return;
+    this.seaRing.position.set(p.x, WATER_LEVEL - 0.12, p.z); // 25.88: one block under the rippling surface plane
+    // colour eases toward the water colour, dimmed with the daylight (a Basic
+    // material is unlit — a constant colour would glow at night); module-scratch
+    // Color, nowt allocated per frame. Sun formula mirrors sky.js (sunrise t=0.25).
+    const dayness = Math.max(0, Math.min(1, (Math.sin((this.sky.time - 0.25) * Math.PI * 2) + 0.12) * 3));
+    _seaRingCol.set(SEA_RING_COL).multiplyScalar(0.18 + 0.82 * dayness);
+    this.seaRing.material.color.lerp(_seaRingCol, Math.min(1, dt * 2));
   }
 
   // The BRANCH trains: a steam train on every OTHER line (Esk Valley, Coast Line), running its
@@ -4819,7 +4844,7 @@ class Game {
 
       // streaming
       this.world.update(this.player.pos.x, this.player.pos.z);
-      this._updateSeaPlane(); // keep the open sea reaching the horizon (Moors only)
+      this._updateSeaRing(dt); // keep the open sea reaching the horizon, fogged honestly (Moors only)
 
       // entities
       this.entities.day = this.sky.day;
@@ -4942,6 +4967,17 @@ class Game {
         const dayness = Math.max(0, Math.min(1, (sunY + 0.12) * 3));
         const overcast = overcastGrey(this.sky.weather, this.sky.snowAmount || 0, this.sky.rainAmount);
         setGlitter(dayness * (1 - overcast));
+        // [0] cloud shadows sweep t' moor: t' clock is sky.cloudT — t' SAME
+        // accumulator t' dome scrolls its clouds by (churn speed-up an' all) —
+        // so ground patches track t' dome exactly. Strength = cover × dayness ×
+        // clear-sky: uClouds (t' dome's eased cover) rises toward overcastGrey,
+        // so cover × (1 − overcast) peaks ~0.25 at half-cover an' self-zeroes
+        // both stone-clear an' full-overcast; dayness kills it at neet. ×1.4
+        // lands t' peak dimmin' at ~0.35, an' t' min() clamps t' odd frame where
+        // cover an' grey diverge (boss-storm churn drives cover, not grey).
+        setCloudTime(this.sky.cloudT || 0);
+        const cover = this.sky.domeMat.uniforms.uClouds.value;
+        setCloudShadow(Math.min(0.35, 1.4 * cover * dayness * (1 - overcast)));
       }
       const sbk = Math.floor(season.yearPhase * 40);
       if (sbk !== this._seasonBucket) { this._seasonBucket = sbk; retintAtlasForSeason(season); } // heather purple, bracken rust…

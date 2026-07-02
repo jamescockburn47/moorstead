@@ -1102,6 +1102,20 @@ const TILE_PAINTERS = {
   },
 };
 
+// [16] shoreline foam: white lace on a TRANSPARENT ground — it rides t' CUTOUT
+// pass (alphaTest 0.5), so t' gaps in t' lace show t' water beneath. Same canvas
+// idiom as WATER's streaks; goes through t' one atlas pipeline (base paint →
+// gutter replication → mipped atlas + no-mip cutout twin) like every other tile.
+TILE_PAINTERS[TILE.FOAM] = (p) => {
+  p.clear();
+  for (let i = 0; i < 9; i++) {
+    const y = (p.rng() * T) | 0, x = (p.rng() * 10) | 0, w = 3 + ((p.rng() * 6) | 0);
+    p.rect(x, y, w, 1, shade(0xf2f6f8, 0.9 + p.rng() * 0.18));
+    if (p.rng() < 0.6) p.rect(Math.min(x + 1, T - 2), Math.min(y + 1, T - 1), Math.max(2, w - 2), 1, shade(0xdde8ee, 0.88 + p.rng() * 0.2));
+  }
+  p.dots(0xffffff, 26); p.dots(0xcfdde6, 12);
+};
+
 let atlasCanvas = null;   // the LIVE atlas (may be season-tinted)
 let baseCanvas = null;    // untinted base, kept so seasonal tints don't compound
 let atlasTexture = null;        // mipped: opaque + liquid terrain

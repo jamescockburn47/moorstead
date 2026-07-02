@@ -6,7 +6,7 @@
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { B, I, CHUNK, RECIPES, CREATIVE_ITEMS, itemName, maxStack } from '../src/defs.js';
-import { resolveQuality, lanternFlicker } from '../src/sky.js';
+import { resolveQuality, lanternFlicker, buildStarField, moonPhase } from '../src/sky.js';
 import { tileUV, ATLAS_TILES } from '../src/textures.js';
 
 let n = 0;
@@ -200,6 +200,114 @@ ok(/setRippleAmp\(fine \? 0\.05 : 0\);\s*\n\s*setFlowAmp\(fine \? 0\.05 : 0\);\s
 ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,500}?setGlitter\(dayness \* \(1 - overcast\)\);/.test(mainSrc), 'glitter driven per frame frae dayness × clear-sky, Fine only');
 ok(mainSrc.includes('setWaterTime(this._glintT)'), 'water clock rides the existing glint tick — no new per-client accumulator');
 ok(mainSrc.includes('overcastGrey(this.sky.weather'), 'overcast term mirrors sky.js’s own overcastGrey call');
+
+// ---- S2b [16]: the shoreline — depth tint + foam (behaviour in verify-shoreline.mjs) + horizon sea ring ----
+ok(mesherSrc.includes('export const DEPTH_TINT_AMP = 1'), 'depth-tint kill switch exists, ships on');
+ok(mesherSrc.includes('export const FOAM_CAP = 32'), 'foam capped at 32 quads per chunk (0 = kill switch)');
+ok(mesherSrc.includes("setAttribute('aGlint'"), 'GeoBuilder bakes aGlint when foam rides a chunk (the red-team gap closed)');
+ok(mesherSrc.includes('waterDepthTint(d)'), 'liquid pass scales vertex colour through the pure waterDepthTint helper');
+ok((mesherSrc.match(/customProgramCacheKey/g) || []).length === 2,
+  'S2b added NO shader code: still exactly the addSnow + addWater handlers/keys');
+ok(texSrc.includes('TILE_PAINTERS[TILE.FOAM]'), 'FOAM painted procedurally through the one atlas pipeline (no-asset invariant)');
+// the horizon sea ring — fogged, flat, follows the player; the OLD unfogged backdrop is GONE
+ok(mainSrc.includes('new THREE.RingGeometry(90, 500, 48)'), 'sea ring: RingGeometry inner 90 / outer 500 / 48 segments');
+ok(mainSrc.includes('this.seaRing.rotation.x = -Math.PI / 2'), 'sea ring rotated -PI/2 about X to lie flat (RingGeometry is XY-plane)');
+ok(/seaRing = new THREE\.Mesh\(new THREE\.RingGeometry/.test(mainSrc)
+  && mainSrc.includes('fog: true, depthWrite: false'), 'sea ring material is FOGGED (fog: true) — dissolves at the fog line');
+ok(mainSrc.includes('const SEA_RING = true'), 'sea-ring kill switch exists, ships on');
+ok(mainSrc.includes('_seaRingCol.set(SEA_RING_COL)') && mainSrc.includes('this.seaRing.material.color.lerp(_seaRingCol'),
+  'ring colour lerped toward the water colour each frame via a module-scratch Color (no allocation)');
+ok(mainSrc.includes('camY > 60') && mainSrc.includes('geo.coastT(Math.round(p.x), Math.round(p.z)) > 0'),
+  'ring shown when the camera is high OR the player is over coastal ground; hidden inland');
+ok(mainSrc.includes('this.seaRing.geometry.dispose(); this.seaRing.material.dispose()'),
+  'ring geometry/material built once, disposed on world teardown (invariant 7)');
+ok(!mainSrc.includes('this.seaPlane'), 'the OLD solid sea-plane backdrop is fully retired (no consumer left)');
+ok(!mainSrc.includes('fog: false'), 'no unfogged material construction left in main.js — nowt can poke through the fog line');
+
+// ---- S3a [0]: cloud shadows sweeping the moor — folded into the addSnow handler ----
+// module uniforms exist, default 0 — a fresh compile is today's terrain exactly
+ok(mesherSrc.includes('uCloudTime: { value: 0 }'), 'uCloudTime module uniform exists, defaults 0');
+ok(mesherSrc.includes('uCloudShadowAmt: { value: 0 }'), 'uCloudShadowAmt module uniform exists, defaults 0');
+ok(mesherSrc.includes('shader.uniforms.uCloudTime = cloudUniforms.uCloudTime')
+  && mesherSrc.includes('shader.uniforms.uCloudShadowAmt = cloudUniforms.uCloudShadowAmt'),
+  'cloud uniforms registered inside the EXISTING addSnow handler (one handler slot — no sibling)');
+// injection point + what it touches
+ok(mesherSrc.includes(".replace('#include <lights_fragment_end>'")
+  && mesherSrc.includes("'#include <lights_fragment_end>\\n'"),
+  'cloud term injected AFTER lights_fragment_end (include itself preserved)');
+ok(mesherSrc.includes('reflectedLight.directDiffuse *= 1.0 - csCloud * uCloudShadowAmt'),
+  'cloud blocks DIRECT sun only — reflectedLight.directDiffuse multiplied');
+ok((mesherSrc.match(/reflectedLight\./g) || []).length === 1 && !mesherSrc.includes('indirectDiffuse'),
+  'ambient untouched: exactly ONE reflectedLight write, indirectDiffuse never touched (shade stays readable)');
+ok(mesherSrc.includes('if (uCloudShadowAmt > 0.001) {'),
+  'whole term wrapped in the >0.001 uniform branch — a zero uniform skips the ALU (Plain hard requirement)');
+// the dome's noise idiom, hard-capped at 2 octaves on terrain (perf ruling)
+ok(mesherSrc.includes('float csFbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 2; i++){ v += a * csNoise(p); p *= 2.0; a *= 0.5; } return v; }'),
+  'terrain fbm is EXACTLY 2 octaves — the literal loop, the perf ruling made assertable');
+ok(mesherSrc.includes('fract(p * vec2(123.34, 345.45))') && skySrc.includes('fract(p * vec2(123.34, 345.45))'),
+  'hash is the dome\'s own idiom (same constants in sky.js and mesher.js)');
+ok(mesherSrc.includes('vec2(vSnowWX, vSnowWZ) * 0.012'),
+  'sampled at world XZ ~0.012/block through the EXISTING snow varyings (no new attribute)');
+ok(mesherSrc.includes('uCloudTime * vec2(0.012, 0.007)') && skySrc.includes('uTime * vec2(0.012, 0.007)'),
+  'ground drift rides the dome\'s wind vector — sky clouds and moor shadows move together');
+// cache keys forked, program count unchanged
+ok(mesherSrc.includes("customProgramCacheKey = () => key + '-cloud'"),
+  "BOTH snow cache keys extended ('-cloud') so the new uniform/GLSL forks fresh programs");
+ok(/'snow-opaque'\)/.test(mesherSrc) && /'snow-cutout-glint', true\)/.test(mesherSrc),
+  'still exactly the two addSnow materials (opaque + cutout-glint) — same program COUNT');
+// drive: Plain stamped 0 in applyQuality; Fine per-frame off the live sky (no sky.js edit)
+ok(/setFresnel\(fine \? 0\.35 : 0\);[\s\S]{0,250}?setCloudShadow\(0\);/.test(mainSrc),
+  'applyQuality parks uCloudShadowAmt at 0 — Plain\'s branch never executes, terrain byte-identical');
+ok(mainSrc.includes('setCloudTime(this.sky.cloudT || 0)'),
+  'cloud clock fed frae sky.cloudT — the SAME accumulator the dome scrolls by (churn speed-up an\' all)');
+ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,1600}?setCloudShadow\(Math\.min\(0\.35, 1\.4 \* cover \* dayness \* \(1 - overcast\)\)\);/.test(mainSrc),
+  'Fine drive: cover × dayness × clear-sky, clamped at 0.35 — self-zeroes at night and in full overcast');
+ok(mainSrc.includes('this.sky.domeMat.uniforms.uClouds.value'),
+  'cover read off the live dome uniform (uClouds) — no sky.js edit needed');
+
+// ---- S4a [4]: t' 1900 night sky — seeded stars, moon calendar, Milky Way, dawn-glow fog ----
+// functional determinism: the star field is pure, seeded, byte-identical on every client
+{
+  const realRandom = Math.random;
+  Math.random = () => { throw new Error('buildStarField must not consult Math.random (invariant 6)'); };
+  let A, B;
+  try { A = buildStarField(); B = buildStarField(); }
+  finally { Math.random = realRandom; }
+  ok(A.mag.length === 1100 && A.pos.length === 3300 && A.col.length === 3300, 'star field: 1100 seeded stars with pos/col/mag');
+  ok(Buffer.from(A.pos.buffer).equals(Buffer.from(B.pos.buffer))
+    && Buffer.from(A.col.buffer).equals(Buffer.from(B.col.buffer))
+    && Buffer.from(A.mag.buffer).equals(Buffer.from(B.mag.buffer)),
+    'star field byte-identical across calls — t\' SAME heavens ower every moor');
+  let bright = 0;
+  for (let i = 0; i < A.mag.length; i++) if (A.mag[i] > 1.65) bright++;
+  const frac = bright / A.mag.length;
+  ok(frac > 0.03 && frac < 0.10, `power-law magnitudes: a bright minority (mag > 1.65 is ${(frac * 100).toFixed(1)}%, want 3..10%)`);
+  ok(Math.abs(moonPhase(29.53 / 2) - 0.5) < 1e-9 && Math.abs(moonPhase(29.53)) < 1e-9,
+    'moon calendar: full at 14.765, new wraps at 29.53');
+}
+// source wiring: stars, twinkle, Milky Way, moon phase + halo, dawn-glow fog
+ok(skySrc.includes('const field = buildStarField()'), 'stars built frae the seeded field (no per-star Math.random)');
+ok(skySrc.includes('gl_PointSize = size * aMag * twinkle;'), 'per-star magnitude + twinkle scale gl_PointSize in the injected vertex stage');
+ok(skySrc.includes("this._starU.uTwinkle.value = fine ? 1 : 0"), 'twinkle is Fine-gated (Plain leaves uTwinkle 0 — static field, same program)');
+ok(skySrc.includes('uStarAmt: { value: 0 }'), 'dome uStarAmt uniform exists, defaults 0 (fresh compile = today, no Milky Way)');
+ok(skySrc.includes('exp(-pow(dot(dir, GPOLE), 2.0) * 16.0)'), 'Milky Way: great-circle band about GPOLE in the dome shader');
+ok(skySrc.includes('cu.uStarAmt.value = starA * (1 - grey)'), 'Milky Way rides the same night term as the stars, doused by overcast');
+ok(skySrc.includes('if (this._moonDay !== this.day) this._drawMoonPhase()'), 'moon disc redrawn once per game DAY, never per frame');
+ok(skySrc.includes('this.moonSprite.add(this.moonHalo)'), 'halo parented to the moon sprite — rides it for free');
+ok(skySrc.includes('this.moonHalo.material.opacity = this._mistS * moonVis * (1 - grey)'),
+  'halo = mistiness × moon-up × clear-of-overcast — t\' shepherd\'s rain-sign');
+ok(skySrc.includes('_fogC.lerp(this.sun.color, dawnAmt)'), 'dawn-glow fog: mist borrows the low sun\'s own colour');
+ok(skySrc.includes('this.scene.fog.color.copy(_fogC)') && skySrc.includes('this.domeMat.uniforms.bottomColor.value.copy(_fogC)'),
+  '_fogC feeds BOTH scene fog and dome horizon — one colour at the fog line, tint or no tint');
+{
+  // [22] allocation-free hot path: no Color allocation inside update() itself
+  const uStart = skySrc.indexOf('update(dt, playerPos');
+  const uEnd = skySrc.indexOf('_snapShadowCamera() {');
+  ok(uStart > 0 && uEnd > uStart, 'sky.update() body sliceable (anchors present)');
+  const body = skySrc.slice(uStart, uEnd);
+  ok(!body.includes('new THREE.Color(') && !body.includes('.clone()'),
+    'sky.update() allocates no Colors — no new THREE.Color / .clone() in the per-frame path');
+}
 
 // ---- item 36: the visible lightning bolt + storm sky (shape checks in verify-storm.mjs) ----
 // bolt shape seeded frae (strike index, world seed) — no Math.random, identical every client

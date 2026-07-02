@@ -1,6 +1,6 @@
 // Chunk meshing: culled faces with per-vertex AO; opaque, cutout and liquid passes.
 import * as THREE from 'three';
-import { B, BLOCKS, CHUNK, HEIGHT, TILE, isOpaque, isLiquid, isCutout } from './defs.js';
+import { B, BLOCKS, CHUNK, HEIGHT, TILE, WATER_LEVEL, isOpaque, isLiquid, isCutout } from './defs.js';
 import { tileUV, buildAtlas, getCutoutAtlas } from './textures.js';
 import { hash2i, noise2 } from './noise.js';
 import { snowLineFor, freezableWater } from './snow.js';
@@ -13,6 +13,18 @@ let materials = null;
 const snowUniforms = { uSnowLine: { value: 64 }, uSnowAmt: { value: 0 } };
 const glintUniform = { uGlintTime: { value: 0 } };
 export function setGlintTime(t) { glintUniform.uGlintTime.value = t; }
+// [0] cloud shadows: soft dark patches glidin' ower t' moor in time wi' t' dome
+// clouds. Module uniforms shared by BOTH addSnow materials (t' glintUniform
+// pattern). uCloudTime rides sky.cloudT — t' SAME accumulator t' dome scrolls
+// by, churn speed-up an' all — an' t' fragment drifts by t' same wind vector
+// (uTime * vec2(0.012, 0.007)), so ground shadows an' sky clouds move together.
+// uCloudShadowAmt defaults 0 an' applyQuality parks it there on Plain: t'
+// >0.001 branch never runs, terrain output stays byte-identical. Fine re-drives
+// it every frame frae cover × dayness × clear-sky (self-zeroes at neet an' in
+// full overcast by construction).
+const cloudUniforms = { uCloudTime: { value: 0 }, uCloudShadowAmt: { value: 0 } };
+export function setCloudTime(t) { cloudUniforms.uCloudTime.value = t; }
+export function setCloudShadow(v) { cloudUniforms.uCloudShadowAmt.value = v; }
 export function setSnowLevel(snowiness) {
   const s = snowiness < 0 ? 0 : snowiness > 1 ? 1 : snowiness;
   snowUniforms.uSnowAmt.value = s;
@@ -22,12 +34,33 @@ function addSnow(mat, key = 'terrain-snow', glint = false) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uSnowLine = snowUniforms.uSnowLine;
     shader.uniforms.uSnowAmt = snowUniforms.uSnowAmt;
+    shader.uniforms.uCloudTime = cloudUniforms.uCloudTime;
+    shader.uniforms.uCloudShadowAmt = cloudUniforms.uCloudShadowAmt;
     shader.vertexShader = 'attribute float aSnowExp;\nvarying float vSnowExp;\nvarying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\n' + shader.vertexShader
       .replace('#include <begin_vertex>',
         '#include <begin_vertex>\n  vec4 wSnowPos = modelMatrix * vec4(transformed, 1.0);\n  vSnowY = wSnowPos.y;\n  vSnowWX = wSnowPos.x;\n  vSnowWZ = wSnowPos.z;\n  vSnowUp = normalize(mat3(modelMatrix) * objectNormal).y;\n  vSnowExp = aSnowExp;');
-    shader.fragmentShader = 'uniform float uSnowLine;\nuniform float uSnowAmt;\nvarying float vSnowExp;\nvarying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\n' + shader.fragmentShader
+    // [0] t' dome's hash/noise idiom (sky.js dome fragment), fbm capped at TWO
+    // octaves on terrain — t' perf rulin's hard cap. cs- prefix keeps t' names
+    // clear o' owt three.js chunks define.
+    shader.fragmentShader = 'uniform float uSnowLine;\nuniform float uSnowAmt;\nuniform float uCloudTime;\nuniform float uCloudShadowAmt;\nvarying float vSnowExp;\nvarying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\n'
+      + 'float csHash(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }\n'
+      + 'float csNoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);\n'
+      + '  float a = csHash(i), b = csHash(i + vec2(1.0, 0.0)), c = csHash(i + vec2(0.0, 1.0)), d = csHash(i + vec2(1.0, 1.0));\n'
+      + '  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y); }\n'
+      + 'float csFbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 2; i++){ v += a * csNoise(p); p *= 2.0; a *= 0.5; } return v; }\n'
+      + shader.fragmentShader
       .replace('#include <color_fragment>',
-        '#include <color_fragment>\n  float drift = 0.6 + 0.4 * sin(vSnowWX * 0.15) * cos(vSnowWZ * 0.15);\n  float snow = uSnowAmt * drift * vSnowExp * smoothstep(uSnowLine, uSnowLine + 10.0, vSnowY) * smoothstep(0.05, 0.55, vSnowUp);\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.96, 0.98, 1.0), clamp(snow * 1.25, 0.0, 1.0));');
+        '#include <color_fragment>\n  float drift = 0.6 + 0.4 * sin(vSnowWX * 0.15) * cos(vSnowWZ * 0.15);\n  float snow = uSnowAmt * drift * vSnowExp * smoothstep(uSnowLine, uSnowLine + 10.0, vSnowY) * smoothstep(0.05, 0.55, vSnowUp);\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.96, 0.98, 1.0), clamp(snow * 1.25, 0.0, 1.0));')
+      // [0] cloud shadows: dim DIRECT sun only (ambient untouched, so shade stays
+      // readable), sampled at world XZ ~0.012/block an' drifted by t' dome's wind
+      // vector on t' shared cloud clock. Zero uniform skips t' whole term (Plain).
+      .replace('#include <lights_fragment_end>',
+        '#include <lights_fragment_end>\n'
+        + '  if (uCloudShadowAmt > 0.001) {\n'
+        + '    vec2 csP = vec2(vSnowWX, vSnowWZ) * 0.012 + uCloudTime * vec2(0.012, 0.007);\n'
+        + '    float csCloud = smoothstep(0.38, 0.62, csFbm(csP));\n'
+        + '    reflectedLight.directDiffuse *= 1.0 - csCloud * uCloudShadowAmt;\n'
+        + '  }');
     if (glint) {
       shader.uniforms.uGlintTime = glintUniform.uGlintTime;
       shader.vertexShader = 'attribute float aGlint;\nvarying float vGlint;\nvarying float vGlintH;\n' + shader.vertexShader
@@ -38,7 +71,9 @@ function addSnow(mat, key = 'terrain-snow', glint = false) {
           '#include <color_fragment>\n  float gl = vGlint * 0.12 * (0.5 + 0.5 * sin(uGlintTime * 2.0 + vGlintH));\n  diffuseColor.rgb += gl;');
     }
   };
-  mat.customProgramCacheKey = () => key;
+  // [0] '-cloud' extends BOTH snow keys ('snow-opaque', 'snow-cutout-glint') so
+  // t' new uniform/GLSL forks fresh programs — still t' same program COUNT (3).
+  mat.customProgramCacheKey = () => key + '-cloud';
   return mat;
 }
 
@@ -71,6 +106,27 @@ export function setFresnel(v) { waterUniforms.uFresnel.value = v; }
 // sub-radian precision t' wavelets need).
 export const FLOW_WRAP = Math.PI * 50;
 const FLOW_ZERO = [0, 0, 0];
+
+// --- [16] shoreline: depth tint + foam fringe (mesh-time, tier-flat, no shader) ---
+// Depth tint: every liquid TOP face scans down its own column to t' first
+// non-liquid block an' scales t' vertex colour by depth — 1.0 at depth 1 (pale,
+// glassy shallows) down to 0.55 at depth 8+ (dark slate off Whitby). Mesh-time
+// vertex colour only: deterministic, identical on both tiers, zero runtime cost,
+// NO shader change (so no cache-key change either). DEPTH_TINT_AMP = 0 restores
+// today's flat water colour exactly.
+export const DEPTH_TINT_AMP = 1;
+export function waterDepthTint(depth, amp = DEPTH_TINT_AMP) {
+  if (!amp) return 1;
+  const d = depth < 1 ? 1 : depth > 8 ? 8 : depth;
+  return 1 - 0.45 * amp * ((d - 1) / 7);
+}
+// Foam fringe: where a WATER top face at sea level (y === WATER_LEVEL) horizontally
+// neighbours solid SAND or GRAVEL, ONE flat quad goes into t' CUTOUT builder 0.01
+// ABOVE t' water surface (cutout writes depth an' renders afore t' translucent
+// liquid — a sub-surface quad would show tinted through t' 0.78-opacity water).
+// Foam verts carry aGlint = 1, so t' compiled cutout glint shimmers 'em for free.
+// Capped per chunk; FOAM_CAP = 0 is t' kill switch.
+export const FOAM_CAP = 32;
 
 // T' liquid shader: ice tint (winter freeze, unchanged semantics — uFrozen stays t'
 // binary addIce had; S2c will float it), plus [15] ripple/glitter an' [D0] downstream
@@ -193,11 +249,15 @@ export function topFaceVariation(wx, wz, amp = TOP_VARY_AMP) {
 }
 
 class GeoBuilder {
-  constructor() { this.pos = []; this.norm = []; this.uv = []; this.col = []; this.exp = []; this.frz = []; this.top = []; this.flow = []; this.idx = []; this.n = 0; }
+  constructor() { this.pos = []; this.norm = []; this.uv = []; this.col = []; this.exp = []; this.frz = []; this.top = []; this.flow = []; this.gli = []; this.hasGlint = false; this.idx = []; this.n = 0; }
   // tops: per-corner aTop floats (liquid only); flow: per-quad [fx, fz, s] aFlow vec3
   // (liquid only). Solid/cutout passes never push 'em, so build() skips t' attributes
   // an' t' big opaque geometry carries nowt extra.
-  quad(corners, normal, uvRect, aos, light, exp = 1, frz = 0, tint = null, tops = null, flow = null) {
+  // glint: per-quad aGlint float ([16] foam = 1). T' builder never wrote aGlint afore
+  // — chunk cutout geometry leant on t' disabled-attribute default (0), only
+  // floraLayer set it — so t' attribute is baked ONLY when a quad carries a non-zero
+  // value; every other geometry stays byte-identical wi' t' default-0 behaviour.
+  quad(corners, normal, uvRect, aos, light, exp = 1, frz = 0, tint = null, tops = null, flow = null, glint = 0) {
     const [u0, v0, u1, v1] = uvRect;
     for (const c of corners) {
       this.pos.push(c[0], c[1], c[2]);
@@ -206,6 +266,8 @@ class GeoBuilder {
       this.exp.push(exp);
     }
     this.frz.push(frz, frz, frz, frz);
+    this.gli.push(glint, glint, glint, glint);
+    if (glint) this.hasGlint = true;
     if (tops) this.top.push(tops[0], tops[1], tops[2], tops[3]);
     if (flow) for (let i = 0; i < 4; i++) this.flow.push(flow[0], flow[1], flow[2]);
     for (let i = 0; i < 4; i++) {
@@ -232,6 +294,7 @@ class GeoBuilder {
     g.setAttribute('aFreeze', new THREE.Float32BufferAttribute(this.frz, 1));
     if (this.top.length) g.setAttribute('aTop', new THREE.Float32BufferAttribute(this.top, 1));
     if (this.flow.length) g.setAttribute('aFlow', new THREE.Float32BufferAttribute(this.flow, 3));
+    if (this.hasGlint) g.setAttribute('aGlint', new THREE.Float32BufferAttribute(this.gli, 1));
     g.setIndex(this.idx);
     g.computeBoundingSphere();
     return new THREE.Mesh(g, material);
@@ -279,6 +342,25 @@ export function buildChunkMeshes(world, chunk) {
     }
     return f;
   };
+
+  // [16] per-COLUMN water depth tint, memoised like flowAt (keyed on t' surface y an'
+  // all, so a rare second liquid run higher up t' same column recomputes honestly).
+  // Scan stays inside t' column — t' get() closure never leaves this chunk's data.
+  const depthMemo = new Map();
+  const depthTintAt = (lx, y, lz) => {
+    const k = lx + lz * CHUNK;
+    let m = depthMemo.get(k);
+    if (m === undefined || m.y !== y) {
+      let d = 1;
+      while (d < 8 && isLiquid(get(lx, y - d, lz))) d++;
+      const t = waterDepthTint(d);
+      m = { y, tint: t === 1 ? null : { r: t, g: t, b: t } };
+      depthMemo.set(k, m);
+    }
+    return m.tint;
+  };
+  const foamUV = tileUV(TILE.FOAM);
+  let foamN = 0; // [16] foam quads this chunk, capped at FOAM_CAP
 
   for (let y = 0; y < HEIGHT; y++) {
     for (let lz = 0; lz < CHUNK; lz++) {
@@ -334,10 +416,32 @@ export function buildChunkMeshes(world, chunk) {
               return [lx + c[0], yy, lz + c[2], c[3], c[4]];
             });
             const frz = freezableWater(id, geo.coastT(x0 + lx, z0 + lz), B) ? 1 : 0;
+            // [16] TOP faces only: depth tint (null at depth 1 = today's colour), an'
+            // t' foam fringe where sea-level WATER meets solid SAND/GRAVEL abeam
+            let tint = null;
+            if (f === 3) {
+              tint = depthTintAt(lx, y, lz);
+              if (id === B.WATER && y === WATER_LEVEL && foamN < FOAM_CAP) {
+                const e = get(lx + 1, y, lz), w = get(lx - 1, y, lz),
+                      s = get(lx, y, lz + 1), n = get(lx, y, lz - 1);
+                if (e === B.SAND || e === B.GRAVEL || w === B.SAND || w === B.GRAVEL
+                  || s === B.SAND || s === B.GRAVEL || n === B.SAND || n === B.GRAVEL) {
+                  foamN++;
+                  // 0.01 ABOVE t' surface, into t' CUTOUT builder (depth-writing, drawn
+                  // afore t' translucent water); aGlint = 1 rides t' compiled glint
+                  // shimmer for free. exp 0: t' snow wash leaves foam be.
+                  const fy = y + 1 - drop + 0.01;
+                  cutout.quad(
+                    [[lx, fy, lz + 1, 1, 1], [lx + 1, fy, lz + 1, 0, 1],
+                     [lx, fy, lz, 1, 0], [lx + 1, fy, lz, 0, 0]],
+                    [0, 1, 0], foamUV, [3, 3, 3, 3], 1.0, 0, 0, null, null, null, 1);
+                }
+              }
+            }
             // aTop = 1 exactly where t' 0.12 top-drop applied (c[1] === 1) — INCLUDING
             // side-face top edges, so edges ripple wi' t' surface an' no cracks open
             liquid.quad(cs, dir, uvr, [3, 3, 3, 3], FACE_LIGHT[f], 1, frz,
-              null, corners.map(c => c[1]), flow);
+              tint, corners.map(c => c[1]), flow);
           }
           continue;
         }
