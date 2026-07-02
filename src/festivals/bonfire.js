@@ -15,13 +15,15 @@
 import * as THREE from 'three';
 import { B } from '../defs.js';
 import { Fire } from '../fire.js';
-import { greenPlacement } from '../festivalKit.js';
+import { greenPlacement, makeFireworks, nightFactor } from '../festivalKit.js';
 
 const RADIUS = 48; // match the host's village cull radius
 
-// ctx = { scene, world, gen, cx, cz, season, snowAccum, objects, lit, robins }
+// ctx = { scene, world, gen, cx, cz, season, snowAccum, objects, lit, robins, fx, fine }
 export function buildBonfire(ctx) {
   const { scene, world, gen, cx, cz, objects } = ctx;
+  const fine = !!ctx.fine;          // 'Fine' renderer live → fireworks + ember column
+  const fx = ctx.fx || [];
 
   for (const v of (gen.geo.villages || [])) {
     if (Math.abs(v.x - cx) > RADIUS || Math.abs(v.z - cz) > RADIUS) continue;
@@ -31,16 +33,31 @@ export function buildBonfire(ctx) {
     const fp = greenPlacement(world, v);
     if (!fp) continue;
     const groundY = gen.height(fp.x, fp.z) + 1; // block-top the pile stands on
-    const g = buildBonfireStack(fp.x + 0.5, groundY, fp.z + 0.5);
+    const g = buildBonfireStack(fp.x + 0.5, groundY, fp.z + 0.5, fine);
     scene.add(g);
     objects.push(g);
+
+    // -- FIREWORKS ('Fine' only): a rocket pale a few strides off the pyre. One
+    // pooled Points per village; rockets every 4–8 s after dark. Period-true
+    // c.1900 — commercial rockets an' garden fireworks were Bonfire Night
+    // staples by then (Brock's an' Pain's both sold to the public).
+    if (fine) {
+      const fw = makeFireworks({ seed: fp.x * 0.173 + fp.z * 0.031 });
+      // launch pale: 5 blocks east, 3 south of the pyre — clear of the crowd
+      const lx = fp.x + 5, lz = fp.z - 3;
+      fw.position.set(lx + 0.5, gen.height(lx, lz) + 1, lz + 0.5);
+      scene.add(fw);
+      objects.push(fw); // ROOT — dispose() unregisters its uTime material
+      // after-dark gate: uNight rides the live sky each frame (0 by day)
+      fx.push(() => { fw.material.uniforms.uNight.value = nightFactor(); });
+    }
   }
 }
 
 // Build the whole bonfire as ONE group rooted at the woodpile base (feet at
 // groundY): a stacked-wood cone, a guy effigy leaning on it, an' the hero Fire on
 // top. The group carries a dispose() that tears the Fire group down too.
-function buildBonfireStack(x, groundY, z) {
+function buildBonfireStack(x, groundY, z, fine = false) {
   const group = new THREE.Group();
   group.position.set(x, groundY, z);
 
@@ -88,7 +105,10 @@ function buildBonfireStack(x, groundY, z) {
   // -- the hero flame: broad/chaotic bonfire preset, embers + smoke + one warm
   // pulsing light. scale ~3 → big auto-on, but we set big:true explicit for clarity.
   // Sits at the woodpile apex.
-  const fire = Fire({ scale: 3, big: true, layers: 3, embers: true, smoke: true, light: true, seed: (x * 13.1 + z * 7.7) % 1 });
+  // Under 'Fine' the fire also gets the tall EMBER COLUMN — a second pooled spark
+  // stream (70 motes, ~2.6× rise, tight lanes) that glows under the bloom.
+  const fire = Fire({ scale: 3, big: true, layers: 3, embers: true, smoke: true, light: true,
+                      column: fine, seed: (x * 13.1 + z * 7.7) % 1 });
   fire.position.set(0, 1.2, 0); // apex of the pile, frae which the flame licks up
   group.add(fire);
 

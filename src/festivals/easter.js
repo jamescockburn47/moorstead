@@ -27,8 +27,13 @@ const EGG_COLORS = [
   0x9a3030,  // deeper red-brown
 ];
 
+// Wildflower palette for the 'Fine' colour scatter — primroses, violets,
+// daisies, celandines: the flowers actually out at Eastertide on the moor edge.
+const WILDFLOWER_COLORS = [0xf2e28a, 0x8a6fb8, 0xf5f0e0, 0xf0c040, 0xd88ab0];
+
 export function buildEaster(ctx) {
   const { scene, world, gen, cx, cz, objects } = ctx;
+  const fine = !!ctx.fine;
 
   for (const v of (gen.geo.villages || [])) {
     if (Math.abs(v.x - cx) > RADIUS || Math.abs(v.z - cz) > RADIUS) continue;
@@ -61,6 +66,43 @@ export function buildEaster(ctx) {
       }
     }
 
+    // -- 'Fine': spring GARLANDS on cottage doors — a small evergreen-and-
+    // flower hoop over each lintel (cottages / shops / pubs), kept gentle.
+    if (fine) {
+      for (const b of (v.buildings || [])) {
+        if (b.type !== 'cottage' && b.type !== 'shop' && b.type !== 'pub') continue;
+        const midX = Math.floor((b.x0 + b.x1) / 2);
+        const doorY = gen.height(midX, b.z0) + 2.2; // just above the lintel
+        const garland = buildDoorGarland(hash2i(b.x0, b.z0, 0x15c9));
+        garland.position.set(midX + 0.5, doorY, b.z0 - 0.12);
+        scene.add(garland);
+        objects.push(garland);
+      }
+    }
+
+    // -- 'Fine': a WILDFLOWER colour scatter near the green — little clumps of
+    // primrose/violet/daisy colour lifting the spring grass. Cap 14 per village.
+    if (fine) {
+      let flowerCount = 0;
+      for (let r = 2; r < 16 && flowerCount < 14; r++) {
+        for (let a = 0; a < 14 && flowerCount < 14; a++) {
+          const angle = (a / 14) * Math.PI * 2 + 0.22;
+          const x = v.x + Math.round(r * Math.cos(angle));
+          const z = v.z + Math.round(r * Math.sin(angle));
+          const col = gen.geo.villageColumn(x, z);
+          if (!isOpenGround(world, v, x, z, col)) continue;
+          const hv = hash2i(x, z, gen.geo.seed ^ 0x33d1);
+          if (hv > 0.28) continue;
+          const sy = gen.height(x, z);
+          const clump = buildWildflowerClump(hv);
+          clump.position.set(x + 0.5, sy + 1, z + 0.5);
+          scene.add(clump);
+          objects.push(clump);
+          flowerCount++;
+        }
+      }
+    }
+
     // -- Deck the chapel in spring-white greenery --
     // Pale-green / white sprig billboards along the front (z0) wall +
     // a single small sprig arrangement above the door.
@@ -70,6 +112,49 @@ export function buildEaster(ctx) {
       deckChapelEaster(scene, objects, b, midX, gen);
     }
   }
+}
+
+// 'Fine' only: a small spring garland hoop for a cottage door — a green torus
+// hung vertically against the wall wi' a few wildflower dots round it.
+function buildDoorGarland(seed) {
+  const g = new THREE.Group();
+  const matGreen = new THREE.MeshLambertMaterial({ color: 0x4a7a40 }); // fresh spring green
+  const RING_R = 0.3;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(RING_R, 0.055, 5, 14), matGreen);
+  // TorusGeometry lies in the XY plane — already vertical, flat against a z-facing wall
+  g.add(ring);
+  const FLOWER_N = 6;
+  for (let i = 0; i < FLOWER_N; i++) {
+    const a = (i / FLOWER_N) * Math.PI * 2 + seed * 6.28;
+    const mat = new THREE.MeshLambertMaterial({ color: WILDFLOWER_COLORS[(i + Math.floor(seed * 5)) % WILDFLOWER_COLORS.length] });
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 5, 4), mat);
+    dot.position.set(Math.cos(a) * RING_R, Math.sin(a) * RING_R, 0.03);
+    g.add(dot);
+  }
+  g.userData.wow = 'doorGarland';
+  return g;
+}
+
+// 'Fine' only: a tiny wildflower clump — 3-5 colour dots on wee green stems,
+// ~0.25 blocks tall. Cheap Lambert spheres; the colour is the point.
+function buildWildflowerClump(seed) {
+  const g = new THREE.Group();
+  const matStem = new THREE.MeshLambertMaterial({ color: 0x3e6e34 });
+  const n = 3 + Math.floor(seed * 3); // 3..5 flowers
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + seed * 9;
+    const rx = Math.cos(a) * 0.14, rz = Math.sin(a) * 0.14;
+    const h = 0.14 + ((seed * 13 + i) % 1) * 0.1;
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, h, 4), matStem);
+    stem.position.set(rx, h / 2, rz);
+    g.add(stem);
+    const mat = new THREE.MeshLambertMaterial({ color: WILDFLOWER_COLORS[(i + Math.floor(seed * 7)) % WILDFLOWER_COLORS.length] });
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.045, 5, 4), mat);
+    head.position.set(rx, h + 0.03, rz);
+    g.add(head);
+  }
+  g.userData.wow = 'wildflowers';
+  return g;
 }
 
 // A pace-egg: a slightly elongated sphere (egg shape) in one vivid colour.

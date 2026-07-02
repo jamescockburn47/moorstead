@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { hash2i } from '../noise.js';
 import { B, TILE } from '../defs.js';
-import { addBillboard, isOpenGround } from '../festivalKit.js';
+import { addBillboard, isOpenGround, makeDriftMotes, nightFactor } from '../festivalKit.js';
 
 const RADIUS = 48;
 
@@ -21,6 +21,8 @@ const BIND_BROWN   = 0x7a5c2a;
 
 export function buildHarvest(ctx) {
   const { scene, world, gen, cx, cz, objects } = ctx;
+  const fine = !!ctx.fine;
+  const fx = ctx.fx || [];
 
   for (const v of (gen.geo.villages || [])) {
     if (Math.abs(v.x - cx) > RADIUS || Math.abs(v.z - cz) > RADIUS) continue;
@@ -28,6 +30,8 @@ export function buildHarvest(ctx) {
     // -- Corn stooks on the green and closes --
     // Scan radially, 4-20 blocks out; green/closes cells only; hash-gated;
     // cap at 6 stooks per village so the scene isn't cluttered.
+    // Under 'Fine' each stook becomes a CLUSTER — two smaller companions lean
+    // in beside it (how a harvested close actually stood; Plain keeps the six).
     let stookCount = 0;
     for (let r = 3; r < 20 && stookCount < 6; r++) {
       for (let a = 0; a < 16 && stookCount < 6; a++) {
@@ -45,8 +49,49 @@ export function buildHarvest(ctx) {
         stook.position.set(x + 0.5, sy + 1, z + 0.5);
         scene.add(stook);
         objects.push(stook);
+        if (fine) {
+          // two companions, scaled down, offset round the primary — a stook row
+          const offs = [
+            { dx: 0.95, dz: 0.25, s: 0.8 },
+            { dx: -0.55, dz: 0.85, s: 0.7 },
+          ];
+          for (let oi = 0; oi < offs.length; oi++) {
+            const o = offs[oi];
+            const side = buildStook();
+            side.scale.setScalar(o.s);
+            side.rotation.y = yaw + 0.7 + oi;
+            side.position.set(x + 0.5 + o.dx, sy + 1, z + 0.5 + o.dz);
+            scene.add(side);
+            objects.push(side);
+          }
+        }
         stookCount++;
       }
+    }
+
+    // -- 'Fine': a warm LAMPLIT PRODUCE TABLE near the chapel — the harvest-
+    // festival table of marrows, apples an' turnips under a storm lantern, with
+    // one warm point-light so the whole spread glows come evening.
+    if (fine) {
+      const chapelB = (v.buildings || []).find(b => b.type === 'chapel');
+      const tablePos = chapelForecourtCell(world, v, chapelB);
+      if (tablePos) {
+        const table = buildProduceTable();
+        table.position.set(tablePos.x + 0.5, gen.height(tablePos.x, tablePos.z) + 1, tablePos.z + 0.5);
+        table.rotation.y = hash2i(tablePos.x, tablePos.z, 0x77aa) * Math.PI * 2;
+        scene.add(table);
+        objects.push(table);
+      }
+    }
+
+    // -- 'Fine': drifting CHAFF MOTES by day over the green — threshing dust
+    // an' straw-chaff in the air. Gated on daylight (uGate = 1 - nightFactor).
+    if (fine) {
+      const chaff = makeDriftMotes({ count: 70, color: 0xe8d9a0, radius: 8, height: 3.2, speed: 1.4, size: 1.8 });
+      chaff.position.set(v.x + 0.5, gen.height(v.x, v.z) + 1.2, v.z + 0.5);
+      scene.add(chaff);
+      objects.push(chaff); // ROOT — dispose() unregisters its uTime material
+      fx.push(() => { chaff.material.uniforms.uGate.value = 1 - nightFactor(); });
     }
 
     // -- Corn dolly near the chapel (or village centre if no chapel) --
@@ -210,6 +255,75 @@ function deckChapelHarvest(scene, objects, b, midX, gen) {
   doorSheaf.rotation.x = Math.PI / 2;
   scene.add(doorSheaf);
   objects.push(doorSheaf);
+}
+
+// 'Fine' only: the harvest-festival PRODUCE TABLE — a plank trestle laid wi'
+// period produce (marrows, apples, turnips, a sheaf) under a storm lantern.
+// The lantern body is warm-emissive (pops the bloom) and one small PointLight
+// pools warm lamplight over the spread. Root at y=0; ~1.1 blocks tall.
+// The light needs no registry — scene.remove(group) on teardown takes it out.
+function buildProduceTable() {
+  const g = new THREE.Group();
+  const matWood  = new THREE.MeshLambertMaterial({ color: 0x6b4a2a });
+  const matWood2 = new THREE.MeshLambertMaterial({ color: 0x55381f });
+
+  // trestle: a plank top on two leg pairs
+  const top = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 0.8), matWood);
+  top.position.y = 0.72;
+  g.add(top);
+  for (const sx of [-0.65, 0.65]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.7, 0.7), matWood2);
+    leg.position.set(sx, 0.36, 0);
+    g.add(leg);
+  }
+
+  // produce: marrows (long green), apples (red/russet), turnips (cream-purple)
+  const matMarrow = new THREE.MeshLambertMaterial({ color: 0x4a7030 });
+  const matApple  = new THREE.MeshLambertMaterial({ color: 0xa83424 });
+  const matRusset = new THREE.MeshLambertMaterial({ color: 0xb07a34 });
+  const matTurnip = new THREE.MeshLambertMaterial({ color: 0xdcc8a8 });
+  const marrow = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.5, 7), matMarrow);
+  marrow.rotation.z = Math.PI / 2;
+  marrow.position.set(-0.35, 0.85, 0.12);
+  g.add(marrow);
+  const appleSpots = [
+    { x: 0.18, z: 0.18, m: matApple }, { x: 0.34, z: 0.02, m: matRusset },
+    { x: 0.22, z: -0.2, m: matApple }, { x: 0.48, z: 0.2, m: matRusset },
+  ];
+  for (const s of appleSpots) {
+    const a = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), s.m);
+    a.position.set(s.x, 0.83, s.z);
+    g.add(a);
+  }
+  for (const s of [{ x: -0.15, z: -0.22 }, { x: 0.02, z: 0.24 }]) {
+    const t = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), matTurnip);
+    t.scale.set(1, 0.8, 1);
+    t.position.set(s.x, 0.83, s.z);
+    g.add(t);
+  }
+  // a small sheaf stood at the table end
+  const sheaf = buildWallSheaf();
+  sheaf.position.set(0.68, 0.76, -0.2);
+  g.add(sheaf);
+
+  // the storm lantern: dark frame + warm-emissive glass body, hung off a crook
+  const crook = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.1, 5), matWood2);
+  crook.position.set(-0.75, 0.55, -0.3);
+  g.add(crook);
+  const matLampGlass = new THREE.MeshLambertMaterial({
+    color: 0x2c1d10,
+    emissive: new THREE.Color(0xffa845),
+    emissiveIntensity: 2.2, // over the bloom threshold — warm lamplit glow
+  });
+  const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.2, 0.14), matLampGlass);
+  lamp.position.set(-0.75, 1.12, -0.3);
+  g.add(lamp);
+  const light = new THREE.PointLight(0xffa845, 0.9, 6, 2);
+  light.position.set(-0.75, 1.1, -0.3);
+  g.add(light);
+
+  g.userData.wow = 'produceTable';
+  return g;
 }
 
 // A small flat sheaf intended to be mounted against a wall face.

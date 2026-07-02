@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { hash2i } from '../noise.js';
 import { B } from '../defs.js';
-import { greenPlacement } from '../festivalKit.js';
+import { greenPlacement, makeRibbonStreamers, makeBunting, nearbyBuildingPairs } from '../festivalKit.js';
 
 const RADIUS = 48;
 
@@ -26,9 +26,10 @@ const RIBBON_COLORS = [
   0xdd55aa, // pink
 ];
 
-// ctx = { scene, world, gen, cx, cz, season, snowAccum, objects, lit, robins }
+// ctx = { scene, world, gen, cx, cz, season, snowAccum, objects, lit, robins, fx, fine }
 export function buildMayDay(ctx) {
   const { scene, world, gen, cx, cz, objects } = ctx;
+  const fine = !!ctx.fine;
 
   for (const v of (gen.geo.villages || [])) {
     if (Math.abs(v.x - cx) > RADIUS || Math.abs(v.z - cz) > RADIUS) continue;
@@ -41,6 +42,33 @@ export function buildMayDay(ctx) {
       pole.position.set(fp.x + 0.5, groundY, fp.z + 0.5);
       scene.add(pole);
       objects.push(pole);
+
+      // -- 'Fine': ribbons that actually STREAM an' wrap — 6 shader-animated
+      // strips swirling off the pole top in the Maytime colours, over the
+      // static helix (which reads as the wrapped-in layer). GPU-only motion.
+      if (fine) {
+        const streamers = makeRibbonStreamers({ topY: 6.3, baseR: 2.0, colors: RIBBON_COLORS });
+        streamers.position.set(fp.x + 0.5, groundY, fp.z + 0.5);
+        scene.add(streamers);
+        objects.push(streamers); // ROOT — dispose() unregisters its uTime material
+      }
+
+      // -- 'Fine': spring BUNTING in period colours strung between the
+      // buildings round the green — up to 2 lines, ≤16 flags each, static
+      // vertex-coloured triangles (the joy is the sag + the colours).
+      if (fine) {
+        const pairs = nearbyBuildingPairs(v, fp.x, fp.z, 2, 18);
+        for (const [a, b] of pairs) {
+          const ax = (a.x0 + a.x1) / 2, az = (a.z0 + a.z1) / 2;
+          const bx = (b.x0 + b.x1) / 2, bz = (b.z0 + b.z1) / 2;
+          const p0 = { x: ax + 0.5, y: gen.height(Math.round(ax), Math.round(az)) + 3.4, z: az + 0.5 };
+          const p1 = { x: bx + 0.5, y: gen.height(Math.round(bx), Math.round(bz)) + 3.4, z: bz + 0.5 };
+          if (Math.hypot(p1.x - p0.x, p1.z - p0.z) < 3) continue;
+          const bunt = makeBunting(p0, p1, RIBBON_COLORS);
+          scene.add(bunt);
+          objects.push(bunt);
+        }
+      }
     }
 
     // -- Garland ring around the stone cross base (at v.x, v.z) --

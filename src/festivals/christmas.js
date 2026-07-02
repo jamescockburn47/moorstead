@@ -17,13 +17,19 @@
 import * as THREE from 'three';
 import { hash2i } from '../noise.js';
 import { B, TILE } from '../defs.js';
-import { addBillboard, addWindowGlow, isOpenGround } from '../festivalKit.js';
+import { addBillboard, addWindowGlow, isOpenGround, makeLanternString, nearbyBuildingPairs } from '../festivalKit.js';
 
 const RADIUS = 48;
 
-// ctx = { scene, world, gen, cx, cz, season, snowAccum, objects, lit, robins }
+// 'Fine' window pane: warmer + brighter so the ACES/bloom stack catches it.
+// Plain keeps addWindowGlow's stock amber untouched.
+const FINE_PANE = { color: 0xffbe55, opacity: 0.92 };
+
+// ctx = { scene, world, gen, cx, cz, season, snowAccum, objects, lit, robins, fx, fine }
 export function buildChristmas(ctx) {
   const { scene, world, gen, cx, cz, objects, lit, robins } = ctx;
+  const fine = !!ctx.fine;
+  const fx = ctx.fx || [];
 
   // Winter firs — one per village, whole festive season (no deep-snow gate)
   for (const v of (gen.geo.villages || [])) {
@@ -35,6 +41,44 @@ export function buildChristmas(ctx) {
       scene.add(g);
       objects.push(g);
       g.traverse(c => { if (c.isMesh && c.userData.flicker) lit.push(c); });
+
+      // -- 'Fine': the tree candles actually GLIMMER — the unlit candle/star
+      // materials pulse above white so the bloom catches each waver. One fx
+      // callback per fir; the materials are per-fir so teardown disposes them.
+      if (fine) {
+        const glims = [];
+        g.traverse(c => {
+          if (c.isMesh && c.material && c.material.userData && c.material.userData.glimmer &&
+              glims.indexOf(c.material) < 0) glims.push(c.material);
+        });
+        const bases = glims.map(m => m.color.clone());
+        fx.push(t => {
+          for (let i = 0; i < glims.length; i++) {
+            // candlelight waver: 1.1×..1.8× base — over the bloom threshold at the peaks
+            const k = 1.1 + 0.35 * (1 + Math.sin(t * 4.3 + i * 2.1)) * (0.7 + 0.3 * Math.sin(t * 9.7 + i));
+            glims[i].color.copy(bases[i]).multiplyScalar(k);
+          }
+        });
+      }
+
+      // -- 'Fine': LANTERN STRINGS — catenaries of warm emissive lanterns strung
+      // between the buildings round the parish tree, swaying gently. Up to 3
+      // strings per village, ≤9 lanterns each (pooled meshes, no per-frame alloc).
+      if (fine) {
+        const pairs = nearbyBuildingPairs(v, fp.x, fp.z, 3, 18);
+        for (let pi = 0; pi < pairs.length; pi++) {
+          const [a, b] = pairs[pi];
+          const ax = (a.x0 + a.x1) / 2, az = (a.z0 + a.z1) / 2;
+          const bx = (b.x0 + b.x1) / 2, bz = (b.z0 + b.z1) / 2;
+          const p0 = { x: ax + 0.5, y: gen.height(Math.round(ax), Math.round(az)) + 3.6, z: az + 0.5 };
+          const p1 = { x: bx + 0.5, y: gen.height(Math.round(bx), Math.round(bz)) + 3.6, z: bz + 0.5 };
+          if (Math.hypot(p1.x - p0.x, p1.z - p0.z) < 3) continue; // same stoop — skip
+          const str = makeLanternString(p0, p1, { seed: pi * 0.37 });
+          scene.add(str);
+          objects.push(str);
+          fx.push(t => str.swayTick(t));
+        }
+      }
 
       // -- carol singers: 4 children clustered tightly to one side of the
       // fir, clear of the foliage footprint (base tier hw=3, so ≥4 blocks
@@ -129,7 +173,7 @@ export function buildChristmas(ctx) {
             glowZ = wz + 0.5;
             yaw   = -Math.PI / 2;
           }
-          addWindowGlow(scene, objects, glowX, glowY, glowZ, yaw);
+          addWindowGlow(scene, objects, glowX, glowY, glowZ, yaw, fine ? FINE_PANE : undefined);
         }
       }
 
@@ -139,7 +183,7 @@ export function buildChristmas(ctx) {
       const wantsParlourTree = b.type === 'farmhouse' ||
         (b.type === 'cottage' && hash2i(b.x0, b.z0, gen.geo.seed ^ 0xc7d3) < 0.18);
       if (wantsParlourTree) {
-        addParlourTree(scene, objects, lit, b, g);
+        addParlourTree(scene, objects, lit, b, g, fine);
       }
     }
   }
@@ -279,7 +323,7 @@ function deckChapel(scene, objects, b, midX, gen) {
 // green MeshLambertMaterial boxes + a tiny warm cap) — the parlour tree lived
 // inside and was small enough to fit on a side-table. The glow reads from
 // outside as a lit, ornamented tree silhouette behind glass.
-function addParlourTree(scene, objects, lit, b, groundY) {
+function addParlourTree(scene, objects, lit, b, groundY, fine = false) {
   // Position: just inside the south wall (z = b.z0 + 0.6) at window height (groundY + 2)
   // Centred on the building's x (the main front window bay).
   const midX = (b.x0 + b.x1) / 2 + 0.5;
@@ -321,7 +365,7 @@ function addParlourTree(scene, objects, lit, b, groundY) {
 
   // Warm glow quad just outside the south wall — reads as light spilling out
   // through the window from the lit parlour tree.
-  addWindowGlow(scene, objects, midX, treeY + 0.4, b.z0 - 0.05, 0);
+  addWindowGlow(scene, objects, midX, treeY + 0.4, b.z0 - 0.05, 0, fine ? FINE_PANE : undefined);
 }
 
 // Build a small child caroller figure Group, feet at y=0, height ≈1.6.
@@ -532,6 +576,10 @@ function dressFir(g) {
   // --- materials -------------------------------------------------------
   const matCandle  = new THREE.MeshBasicMaterial({ color: 0xffdf8a }); // warm candlelight
   const matStar    = new THREE.MeshBasicMaterial({ color: 0xfff2b0 }); // pale gold glow
+  // tagged for the 'Fine' glimmer pulse (buildChristmas collects these; on Plain
+  // the tag is inert and the colours stay exactly as above)
+  matCandle.userData.glimmer = true;
+  matStar.userData.glimmer = true;
   const matBaubles = [
     new THREE.MeshLambertMaterial({ color: 0xb23b3b }), // red
     new THREE.MeshLambertMaterial({ color: 0xc9a13b }), // gold

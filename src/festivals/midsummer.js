@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 import { hash2i } from '../noise.js';
 import { B, TILE } from '../defs.js';
-import { addBillboard, isOpenGround } from '../festivalKit.js';
+import { addBillboard, isOpenGround, makeDriftMotes, nightFactor } from '../festivalKit.js';
 import { Fire } from '../fire.js';
 
 const RADIUS       = 48;  // village cull
@@ -27,9 +27,11 @@ const SUMMIT_RISE  = 4;
 // (keeps them reading as moor-top beacons, separate from the village bonfires).
 const VILLAGE_EXCL = 32;
 
-// ctx = { scene, world, gen, cx, cz, season, snowAccum, objects, lit, robins }
+// ctx = { scene, world, gen, cx, cz, season, snowAccum, objects, lit, robins, fx, fine }
 export function buildMidsummer(ctx) {
   const { scene, world, gen, cx, cz, objects } = ctx;
+  const fine = !!ctx.fine;
+  const fx = ctx.fx || [];
 
   // -- Hilltop fires on the high moor --
   // Scan a coarse grid centred on the player for local height maxima that are:
@@ -73,7 +75,7 @@ export function buildMidsummer(ctx) {
 
   for (const { x, z, h } of fires) {
     const groundY = h + 1; // block top to stand the woodpile on
-    const stack = buildMidsummerStack(x + 0.5, groundY, z + 0.5);
+    const stack = buildMidsummerStack(x + 0.5, groundY, z + 0.5, fine);
     scene.add(stack);
     objects.push(stack);
   }
@@ -89,6 +91,17 @@ export function buildMidsummer(ctx) {
     crossSprig.position.set(v.x + 0.5, crossY, v.z + 0.5);
     scene.add(crossSprig);
     objects.push(crossSprig);
+
+    // -- 'Fine': drifting GOLDEN MOTES in the evening air over the green —
+    // a pooled 60-point cloud, gated on dusk/night (uGate rides nightFactor).
+    // The midsummer-eve shimmer: additive gold under the bloom.
+    if (fine) {
+      const motes = makeDriftMotes({ count: 60, color: 0xffd27a, radius: 7, height: 4.5, speed: 0.8, size: 2.4 });
+      motes.position.set(v.x + 0.5, crossY + 0.6, v.z + 0.5);
+      scene.add(motes);
+      objects.push(motes); // ROOT — dispose() unregisters its uTime material
+      fx.push(() => { motes.material.uniforms.uGate.value = nightFactor(); });
+    }
 
     // A few holly-sprig billboards on the green — sparse (up to 4 per village)
     let sprigCount = 0;
@@ -115,7 +128,7 @@ export function buildMidsummer(ctx) {
 // Modelled on bonfire.js's buildBonfireStack but simpler — no guy effigy,
 // smaller woodpile (a hilltop beacon is a practical fire, not a village ceremony),
 // and the same hero Fire({ big:true }) preset. Group base at groundY.
-function buildMidsummerStack(x, groundY, z) {
+function buildMidsummerStack(x, groundY, z, fine = false) {
   const group = new THREE.Group();
   group.position.set(x, groundY, z);
 
@@ -138,9 +151,11 @@ function buildMidsummerStack(x, groundY, z) {
   cap.rotation.y = 0.5;
   group.add(cap);
 
-  // Hero beacon fire: big, embers, smoke, light — same call as bonfire.js
+  // Hero beacon fire: big, embers, smoke, light — same call as bonfire.js.
+  // 'Fine' adds the tall ember COLUMN (pooled spark stream riding the bloom) —
+  // a beacon seen across the dales, as the St John's Eve fires were meant to be.
   const fire = Fire({ scale: 3, big: true, layers: 3, embers: true, smoke: true, light: true,
-                      seed: (x * 11.3 + z * 9.1) % 1 });
+                      column: fine, seed: (x * 11.3 + z * 9.1) % 1 });
   fire.position.set(0, 0.9, 0); // sit the flame at the pile apex
   group.add(fire);
 

@@ -212,6 +212,19 @@ Object.defineProperty(makeFlameMaterial, 'shared', { get: () => _flameMat });
 const _emberMats = []; // ShaderMaterials wi' a uTime uniform (ember + smoke plumes)
 const _heroLights = []; // { light, base } — pulsed about `base` intensity
 
+// --- external FX registration ---------------------------------------------------
+// Festival FX (fireworks, drifting motes, maypole ribbons — see festivalKit.js)
+// are GPU-animated ShaderMaterials wi' a uTime uniform, exactly like the embers.
+// They register here so the ONE global tick drives them too; their owners MUST
+// unregister on dispose (SeasonalLayer teardown) or the registry leaks.
+export function registerFxMat(mat) {
+  if (mat && mat.uniforms && mat.uniforms.uTime && _emberMats.indexOf(mat) < 0) _emberMats.push(mat);
+}
+export function unregisterFxMat(mat) { removeFrom(_emberMats, mat); }
+// registry size — used by the headless teardown test (verify-festivalwow) to
+// assert zero orphans after a SeasonalLayer.clear().
+export function fxMatCount() { return _emberMats.length; }
+
 // --- ember particle system ----------------------------------------------------
 // A capped (~EMBER_COUNT) THREE.Points of additive warm motes that rise off the
 // bed an' recycle, animated ENTIRELY GPU-side: the vertex shader derives each
@@ -219,27 +232,33 @@ const _heroLights = []; // { light, base } — pulsed about `base` intensity
 // the fragment fades warm-orange → transparent over life. No per-frame CPU loop —
 // tickFires only pokes uTime.
 const EMBER_COUNT = 40;
+// The taller EMBER COLUMN (Bonfire Night / Midsummer under 'Fine'): same pooled
+// shader, more motes, a narrower lane spread an' a much taller rise — a spark
+// column that rides the bloom. Capped; allocated once per fire; GPU-animated.
+const EMBER_COLUMN_COUNT = 70;
 
 const EMBER_VERT = `
   attribute float aSeed;   // 0..1 per mote — phase + lane + lifespan jitter
   uniform float uTime;
   uniform float uScale;    // fire scale (blocks) — sizes the spread + rise height
+  uniform float uRise;     // rise-height multiplier (1 = bed embers, ~2.6 = column)
+  uniform float uSpread;   // lane-radius multiplier (1 = bed, ~0.55 = tight column)
   varying float vLife;     // 0..1 along this mote's current life (for the fade)
   // cheap 1D hash for per-mote lane offsets
   float h(float n){ return fract(sin(n * 78.233) * 43758.5453); }
   void main(){
     float seed = aSeed;
     float life = h(seed * 11.1);          // 0.5..1.5s lifespans, varied
-    float dur  = 0.9 + life;
+    float dur  = (0.9 + life) * (0.7 + 0.3 * uRise); // column motes live a touch longer
     // each mote loops on its own phase; t in [0,1) is its progress this cycle
     float t = fract(uTime / dur + seed);
     vLife = t;
     // lane: a fixed-ish x/z drift per mote, widening a touch as it climbs
     float ang = seed * 6.2831;
-    float rad = (0.10 + 0.22 * h(seed * 3.7)) * uScale * (0.4 + 0.8 * t);
+    float rad = (0.10 + 0.22 * h(seed * 3.7)) * uScale * (0.4 + 0.8 * t) * uSpread;
     float px = cos(ang) * rad + sin(uTime * 1.3 + seed * 10.0) * 0.04 * uScale;
     float pz = sin(ang) * rad + cos(uTime * 1.1 + seed * 7.0) * 0.04 * uScale;
-    float py = (0.2 + t * (1.1 + 0.6 * h(seed * 5.3))) * uScale; // rises up its lane
+    float py = (0.2 + t * (1.1 + 0.6 * h(seed * 5.3))) * uScale * uRise; // rises up its lane
     vec4 mv = modelViewMatrix * vec4(px, py, pz, 1.0);
     gl_Position = projectionMatrix * mv;
     // shrink with life + distance; bigger fires throw bigger embers
@@ -264,17 +283,20 @@ const EMBER_FRAG = `
   }
 `;
 
-function makeEmbers(scale) {
+function makeEmbers(scale, opts = {}) {
+  const count  = opts.count  || EMBER_COUNT;
+  const rise   = opts.rise   != null ? opts.rise   : 1.0;
+  const spread = opts.spread != null ? opts.spread : 1.0;
   const g = new THREE.BufferGeometry();
   // all points sit at the origin in attribute space; the vertex shader places
   // them — so geometry is just a seed per point (position is a required attr).
-  const pos = new Float32Array(EMBER_COUNT * 3); // all zero
-  const seeds = new Float32Array(EMBER_COUNT);
-  for (let i = 0; i < EMBER_COUNT; i++) seeds[i] = (i + 0.5) / EMBER_COUNT;
+  const pos = new Float32Array(count * 3); // all zero
+  const seeds = new Float32Array(count);
+  for (let i = 0; i < count; i++) seeds[i] = (i + 0.5) / count;
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uScale: { value: scale } },
+    uniforms: { uTime: { value: 0 }, uScale: { value: scale }, uRise: { value: rise }, uSpread: { value: spread } },
     vertexShader: EMBER_VERT,
     fragmentShader: EMBER_FRAG,
     transparent: true,
@@ -382,6 +404,8 @@ function makeSmoke(scale) {
 //   embers  } HERO features — only big fires use them. embers: a rising-ember
 //   smoke   } Points; smoke: a soft drifting plume; light: one warm pulsed
 //   light   } PointLight. All GPU-animated off the shared tick (no CPU loop).
+//   column   a SECOND, taller+tighter ember stream (the 'Fine'-quality spark
+//            column that rides the bloom). Pooled at EMBER_COLUMN_COUNT motes.
 //   material the shared flame material to render on. Defaults to the singleton;
 //            FireLayer passes the same singleton explicitly.
 export function Fire(opts = {}) {
@@ -393,6 +417,7 @@ export function Fire(opts = {}) {
     embers = false,
     smoke = false,
     light = false,
+    column = false,
   } = opts;
   // a big flame either asks for it, or is simply large
   const big = opts.big != null ? !!opts.big : scale >= 1.5;
@@ -419,11 +444,19 @@ export function Fire(opts = {}) {
   group.userData.big = big;
 
   // -- hero features (big fires only) --
-  let emberPts = null, smokeMesh = null, pointLight = null;
+  let emberPts = null, smokeMesh = null, pointLight = null, columnPts = null;
   if (embers) {
     emberPts = makeEmbers(scale);
     group.add(emberPts);
     _emberMats.push(emberPts.userData.emberMat); // registered for the global tick
+  }
+  if (column) {
+    // the tall spark column: more motes, tighter lanes, ~2.6× the rise — under
+    // 'Fine' (ACES + bloom) the additive motes glow like true fire-sparks.
+    columnPts = makeEmbers(scale, { count: EMBER_COLUMN_COUNT, rise: 2.6, spread: 0.55 });
+    columnPts.userData.emberColumn = true;
+    group.add(columnPts);
+    _emberMats.push(columnPts.userData.emberMat);
   }
   if (smoke) {
     smokeMesh = makeSmoke(scale);
@@ -450,6 +483,12 @@ export function Fire(opts = {}) {
       emberPts.userData.emberMat.dispose();
       removeFrom(_emberMats, emberPts.userData.emberMat);
       emberPts = null;
+    }
+    if (columnPts) {
+      columnPts.userData.emberGeo.dispose();
+      columnPts.userData.emberMat.dispose();
+      removeFrom(_emberMats, columnPts.userData.emberMat);
+      columnPts = null;
     }
     if (smokeMesh) {
       smokeMesh.userData.smokeGeo.dispose();

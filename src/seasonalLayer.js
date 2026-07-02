@@ -9,6 +9,7 @@ import { festivalState } from './festivals.js';
 import { SCARF_COLORS, DEFAULT_SNOWMAN } from './snowman.js';
 import { hash2i } from './noise.js';
 import { B } from './defs.js';
+import { isFine } from './festivalKit.js';
 import { buildChristmas } from './festivals/christmas.js';
 import { buildBonfire } from './festivals/bonfire.js';
 import { buildHarvest } from './festivals/harvest.js';
@@ -35,6 +36,7 @@ export class SeasonalLayer {
     this._builtOnce = false;
     this._lit = [];
     this._robins = [];
+    this._fx = [];   // per-frame FX callbacks (lantern sway, uNight/uGate feeds) — cleared with the build
     this._t = 0;
   }
 
@@ -57,6 +59,11 @@ export class SeasonalLayer {
       r.rotation.z = 0.08 * Math.sin(this._t * 2.1 + phase);
     }
 
+    // Festival FX callbacks (lantern-string sway, fireworks uNight, mote uGate) —
+    // a handful of cheap writes per frame; the heavy animation is GPU-side off the
+    // shared fire tick (tickFires in main.js).
+    for (let i = 0; i < this._fx.length; i++) this._fx[i](this._t, dt);
+
     this.timer -= dt;
     if (this.timer > 0) return;
     this.timer = 0.4;
@@ -64,8 +71,11 @@ export class SeasonalLayer {
     // Rebuild key changes on: the active festival window, the deep-snow gate,
     // and the player-snowman ledger size (so newly built/dressed/melted
     // snowmen re-render).
+    // The key includes the quality tier so flipping Fine ↔ Plain rebuilds the
+    // dressing (Fine adds the FX layer; Plain must fall back to today's look).
     const fest = festivalState(season.yearPhase);
     const key = (fest.active || '-') + (deepSnow(snowAccum) ? 'D' : '') +
+                (isFine() ? 'F' : '') +
                 '|' + this.world.snowmanLedger.size;
     if (this.center &&
         Math.abs(cx - this.center[0]) < REBUILD_MOVE &&
@@ -81,6 +91,7 @@ export class SeasonalLayer {
   build(cx, cz, season, snowAccum) {
     this._lit = [];
     this._robins = [];
+    this._fx = [];
     this.clear();
     const gen = this.world.gen;
 
@@ -155,6 +166,8 @@ export class SeasonalLayer {
       objects: this.objects,
       lit: this._lit,
       robins: this._robins,
+      fx: this._fx,        // per-frame callbacks — run in update(), cleared on rebuild
+      fine: isFine(),      // 'Fine' renderer live → builders add the FX/spectacle layer
     });
   }
 
@@ -279,6 +292,7 @@ export class SeasonalLayer {
     }
     this.objects.length = 0;
     this._lit = [];
+    this._fx = [];
   }
 }
 
