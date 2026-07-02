@@ -37,6 +37,39 @@ export function gatherContext(game = null, page = 'title') {
   return ctx;
 }
 
+// Quiet telemetry for swallowed catch blocks: fire-and-forget, capped per session, and it
+// must NEVER throw or change the caller's behaviour — it only makes silent failures visible
+// on the parish ledger. Returns true if a report was attempted, false if capped/impossible
+// (the return is for the verify script; callers should ignore it).
+const QUIET_MAX = 5;
+let _quietSent = 0;
+export function reportQuiet(tag, err) {
+  try {
+    if (_quietSent >= QUIET_MAX) return false;
+    _quietSent++;
+    let msg = 'unknown';
+    try { msg = String((err && err.message) || err).slice(0, 300); } catch { /* poisoned error object */ }
+    let context = { tag: String(tag || 'untagged') };
+    try {
+      const game = (typeof window !== 'undefined' && (window.moorstead || null)) || null;
+      context = gatherContext(game, 'quiet');
+      context.tag = String(tag || 'untagged');
+    } catch { /* headless / half-booted — the tag alone still tells the tale */ }
+    if (typeof fetch === 'function') {
+      // kind 'bug': the ledger only files 'bug' | 'feedback' (owt else is coerced to
+      // 'feedback' — dash/app.py:399) — the [quiet:tag] prefix marks these for triage
+      fetch('/dash/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pid: devicePid(), kind: 'bug', message: `[quiet:${context.tag}] ${msg}`, email: '', name: '', context }),
+      }).catch(() => { /* ledger unreachable — it was only ever best-effort */ });
+    }
+    return true;
+  } catch {
+    return false; // telemetry must never make owt worse
+  }
+}
+
 export async function submitFeedback({ kind, message, email = '', name = '', context = {}, pid = devicePid() }) {
   const res = await fetch('/dash/feedback', {
     method: 'POST',

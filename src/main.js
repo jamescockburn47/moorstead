@@ -15,7 +15,7 @@ import { Quests, wantGiants, wantWreck, wantHound } from './quests.js';
 import { Economy, bestMarket, FREIGHT_ALLOWANCE, farmRegisterCheck, CHARTER_FEE, livestockPrice, droveValue, convertAt, marketTownName } from './economy.js';
 import { deedFee, weeklyUpkeep, isLapsed, DEED, findActiveDeed, findLapsedDeed, inDeed, makeDeed, lapsesUnderUpkeep } from './deeds.js';
 import { isFreeRoom, isBairnsRoom, baseRoom, FREE_STARTER } from './rooms.js';
-import { gatherContext, submitFeedback } from './feedback.js';
+import { gatherContext, submitFeedback, reportQuiet } from './feedback.js';
 import { miningDigGuide } from './mining-guide.js';
 import { mayDigDeep, categoryOf } from './editledger.js';
 import { commandFromKey } from './herding.js';
@@ -92,7 +92,7 @@ import { EXTRA_FOLK, moodWord } from './villagerlife.js';
 import { Sky } from './sky.js';
 import { Storm } from './storm.js';
 import { AudioEngine } from './audio.js';
-import { UI, bearingLabel, shelterToast } from './ui.js';
+import { UI, bearingLabel, shelterToast, stationChipHTML } from './ui.js';
 import { raycast, boxCollides } from './physics.js';
 
 const REACH = 5.5;
@@ -163,7 +163,7 @@ class Game {
 
     this.bindEvents();
     try { this.auth = JSON.parse(localStorage.getItem('moorcraft-auth') || 'null'); }
-    catch { this.auth = null; /* storage blocked (Safari private mode / cookies off) — don't abort boot */ }
+    catch (e) { this.auth = null; reportQuiet('auth-parse', e); /* storage blocked (Safari private mode / cookies off) — don't abort boot; worth counting, it silently logs an invited player out */ }
     this.refreshAdmin();
     this.ui.setLoggedIn(this.auth);
     this.recordVisit('landing');
@@ -346,13 +346,26 @@ class Game {
   }
 
   async continueGame() {
-    const { loadGame } = await import('./save.js');
+    const { loadGame, migrateSave } = await import('./save.js');
     const saved = await loadGame();
     if (!saved) { this.ui.toast('No saved world found, love.'); return; }
-    if (saved.meta.version !== 2) {
+    // step the save up to the current format; REFUSE a save from a newer build outright —
+    // loading it anyway could quietly corrupt what a newer Moorstead wrote
+    const mig = migrateSave(saved);
+    if (!mig.ok) {
+      this.ui.toast(mig.reason === 'future'
+        ? 'This save’s from a <b>newer Moorstead</b> — refresh t’ page to update afore tha carries on.'
+        : 'This save’s in a shape t’ game can’t read — best start a fresh world, love.', 9000);
+      this.state = 'title';           // back to the title/new-world flow, save untouched
+      this.ui.show('titleScreen');
+      this.refreshContinue();
+      return;
+    }
+    const { meta, chunks } = mig.saved;
+    if (meta.migratedFrom != null) {
       this.ui.toast('That world&rsquo;s from afore t&rsquo; moors moved &mdash; expect odd seams. A fresh world&rsquo;s best.', 7000);
     }
-    this.startWorld(saved.meta.seed, saved.meta, saved.chunks);
+    this.startWorld(meta.seed, meta, chunks);
     this.ensureDaemon();   // thi daemon (first pet) is at thi heel in solo worlds an' all
   }
 
@@ -495,6 +508,7 @@ class Game {
       this.player.pos = { x: v.x + 0.5, y: this.world.gen.height(Math.floor(v.x), Math.floor(v.z)) + 2, z: v.z + 0.5 };
     } catch (e) {
       this.titlePreview = false; this.titlePreviewFailed = true;
+      reportQuiet('title-preview', e); // the whole title backdrop just silently degraded to the flat gradient
     }
   }
 
@@ -536,9 +550,22 @@ class Game {
       }
       return;
     }
-    const { saveGame } = await import('./save.js');
+    // storage nigh full? Say so ONCE a session, before the write, so a kid knows why their
+    // builds might stop sticking. Fully guarded — headless Node an' owd browsers have no
+    // navigator.storage.estimate, an' the warning must never block the save itself.
+    try {
+      if (!this._quotaWarned && typeof navigator !== 'undefined' && navigator.storage && navigator.storage.estimate) {
+        navigator.storage.estimate().then(est => {
+          if (est && est.quota > 0 && est.usage / est.quota > 0.85 && !this._quotaWarned) {
+            this._quotaWarned = true;
+            this.ui.toast('Thi browser’s storage is <b>nigh full</b> — builds may stop saving. Clear a bit o’ room, love.', 9000);
+          }
+        }).catch(() => { /* estimate refused — no matter */ });
+      }
+    } catch { /* estimate unavailable — no matter */ }
+    const { saveGame, SAVE_VERSION } = await import('./save.js');
     const meta = {
-      version: 2,
+      version: SAVE_VERSION,
       seed: this.seed,
       player: this.player.serialize(),
       sky: this.sky.serialize(),
@@ -827,7 +854,7 @@ class Game {
       const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(this.auth.acct));
       const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
       this.adminOk = ADMIN_HASHES.includes(hex);
-    } catch { /* no subtle crypto — no warden powers, no matter */ }
+    } catch (e) { reportQuiet('warden-crypto', e); /* no subtle crypto — no warden powers, no matter (but count it: crypto.subtle EXISTED an' still failed) */ }
   }
 
   isAdmin() {
@@ -1268,8 +1295,10 @@ class Game {
         localStorage.setItem('moorcraft-pid', pid);
       }
       return pid;
-    } catch {
-      // storage blocked — keep a stable id for this session so multiplayer/memory still work
+    } catch (e) {
+      // storage blocked — keep a stable id for this session so multiplayer/memory still work.
+      // Counted: an ephemeral pid means NPC memory an' pets silently reset every visit.
+      if (!this._ephemeralPid) reportQuiet('pid-storage', e);
       return (this._ephemeralPid ||= (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36)));
     }
   }
@@ -1306,7 +1335,7 @@ class Game {
     try {
       const item = itemName(itemId).toLowerCase().replace(/^(raw|roast)\s+/, '');
       npc.trade(villager.charId, item, 1, direction, this.playerId());
-    } catch { /* never let trade-memory break a trade */ }
+    } catch (e) { reportQuiet('trade-memory', e); /* never let trade-memory break a trade — but a vendor quietly forgetting every deal is worth knowing */ }
   }
 
   async login() {
@@ -1474,7 +1503,8 @@ class Game {
   // A roster o' real accounts (not ramblers), so t' family can hop between
   // their own pockets an' ventures wi'out keyin' t' invite code each time.
   loadAccounts() {
-    try { return JSON.parse(localStorage.getItem('moorcraft-accounts') || '[]'); } catch { return []; }
+    try { return JSON.parse(localStorage.getItem('moorcraft-accounts') || '[]'); }
+    catch (e) { reportQuiet('accounts-parse', e); return []; } // the family's saved-login roster silently vanished
   }
 
   saveAccount(auth) {
@@ -2043,6 +2073,65 @@ class Game {
   fmtMins(s) {
     if (!isFinite(s)) return 'no train due';
     return s >= 60 ? `${Math.floor(s / 60)}m ${Math.round(s % 60)}s` : `${Math.round(s)}s`;
+  }
+
+  // The next `want` timetabled calls at stops[idx]: [{ dest, eta, dist }], soonest first.
+  // eta in seconds (0 = she's stood in now); dest = the terminus she departs TOWARD (at the
+  // end of a run she turns about, so the flip's folded in); dist = honest chainage to it.
+  // Scans a full pingpong cycle like roster._nextTrainCall — a terminus is only called at
+  // once per round trip, so a half-hour window would miss it there.
+  nextDeparturesAt(schedFn, stops, stationS, idx, want = 2) {
+    const now = Date.now() / 1000, n = stops.length, out = [];
+    let inDwell = false;
+    for (let t = 0; t < 1900 && out.length < want; t += 2) {
+      const s = schedFn(now + t);
+      const here = s.mode === 'dwell' && s.i === idx;
+      if (here && !inDwell) {
+        const depDir = (s.dir === 0 && idx === n - 1) ? 1 : (s.dir === 1 && idx === 0) ? 0 : s.dir;
+        const di = depDir === 0 ? n - 1 : 0;
+        out.push({ dest: stops[di].name, eta: t, dist: Math.abs(stationS[di] - stationS[idx]) | 0 });
+      }
+      inDwell = here;
+    }
+    return out;
+  }
+
+  // ---- the station departure chip (HUD) ----
+  // Stood on/near a platform, the player sees WHAT's due, WHERE she's bound an' the fare —
+  // not just a countdown once she's close. ~1Hz, main line AND branch lines; rendered by
+  // ui.updateTracker in the quest-chip idiom (an' hidden by it off the 'playing' state).
+  updateStationChip(dt) {
+    this._stnChipT = (this._stnChipT ?? 0) - dt;
+    if (this._stnChipT > 0) return;
+    this._stnChipT = 1;
+    const ui = this.ui;
+    if (this.state !== 'playing' || !this.world || this.player.dead || this.peekingMap) { ui.stationChipHTML = ''; return; }
+    const geo = this.world.gen.geo;
+    const st = geo.nearStation(Math.floor(this.player.pos.x), Math.floor(this.player.pos.z), 16);
+    if (!st) { ui.stationChipHTML = ''; return; }
+    // whose timetable calls here: the main line, else the branch this station serves
+    const main = geo.railway();
+    let schedFn = null, stops = null, stS = null, idx = main.indexOf(st);
+    if (idx >= 0) {
+      schedFn = t => this.trainSchedule(t); stops = main; stS = geo.railPath().stationS;
+    } else if (geo.realWorld) {
+      this._ensureBranchTrains();
+      for (const bt of (this.branchTrains || [])) {
+        const i = bt.stations.findIndex(x => x.name === st.name);
+        if (i >= 0 && bt.stations.length >= 2 && bt.path.stationS.length === bt.stations.length) {
+          schedFn = t => this.trainScheduleFor(bt.path, bt.stations, t);
+          stops = bt.stations; stS = bt.path.stationS; idx = i;
+          break;
+        }
+      }
+    }
+    if (!schedFn) { ui.stationChipHTML = ''; return; }
+    const deps = this.nextDeparturesAt(schedFn, stops, stS, idx, 2);
+    // the fare to the first departure's destination — the SAME sum openStation charges
+    const fare = deps.length
+      ? (this.player.creative ? 0 : Math.max(1, Math.min(4, Math.ceil(deps[0].dist / 400))))
+      : null;
+    ui.stationChipHTML = stationChipHTML(st.name, deps, fare);
   }
 
   // A works (calcining kiln / blast furnace): convert held raw up the chain for a toll, then ship
@@ -4646,6 +4735,7 @@ class Game {
 
     // HUD
     this.ui.updateHUD(this.player, this.sky);
+    this.updateStationChip(dt);   // stood at a platform? keep the departures chip current
     this.ui.updateTracker();
     this.ui.minimapTimer -= dt;
     if (this.ui.minimapTimer <= 0) {

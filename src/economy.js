@@ -71,6 +71,37 @@ export function regionMult(village, itemId) {
   return 1;
 }
 
+// Proper display names for the SPREAD keys (the keys are lowercase substrings for matching).
+const SPREAD_NAMES = {
+  rosedale: 'Rosedale Abbey', grosmont: 'Grosmont', whitby: 'Whitby', staithes: 'Staithes',
+  goathland: 'Goathland', pickering: 'Pickering', moorstead: 'Moorstead', kirkby: 'Kirkbymoorside',
+};
+export const SPREAD_HINT_MIN = 0.15; // hint only when the local price sits ±15% or more off par
+
+// The trade-spread hint for one good in one village, or null when the local price sits near
+// par (or the good has no spread at all). Pure + data-driven off the SPREAD table (and the
+// off-map EXPORTS), so the trade UI can whisper where the brass really is without numbers-soup.
+// Returns { kind: 'cheap' | 'dear', best } — best = the dearest OTHER market's display name
+// (null when nowhere pays over par for it).
+export function spreadHint(itemId, village) {
+  const m = SPREAD[itemId];
+  if (!m) return null;
+  const local = regionMult(village, itemId);
+  const v = (village || '').toLowerCase();
+  let bestKey = null, bestMult = 1;
+  for (const key of Object.keys(m)) {
+    if (v.includes(key)) continue; // somewhere ELSE down the line
+    if (m[key] > bestMult) { bestMult = m[key]; bestKey = key; }
+  }
+  let best = bestKey ? (SPREAD_NAMES[bestKey] || bestKey) : null;
+  // the off-map export (e.g. Teesside for calcined ore) can out-pay every village
+  const exp = EXPORTS[itemId];
+  if (exp && PRICES[itemId] > 0 && exp.perUnit / PRICES[itemId] > bestMult) best = exp.market;
+  if (local <= 1 - SPREAD_HINT_MIN) return best ? { kind: 'cheap', best } : null;
+  if (local >= 1 + SPREAD_HINT_MIN) return { kind: 'dear', best };
+  return null;
+}
+
 // The vendor's cut. side 'buy' = the vendor sells TO you (dearer); 'sell' = the vendor buys
 // FROM you (cheaper). The gap guarantees a round trip at one vendor is a loss.
 const MARGIN = { buy: 1.25, sell: 0.85 };
@@ -277,9 +308,13 @@ export class Economy {
     return true;
   }
 
-  // the village the deal happens in: the villager's home, else the player's current village
+  // the village the deal happens in: the villager's home, else the player's current village.
+  // The home rides on the MOB itself (entities.spawnVillager sets mob.village) — the owd
+  // t.village leg is kept first for any caller that still shapes villagers that way, but on
+  // its own it never matched, so every chat trade silently priced at par (spread invisible).
   villageOf(villager) {
     if (villager && villager.t && villager.t.village) return villager.t.village;
+    if (villager && villager.village) return villager.village;
     return this.game.geo && this.game.geo.village ? this.game.geo.village.name : '';
   }
   standing() { return this.game.quests ? this.game.quests.standingIndex() : 0; }

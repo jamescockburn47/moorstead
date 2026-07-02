@@ -417,6 +417,10 @@ button.mc.quest-btn { background: linear-gradient(#5a6a4a, #44523a); border-colo
 button.mc.quest-btn.done-btn { background: linear-gradient(#8a7a3a, #6a5e2c); border-color: #443a16; }
 button.mc.trade-btn { font-size: 12.5px; padding: 6px 10px; }
 button.mc.trade-btn.locked { opacity: 0.4; cursor: default; }
+/* regional price whisper under a trade row: green = cheap here (haul it), amber = sells dear here */
+.spread-hint { font-size: 11px; font-style: italic; opacity: 0.9; }
+.spread-hint.cheap { color: #9ec27a; }
+.spread-hint.dear { color: #d8b95a; }
 
 /* ---------- notice board / journal ---------- */
 .board-panel { width: 620px; }
@@ -484,6 +488,8 @@ html.touch #quest-tracker { top: calc(env(safe-area-inset-top) + 100px); max-wid
   color: #d8d2c0;
 }
 #quest-tracker .tq b { color: var(--gold); }
+/* the station departures chip rides in the same column, edged green like a train arrival */
+#quest-tracker .tq.station { border-left-color: #9ec27a; }
 
 /* ---------- Dracula dread overlay (subtle, not full horror) ---------- */
 #dread-overlay {

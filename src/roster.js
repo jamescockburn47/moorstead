@@ -2,6 +2,7 @@
 // owns ALL geometry: it maps {at|walk|rail} to a voxel position the client can draw.
 import { rosterState, talkGeneric } from './npc.js';
 import { B, CHUNK, WATER_LEVEL } from './defs.js';
+import { reportQuiet } from './feedback.js';
 
 const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
 
@@ -614,7 +615,7 @@ export class RosterClient {
       const ctxB = `You are ${pb.name}, a ${pb.role} in ${pb.village}. Your neighbour ${pa.name} just said: "${r1.reply}". Reply briefly in character — a single short sentence, North York Moors about 1900. No stage directions, no asterisks.`;
       const r2 = await talkGeneric(pb, r1.reply, null, ctxB);
       if (!this._stopped && !B.dead && r2 && r2.reply) { this._faceEachOther(B, A); this.game.entities.speak(B, r2.reply, 6); }
-    } catch { /* brain didn't answer — let the natter lapse quietly */ }
+    } catch (e) { reportQuiet('banter', e); /* brain didn't answer — let the natter lapse quietly, but count it on the ledger */ }
     finally {
       this._banterBusy = false;
       this._banterCool = 25 + Math.random() * 25;           // a breather before the next one

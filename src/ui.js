@@ -1,6 +1,6 @@
 // All DOM UI: title, HUD, inventory/crafting/smelting, chat, quests, pause, death, minimap, toasts.
 import { B, I, RECIPES, SMELTS, FUELS, FOODS, TOOLS, itemName, maxStack, CREATIVE_ITEMS, CHUNK, WATER_LEVEL } from './defs.js';
-import { FARM_THRESHOLD, CHARTER_FEE, farmRegisterCheck, droveValue } from './economy.js';
+import { FARM_THRESHOLD, CHARTER_FEE, farmRegisterCheck, droveValue, spreadHint } from './economy.js';
 import { deedFee, weeklyUpkeep } from './deeds.js';
 import { getIconURL } from './textures.js';
 import { CASTLE } from './geography.js';
@@ -24,6 +24,26 @@ export function trackerHTML(lines) {
     html += `<div class="tq"><b>${mark}${line.title}</b><br>${line.text}</div>`;
   }
   return html;
+}
+
+// The station departure chip: the next timetabled calls at a platform -> one chip's HTML,
+// in the quest-tracker idiom (rendered into the same HUD column by updateTracker). Pure —
+// verify-econrobust feeds it cooked departures headless.
+//   name: the station's name
+//   deps: [{ dest, eta }] soonest first, eta in SECONDS (<= 2 reads as "stood in now");
+//         empty/nowt finite = nothing timetabled in the scan window
+//   fare: null omits the fare line; 0 = free (creative); else lumps o' coal to the first dest
+export function stationChipHTML(name, deps, fare = null) {
+  const fmt = s => (s >= 60 ? `${Math.floor(s / 60)}m ${Math.round(s % 60)}s` : `${Math.round(s)}s`);
+  const good = (deps || []).filter(d => d && d.dest && isFinite(d.eta));
+  let body;
+  if (!good.length) body = 'no train due for a good while';
+  else if (good[0].eta <= 2) body = `next: <b>${good[0].dest}</b> — she’s stood in NOW`;
+  else body = `next: <b>${good[0].dest}</b> in <b>${fmt(good[0].eta)}</b>`;
+  if (good[1]) body += `, then ${good[1].dest} in ${fmt(good[1].eta)}`;
+  const fareBit = (fare == null || !good.length) ? ''
+    : fare > 0 ? ` Fare: ${fare}× coal.` : ' Fare: free (creative).';
+  return `<div class="tq station">⏱ <b>${name}</b> — ${body}.${fareBit}</div>`;
 }
 
 // compass bearing + distance from (px,pz) to (x,z), e.g. "NW · 120m".
@@ -792,9 +812,21 @@ export class UI {
     }
     const econ = this.game.economy;
     if (econ) {
+      // regional price whisper: a line under a trade row when this village pays well off par
+      // for the good (±15%+), so the haul-by-rail spread is VISIBLE, not a secret. Short an'
+      // wordy for the bairns — the exact pence on the row stays exactly as it was.
+      const village = econ.villageOf(v);
+      const hintBit = (id) => {
+        const h = spreadHint(id, village);
+        if (!h) return '';
+        const txt = h.kind === 'cheap'
+          ? `cheap here — fetches more in ${h.best}`
+          : 'sells dear here';
+        return `<br><span class="spread-hint ${h.kind}">${txt}</span>`;
+      };
       for (const { id, price } of econ.buyList(v)) {
         const b = this.el('button', 'mc chat-btn trade-btn', this.chatQuestRow,
-          `Buy ${itemName(id)} for <b>${econ.format(price)}</b>`);
+          `Buy ${itemName(id)} for <b>${econ.format(price)}</b>${hintBit(id)}`);
         if (econ.canAfford(price)) {
           b.addEventListener('click', () => {
             if (econ.doBuy(v, id)) {
@@ -815,7 +847,7 @@ export class UI {
         if (standing >= 3 && isRare(id) && fullPrices.has(id)) {
           const fullPrice = fullPrices.get(id);
           const b = this.el('button', 'mc chat-btn trade-btn', this.chatQuestRow,
-            `Sell ${itemName(id)} (Trust) for <b>${econ.format(fullPrice)}</b>`);
+            `Sell ${itemName(id)} (Trust) for <b>${econ.format(fullPrice)}</b>${hintBit(id)}`);
           this.bindTooltip(b, `As a Respected/Treasured traveller, they'll buy thi rare goods at the full export rate directly.`);
           b.addEventListener('click', () => {
             if (econ.doSell(v, id)) {
@@ -826,7 +858,7 @@ export class UI {
           });
         } else {
           const b = this.el('button', 'mc chat-btn trade-btn', this.chatQuestRow,
-            `Sell ${itemName(id)} for <b>${econ.format(price)}</b>`);
+            `Sell ${itemName(id)} for <b>${econ.format(price)}</b>${hintBit(id)}`);
           this.bindTooltip(b, `A drop-in price, sold on t&rsquo; spot. Ship it by rail to where it&rsquo;s dear an&rsquo; tha&rsquo;ll get more.`);
           b.addEventListener('click', () => {
             if (econ.dropInSell(v, id)) {
@@ -1142,7 +1174,11 @@ export class UI {
     const q = g.quests;
     // out of the way when there's nowt tracked, tha's dead, or the big map's up
     const hide = !q || !q.active.length || (g.player && g.player.dead) || g.peekingMap;
-    const html = hide ? '' : trackerHTML(q.trackerLines());
+    // the station departure chip rides in the same column (set ~1Hz by game.updateStationChip;
+    // only while actually playing — never over the title, the map, or a death screen)
+    const station = (g.state === 'playing' && g.player && !g.player.dead && !g.peekingMap)
+      ? (this.stationChipHTML || '') : '';
+    const html = station + (hide ? '' : trackerHTML(q.trackerLines()));
     if (this.tracker.innerHTML !== html) this.tracker.innerHTML = html;
   }
 
