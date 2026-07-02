@@ -93,7 +93,7 @@ import { EXTRA_FOLK, moodWord } from './villagerlife.js';
 import { Sky } from './sky.js';
 import { Storm } from './storm.js';
 import { AudioEngine } from './audio.js';
-import { UI, bearingLabel, shelterToast, stationChipHTML, composeSketch, sketchFilename } from './ui.js';
+import { UI, bearingLabel, shelterToast, stationChipHTML, composeSketch, sketchFilename, offerShapeOk, hasStacks, countsFromSlots, describeStacks } from './ui.js';
 import { raycast, boxCollides } from './physics.js';
 
 const REACH = 5.5;
@@ -1806,6 +1806,84 @@ class Game {
     this.ui.invDirty = true;
     const desc = items.map(([id, n]) => `${n}× ${itemName(id)}`).join(', ');
     this.ui.toast(`<b>${fromName}</b> gave thee <b>${desc}</b>!`, 6000);
+  }
+
+  // ---- T' Tradin' Post (market stalls v1) ----
+  // Offer board over t' relay (relay-authoritative; see ui.buildStallSection).
+  // Posting escrows t' give-goods OUT o' thi pockets at once, so they can't be
+  // spent twice; t' relay holds 'em in t' offer an' echoes 'em back on a refused
+  // post (stallerr.give), a withdraw (stallreturn), or to t' taker (stalldone).
+  // A taker pays t' want-goods over the EXISTING gift mechanism — no new trust
+  // surface. T' relay only lets an accept through while t' poster's connected
+  // (gifts don't queue for offline folk), so t' payment always has a home.
+
+  stallPost(give, want) {
+    if (!(this.netActive && this.net && this.net.connected)) {
+      this.ui.toast('T&rsquo; Tradin&rsquo; Post only works on t&rsquo; shared moor.'); return false;
+    }
+    if (!offerShapeOk({ give, want })) { this.ui.toast('That swap doesn&rsquo;t look right, love.'); return false; }
+    if (!hasStacks(countsFromSlots(this.player.slots), give)) {
+      this.ui.toast('Tha hasn&rsquo;t got them goods to give.'); return false;
+    }
+    if (!this.net.sendStallPost(give, want)) { this.ui.toast('Couldn&rsquo;t reach t&rsquo; relay &mdash; try again.'); return false; }
+    for (const [id, n] of give) this.player.removeItem(id, n);   // escrow, immediately
+    this.ui.invDirty = true;
+    this.ui.toast('Thi swap&rsquo;s pinned to t&rsquo; Tradin&rsquo; Post &mdash; thi goods sit in escrow till it&rsquo;s took or pulled back.', 5000);
+    return true;
+  }
+
+  stallWithdraw(id) {
+    if (this.net && this.net.connected) this.net.sendStallWithdraw(id);
+  }
+
+  // t' relay's confirmed an offer o' thine is off t' board — its escrow comes home
+  stallReturned(offer) {
+    if (!offer || !Array.isArray(offer.give)) return;
+    for (const [id, n] of offer.give) {
+      if (!Number.isFinite(id) || !Number.isFinite(n) || n <= 0) continue;
+      const left = this.player.addItem(id, n);
+      if (left > 0) this.dropAtPlayer(id, left);
+    }
+    this.ui.invDirty = true;
+    this.ui.toast(`Back in thi pockets: <b>${escHtml(describeStacks(offer.give))}</b>.`, 5000);
+  }
+
+  stallAccept(offer) {
+    // belt to t' UI's braces: hold t' want-goods NOW, afore owt goes on t' wire
+    if (!offer || !this.net || !this.net.connected) return;
+    if (!hasStacks(countsFromSlots(this.player.slots), offer.want)) {
+      this.ui.toast(`Tha needs <b>${escHtml(describeStacks(offer.want))}</b> in thi pockets first.`); return;
+    }
+    this.net.sendStallAccept(offer.id);
+  }
+
+  // t' relay says a swap's completed (first accept won; t' offer's gone frae t' board).
+  // If WE took it: pay t' want-goods to t' poster as a normal gift, an' pocket t'
+  // escrowed give-goods (they ride in on m.offer — they left t' poster at post time).
+  stallDone(m) {
+    const my = this.net && this.net.diag.pid;
+    if (!my) return;
+    if (m.takerPid === my && m.offer && Array.isArray(m.offer.give)) {
+      const offer = m.offer;
+      // re-check at receipt: pay exactly what we still hold (t' accept was gated on
+      // holding it all; owt spent in t' race window just pays short, never negative)
+      const pay = [];
+      for (const [id, n] of (Array.isArray(offer.want) ? offer.want : [])) {
+        if (!Number.isFinite(id) || !Number.isFinite(n) || n <= 0) continue;
+        const have = Math.min(this.player.countItem(id), n);
+        if (have > 0) { this.player.removeItem(id, have); pay.push([id, have]); }
+      }
+      if (pay.length) this.net.send({ type: 'gift', to: offer.pid, goods: pay });
+      for (const [id, n] of offer.give) {
+        if (!Number.isFinite(id) || !Number.isFinite(n) || n <= 0) continue;
+        const left = this.player.addItem(id, n);
+        if (left > 0) this.dropAtPlayer(id, left);
+      }
+      this.ui.invDirty = true;
+      this.ui.toast(`Swap done! <b>${escHtml(describeStacks(offer.give))}</b> for thee &mdash; thi <b>${escHtml(describeStacks(pay))}</b>&rsquo;s gone to <b>${escHtml(String(offer.name || 'them'))}</b>.`, 6000);
+    } else if (m.posterPid === my) {
+      this.ui.toast(`<b>${escHtml(String(m.takerName || 'Somebody'))}</b> took thi swap off t&rsquo; Tradin&rsquo; Post &mdash; their goods are on t&rsquo; way.`, 6000);
+    }
   }
 
   readSignpost() {

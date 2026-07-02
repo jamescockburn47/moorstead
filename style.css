@@ -429,6 +429,49 @@ button.mc.trade-btn.locked { opacity: 0.4; cursor: default; }
 .quest-row .r-name { line-height: 1.45; }
 .quest-row button { flex-shrink: 0; }
 
+/* ---------- T' Moorstead Gazette (period broadsheet in t' board panel) ---------- */
+.gazette-sheet {
+  width: 560px; max-width: 100%; margin: 4px auto 10px; padding: 18px 22px;
+  background: linear-gradient(#efe6cd, #e4d6b4);
+  color: #2c2418; border: 1px solid #b8a878; border-radius: 3px;
+  box-shadow: inset 0 0 46px rgba(120, 95, 40, 0.28), 0 4px 18px rgba(0,0,0,0.45);
+  font-family: Georgia, 'Times New Roman', serif;
+  user-select: text;
+}
+.gazette-masthead {
+  text-align: center; font-size: 25px; font-weight: 700; letter-spacing: 3px;
+  font-variant: small-caps; color: #241c0e;
+  border-bottom: 3px double #5a4a28; padding-bottom: 6px; margin-bottom: 4px;
+}
+.gazette-issue {
+  text-align: center; font-size: 12px; font-style: italic; color: #5a4a30;
+  border-bottom: 1px solid #b8a878; padding-bottom: 6px; margin-bottom: 10px;
+}
+.gazette-headline { text-align: center; font-size: 16.5px; font-weight: 700; line-height: 1.35; margin-bottom: 12px; }
+.gazette-cols { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.gazette-stories { flex: 2; min-width: 240px; }
+.gazette-notices { flex: 1; min-width: 130px; border-left: 1px solid #b8a878; padding-left: 14px; }
+.gazette-notices-head { font-weight: 700; letter-spacing: 2px; font-size: 13px; border-bottom: 2px solid #5a4a28; padding-bottom: 3px; margin-bottom: 8px; }
+.gazette-story { margin-bottom: 12px; }
+.gazette-story-title { font-weight: 700; font-size: 14px; font-variant: small-caps; margin-bottom: 3px; }
+.gazette-body { font-size: 13px; line-height: 1.55; }
+.gazette-wait { text-align: center; padding: 14px 0 6px; }
+.gazette-notice {
+  font-size: 12px; line-height: 1.5; font-style: italic;
+  margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dotted #b8a878;
+}
+.gazette-notice:last-child { border-bottom: none; }
+
+/* ---------- T' Tradin' Post (market stalls, notice board) ---------- */
+.stall-compose { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; font-size: 13px; color: #b0a890; }
+.stall-sel, .stall-n {
+  padding: 6px; font-size: 13px; background: rgba(0,0,0,0.5); color: var(--text);
+  border: 2px solid var(--slot-border); border-radius: 4px;
+}
+.stall-sel { max-width: 150px; }
+.stall-n { width: 62px; }
+.stall-sel:focus, .stall-n:focus { outline: none; border-color: var(--gold); }
+
 /* ---------- ow ter play handbook ---------- */
 .how-panel { width: 700px; }
 .how-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }

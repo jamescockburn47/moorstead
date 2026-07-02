@@ -111,6 +111,17 @@ export function trade(characterId, item, qty, direction, playerId) {
   }, 8000).catch(() => null);
 }
 
+// -> {issue, date, headline, stories:[{title,body}], notices:[string], generatedAt}
+// or null when t' brain's down. This week's paper is cached brain-side; the FIRST
+// hit of a fresh week pays the printing (~15s of LLM), hence the long timeout.
+export async function gazette() {
+  try {
+    return await req('/api/gazette', {}, 20000);
+  } catch {
+    return null;   // t' Gazette's not come up frae t' printers — the board shows a kind line
+  }
+}
+
 // -> {total_trust, standing, next_threshold, progress, villagers}
 export function standing(playerId) {
   return req('/api/standing?player_id=' + encodeURIComponent(playerId || ''), {}, 8000);

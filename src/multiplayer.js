@@ -21,6 +21,8 @@ export class Net {
     this.lastSent = null;
     this.reconnectAttempt = 0;
     this.staleAfterMs = 60000; // heard nowt back this long => half-open, force a reconnect
+    this.stalls = [];          // t' Tradin' Post's open offers (relay-authoritative)
+    this.stallsSynced = false; // true once t' relay's told us (init or a stalls message)
     // ---- connection diagnostics (observability-first, like the Bot Council) ----
     // every lifecycle event is timestamped + classified so we can SEE why the
     // thread drops, not guess. Read it live with `netDiag()` in the console, or
@@ -195,6 +197,9 @@ export class Net {
     }
     this.savedState = m.save || null;
     this.daemon = m.daemon || null; // thi lifelong first-pet companion — sent every connect, come epoch reset or no
+    // t' Tradin' Post's open offers ride t' init when t' relay knows 'em (an owd
+    // relay simply omits t' key — stallsSynced stays false an' t' board asks)
+    if (Array.isArray(m.stalls)) { this.stalls = m.stalls; this.stallsSynced = true; }
     g.world.netEdits = g.world.netEdits || new Map();
     for (const [x, y, z, id] of m.edits) {
       g.world.netEdits.set(`${x},${y},${z}`, id);
@@ -273,6 +278,25 @@ export class Net {
     } else if (m.type === 'fx') {
       // a flourish frae a warden nearby (landing thump an' t' like)
       if (g.remoteFx) g.remoteFx(m);
+    } else if (m.type === 'stalls') {
+      // t' Tradin' Post's open offers — a stalllist reply, or a broadcast on change.
+      // If t' board's open, re-render it so t' post stays live (t' deeds idiom).
+      this.stalls = Array.isArray(m.offers) ? m.offers : [];
+      this.stallsSynced = true;
+      if (g.state === 'board' || (g.ui && g.ui.boardScreen.className.indexOf('hidden') === -1)) {
+        g.ui.openBoard(true);
+      }
+    } else if (m.type === 'stallreturn') {
+      // t' relay confirmed a withdraw (or a self-accept): escrowed goods come home
+      if (g.stallReturned) g.stallReturned(m.offer);
+    } else if (m.type === 'stalldone') {
+      // a swap completed — t' taker's copy carries t' offer payload (see stallDone)
+      if (g.stallDone) g.stallDone(m);
+    } else if (m.type === 'stallerr') {
+      // a refused stall action. A refused POST echoes t' give-stacks back so t'
+      // client can undo its immediate escrow — nowt is ever stranded server-side.
+      if (Array.isArray(m.give) && g.stallReturned) g.stallReturned({ give: m.give });
+      if (m.text) g.ui.toast(escHtml(String(m.text)), 6000);
     }
   }
 
@@ -376,6 +400,11 @@ export class Net {
     this.send({ type: 'edit', x, y, z, id, was, cat, day, by });
   }
   sendDeeds(deeds) { this.send({ type: 'deeds', deeds }); }
+  // ---- t' Tradin' Post (market stalls v1): offer board, relay-authoritative ----
+  sendStallPost(give, want) { return this.send({ type: 'stallpost', give, want }); }
+  sendStallList() { this.send({ type: 'stalllist' }); }
+  sendStallWithdraw(id) { this.send({ type: 'stallwithdraw', id }); }
+  sendStallAccept(id) { return this.send({ type: 'stallaccept', id }); }
   sendChat(text) { this.send({ type: 'chat', text }); }
   sendSleep(on) { this.send({ type: 'sleep', on: !!on }); }
   sendSave(data) { this.send({ type: 'save', data }); }

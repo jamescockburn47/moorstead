@@ -8,6 +8,7 @@ import { CASTLE } from './geography.js';
 import { TitleFlyover } from './titlescene.js';
 import { escHtml } from './escape.js';
 import { parishQuarries, drawMinimapMarker } from './mining-guide.js';
+import { gazette } from './npc.js';
 
 const PIX = {
   heart: ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'],
@@ -158,6 +159,92 @@ export function buildHonoursRows(q) {
   const rows = titles.map(t => ({ label: `★ ${t}`, value: t, worn: q.wornTitle === t }));
   rows.push({ label: '— none —', value: null, worn: q.wornTitle == null });
   return { rows, empty: null, standing };
+}
+
+// ---- T' Moorstead Gazette — pure sheet builder, exported for verify-gazette-stalls.
+// Every string in t' payload is BRAIN-BORNE prose: escaped to a fault (escHtml on
+// t' lot). Tolerates a missing/empty stories or notices list without complaint. ----
+export function buildGazetteHTML(gz) {
+  const stories = Array.isArray(gz && gz.stories) ? gz.stories : [];
+  const notices = Array.isArray(gz && gz.notices) ? gz.notices : [];
+  let html = '<div class="gazette-masthead">THE MOORSTEAD GAZETTE</div>';
+  const issueBit = gz && gz.issue != null ? `No. ${escHtml(String(gz.issue))}` : '';
+  const dateBit = gz && gz.date ? escHtml(String(gz.date)) : '';
+  html += `<div class="gazette-issue">${[issueBit, dateBit].filter(Boolean).join(' &mdash; ')}</div>`;
+  if (gz && gz.headline) html += `<div class="gazette-headline">${escHtml(String(gz.headline))}</div>`;
+  html += '<div class="gazette-cols"><div class="gazette-stories">';
+  if (!stories.length) {
+    html += '<div class="gazette-body"><i>Nowt to report this week &mdash; t&rsquo; moor keeps its own counsel.</i></div>';
+  }
+  for (const s of stories) {
+    html += '<div class="gazette-story">' +
+      `<div class="gazette-story-title">${escHtml(String((s && s.title) || ''))}</div>` +
+      `<div class="gazette-body">${escHtml(String((s && s.body) || ''))}</div></div>`;
+  }
+  html += '</div><div class="gazette-notices"><div class="gazette-notices-head">NOTICES</div>';
+  if (!notices.length) html += '<div class="gazette-body"><i>No notices posted.</i></div>';
+  for (const nt of notices) html += `<div class="gazette-notice">${escHtml(String(nt || ''))}</div>`;
+  html += '</div></div>';
+  return html;
+}
+
+// ---- T' Tradin' Post (market stalls v1) — pure offer maths + row builder, exported
+// for verify-gazette-stalls. An OFFER is {id, pid, name, give:[[id,n]…], want:[[id,n]…]}:
+// items only, no brass, ≤3 stacks a side. Posting escrows the give-goods out of the
+// poster's pockets at once (they ride in the offer, held server-side); withdrawing
+// brings them home; a taker pays the want-goods over the EXISTING gift mechanism.
+// The caps are enforced server-side too (worldsvc/server.py) — these mirror them. ----
+export const STALL_MAX_STACKS = 3;   // stacks per side of an offer
+export const STALL_MAX_QTY = 999;    // per stack
+export const STALL_MAX_MINE = 2;     // open offers one body may keep pinned
+export const STALL_MAX_ROOM = 12;    // open offers a room's board holds
+
+// one side of an offer: 1..3 stacks of [id, n], whole numbers, 0 < n <= 999
+export function offerStacksOk(stacks) {
+  return Array.isArray(stacks) && stacks.length >= 1 && stacks.length <= STALL_MAX_STACKS &&
+    stacks.every(s => Array.isArray(s) && s.length === 2 &&
+      Number.isInteger(s[0]) && s[0] >= 0 && s[0] < 4096 &&
+      Number.isInteger(s[1]) && s[1] > 0 && s[1] <= STALL_MAX_QTY);
+}
+export function offerShapeOk(offer) {
+  return !!offer && offerStacksOk(offer.give) && offerStacksOk(offer.want);
+}
+
+// plain {id: n} counts frae inventory slots — pure, no Player needed
+export function countsFromSlots(slots) {
+  const c = {};
+  for (const s of slots || []) if (s && s.n > 0) c[s.id] = (c[s.id] || 0) + s.n;
+  return c;
+}
+
+// do these counts cover every stack (duplicated ids summed)?
+export function hasStacks(counts, stacks) {
+  const need = {};
+  for (const [id, n] of stacks || []) need[id] = (need[id] || 0) + n;
+  return Object.keys(need).every(id => (counts[id] || 0) >= need[id]);
+}
+
+// counts ± stacks -> NEW counts object, or null if owt would go negative.
+// sign -1 = escrow out (post) / pay (take); sign +1 = return (withdraw) / receive.
+export function applyStacks(counts, stacks, sign = -1) {
+  const c = { ...counts };
+  for (const [id, n] of stacks || []) {
+    c[id] = (c[id] || 0) + sign * n;
+    if (c[id] < 0) return null;
+    if (c[id] === 0) delete c[id];
+  }
+  return c;
+}
+
+// "12× Wool, 4× Iron Ingot" — plain text (escaped by t' row builder below)
+export function describeStacks(stacks) {
+  return (stacks || []).map(([id, n]) => `${n}× ${itemName(id)}`).join(', ');
+}
+
+// one offer row's inner HTML. The name (an' owt else) is RELAY-BORNE — escHtml, always.
+export function stallRowHTML(offer) {
+  return `<div class="r-name"><b>${escHtml(String((offer && offer.name) || 'A soul'))}</b> offers ` +
+    `<b>${escHtml(describeStacks(offer && offer.give))}</b> for <b>${escHtml(describeStacks(offer && offer.want))}</b></div>`;
 }
 
 function pixURL(pattern, fullColor, dim) {
@@ -977,6 +1064,16 @@ export class UI {
       (q.wornTitle ? `, <i style="color:#c9b27a">${q.wornTitle}</i>` : '') +
       (q.shame > 0 ? ` &mdash; <span style="color:#d87a5a">but tha&rsquo;s in folk&rsquo;s bad books (${q.shame}). Good deeds&rsquo;ll mend it.</span>` : ''));
 
+    // ---- T' Moorstead Gazette: this week's paper, printed by t' village brain.
+    // Fetched lazily on first read per session an' cached; never blocks t' board. ----
+    {
+      const row = this.el('div', 'recipe quest-row', this.boardPanel);
+      row.innerHTML = '<div class="r-name"><b>&#128240; T&rsquo; Moorstead Gazette</b><br>' +
+        '<span class="r-needs">This week&rsquo;s paper &mdash; all t&rsquo; parish news fit to print.</span></div>';
+      const b = this.el('button', 'mc chat-btn', row, 'Read');
+      b.addEventListener('click', () => this.openGazette(fromBoard));
+    }
+
     // ---- Honours: t' roll of honour — earned period titles; wear one (or none).
     // Rows come from buildHonoursRows (pure, verified headless). Other ramblers' worn
     // titles aren't in t' wire protocol (remotes carry a name only), so the roll lists
@@ -1048,6 +1145,9 @@ export class UI {
     if (!q.boardOffers.length && !Object.keys(q.offers).length && !arcDef) {
       this.el('div', 'chat-msg sys', list, 'Nowt doing today. T&rsquo; moor keeps its own counsel.');
     }
+
+    // ---- T' Tradin' Post: player-to-player swaps ower t' relay (shared worlds only) ----
+    this.buildStallSection(this.boardPanel, fromBoard);
 
     // ---- Become a Farmer (Slice 2): the registered-farm path, always shown for legibility ----
     {
@@ -1183,6 +1283,126 @@ export class UI {
     const close = this.el('button', 'mc', this.boardPanel, 'Reet, Ta');
     close.addEventListener('click', () => this.game.closeScreens());
     this.show('boardScreen');
+  }
+
+  // ============ T' Moorstead Gazette ============
+  // A period broadsheet in t' board panel. Fetched lazily (first read per session),
+  // cached in memory; a slow week's first print shows "t' press is still runnin'",
+  // an' a dead brain gets a kind line — t' board itself is never blocked.
+  openGazette(fromBoard) {
+    this.boardPanel.innerHTML = '';
+    const sheet = this.el('div', 'gazette-sheet', this.boardPanel);
+    const failLine = '<div class="gazette-masthead">THE MOORSTEAD GAZETTE</div>' +
+      '<div class="gazette-body gazette-wait"><i>T&rsquo; Gazette&rsquo;s not come up frae t&rsquo; printers &mdash; try again in a bit.</i></div>';
+    if (this.gazetteCache) {
+      sheet.innerHTML = buildGazetteHTML(this.gazetteCache);
+    } else {
+      sheet.innerHTML = '<div class="gazette-masthead">THE MOORSTEAD GAZETTE</div>' +
+        '<div class="gazette-body gazette-wait"><i>T&rsquo; press is still runnin&rsquo;&hellip;</i></div>';
+      if (!this.gazettePending) {
+        this.gazettePending = gazette().then(gz => {
+          this.gazettePending = null;
+          if (gz && Array.isArray(gz.stories)) this.gazetteCache = gz;   // cache good issues only — a failure retries next read
+          return gz;
+        });
+      }
+      this.gazettePending.then(() => {
+        if (sheet.isConnected) {   // still on t' gazette view (not re-rendered away)
+          sheet.innerHTML = this.gazetteCache ? buildGazetteHTML(this.gazetteCache) : failLine;
+        }
+      });
+    }
+    const back = this.el('button', 'mc', this.boardPanel, 'Back to t&rsquo; board');
+    back.addEventListener('click', () => this.openBoard(fromBoard));
+    const close = this.el('button', 'mc', this.boardPanel, 'Reet, Ta');
+    close.addEventListener('click', () => this.game.closeScreens());
+    this.show('boardScreen');
+  }
+
+  // ============ T' Tradin' Post (market stalls v1) ============
+  // Offer board over t' relay: open offers with Swap/Pull-back, plus a compose row
+  // (one give-stack for one want-stack; t' wire allows up to 3 a side). Items only,
+  // no brass; every cap is enforced server-side an' all it does with thi goods rides
+  // t' EXISTING gift mechanism. Names off t' wire are escaped, always.
+  buildStallSection(panel, fromBoard) {
+    const g = this.game;
+    this.el('div', 'inv-title', panel, 'T&rsquo; Tradin&rsquo; Post');
+    if (!(g.netActive && g.net && g.net.connected)) {
+      this.el('div', 'r-needs', panel, 'Swaps wi&rsquo; other folk only work on t&rsquo; <b>shared moor</b>.');
+      return;
+    }
+    const net = g.net;
+    const myPid = net.diag.pid;
+    if (!net.stallsSynced) net.sendStallList();   // lazy: t' reply re-renders this board
+    const offers = (Array.isArray(net.stalls) ? net.stalls : []).filter(offerShapeOk);
+    const counts = countsFromSlots(g.player.slots);
+    this.el('div', 'r-needs', panel,
+      'Pin a swap: what tha&rsquo;ll <b>give</b> for what tha <b>wants</b>. Thi give-goods go in escrow ' +
+      'till somebody teks it (or tha pulls it back). Items only &mdash; no brass.');
+    const list = this.el('div', 'recipes board-list', panel);
+    if (!offers.length) this.el('div', 'chat-msg sys', list, 'No swaps pinned up just now.');
+    for (const o of offers) {
+      const row = this.el('div', 'recipe quest-row', list);
+      row.innerHTML = stallRowHTML(o);
+      if (o.pid === myPid) {
+        const wb = this.el('button', 'mc chat-btn', row, 'Pull it back');
+        wb.addEventListener('click', () => g.stallWithdraw(o.id));
+      } else {
+        const online = net.remotes.has(o.pid);
+        const afford = hasStacks(counts, o.want);
+        const ab = this.el('button', 'mc chat-btn trade-btn' + (online && afford ? '' : ' locked'), row, 'Swap');
+        if (online && afford) {
+          ab.addEventListener('click', () => g.stallAccept(o));
+        } else {
+          ab.disabled = true;
+          this.bindTooltip(ab, online
+            ? `Tha needs ${escHtml(describeStacks(o.want))} in thi pockets first.`
+            : 'They&rsquo;re away just now &mdash; try when they&rsquo;re about.');
+        }
+      }
+    }
+    // compose: a give-picker frae thi pockets, a want-picker frae t' catalogue
+    const mine = offers.filter(o => o.pid === myPid);
+    if (mine.length >= STALL_MAX_MINE) {
+      this.el('div', 'r-needs', panel, `Tha&rsquo;s ${STALL_MAX_MINE} swaps pinned already &mdash; pull one back to post another.`);
+      return;
+    }
+    if (offers.length >= STALL_MAX_ROOM) {
+      this.el('div', 'r-needs', panel, 'T&rsquo; board&rsquo;s full o&rsquo; swaps &mdash; try again later.');
+      return;
+    }
+    const haveIds = Object.keys(counts).map(Number).filter(id => !TOOLS[id]);   // worn tools stay out o' t' post
+    if (!haveIds.length) {
+      this.el('div', 'r-needs', panel, 'Nowt in thi pockets to offer yet.');
+      return;
+    }
+    const comp = this.el('div', 'stall-compose', panel);
+    const mkSel = (ids) => {
+      const sel = this.el('select', 'stall-sel', comp);
+      for (const id of ids) {
+        const opt = this.el('option', '', sel, escHtml(itemName(id)));
+        opt.value = String(id);
+      }
+      return sel;
+    };
+    const mkN = () => {
+      const inp = this.el('input', 'stall-n', comp);
+      inp.type = 'number'; inp.min = '1'; inp.max = String(STALL_MAX_QTY); inp.value = '1';
+      return inp;
+    };
+    this.el('span', '', comp, 'Give');
+    const giveSel = mkSel(haveIds);
+    const giveN = mkN();
+    this.el('span', '', comp, 'for');
+    const wantSel = mkSel(CREATIVE_ITEMS.filter(id => !TOOLS[id]));
+    const wantN = mkN();
+    const pb = this.el('button', 'mc chat-btn', comp, 'Pin it up');
+    pb.addEventListener('click', () => {
+      const gid = +giveSel.value, wid = +wantSel.value;
+      const gn = Math.max(1, Math.min(STALL_MAX_QTY, Math.round(+giveN.value || 1)));
+      const wn = Math.max(1, Math.min(STALL_MAX_QTY, Math.round(+wantN.value || 1)));
+      if (g.stallPost([[gid, gn]], [[wid, wn]])) this.openBoard(fromBoard);
+    });
   }
 
   // ============ Dracula Museum ============
