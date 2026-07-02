@@ -5,8 +5,9 @@
 // the Fine path and that the Plain path leaves the renderer exactly as it was.
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
-import { B, I, RECIPES, CREATIVE_ITEMS, itemName, maxStack } from '../src/defs.js';
+import { B, I, CHUNK, RECIPES, CREATIVE_ITEMS, itemName, maxStack } from '../src/defs.js';
 import { resolveQuality, lanternFlicker } from '../src/sky.js';
+import { tileUV, ATLAS_TILES } from '../src/textures.js';
 
 let n = 0;
 const ok = (c, m) => { assert.ok(c, m); n++; };
@@ -16,6 +17,7 @@ const skySrc = src('../src/sky.js');
 const uiSrc = src('../src/ui.js');
 const texSrc = src('../src/textures.js');
 const playerSrc = src('../src/player.js');
+const mesherSrc = src('../src/mesher.js');
 
 // ---- quality setting: persistence/resolution logic (pure) ----
 ok(resolveQuality('fine', true) === 'fine', 'stored fine wins, even on touch');
@@ -106,5 +108,71 @@ ok(mainSrc.includes('this.renderer.render(this.scene, this.camera)'), 'Plain: di
 ok(skySrc.includes('(0.25 + dayness * 1.0) * (1 - this.dread * 0.35) + flashLift'), 'Plain: original sun curve intact');
 ok(skySrc.includes('(0.16 + dayness * 0.5) * (1 - this.dread * 0.25) + flashLift * 0.7'), 'Plain: original ambient curve intact');
 ok(skySrc.includes("dayness < 0.4 ? 0.6 : 0.25"), 'Plain: original sun colour curve intact');
+
+// ---- S1a: post stack — explicit MSAA scene target, FXAA rung ----
+ok(mainSrc.includes("from 'three/addons/shaders/FXAAShader.js'"), 'FXAA shader imported');
+ok(mainSrc.includes("samples: this._govState && this._govState.aa === 'msaa' ? 4 : 0"), 'explicit MSAA scene target, samples keyed to the governor rung');
+ok(mainSrc.includes('new EffectComposer(this.renderer, rt)'), 'composer built over the explicit half-float target');
+ok(mainSrc.includes('type: THREE.HalfFloatType'), 'scene target stays HDR half-float');
+ok(/this\.composer\.addPass\(new OutputPass\(\)\);[\s\S]{0,400}this\.fxaaPass = new ShaderPass\(FXAAShader\);[\s\S]{0,300}this\.composer\.addPass\(this\.fxaaPass\);[\s\S]{0,300}this\.gradePass = new ShaderPass\(GradeShader\)/.test(mainSrc),
+  'FXAA sits between OutputPass and the grade');
+ok(mainSrc.includes("aa: mobile ? 'fxaa' : 'msaa'"), 'touch/mobile opens FXAA, desktop opens 4x MSAA');
+
+// ---- S1a: frame-time resolution governor (wiring; decision logic in verify-governor.mjs) ----
+ok(/\/\/ GOV-PURE-BEGIN[^\n]*\n[\s\S]*?\/\/ GOV-PURE-END/.test(mainSrc), 'pure governor block sliceable');
+ok(mainSrc.includes('export const GOV_SCALES = [1.5, 1.25, 1.0]'), 'resolution ladder');
+ok(mainSrc.includes('this._dtEma = this._dtEma * 0.95 + dt * 0.05'), 'frame-dt EMA');
+ok(mainSrc.includes('stepGovernor(this._govState, this._dtEma * 1000, this.clock.elapsedTime)'), 'pure step drives the live governor');
+ok(mainSrc.includes('if (swapAA) this.rebuildComposer()'), 'AA swap rebuilds the composer');
+ok(mainSrc.includes('Math.min(window.devicePixelRatio || 1, this._resScale)'), 'one resolver: min(DPR, governor scale)');
+ok(/window\.addEventListener\('resize', \(\) => \{[\s\S]{0,400}?this\.applyResolution\(\);/.test(mainSrc),
+  'resize handler routes through applyResolution (re-reads DPR)');
+ok(mainSrc.includes('this.composer.setPixelRatio(pr); this.composer.setSize(w, h)'), 'composer kept in step with renderer DPR');
+ok(mainSrc.includes('this.fxaaPass.material.uniforms.resolution.value.set(1 / (w * pr), 1 / (h * pr))'), 'FXAA fed true RT texel size');
+
+// ---- S1a: CAS sharpen (in the grade pass) ----
+ok(mainSrc.includes('sqrt(clamp(min(mn, 2.0 - mx) / max(mx, vec3(1e-4)), 0.0, 1.0)) * uSharp'), 'AMD CAS weight');
+ok(mainSrc.includes('(1.5 - this._resScale) * 0.5'), 'CAS strength rides the governor rung, ~0 at full quality');
+ok((mainSrc.match(/texture2D\(tDiffuse, vUv \+ vec2\(/g) || []).length === 4, 'CAS takes exactly 4 cross-taps');
+
+// ---- S1a: resource hygiene ----
+ok(mainSrc.includes('const old = this.heldSprite.material.map'), 'held-item swap keeps the old texture in hand…');
+ok(mainSrc.includes('if (old) old.dispose();'), '…and disposes it once the new one is on');
+ok(mainSrc.includes('if (this.bloomPass) this.bloomPass.dispose()'), 'teardown disposes bloom internals');
+ok(mainSrc.includes('map: getCutoutAtlas(), alphaTest: 0.5'), 'leaf-shadow depth pass uses the no-mip atlas twin');
+
+// ---- S1b: atlas mip gutters; cutouts stay mip-free ----
+ok(texSrc.includes('const PAD = 4'), 'atlas cells carry a 4px edge-replicated mip gutter');
+ok(texSrc.includes('minFilter = THREE.NearestMipmapLinearFilter'), 'terrain atlas mips on');
+ok(texSrc.includes('cutoutAtlasTexture.generateMipmaps = false'), 'no-mip twin for alphaTest cutouts');
+ok(texSrc.includes('replicateGutters(bctx, baseCanvas'), 'gutters replicated after every painter has run');
+ok(mesherSrc.includes('map: getCutoutAtlas()'), 'cutout material samples the no-mip twin');
+{
+  const [u0, , u1] = tileUV(17);
+  ok(Math.abs((u1 - u0) * ATLAS_TILES - 16 / 24) < 1e-9, 'tileUV spans exactly the 16px payload of a 24px cell');
+}
+
+// ---- S1d: sky — shadow texel snap + world-edge fog budget ----
+ok(skySrc.includes('SHADOW_TEXEL = 140 / 2048'), 'shadow frustum snapped to whole texels');
+ok(skySrc.includes('_snapShadowCamera() {') && skySrc.includes('if (fine) this._snapShadowCamera()'),
+  'texel snap exists and is Fine-gated (Plain has no shadow map)');
+ok(skySrc.includes('STREAM_RADIUS = 6 * CHUNK'), 'fog budget mirrors world.renderDist');
+ok(skySrc.includes('uFogBand'), 'dome holds the fog colour at the horizon band');
+{
+  // numeric mirror of the sky.js fogTargetFar knee — constants parsed from the REAL
+  // source so this can't drift silently if someone retunes the budget
+  const mR = skySrc.match(/const STREAM_RADIUS = (\d+) \* CHUNK/);
+  const mM = skySrc.match(/const FOG_FAR_MAX = Math\.floor\(STREAM_RADIUS \* ([\d.]+)\)/);
+  const mK = skySrc.match(/const FOG_KNEE = (\d+)/);
+  ok(mR && mM && mK, 'fog-budget constants parseable from sky.js');
+  ok(skySrc.includes('FOG_KNEE + (baseFog - FOG_KNEE) * ((FOG_FAR_MAX - FOG_KNEE) / (160 - FOG_KNEE))'),
+    'soft knee compresses open weather into the budget, not a flat min()');
+  const R = Number(mR[1]) * CHUNK;                 // guaranteed meshed radius (96)
+  const MAX = Math.floor(R * Number(mM[1]));
+  const KNEE = Number(mK[1]);
+  const baseFog = 160;                             // clearest open-weather target
+  const far = baseFog <= KNEE ? baseFog : KNEE + (baseFog - KNEE) * ((MAX - KNEE) / (160 - KNEE));
+  ok(far <= 0.9 * R, `clear-weather fog (far ${far}) fully occludes inside the ${R}-block meshed radius`);
+}
 
 console.log(`verify-graphics: ${n} assertions OK`);

@@ -1,5 +1,6 @@
 // Day/night cycle, moorland weather (clear / misty / fog / rain), rain particles.
 import * as THREE from 'three';
+import { CHUNK } from './defs.js';
 import { currentWeather } from './weather-live.js';
 import { winterPrecip, overcastGrey, snowfallIntensity } from './snow.js';
 
@@ -15,6 +16,28 @@ const WEATHER_MSG = {
 };
 
 function lerpC(a, b, t) { return a.clone().lerp(b, t); }
+
+// ---- world-edge fog budget ----
+// world.js streams an' meshes chunks to renderDist = 6 round t' player (src/world.js:32,
+// an instance field, not exported — keep this mirror in step wi' it). 6 × CHUNK = 96
+// blocks is t' GUARANTEED meshed distance in every direction (worst case, player stood
+// on a chunk seam). Past that edge there's no terrain at all — only t' bare dome — so
+// fog must finish its WHOLE job (full occlusion) inside it, else half-fogged terrain
+// ends in a hard silhouette against flat dome colour: t' off-puttin' horizon band.
+const STREAM_RADIUS = 6 * CHUNK;                       // blocks — mirrors world.renderDist × CHUNK
+const FOG_FAR_MAX = Math.floor(STREAM_RADIUS * 0.88);  // 84: full occlusion afore t' meshed edge
+const FOG_KNEE = 60;  // open-weather targets (rain 90 / misty 120 / clear 160) compress into KNEE..MAX
+
+// ---- Fine shadow rig: whole-texel snap ----
+// World units per shadow-map texel: t' ±70-block ortho frustum ower a 2048px map
+// (see applyQuality in main.js) — 140/2048 ≈ 0.068 blocks. T' frustum rides playerPos
+// continuously, so wi'out snappin' every step slides t' depth map a fraction of a texel
+// an' shadow edges shimmer an' crawl. Quantisin' t' light position AND target together
+// along t' shadow camera's right/up axes moves t' frustum in whole-texel steps only,
+// while leavin' t' light DIRECTION exact (t' sun still sweeps smoothly wi' time o' day).
+const SHADOW_TEXEL = 140 / 2048;
+const _SNAP_UP = new THREE.Vector3(0, 1, 0);
+const _snapZ = new THREE.Vector3(), _snapX = new THREE.Vector3(), _snapY = new THREE.Vector3();
 
 // ---- graphics quality (pure helpers — headless-testable, no DOM, no GL) ----
 // Two rigs: 'fine' (ACES tone mapping, sun/moon shadows, bloom + grade post stack)
@@ -114,6 +137,7 @@ export class Sky {
         exponent: { value: 0.7 },
         uTime: { value: 0 },
         uClouds: { value: 0.3 },
+        uFogBand: { value: 0.19 }, // horizon band height (dir.y) where t' dome holds t' fog colour
       },
       vertexShader: `
         varying vec3 vDir;
@@ -123,7 +147,7 @@ export class Sky {
         }`,
       fragmentShader: `
         uniform vec3 topColor, bottomColor, cloudCol;
-        uniform float exponent, uTime, uClouds;
+        uniform float exponent, uTime, uClouds, uFogBand;
         varying vec3 vDir;
         float hash(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
         float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -142,6 +166,13 @@ export class Sky {
             float cloud = smoothstep(cover, cover + 0.2, n) * smoothstep(0.05, 0.4, up);
             col = mix(col, cloudCol, cloud * 0.85);
           }
+          // horizon fog band: near t' horizon (an' all t' way below it) t' dome holds
+          // t' fog colour EXACTLY — bottomColor IS scene.fog.color, both copy t' live
+          // sky tint each frame — so terrain dissolvin' into fog an' t' sky it meets
+          // are one colour, an' t' world-edge band melts away. Applied AFTER clouds so
+          // distant cloud hazes into t' band too. Height breathes wi' fog thickness.
+          float hf = 1.0 - smoothstep(0.0, uFogBand, dir.y);
+          col = mix(col, bottomColor, hf);
           gl_FragColor = vec4(col, 1.0);
         }`,
     });
@@ -295,6 +326,7 @@ export class Sky {
       this.sun.color.setHSL(0.1, dayness < 0.4 ? 0.6 : 0.25, 0.85);
     }
     this.sun.target.position.set(playerPos.x, playerPos.y, playerPos.z);
+    if (fine) this._snapShadowCamera(); // whole-texel frustum steps — rock-steady shadow edges when walkin' (Plain has no shadow map)
 
     this.sunSprite.position.set(playerPos.x + sunX * 160, sunY * 150 + playerPos.y * 0.3, playerPos.z - 60);
     this.moonSprite.position.set(playerPos.x - sunX * 160, -sunY * 150 + playerPos.y * 0.3, playerPos.z + 60);
@@ -373,7 +405,16 @@ export class Sky {
     else if (this.weather === 'fog') baseFog = Math.min(baseFog, 28);
     if (this.dread > 0.05) baseFog = Math.min(baseFog, 55 - this.dread * 22);
     if (this.moorFog > 0.01) baseFog = Math.min(baseFog, 150 - this.moorFog * 143); // ~7 at full: hand-afore-face stuff
-    this.fogTargetFar = baseFog;
+    // T' meshed world ends STREAM_RADIUS (96) blocks out — three o' t' four open-weather
+    // targets above (rain 90 / misty 120 / clear 160) put full occlusion AT or PAST that
+    // edge, so t' last chunks showed half-fogged against bare dome: t' horizon band.
+    // A bare min() would flatten all three into one look, so a soft knee compresses
+    // KNEE..160 into KNEE..FOG_FAR_MAX instead — clear stays hazier-than-misty stays
+    // hazier-than-rain, but every one lands full occlusion INSIDE t' edge. Owt already
+    // under t' knee (thick fog, dread, t' Great Fog) passes through untouched.
+    this.fogTargetFar = baseFog <= FOG_KNEE
+      ? baseFog
+      : FOG_KNEE + (baseFog - FOG_KNEE) * ((FOG_FAR_MAX - FOG_KNEE) / (160 - FOG_KNEE));
     this.fogFar += (this.fogTargetFar - this.fogFar) * Math.min(1, dt * 0.5);
     this.scene.fog.far = this.fogFar;
     // thick fog fades in over a SHORT band so it genuinely hides what's beyond (not a
@@ -391,6 +432,10 @@ export class Sky {
     cu.uTime.value = this.cloudT;
     cu.uClouds.value += (grey - cu.uClouds.value) * Math.min(1, dt * 0.5);
     cu.cloudCol.value.setRGB(0.16, 0.18, 0.22).lerp(new THREE.Color(0.91, 0.93, 0.95), dayness);
+    // horizon-band height follows fog thickness: open weather a low haze line (~0.19),
+    // thick fog / dread / t' Great Fog swallow most o' t' sky. Derived frae t' EASED
+    // fogFar so t' dome glides through weather transitions in step wi' t' fog itself.
+    cu.uFogBand.value = Math.min(0.55, Math.max(0.08, 16 / Math.max(1, this.fogFar)));
 
     // rain
     this.rainAmount += (targetRain - this.rainAmount) * Math.min(1, dt * 0.8);
@@ -430,6 +475,26 @@ export class Sky {
     }
 
     return msg;
+  }
+
+  // Quantise t' sun/moon shadow frustum to whole shadow-map texels (Fine only — Plain
+  // has no shadow map, an' its light curves stay byte-identical). T' SAME delta lands
+  // on position an' target, so t' light direction is untouched; only t' frustum's
+  // world anchor snaps, an' t' sampled depth grid stays put under t' walkin' player.
+  // Module-scratch vectors — nowt allocated per frame.
+  _snapShadowCamera() {
+    const pos = this.sun.position, tgt = this.sun.target.position;
+    // mirror THREE's LightShadow lookAt basis: z frae target up to t' light,
+    // x = up × z (camera right), y = z × x (camera up). z is never parallel to up —
+    // sun/moon positions allus carry a ±20/24-block z offset frae t' target.
+    _snapZ.subVectors(pos, tgt).normalize();
+    _snapX.crossVectors(_SNAP_UP, _snapZ).normalize();
+    _snapY.crossVectors(_snapZ, _snapX);
+    const ox = pos.dot(_snapX), oy = pos.dot(_snapY);
+    const dx = Math.round(ox / SHADOW_TEXEL) * SHADOW_TEXEL - ox;
+    const dy = Math.round(oy / SHADOW_TEXEL) * SHADOW_TEXEL - oy;
+    pos.addScaledVector(_snapX, dx).addScaledVector(_snapY, dy);
+    tgt.addScaledVector(_snapX, dx).addScaledVector(_snapY, dy);
   }
 
   setDread(v) { this.dreadTarget = Math.max(0, Math.min(1, v)); }

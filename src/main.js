@@ -7,12 +7,13 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_HASHES } from './defs.js';
 import { strSeed } from './noise.js';
 import { protectedAt } from './landmarks.js';
 import { initMaterials, setSnowLevel, setFrozen, setGlintTime, getMaterials } from './mesher.js';
 import { stepAccumulation, accumulationTarget, isFrozen } from './snow.js';
-import { getIconURL, retintAtlasForSeason } from './textures.js';
+import { getIconURL, retintAtlasForSeason, getCutoutAtlas } from './textures.js';
 import { World } from './world.js';
 import { Player } from './player.js';
 import * as npc from './npc.js';
@@ -109,17 +110,33 @@ const REACH = 5.5;
 // an' a one-LSB dither to kill t' banding in t' sky gradient.
 const GradeShader = {
   name: 'MoorGradeShader',
-  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 } },
+  uniforms: {
+    tDiffuse: { value: null }, uTime: { value: 0 },
+    uSharp: { value: 0 },                                      // CAS strength — ~0 at full res, rises as t' governor steps t' resolution down
+    uTexel: { value: new THREE.Vector2(1 / 1920, 1 / 1080) },  // 1 / render-target pixel; kept honest by applyResolution()
+  },
   vertexShader: /* glsl */`
     varying vec2 vUv;
     void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: /* glsl */`
     uniform sampler2D tDiffuse;
     uniform float uTime;
+    uniform float uSharp;
+    uniform vec2 uTexel;
     varying vec2 vUv;
     float hash12(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
       vec3 c = texture2D(tDiffuse, vUv).rgb;
+      // AMD-CAS-shaped sharpen: puts crispness back when t' frame-time governor drops
+      // t' render resolution. 4 cross-taps, local min/max, contrast-adaptive weight.
+      vec3 nN = texture2D(tDiffuse, vUv + vec2(0.0, -uTexel.y)).rgb;
+      vec3 nS = texture2D(tDiffuse, vUv + vec2(0.0,  uTexel.y)).rgb;
+      vec3 nW = texture2D(tDiffuse, vUv + vec2(-uTexel.x, 0.0)).rgb;
+      vec3 nE = texture2D(tDiffuse, vUv + vec2( uTexel.x, 0.0)).rgb;
+      vec3 mn = min(c, min(min(nN, nS), min(nW, nE)));
+      vec3 mx = max(c, max(max(nN, nS), max(nW, nE)));
+      vec3 w = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, vec3(1e-4)), 0.0, 1.0)) * uSharp;
+      c = max(vec3(0.0), c * (1.0 + 4.0 * w) - (nN + nS + nW + nE) * w); // kernel weights sum to 1
       float lum = dot(c, vec3(0.299, 0.587, 0.114));
       // cool shadows, warm highlights — a Victorian hand-tinted plate, not teal-an'-orange
       c = mix(c, c * vec3(0.965, 0.99, 1.055), (1.0 - smoothstep(0.0, 0.45, lum)) * 0.5);
@@ -134,6 +151,39 @@ const GradeShader = {
       gl_FragColor = vec4(c, 1.0);
     }`,
 };
+
+// ---- frame-time resolution governor: PURE decision logic -----------------------
+// GOV-PURE-BEGIN (self-contained: no THREE, no window, no closures over module state.
+// main.js can't be imported under Node — it boots t' game at module scope — so a verify
+// script slices this block out o' t' source text, strips t' `export `s, an' evals it.)
+export const GOV_SCALES = [1.5, 1.25, 1.0]; // pixel-ratio ladder, full res first
+export const GOV_SLOW_MS = 26;   // EMA'd frame ms above this…
+export const GOV_SLOW_HOLD = 3;  // …sustained this many seconds -> step DOWN a rung
+export const GOV_FAST_MS = 18;   // EMA'd frame ms below this…
+export const GOV_FAST_HOLD = 20; // …sustained this many seconds -> step back UP
+// One rung per decision. Going down: 4x MSAA -> FXAA first (t' cheap AA), THEN pixel
+// ratio down GOV_SCALES. Recovery climbs t' pixel ratio back one step at a time but
+// never re-arms MSAA — a machine that buckled under it once would only oscillate.
+// state = { level, aa: 'msaa'|'fxaa', badSince, goodSince }; dtEmaMs = smoothed frame
+// time in ms; nowSec = a monotonic seconds clock. Returns t' NEXT state (never mutates
+// t' input) plus { scale, changed } — t' caller applies scale/aa when changed is true.
+export function stepGovernor(state, dtEmaMs, nowSec) {
+  let { level, aa, badSince, goodSince } = state;
+  badSince = dtEmaMs > GOV_SLOW_MS ? (badSince == null ? nowSec : badSince) : null;
+  goodSince = dtEmaMs < GOV_FAST_MS ? (goodSince == null ? nowSec : goodSince) : null;
+  let changed = false;
+  if (badSince != null && nowSec - badSince >= GOV_SLOW_HOLD) {
+    if (aa === 'msaa') { aa = 'fxaa'; changed = true; }                       // rung 1: drop MSAA for FXAA
+    else if (level < GOV_SCALES.length - 1) { level += 1; changed = true; }   // then: resolution down
+    if (changed) { badSince = null; goodSince = null; }
+    else badSince = nowSec;  // floor o' t' ladder — nowt left to shed, keep watching quietly
+  } else if (goodSince != null && nowSec - goodSince >= GOV_FAST_HOLD) {
+    if (level > 0) { level -= 1; changed = true; }                            // one step back up
+    badSince = null; goodSince = null;  // restart t' clock (or stop it, if fully restored)
+  }
+  return { level, aa, badSince, goodSince, scale: GOV_SCALES[level], changed };
+}
+// GOV-PURE-END
 
 class Game {
   constructor() {
@@ -155,9 +205,16 @@ class Game {
     this.mount = null;          // the moorland pony tha's ridin', or null
     this.boat = null;           // the coble tha's sailin', or null
 
+    // frame-time resolution governor (Fine only — see stepGovernor above)
+    this._resScale = 1.5;   // pixel-ratio cap: t' real DPR is min(devicePixelRatio, this)
+    this._dtEma = 1 / 60;   // EMA'd frame dt (seconds) — t' governor's ear to t' ground
+    this._govT = 0;         // decision cadence: t' pure step runs twice a second, not per frame
+    this._govState = null;  // { level, aa, badSince, goodSince } — made on first Fine
+    this._texLoader = null; // shared TextureLoader for t' held-item viewmodel icon
+
     // renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this._resScale));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.domElement.className = 'game';
     document.getElementById('app').appendChild(this.renderer.domElement);
@@ -170,7 +227,9 @@ class Game {
     // cutout foliage casts leaf-shaped shadows, not quad-shaped ones: t' shadow-map
     // depth pass needs its own alpha-tested depth material (shared, one instance)
     this._cutoutDepth = new THREE.MeshDepthMaterial({
-      depthPacking: THREE.RGBADepthPacking, map: this.atlas, alphaTest: 0.5,
+      // t' NO-MIP twin o' t' atlas: t' main atlas is mipped now, an' alphaTest 0.5
+      // through shrinking mip alpha would fizzle t' leaf-shaped shadows at range
+      depthPacking: THREE.RGBADepthPacking, map: getCutoutAtlas(), alphaTest: 0.5,
     });
 
     this.audio = new AudioEngine();
@@ -255,6 +314,15 @@ class Game {
       r.outputColorSpace = THREE.SRGBColorSpace;
       r.shadowMap.enabled = true;
       r.shadowMap.type = THREE.PCFSoftShadowMap;
+      // AA opening stance under Fine: FXAA for touch-primary/mobile (MSAA bandwidth is
+      // dear on tile GPUs), 4x MSAA for t' desktop. Learned governor state (rungs already
+      // shed this session) survives a Plain round-trip on purpose — t' machine hasn't changed.
+      if (!this._govState) {
+        const mobile = isTouchPrimary(q => window.matchMedia(q), navigator)
+          || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '');
+        this._govState = { level: 0, aa: mobile ? 'fxaa' : 'msaa', badSince: null, goodSince: null };
+      }
+      this._resScale = GOV_SCALES[this._govState.level];
       this.setupComposer();
     } else {
       // Plain path: leave t' renderer untouched (library defaults, no composer, no shadows)
@@ -262,7 +330,9 @@ class Game {
       r.toneMappingExposure = 1;
       r.outputColorSpace = THREE.SRGBColorSpace;
       r.shadowMap.enabled = false;
-      if (this.composer) { this.composer.dispose(); this.composer = null; this.gradePass = null; this.bloomPass = null; }
+      this.teardownComposer();
+      this._resScale = 1.5;    // Plain always runs t' full min(dpr, 1.5) — as it allus did
+      this.applyResolution();
     }
     if (this.sky) {
       this.sky.gfx = q; // sky swaps in its ACES-retuned day/dusk/night curves under Fine
@@ -295,16 +365,66 @@ class Game {
 
   setupComposer() {
     if (this.composer) return;
-    this.composer = new EffectComposer(this.renderer);
+    // Scene target is explicit so it can carry MSAA (r166 is WebGL2-only): half-float,
+    // 4 samples on t' desktop rung. T' composer clones it for ping-pong an' t' GL layer
+    // resolves t' multisample buffer afore bloom ever samples it. FXAA rung (an' t'
+    // touch/mobile opening stance) runs samples:0 wi' t' FXAA pass enabled instead.
+    const size = this.renderer.getSize(new THREE.Vector2());
+    const pr = this.renderer.getPixelRatio();
+    const rt = new THREE.WebGLRenderTarget(size.x * pr, size.y * pr, {
+      type: THREE.HalfFloatType,
+      samples: this._govState && this._govState.aa === 'msaa' ? 4 : 0,
+    });
+    this.composer = new EffectComposer(this.renderer, rt);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     // subtle threshold — only genuine lights bloom: lantern flames, lit windows at
     // dusk, t' sun itsen, an' a whisper on t' bright horizon at golden hour
-    const size = this.renderer.getSize(new THREE.Vector2());
     this.bloomPass = new UnrealBloomPass(size, 0.32, 0.5, 0.85);
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass()); // tone mapping + sRGB out
+    // FXAA sits AFTER OutputPass (it wants display-space sRGB luma) an' BEFORE t' grade
+    // (so t' temporal dither stays crisp, laid on top o' t' antialiased image)
+    this.fxaaPass = new ShaderPass(FXAAShader);
+    this.fxaaPass.enabled = !!this._govState && this._govState.aa === 'fxaa';
+    this.composer.addPass(this.fxaaPass);
     this.gradePass = new ShaderPass(GradeShader); // vignette + period grade + dither (display space)
     this.composer.addPass(this.gradePass);
+    this.applyResolution(); // normalise composer size/pixel-ratio + feed FXAA/CAS their texel sizes
+  }
+
+  teardownComposer() {
+    if (!this.composer) return;
+    // passes hold their own GPU targets/materials — t' composer doesn't dispose 'em
+    if (this.bloomPass) this.bloomPass.dispose();
+    if (this.gradePass) this.gradePass.dispose();
+    if (this.fxaaPass) this.fxaaPass.dispose();
+    this.composer.dispose(); this.composer = null; this.gradePass = null; this.bloomPass = null; this.fxaaPass = null;
+  }
+
+  // Governor rung 1 (desktop): swap t' 4x MSAA scene target for FXAA — t' sample count
+  // is baked into t' render targets, so t' whole stack comes down an' goes back up.
+  rebuildComposer() {
+    if (!this.composer) return;
+    this.teardownComposer();
+    this.setupComposer(); // reads this._govState.aa for samples/FXAA-enable
+  }
+
+  // T' one place t' real canvas resolution is resolved: min(devicePixelRatio, governor
+  // scale). Called at composer build, on resize (re-reads DPR — dragging t' window to
+  // another monitor used to be ignored), an' whenever t' governor steps a rung.
+  applyResolution() {
+    const pr = Math.min(window.devicePixelRatio || 1, this._resScale);
+    const w = window.innerWidth, h = window.innerHeight;
+    this.renderer.setPixelRatio(pr);
+    this.renderer.setSize(w, h);
+    if (this.composer) { this.composer.setPixelRatio(pr); this.composer.setSize(w, h); }
+    if (this.fxaaPass) this.fxaaPass.material.uniforms.resolution.value.set(1 / (w * pr), 1 / (h * pr));
+    if (this.gradePass) {
+      this.gradePass.uniforms.uTexel.value.set(1 / (w * pr), 1 / (h * pr));
+      // CAS strength rides t' GOVERNOR step, not raw DPR — a 1x monitor at full
+      // quality gets no sharpen; only a stepped-down rung does
+      this.gradePass.uniforms.uSharp.value = Math.max(0, (1.5 - this._resScale) * 0.5);
+    }
   }
 
   // Chunk meshes are built off-thread o' this file (world.js/mesher.js), so shadow
@@ -1004,8 +1124,8 @@ class Game {
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
-      this.renderer.setSize(window.innerWidth, window.innerHeight);
-      if (this.composer) this.composer.setSize(window.innerWidth, window.innerHeight);
+      // re-reads devicePixelRatio an' all — a drag onto another monitor never used to land
+      this.applyResolution();
     });
 
     window.addEventListener('beforeunload', () => {
@@ -4993,12 +5113,16 @@ class Game {
     if (heldId !== this.heldIconId) {
       this.heldIconId = heldId;
       if (held) {
-        const tex = new THREE.TextureLoader().load(getIconURL(held.id));
+        // one shared loader, an' t' outgoing icon texture DISPOSED — every swap used to
+        // leak a GPU texture (they're not GC'd), a slow bleed over a long session
+        const old = this.heldSprite.material.map;
+        const tex = (this._texLoader || (this._texLoader = new THREE.TextureLoader())).load(getIconURL(held.id));
         tex.magFilter = THREE.NearestFilter;
         tex.colorSpace = THREE.SRGBColorSpace;
         this.heldSprite.material.map = tex;
         this.heldSprite.material.needsUpdate = true;
         this.heldSprite.visible = true;
+        if (old) old.dispose();
       } else {
         this.heldSprite.visible = false;
       }
@@ -5235,6 +5359,25 @@ class Game {
     if (this.gfxQuality === 'fine') {
       this._shadowFlagT = (this._shadowFlagT || 0) - dt;
       if (this._shadowFlagT <= 0) { this._shadowFlagT = 0.6; this.applyShadowFlags(true); }
+    }
+    // Frame-time governor (Fine, in-world only — t' title's streaming bursts would mis-train
+    // it): EMA t' dt every frame (scalar, no allocation), take t' pure decision twice a
+    // second. Laboured >26 ms for 3 s -> shed a rung (MSAA->FXAA first, then pixel ratio);
+    // 20 s o' clear air under 18 ms -> climb one back.
+    this._dtEma = this._dtEma * 0.95 + dt * 0.05;
+    if (this.gfxQuality === 'fine' && this.composer) {
+      this._govT -= dt;
+      if (this._govT <= 0) {
+        this._govT = 0.5;
+        const g = stepGovernor(this._govState, this._dtEma * 1000, this.clock.elapsedTime);
+        const swapAA = g.aa !== this._govState.aa;
+        this._govState = g;
+        if (g.changed) {
+          this._resScale = g.scale;
+          if (swapAA) this.rebuildComposer(); // sample count is baked into t' targets
+          else this.applyResolution();
+        }
+      }
     }
     this.renderFrame(dt);
   }

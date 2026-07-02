@@ -1,8 +1,8 @@
 // Chunk meshing: culled faces with per-vertex AO; opaque, cutout and liquid passes.
 import * as THREE from 'three';
-import { B, BLOCKS, CHUNK, HEIGHT, isOpaque, isLiquid, isCutout } from './defs.js';
-import { tileUV, buildAtlas } from './textures.js';
-import { hash2i } from './noise.js';
+import { B, BLOCKS, CHUNK, HEIGHT, TILE, isOpaque, isLiquid, isCutout } from './defs.js';
+import { tileUV, buildAtlas, getCutoutAtlas } from './textures.js';
+import { hash2i, noise2 } from './noise.js';
 import { snowLineFor, freezableWater } from './snow.js';
 
 let materials = null;
@@ -60,7 +60,7 @@ export function initMaterials() {
   const atlas = buildAtlas();
   materials = {
     opaque: addSnow(new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true }), 'snow-opaque'),
-    cutout: addSnow(new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }), 'snow-cutout-glint', true),
+    cutout: addSnow(new THREE.MeshLambertMaterial({ map: getCutoutAtlas(), vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }), 'snow-cutout-glint', true),
     liquid: addIce(new THREE.MeshLambertMaterial({
       map: atlas, vertexColors: true, transparent: true, opacity: 0.78,
       depthWrite: false, side: THREE.DoubleSide,
@@ -91,9 +91,38 @@ function faceTile(def, faceIdx, x, z) {
   return def.tex.s;
 }
 
+// --- per-block top-face variation (S1c): hue jitter + dryness skew + UV rotation ---
+// Only TOP faces (f===3) o' t' growing ground — grass tops, leaf canopies, peat
+// moor-top — get a seeded brightness jitter, a slow dryness field (exposed tops
+// strawier, dale floors lusher) and one o' four texture rotations, so t' moor
+// stops reading as a grid of identical tiles. Building blocks (stone, brick,
+// planks…) stay perfectly uniform. Mesh-time only, seeded frae WORLD x/z —
+// deterministic, identical on both quality tiers, zero per-frame cost.
+// TOP_VARY_AMP = 0 restores today's output exactly (identity tint, rotation 0).
+export const TOP_VARY_AMP = 1;
+const VARIED_TOP_TILES = new Set([
+  TILE.GRASS_TOP, TILE.LEAVES, TILE.MONKEY_LEAVES, TILE.ORCHARD_LEAVES, TILE.PEAT,
+]);
+// t' four rotations o' t' corner UV frame (u,v within t' tile rect)
+const UV_ROT = [
+  (u, v) => [u, v],
+  (u, v) => [v, 1 - u],
+  (u, v) => [1 - u, 1 - v],
+  (u, v) => [1 - v, u],
+];
+// Pure + exported so a verify script can assert variation at amp 1 and exact
+// identity at amp 0 without building a chunk.
+export function topFaceVariation(wx, wz, amp = TOP_VARY_AMP) {
+  if (!amp) return { r: 1, g: 1, b: 1, rot: 0 };
+  const j = 1 + amp * (0.92 + hash2i(wx, wz, 7) * 0.16 - 1); // brightness jitter, 0.92..1.08 at amp 1
+  const dry = noise2(wx * 0.02, wz * 0.02, 9);               // slow dryness field in [-1,1]
+  const skew = amp * 0.04 * dry;                             // dry -> +red/-blue (strawy); wet -> t' reverse (lush)
+  return { r: j * (1 + skew), g: j, b: j * (1 - skew), rot: (hash2i(wx, wz, 8) * 4) | 0 };
+}
+
 class GeoBuilder {
   constructor() { this.pos = []; this.norm = []; this.uv = []; this.col = []; this.exp = []; this.frz = []; this.idx = []; this.n = 0; }
-  quad(corners, normal, uvRect, aos, light, exp = 1, frz = 0) {
+  quad(corners, normal, uvRect, aos, light, exp = 1, frz = 0, tint = null) {
     const [u0, v0, u1, v1] = uvRect;
     for (const c of corners) {
       this.pos.push(c[0], c[1], c[2]);
@@ -104,7 +133,8 @@ class GeoBuilder {
     this.frz.push(frz, frz, frz, frz);
     for (let i = 0; i < 4; i++) {
       const b = AO_LEVELS[aos[i]] * light;
-      this.col.push(b, b, b);
+      if (tint) this.col.push(b * tint.r, b * tint.g, b * tint.b);
+      else this.col.push(b, b, b);
     }
     // flip quad to avoid AO anisotropy artefacts
     if (aos[0] + aos[3] > aos[1] + aos[2]) {
@@ -214,11 +244,12 @@ export function buildChunkMeshes(world, chunk) {
         }
 
         // solid block faces
+        const swx = x0 + lx, swz = z0 + lz; // WORLD coords, so t' pattern doesn't repeat per chunk
         for (let f = 0; f < FACES.length; f++) {
           const { dir, corners } = FACES[f];
           const nb = get(lx + dir[0], y + dir[1], lz + dir[2]);
           if (isOpaque(nb)) continue;
-          const uvr = tileUV(faceTile(def, f, x0 + lx, z0 + lz));
+          const uvr = tileUV(faceTile(def, f, swx, swz));
           // per-vertex AO
           const aos = [];
           const axis = dir[0] !== 0 ? 0 : dir[1] !== 0 ? 1 : 2;
@@ -236,7 +267,16 @@ export function buildChunkMeshes(world, chunk) {
             const co = occludes(pc[0], pc[1], pc[2]) ? 1 : 0;
             aos.push(s1 && s2 ? 0 : 3 - (s1 + s2 + co));
           }
-          solid.quad(corners.map(c => [lx + c[0], y + c[1], lz + c[2], c[3], c[4]]), dir, uvr, aos, FACE_LIGHT[f], f === 3 ? exposedAt(lx, y, lz) : 0);
+          // per-block variation on growing tops only (S1c) — identity when amp is 0
+          let tint = null, uvRot = UV_ROT[0];
+          if (f === 3 && VARIED_TOP_TILES.has(def.tex.t)) {
+            tint = topFaceVariation(swx, swz);
+            uvRot = UV_ROT[tint.rot];
+          }
+          solid.quad(corners.map(c => {
+            const [ru, rv] = uvRot(c[3], c[4]);
+            return [lx + c[0], y + c[1], lz + c[2], ru, rv];
+          }), dir, uvr, aos, FACE_LIGHT[f], f === 3 ? exposedAt(lx, y, lz) : 0, 0, tint);
         }
       }
     }
