@@ -9,7 +9,8 @@ import { festivalState } from './festivals.js';
 import { SCARF_COLORS, DEFAULT_SNOWMAN } from './snowman.js';
 import { hash2i } from './noise.js';
 import { B } from './defs.js';
-import { isFine } from './festivalKit.js';
+import { isFine, nightFactor } from './festivalKit.js';
+import { makeSmoke, registerFxMat, unregisterFxMat } from './fire.js';
 import { buildChristmas } from './festivals/christmas.js';
 import { buildBonfire } from './festivals/bonfire.js';
 import { buildHarvest } from './festivals/harvest.js';
@@ -19,6 +20,18 @@ import { buildMidsummer } from './festivals/midsummer.js';
 
 const RADIUS = 48;
 const REBUILD_MOVE = 8;
+
+// -- chimney smoke (non-festival dressing — runs every rebuild, any season) --
+// A hearth plume for the nearest cottages, on whenever it's cold (season.warmth
+// < CHIMNEY_WARMTH — the fire's in for the winter half of the year) or it's
+// hearth hours (dusk-through-dawn — folk bank the fire overnight even in
+// summer). Deterministic per building (hash-seeded corner offset + phase); the
+// windowed rebuild (this.build(), r=RADIUS, 0.4s throttle) creates/destroys the
+// plumes exactly like every other dressing prop in this file.
+const CHIMNEY_WARMTH = 0.15;   // season.warmth below this = cold enough to light the range
+const CHIMNEY_MAX = 6;          // nearest cottages that get a plume ('Fine')
+const CHIMNEY_MAX_PLAIN = 3;    // halved under 'Plain' (fewer draws, same gate)
+const CHIMNEY_SCALE = 0.45;     // makeSmoke() scale — a modest domestic plume, not a bonfire
 
 // Registry of festival-id → dressing builder. Later slices add more entries
 // (mayday, harvest…); the host calls whichever matches the active festival
@@ -150,6 +163,10 @@ export class SeasonalLayer {
       }
     }
 
+    // -- Chimney smoke: non-festival dressing, independent of the calendar —
+    // see buildChimneySmoke() for the cold/hearth-hours gate. --
+    this.buildChimneySmoke(cx, cz, gen, season);
+
     // -- Festival dressing: dispatch the active festival's builder. The builder
     // is only invoked inside its own calendar window, so e.g. the Christmas
     // dressing now shows across Christmastide rather than the whole winter. --
@@ -169,6 +186,79 @@ export class SeasonalLayer {
       fx: this._fx,        // per-frame callbacks — run in update(), cleared on rebuild
       fine: isFine(),      // 'Fine' renderer live → builders add the FX/spectacle layer
     });
+  }
+
+  // Hearth smoke for the nearest cottages inside the window — lit whenever it's
+  // cold (season.warmth < CHIMNEY_WARMTH) OR it's dusk-through-dawn (the range
+  // stays banked overnight even in summer). Off in the middle of a warm day.
+  // Uses the SAME makeSmoke() plume the bonfire's hero fire rides (fire.js),
+  // at a small domestic scale; since there's no Fire() group here to register
+  // it, each plume registers its own material with the shared fire tick
+  // directly (registerFxMat/unregisterFxMat) — see fire.js's makeSmoke()
+  // comment for why that split exists.
+  buildChimneySmoke(cx, cz, gen, season) {
+    if (!(gen.geo && gen.geo.villages)) return;
+    const cold = season && season.warmth < CHIMNEY_WARMTH;
+    // Live gate baked as a starting alpha; the per-frame fx callback re-derives
+    // it each frame off the running clock so the plume ramps rather than pops
+    // (see the fx push below) — cold OR hearth-hours, whichever is stronger.
+    const gate = () => Math.max(cold ? 1 : 0, nightFactor());
+    if (gate() <= 0) return; // broad warm daylight — no fires lit, nowt to build
+
+    // Gather every cottage-ish building inside the window, nearest-first, from
+    // every village already in range (mirrors the snowman/festival village
+    // loops above). `type` filter keeps this to homes with a lit range, not
+    // every business premises (the pub/shop chimneys would double up smoke
+    // with their own hearths — kept to cottage/farmhouse for now).
+    const candidates = [];
+    for (const v of gen.geo.villages) {
+      if (Math.abs(v.x - cx) > RADIUS || Math.abs(v.z - cz) > RADIUS) continue;
+      for (const b of (v.buildings || [])) {
+        if (b.type !== 'cottage' && b.type !== 'farmhouse') continue;
+        const midX = (b.x0 + b.x1) / 2, midZ = (b.z0 + b.z1) / 2;
+        candidates.push({ b, midX, midZ, d: Math.hypot(midX - cx, midZ - cz) });
+      }
+    }
+    candidates.sort((p, q) => p.d - q.d);
+    const cap = isFine() ? CHIMNEY_MAX : CHIMNEY_MAX_PLAIN;
+
+    for (let i = 0; i < candidates.length && i < cap; i++) {
+      const { b, midX, midZ } = candidates[i];
+      // Roof-ridge height mirrors worldgen's gabled roof exactly (stampBuildingColumn,
+      // worldgen.js): ridge peak = g + wallH + 1 + floor((z1-z0)/2), running along x at
+      // the building's mid-z. g comes from gen.height() at the footprint (the same
+      // source every other festival builder uses — b.g isn't populated in every world).
+      const groundY = gen.height(Math.round(midX), Math.round(midZ));
+      const wallH = b.wallH != null ? b.wallH : 4;
+      const ridgeRise = Math.floor((b.z1 - b.z0) / 2);
+      const ridgeY = groundY + wallH + 1 + ridgeRise;
+
+      // Hash-seed a believable chimney corner: real stacks sit near a gable end,
+      // set in a little from the corner, not dead-centre on the ridge. Deterministic
+      // per building footprint — identical on every client, no Math.random.
+      const cornerSeed = hash2i(b.x0, b.z1, gen.geo.seed ^ 0x484d); // 'HM' — hearth/chimney salt
+      const gableAtX0 = cornerSeed < 0.5;
+      const chimX = gableAtX0 ? b.x0 + 1 : b.x1 - 1;
+      const chimZ = midZ + (hash2i(b.x0, b.z0, gen.geo.seed ^ 0x9a3c) - 0.5) * (b.z1 - b.z0) * 0.4;
+      const phase = hash2i(b.x1, b.z1, gen.geo.seed ^ 0x2e11); // desyncs the puff cycle per house
+
+      const plume = makeSmoke(CHIMNEY_SCALE);
+      plume.position.set(chimX + 0.5, ridgeY + 0.6, chimZ + 0.5); // a touch above the chimney pot
+      plume.material.uniforms.uPhase.value = phase * 7.3; // desync so chimneys don't puff in lockstep
+      plume.material.uniforms.uGate.value = 0; // starts hidden; the fx callback ramps it in
+      registerFxMat(plume.material);
+      plume.dispose = () => unregisterFxMat(plume.material);
+      this.scene.add(plume);
+      this.objects.push(plume);
+
+      // Ramp uGate toward the live cold/hearth-hours target each frame — an
+      // exponential ease rather than a step, so the plume thickens/thins in
+      // rather than popping as the gate flips (dusk arriving, a warm snap).
+      this._fx.push((t, dt) => {
+        const u = plume.material.uniforms.uGate;
+        u.value += (gate() - u.value) * Math.min(1, dt * 1.5);
+      });
+    }
   }
 
   addSnowman(x, y, z, cfg, yaw) {

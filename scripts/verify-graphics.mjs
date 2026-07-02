@@ -18,6 +18,7 @@ const uiSrc = src('../src/ui.js');
 const texSrc = src('../src/textures.js');
 const playerSrc = src('../src/player.js');
 const mesherSrc = src('../src/mesher.js');
+const stormSrc = src('../src/storm.js');
 
 // ---- quality setting: persistence/resolution logic (pure) ----
 ok(resolveQuality('fine', true) === 'fine', 'stored fine wins, even on touch');
@@ -199,5 +200,27 @@ ok(/setRippleAmp\(fine \? 0\.05 : 0\);\s*\n\s*setFlowAmp\(fine \? 0\.05 : 0\);\s
 ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,500}?setGlitter\(dayness \* \(1 - overcast\)\);/.test(mainSrc), 'glitter driven per frame frae dayness × clear-sky, Fine only');
 ok(mainSrc.includes('setWaterTime(this._glintT)'), 'water clock rides the existing glint tick — no new per-client accumulator');
 ok(mainSrc.includes('overcastGrey(this.sky.weather'), 'overcast term mirrors sky.js’s own overcastGrey call');
+
+// ---- item 36: the visible lightning bolt + storm sky (shape checks in verify-storm.mjs) ----
+// bolt shape seeded frae (strike index, world seed) — no Math.random, identical every client
+ok(stormSrc.includes('mulberry32((Math.imul(index | 0, 2654435761) ^ (worldSeed | 0)) | 0)'),
+  'bolt RNG is mulberry32 over strike-index ^ world-seed (invariant 6)');
+ok(stormSrc.includes('if (this._boltLine) return true'), 'bolt meshes are pooled — built once, reused every strike');
+ok(stormSrc.includes('new Float32Array(BOLT_MAX_SEGS * 2 * 3)') && stormSrc.includes('new Float32Array(BOLT_MAX_POINTS * 2 * 3)'),
+  'line + glow buffers preallocated at the polyline maxima (zero allocation per strike)');
+ok(stormSrc.includes("this._glowOn = !!(sky && sky.gfx === 'fine')"), 'the wide glow ribbon is Fine-gated (Plain keeps the thin line)');
+ok(stormSrc.includes('blending: THREE.AdditiveBlending, depthWrite: false, fog: false'),
+  'bolt materials are additive, no depth-write, unfogged');
+ok(stormSrc.includes('const f = sky.flash * sky.flash'), 'bolt opacity rides the sky flash decay, squared for a sharp gutter');
+ok(stormSrc.includes('sky.stormChurn = 1') && stormSrc.includes('stormChurn: sky.stormChurn'),
+  'storm asserts stormChurn each frame and caches/restores the prior value');
+// sky side: the uFlash cloud whiten + the churned storm deck
+ok(skySrc.includes('uFlash: { value: 0 }'), 'sky dome has the uFlash uniform, defaults 0 (Plain untouched)');
+ok(skySrc.includes('col = mix(col, vec3(1.0), uFlash * 0.6 * cloud);'), 'flash whitens the cloud term in-shader');
+ok(skySrc.includes('cu.uFlash.value = this.flash * this.flash'), 'uFlash driven frae the squared flash decay');
+ok(skySrc.includes("this._stormS += ((this.stormChurn ? 1 : 0) - this._stormS)"), 'churn eases in/out (no snap)');
+ok(skySrc.includes('dt * (1 + churn * 2)'), 'storm deck scrolls ~3x under full churn');
+ok(skySrc.includes('(grey + (1 - grey) * churn)'), 'churn drives cloud coverage toward full');
+ok(skySrc.includes('STORM_CLOUD = new THREE.Color(0.06, 0.06, 0.08)'), 'near-black storm deck colour hoisted (no per-frame alloc)');
 
 console.log(`verify-graphics: ${n} assertions OK`);

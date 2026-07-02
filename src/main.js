@@ -36,6 +36,8 @@ import { RoadLayer } from './roads.js';
 import { FloraLayer } from './floraLayer.js';
 import { SeasonalLayer } from './seasonalLayer.js';
 import { FireLayer } from './fireLayer.js';
+import { MurmurationLayer } from './birds.js';
+import { HarbourLight } from './lighthouse.js';
 import { tickFires } from './fire.js';
 import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase } from './season.js';
@@ -708,6 +710,15 @@ class Game {
     this.fireLayer = new FireLayer(this.scene, this.world);
     if (this.footprints) this.footprints.clear();
     this.footprints = new Footprints(this.scene, this.world);
+    if (this.murmuration) this.murmuration.dispose();
+    this.murmuration = new MurmurationLayer({
+      scene: this.scene, world: this.world, sky: this.sky,
+      isFine: this.gfxQuality === 'fine',
+    });
+    if (this.harbourLight) { this.harbourLight.dispose(); this.harbourLight = null; }
+    if (this.world.gen.geo && typeof this.world.gen.geo.whitbyHarbour === 'function') {
+      this.harbourLight = new HarbourLight(this.scene, this.world.gen.geo, { plain: this.gfxQuality !== 'fine' });
+    }
     // seed snow cover + season so a world loaded in winter is snowy at once and
     // Merlin spawns as Father Christmas straight off (no one-frame wizard flash)
     this.season = (this.seasonOverride != null) ? seasonStateAtPhase(this.seasonOverride) : seasonState();
@@ -761,6 +772,8 @@ class Game {
     if (this.seasonalLayer) { this.seasonalLayer.clear(); this.seasonalLayer = null; }
     if (this.fireLayer) { this.fireLayer.dispose(); this.fireLayer = null; }
     if (this.footprints) { this.footprints.clear(); this.footprints = null; }
+    if (this.murmuration) { this.murmuration.dispose(); this.murmuration = null; }
+    if (this.harbourLight) { this.harbourLight.dispose(); this.harbourLight = null; }
     if (this.carolBox) { this.carolBox.dispose(); this.carolBox = null; }
     this.entities.clear();
     for (const c of this.world.chunks.values()) {
@@ -4902,6 +4915,8 @@ class Game {
       if (this.floraLayer) this.floraLayer.update(dt, this.player.pos, season);
       if (this.seasonalLayer) this.seasonalLayer.update(dt, this.player.pos, season, this.snowAccum);
       if (this.fireLayer) this.fireLayer.update(dt, this.player.pos, this.camera);
+      if (this.murmuration) this.murmuration.update(dt, season);
+      if (this.harbourLight) this.harbourLight.update(dt, this.camera, this.sky);
       // ONE global flame tick: drives the shared flame material's uTime, every
       // hero fire's embers/smoke, an' the pulsing bonfire light — so torches
       // (FireLayer) AND the festival bonfire (SeasonalLayer) animate off one clock.

@@ -65,6 +65,9 @@ const SKY = {
   dusk: new THREE.Color(0x7a5560),
 };
 
+// t' boss storm's cloud deck: near-black, hoisted so t' churn allocates nowt per frame
+const STORM_CLOUD = new THREE.Color(0.06, 0.06, 0.08);
+
 export class Sky {
   constructor(scene, camera) {
     this.scene = scene;
@@ -80,6 +83,10 @@ export class Sky {
     this.flash = 0;       // transient lightning-flash term (0..1), spiked by the storm controller, decays each frame
     this.stormPrecip = undefined; // when set (~1) the storm overrides precip to a downpour; cleared restores normal weather
     this.stormIsSnow = undefined; // storm precip falls as snow (winter) vs rain
+    this.stormChurn = undefined;  // boss-storm sky: cloud deck driven full, near-black, ~3x scroll.
+                                  // Set ONLY by the storm controller (the title flyover borrows
+                                  // stormPrecip for its winter plates, so precip alone can't key this)
+    this._stormS = 0;             // eased 0..1 churn state, so the deck rolls in and out — no snap
     this.moorFog = 0;    // T' Great Fog intensity at t' player, 0..1
     this.moorGate = 0;   // set by t' game: 1 on t' high moor, 0 in villages/coast
     this._gateS = 0;
@@ -138,6 +145,7 @@ export class Sky {
         uTime: { value: 0 },
         uClouds: { value: 0.3 },
         uFogBand: { value: 0.19 }, // horizon band height (dir.y) where t' dome holds t' fog colour
+        uFlash: { value: 0 },      // lightning blink: whitens t' cloud term (defaults 0 — Plain untouched)
       },
       vertexShader: `
         varying vec3 vDir;
@@ -147,7 +155,7 @@ export class Sky {
         }`,
       fragmentShader: `
         uniform vec3 topColor, bottomColor, cloudCol;
-        uniform float exponent, uTime, uClouds, uFogBand;
+        uniform float exponent, uTime, uClouds, uFogBand, uFlash;
         varying vec3 vDir;
         float hash(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
         float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -165,6 +173,8 @@ export class Sky {
             float cover = 0.62 - uClouds * 0.42;
             float cloud = smoothstep(cover, cover + 0.2, n) * smoothstep(0.05, 0.4, up);
             col = mix(col, cloudCol, cloud * 0.85);
+            // lightning blink: t' deck itself flashes white where there's cloud to catch it
+            col = mix(col, vec3(1.0), uFlash * 0.6 * cloud);
           }
           // horizon fog band: near t' horizon (an' all t' way below it) t' dome holds
           // t' fog colour EXACTLY — bottomColor IS scene.fog.color, both copy t' live
@@ -426,12 +436,20 @@ export class Sky {
     this.stars.material.opacity = fine ? Math.min(1, starA * 1.6) : starA; // brighter stars ower a moonlit moor
     this.stars.position.set(playerPos.x, 0, playerPos.z);
 
-    // drift t' dome clouds on t' wind; coverage frae t' weather, lit by day
-    this.cloudT = (this.cloudT || 0) + dt;
+    // drift t' dome clouds on t' wind; coverage frae t' weather, lit by day.
+    // While t' boss storm rages (sky.stormChurn, storm controller only) t' deck
+    // churns: coverage driven toward full, scroll ~3x, colour pulled near-black —
+    // all through t' eased _stormS so t' sky rolls in an' out, never snaps.
+    this._stormS += ((this.stormChurn ? 1 : 0) - this._stormS) * Math.min(1, dt * 0.7);
+    const churn = this._stormS;
+    this.cloudT = (this.cloudT || 0) + dt * (1 + churn * 2);
     const cu = this.domeMat.uniforms;
     cu.uTime.value = this.cloudT;
-    cu.uClouds.value += (grey - cu.uClouds.value) * Math.min(1, dt * 0.5);
+    cu.uClouds.value += ((grey + (1 - grey) * churn) - cu.uClouds.value) * Math.min(1, dt * 0.5);
     cu.cloudCol.value.setRGB(0.16, 0.18, 0.22).lerp(new THREE.Color(0.91, 0.93, 0.95), dayness);
+    if (churn > 0.001) cu.cloudCol.value.lerp(STORM_CLOUD, churn * 0.9);
+    // t' cloud deck blinks white wi' each strike (squared, same easin' as flashLift)
+    cu.uFlash.value = this.flash * this.flash;
     // horizon-band height follows fog thickness: open weather a low haze line (~0.19),
     // thick fog / dread / t' Great Fog swallow most o' t' sky. Derived frae t' EASED
     // fogFar so t' dome glides through weather transitions in step wi' t' fog itself.

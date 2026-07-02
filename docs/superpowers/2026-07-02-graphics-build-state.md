@@ -31,7 +31,7 @@ Specs: grep `### [n]` / `### [Dn]` in 2026-07-02-graphics-wow-audit.md. Codebase
       skirt ring inside sky.js so the world edge dissolves). fable.
 
 ### S2 — water system (sequential: mesher.js liquid + moorsgeo + worldgen)
-- [ ] S2a [15]+[D0] living water + aFlow flowing becks (foundation attribute)
+- [x] S2a [15]+[D0] living water + aFlow flowing becks (foundation attribute)
 - [ ] S2b [16] shoreline: depth tint, foam fringe, horizon sea ring (+coast side of horizon fix)
 - [ ] S2c [D4] rain-rings + [D11] spate (lift capped 0.12, mask from aFlow) + [21] freeze float
 - [ ] S2d [D2] sea swell (L; shore-distance BFS field) → then [D1] weirs, [D3] storm breakers
@@ -57,14 +57,15 @@ Specs: grep `### [n]` / `### [Dn]` in 2026-07-02-graphics-wow-audit.md. Codebase
 - [ ] S5d [6] baked lamp light (L; mesher BFS, aLamp varying, emitter caps)
 
 ### S6 — spectacle modules (parallel where files disjoint)
-- [ ] [34] chimney smoke (fire.js export + seasonalLayer)
-- [ ] [36] forked lightning (storm.js + sky.js)
-- [ ] [32] murmuration (new birds.js) → [D17] swallows/skylark
-- [ ] [33] Whitby harbour light (new lighthouse.js)
+- [x] [34] chimney smoke — DONE (dedicated stormChurn-style gate; plumes hash-sited on real ridge formula)
+- [x] [36] forked lightning — DONE (pooled meshes; NEW sky.stormChurn flag because title flyover borrows stormPrecip)
+- [x] [32] murmuration (src/birds.js) — DONE (orchestrator fixed per-client clock → Date.now shared clock; update(dt, season)); [D17] swallows still queued
+- [x] [33] Whitby harbour light — DONE (sited harbour mouth 1829,3045 — East Cliff is inside Dracula arena; pier-end light is period-truer anyway)
 - [ ] [D9] eave drips (new dripLayer.js) · [D16] pollen/midges (festivalKit motes)
 - [ ] [19] GPU wind-slanted precipitation (sky.js; deletes CPU fall loops)
 - [ ] [20] seasonal colour fronts (L) · [37] cinematic title plates
 
 ## Log
+- S2a + S6 batch COMPLETE, full gate green (verify-graphics 135; verify-water 40; verify-storm 300; new verify-birds/lighthouse/chimneys). Esk visibly flows w/ downstream glitter shear (preview-confirmed, 0 console errors). Murmuration 600pts + harbour light live in-game. NOTE: cottages have NO stamped chimney block (only stations/terraces/furnace) — plume-vs-chimney alignment is a future worldgen call (world-baseline change, James decides). Next: S2b (shoreline + retire unfogged sea backdrop) ∥ S4a (night sky).
 - S1 COMPLETE + full gate green (97 verify-graphics assertions; new verify-governor + verify-topvary). Horizon band root cause: meshed edge 96 blocks vs fog.far 160 — fixed w/ fog knee-clamp (clear 160→84), dome uFogBand, shadow texel snap. AA: desktop Fine=MSAA 4x, touch=FXAA, governor sheds MSAA→FXAA→res steps; DPR-resize + bloom-RT + held-item leaks fixed. Atlas mipped w/ 4px gutters + no-mip cutout twin. Per-block hue variation live. KNOWN RESIDUAL for S2b: the UNFOGGED sea backdrop plane (main.js:3436) shows as a blue streak at the fog line inland — replace with [16] fogged horizon ring. FXAA bias-100 ANGLE compile warning = stock three shader, harmless.
 - 2026-07-02 late: docs committed on main (7accafb); branch created; baseline verify running.
