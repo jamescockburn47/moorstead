@@ -2403,8 +2403,21 @@ export class Entities {
         const d = Math.hypot(dx, dz);
         wishX = dx / Math.max(d, 0.001); wishZ = dz / Math.max(d, 0.001);
         speed = sp;
-        const spNow = Math.hypot(mob.vel.x, mob.vel.z);
-        mob.homeStuck = spNow < 0.15 ? (mob.homeStuck || 0) + dt : 0;
+        // stuck = no PROGRESS toward the goal, not just standing still — a body
+        // grinding along a wall at an angle moves plenty fast an' gets nowhere,
+        // an' t' old speed test let 'em scrape there all neet
+        const g = mob.stuckG;
+        if (!g || g.x !== tgt.x || g.z !== tgt.z) {
+          // fresh goal: new yardstick, but t' clock keeps runnin' — a re-rolled
+          // potter goal round t' same anchor mustn't hand a wedged body a clean slate
+          mob.stuckG = { x: tgt.x, z: tgt.z, d };
+          mob.homeStuck = (mob.homeStuck || 0) + dt;
+        } else if (d < g.d - 0.4) {
+          g.d = d;
+          mob.homeStuck = 0;
+        } else {
+          mob.homeStuck = (mob.homeStuck || 0) + dt;
+        }
         return d;
       };
       const popTo = (tgt) => { // gie ower an' pop there — kinder than a neet stuck on a wall
