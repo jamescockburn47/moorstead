@@ -2320,11 +2320,19 @@ export class Entities {
       const wantY = (surf != null ? surf : dem) + 1;
       if (Math.abs(mob.pos.y - wantY) > 0.05) { mob.pos.y = wantY; mob.vel.y = 0; }
     }
-    // GLOBAL POLICY: folk sleep out of sight at neet — they vanish at dusk an' are back at
-    // dawn, rather than trekkin' home or standin' about i' t' dark (so no houses are needed).
-    // People only — animals, remote players an' train-riders already returned above.
+    // NIGHT POLICY: houseless folk sleep out of sight at neet — they vanish at dusk an'
+    // are back at dawn (no houses needed). Folk WI' a house get an evening first: frae
+    // dusk they mek for their own doorstep an' stand about it by lamplight, an' only
+    // wink out i' t' dead o' neet. Nobody treks indoors — no door/inside pathing, that
+    // way lies folk wedged on walls. People only — animals, remote players an'
+    // train-riders already returned above.
     const skyT = this.game && this.game.sky ? this.game.sky.time : 0.5;
-    if ((skyT > 0.76 || skyT < 0.16) && !mob.chatting) {
+    const DUSK = 0.76, BEDTIME = 0.88, DAWN = 0.16; // DUSK/DAWN match t' old vanish window; BEDTIME is deeper
+    // evening: a housed body's on their doorstep; latening: any body's talk turns to dusk
+    const evening = !!mob.house && skyT > DUSK && skyT <= BEDTIME;
+    const latening = skyT > 0.7 && skyT <= BEDTIME;
+    const abed = mob.house ? (skyT > BEDTIME || skyT < DAWN) : (skyT > DUSK || skyT < DAWN);
+    if (abed && !mob.chatting) {
       if (mob.model.group.visible) mob.model.group.visible = false;
       mob.vel.x = mob.vel.y = mob.vel.z = 0;
       if (mob.bubble) { mob.model.group.remove(mob.bubble); mob.bubble = null; }
@@ -2380,7 +2388,7 @@ export class Entities {
         mob.yaw = Math.atan2(player.pos.x - mob.pos.x, player.pos.z - mob.pos.z);
       }
       if (distP <= 3.2 || mob.nosyApproach.until <= 0) {
-        if (!mob.bubble) this.speak(mob, villagerRemark({ role: mob.role, mood: mob.mood, nearBuild: mob.nosyApproach.build, outside: !mob.village }, Math.random), 8);
+        if (!mob.bubble) this.speak(mob, villagerRemark({ role: mob.role, mood: mob.mood, nearBuild: mob.nosyApproach.build, outside: !mob.village, evening: latening }, Math.random), 8);
         mob.nosyApproach = null; mob.state = 'greet'; mob.stateTimer = 1.5;
         if (this.nosyToken === mob) this.nosyToken = null;
       }
@@ -2421,7 +2429,7 @@ export class Entities {
         // mill an' shift rather than stack on one tile an' stand like posts.
         // roamers (shepherds, pedlars, the constable) range out on the roads an' moor.
         const phase = dayPhase(skyT);
-        if (mob.roam) {
+        if (mob.roam && !evening) {
           if (mob.stateTimer <= 0 || !mob.roamGoal) {
             mob.stateTimer = 10 + Math.random() * 18;
             const base = (phase === 'social' && mob.green) ? mob.green : (mob.home);
@@ -2432,15 +2440,26 @@ export class Entities {
           if (d < 3) { wishX = wishZ = 0; speed = 0; mob.vel.x *= 0.8; mob.vel.z *= 0.8; mob.homeStuck = 0; }
           else if (mob.homeStuck > 6) popTo(mob.roamGoal);
         } else {
-          const anchor = (phase === 'social' && mob.green) ? mob.green : (mob.work || mob.home);
+          // of an evening a housed body's anchor is their OWN doorstep (house.out) —
+          // walked to wi' t' same potter machinery, then pottered round tight
+          const anchor = evening ? mob.house.out
+            : (phase === 'social' && mob.green) ? mob.green : (mob.work || mob.home);
+          // dusk fell (or dawn broke): drop t' stale goal so they set off now, not in 7s
+          if (evening !== mob.eveHome) { mob.eveHome = evening; mob.potterGoal = null; }
           // amble to a fresh spot a few steps off the patch every so often, an' glance about
           if (mob.stateTimer <= 0 || !mob.potterGoal) {
             mob.stateTimer = 4 + Math.random() * 7;
-            const a = Math.random() * Math.PI * 2, r = (phase === 'social' ? 1.5 + Math.random() * 4 : Math.random() * 3.5);
+            const a = Math.random() * Math.PI * 2,
+              r = evening ? Math.random() * 1.5 : (phase === 'social' ? 1.5 + Math.random() * 4 : Math.random() * 3.5);
             mob.potterGoal = { x: anchor.x + Math.cos(a) * r, z: anchor.z + Math.sin(a) * r };
-            if (Math.random() < 0.4) mob.yaw = Math.random() * Math.PI * 2;
+            if (evening) {
+              // stood quiet on t' step — turn to face t' door now an' then
+              if (Math.random() < 0.5) mob.yaw = Math.atan2(mob.house.inside.x - mob.pos.x, mob.house.inside.z - mob.pos.z);
+            } else if (Math.random() < 0.4) mob.yaw = Math.random() * Math.PI * 2;
           }
-          const d = walkTo(mob.potterGoal, mob.t.speed * 0.55);
+          // stride home at full pace while t' doorstep's far off; potter once tha's there
+          const dHome = evening ? Math.hypot(anchor.x - mob.pos.x, anchor.z - mob.pos.z) : 0;
+          const d = walkTo(mob.potterGoal, dHome > 6 ? mob.t.speed : mob.t.speed * 0.55);
           if (d < 1.2) { wishX = wishZ = 0; speed = 0; mob.vel.x *= 0.85; mob.vel.z *= 0.85; mob.homeStuck = 0; }
           else if (mob.homeStuck > 6) popTo(mob.potterGoal);
         }

@@ -31,6 +31,8 @@ export class World {
     this.lanterns = new Set(); // "x,y,z"
     this.renderDist = 6;
     this.genQueue = [];
+    this.remeshQueue = new Set(); // "cx,cz" — chunks owed a rebuild after an edit burst; update() drains a couple per frame
+    this.frame = 0; // ticks in update(); lets setBlock remesh a chunk at most once a frame
   }
 
   chunkAt(cx, cz) { return this.chunks.get(key(cx, cz)); }
@@ -108,16 +110,34 @@ export class World {
     if (id === B.AIR && BLOCKS[above] && BLOCKS[above].kind === 'cutout') {
       this.setBlock(x, y + 1, z, B.AIR);
     }
-    if (lx === 0) this.markDirty(cx - 1, cz);
-    if (lx === CHUNK - 1) this.markDirty(cx + 1, cz);
-    if (lz === 0) this.markDirty(cx, cz - 1);
-    if (lz === CHUNK - 1) this.markDirty(cx, cz + 1);
+    if (lx === 0) this.queueRemesh(cx - 1, cz);
+    if (lx === CHUNK - 1) this.queueRemesh(cx + 1, cz);
+    if (lz === 0) this.queueRemesh(cx, cz - 1);
+    if (lz === CHUNK - 1) this.queueRemesh(cx, cz + 1);
+    // t' chunk under t' pick rebuilds NOW — instant feedback on t' block you've
+    // just broken or placed. Neighbours wait their turn in remeshQueue above.
+    // But only once a frame: a burst (felling a tree, a day-tick regrow sweep)
+    // gets one instant rebuild, and t' rest joins t' queue like everyone else.
+    if (c.meshes) {
+      if (c.remeshFrame !== this.frame) { c.remeshFrame = this.frame; this.remesh(c); }
+      else this.remeshQueue.add(key(cx, cz));
+    }
     if (this.onBlockSet) this.onBlockSet(x, y, z, id);
   }
 
   markDirty(cx, cz) {
     const c = this.chunks.get(key(cx, cz));
     if (c) c.dirty = true;
+  }
+
+  // A border edit owes t' neighbour a rebuild an' all — but not this instant.
+  // It goes on a dedup'd queue (a Set, so a burst of edits along a seam can't
+  // stack t' same chunk twice) and update() works through it at a small budget.
+  queueRemesh(cx, cz) {
+    const c = this.chunks.get(key(cx, cz));
+    if (!c) return;
+    c.dirty = true;
+    this.remeshQueue.add(key(cx, cz));
   }
 
   // Record a block change so it can revert or decay later. Tracks all edits.
@@ -214,6 +234,7 @@ export class World {
 
   // Stream chunks around t' player. Budgeted per frame.
   update(px, pz) {
+    this.frame++; // new frame — edited chunks may earn a fresh instant remesh
     const pcx = Math.floor(px / CHUNK), pcz = Math.floor(pz / CHUNK);
     const R = this.renderDist;
 
@@ -247,6 +268,29 @@ export class World {
     for (const [, c] of dirty) {
       if (meshBudget-- <= 0) break;
       this.remesh(c);
+    }
+
+    // drain t' neighbour-remesh queue, nearest first — border edits from
+    // setBlock land here so mining a seam can't rebuild half t' parish in
+    // one frame. Owt unloaded (or already rebuilt) just falls off t' queue.
+    let queueBudget = 2;
+    if (this.remeshQueue.size > 0) {
+      const queued = [];
+      for (const k of this.remeshQueue) {
+        const c = this.chunks.get(k);
+        if (!c || !c.dirty) { this.remeshQueue.delete(k); continue; }
+        if (!this.chunkAt(c.cx + 1, c.cz) || !this.chunkAt(c.cx - 1, c.cz) ||
+            !this.chunkAt(c.cx, c.cz + 1) || !this.chunkAt(c.cx, c.cz - 1)) {
+          this.remeshQueue.delete(k); continue; // streaming pass takes over once its neighbours gen
+        }
+        queued.push([Math.max(Math.abs(c.cx - pcx), Math.abs(c.cz - pcz)), k, c]);
+      }
+      queued.sort((a, b) => a[0] - b[0]);
+      for (const [, k, c] of queued) {
+        if (queueBudget-- <= 0) break;
+        this.remeshQueue.delete(k);
+        this.remesh(c);
+      }
     }
 
     // unload distant chunks

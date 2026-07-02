@@ -52,6 +52,13 @@ const GREET = [
   "Mind how tha goes.", "Tha's about, then.", "Good to see a face.",
   "Tha's out early.", "Fine weather for wanderin'.", "Keep thi wits about thee.",
 ];
+// said of an evening, when t' lamps are lit an' folk are for their own doors
+export const GREET_EVENING = [
+  "Evenin' to thee.",
+  "Neet's drawin' in — I'm for my own door.",
+  "Candle's lit an' supper's on t' hearth.",
+  "Mind t' moor after dark — it's no place for wanderin'.",
+];
 const NOSY = [
   "Where's tha headed, then?", "Tha's not frae round here, are tha?",
   "What's tha after, all this way out?", "Tha's a long way frae t' village.",
@@ -85,11 +92,13 @@ const ROLE_LINES = {
   rambler: ["Forty mile I've walked. Grand country.", "Which way's t' nearest inn, dost tha know?"],
 };
 
-// One thing a villager says of their own accord. o = {role, mood, nearBuild, outside}.
+// One thing a villager says of their own accord. o = {role, mood, nearBuild, outside, evening}.
 export function villagerRemark(o, rng) {
   const pick = a => a[(rng() * a.length) | 0];
   const curt = (o.mood !== undefined && o.mood < 0.3);
   if (o.nearBuild && rng() < 0.85) return pick(curt ? BUILD_CURT : BUILD_WARM);
+  // of an evening the greeting mostly turns to dusk talk (lamps, hearths, gettin' in)
+  if (o.evening && rng() < 0.6) return pick(GREET_EVENING);
   const roleLines = ROLE_LINES[o.role] || [];
   // out on the open moor they're nosier; in the village, more neighbourly
   const pool = [];

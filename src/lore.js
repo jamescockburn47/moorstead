@@ -54,6 +54,14 @@ export const LORE = [
     text: 'The Lyke Wake Dirge is the old song sung over the dead in these parts — the soul must cross Whinny Moor barefoot through the prickles, and if you ever gave shoes to a beggar in life, shoes you shall have for the crossing. Be charitable; the moor remembers.',
   },
   {
+    holders: ['glinda'], near: null,
+    text: 'Many an owd dale farm had its hob once — a little brown man of the old folk who threshed the corn, churned the butter and folded the sheep while the house slept, asking nothing but a jug of sweet cream on the hearthstone every night. Stint him or mock him and he turns tricksy: gates opened, milk soured, and no rest for anybody till the cream goes out again. Farndale kept its hob longer than most.',
+  },
+  {
+    holders: ['glinda'], near: null,
+    text: 'A Farndale family were so plagued by their slighted hob that they packed the cart to flit. On the road a neighbour called out, “So you’re flitting, then?” — and a little voice piped up from the milk churn, “Aye, we’s flittin’!” They turned the horse round, put the cream back on the hearthstone, and never had a day’s bother after. You cannot move house away from a hob; you can only make it up with him. And never give him clothes, however kind you mean it — a clad hob leaves forever.',
+  },
+  {
     holders: ['glinda'], near: 'kilns',
     text: 'Whitby jet is found in the cliffs and the deep seams hereabouts — it is the wood of ancient trees turned to black stone over millions of years. When Queen Victoria mourned her Albert, all England wore Whitby jet, and the town grew rich carving it.',
   },
@@ -95,6 +103,10 @@ export const LORE = [
   {
     holders: ['cc'], near: null, kid: true,
     text: 'The black shiny stone is a tree that went to sleep a MILLION years ago and if you find one you can wish on it. Sparkle telled you.',
+  },
+  {
+    holders: ['cc'], near: null, kid: true,
+    text: 'There is a little brown man what lives at the farm and does ALL the jobs at night — the churning and the sheeps and EVERYTHING — and all he wants is CREAM. If you forget his cream he hides your things and laughs. You would NEVER forget his cream.',
   },
   {
     holders: ['glinda'], near: 'abbey',

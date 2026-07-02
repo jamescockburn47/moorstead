@@ -151,6 +151,114 @@ function buildArc(geo) {
 }
 
 // ---------------------------------------------------------------------------
+// The arc: T' Hob o' Farndale (four chapters — an owd custom broken an' mended)
+// A hob — the helpful household sprite of the moors dales — kept Dale End Farm
+// up Farndale thriving for generations, for nowt but a nightly jug of cream on
+// the hearthstone. The farmer's new wife mocked the custom and stopped the
+// cream; the slighted hob turned tricksy — gates opened, sheep scattered, milk
+// soured — and the farm is failing. All genuine North York Moors hob lore (the
+// cream custom, the slighted hob, the flitting tale, never give him clothes).
+// Mischievous, never gory: kid-safe spooky. Slots into the mid-game: hob1
+// needs arc2 (the White Lady) done and Known standing, so it runs between the
+// Barghest's opening chapters and the later hunts. Offered/turned in through
+// the SAME curated-giver flow as the Barghest arc (refreshOffers -> hobNext).
+// ---------------------------------------------------------------------------
+function hobFarm(geo) {
+  // The farm sits up Farndale, beside the River Dove — the dale is real in the
+  // moors data (River Dove -> Farndale), a short walk N-NW of Hutton-le-Hole.
+  // (452,1660): probed dry dale-bottom ground ~10 blocks off the Dove channel.
+  const hutton = (geo.villages || []).find(v => v.name === 'Hutton-le-Hole');
+  if (hutton) return { x: hutton.x + 50, z: hutton.z - 107 };
+  // stylised world: no Hutton-le-Hole — a dale-bottom point out past the home
+  // fields, the same graceful degrade as the Dracula arc's Lealholm garden.
+  return { x: geo.village.x - 52, z: geo.village.z + 44 };
+}
+
+export function buildHobArc(geo) {
+  const farm = hobFarm(geo);
+  return {
+    hob1: {
+      id: 'hob1', giver: 'james', minStanding: 1, needs: 'arc2',
+      title: 'Nowt Goes Reet at Dale End',
+      desc: 'Dale End Farm up Farndale’s gone all wrong — gates opened i’ t’ night, sheep scattered ower t’ moor, milk soured i’ t’ dairy. Walk up t’ dale an’ see t’ mischief wi’ thi own eyes.',
+      offer: 'You can offer the visitor a job: word has come down from Dale End Farm up Farndale — gates opened in the night, sheep scattered over the moor, the milk soured in the dairy and the butter will not come at the churn. Good folk, and the farm is failing fast. You want someone with sense to walk up the dale past Hutton-le-Hole and see what is going on with their own eyes. You suspect no natural cause, but you will not say so aloud.',
+      steps: [
+        { kind: 'visit', x: farm.x, z: farm.z, r: 14,
+          objective: 'Walk up Farndale to Dale End Farm an’ see t’ mischief' },
+      ],
+      turnIn: 'james',
+      truth: 'The trouble at Dale End Farm is UNEXPLAINED. Nobody knows yet what is opening the gates and souring the milk; the visitor has agreed to go up the dale and look but has NOT yet reported back. Do not claim the matter is solved.',
+      doneNote: 'The visitor walked up Farndale to Dale End Farm and saw the mischief for themselves — gates swinging, sheep strewn over the moor, the dairy soured. No fox nor tramp does work like that. Granny Glinda went very quiet when she heard.',
+      reward: { items: [[I.COOKED_MUTTON, 3]], trust: [['james', 3]], text: 'James listens wi’ his arms folded. “Gates lifted clean off their pins? That’s no fox. Granny’s gone quiet ower it — go an’ ask her what she knows.”' },
+      clues: [
+        { holder: 'harry', text: 'T’ sheep frae Dale End were all ower t’ moor this morning — t’ GATES OPENED THEMSELVES, honest! An’ t’ milk went sour in one neet. Dead spooky. Dead good.' },
+        { holder: 'karen', text: 'Poor lass at Dale End’s at her wits’ end — churned all day an’ t’ butter wouldn’t come. Her man’s talking o’ selling up. Summat’s not right up that dale.' },
+      ],
+    },
+    hob2: {
+      id: 'hob2', giver: 'glinda', minStanding: 1, needs: 'hob1',
+      title: 'T’ Little Man o’ Dale End',
+      desc: 'Granny Glinda says Dale End’s kept by a hob — a little brown man that works t’ farm at neet for a jug o’ cream on t’ hearthstone. T’ new wife laughed at t’ custom an’ stopped t’ cream. Sit quiet by t’ farm at gloamin’ an’ hear him for thissen.',
+      offer: 'You can offer the visitor the truth of the Dale End trouble, told in riddles as your granny told you: the farm has been kept by a HOB these hundred years and more — a little brown man of the old folk who threshes and churns and folds the sheep while honest folk sleep, and asks nothing but a jug of sweet cream on the hearthstone every night. The farmer’s new wife mocked the custom and stopped the cream, and a slighted hob turns tricksy — gates opened, sheep scattered, milk soured. He is never cruel, only wronged. Tell the visitor to go up at gloaming and sit quiet by the farm, and they will hear him at his mischief.',
+      steps: [
+        { kind: 'visit', x: farm.x, z: farm.z, r: 12, duskOrNight: true, effect: 'hobHeard',
+          objective: 'Sit quiet by Dale End Farm at gloamin’ an’ listen' },
+      ],
+      turnIn: 'glinda',
+      truth: 'The visitor has NOT yet been up to the farm at gloaming to hear the hob for themselves. Nothing is mended; the cream has not been restored. Do not claim the hob is appeased.',
+      doneNote: 'The visitor sat quiet by Dale End Farm at gloaming and heard the hob at his mischief — pattering feet, the dairy rattled, a dry little laugh in the dark. Nobody hurt; a hob never does worse than mischief. You told them the mending of it: a jug of sweet cream on the hearthstone, freely given.',
+      reward: { items: [[I.BILBERRIES, 5]], trust: [['glinda', 3]], text: '“Tha heard him, then,” Glinda says, nodding slow. “He’s not wicked, only wronged. What were stopped mun be started again. Come back to me when tha’s ready — I’ll have summat jugged up for thee.”' },
+      clues: [
+        { holder: 'cc', text: 'There’s a little brown man at t’ farm what does ALL t’ jobs at neet an’ he only wants CREAM an’ t’ new lady wouldn’t give him any an’ now he’s playing tricks on EVERYBODY.' },
+        { holder: 'harry', text: 'Granny went all quiet an’ said “t’ cream — they’ve stopped t’ cream.” What’s cream got to do wi’ gates opening themselves? Dead mysterious.' },
+      ],
+    },
+    hob3: {
+      id: 'hob3', giver: 'glinda', minStanding: 1, needs: 'hob2',
+      title: 'A Jug o’ Cream at Neet',
+      desc: 'Glinda’s jugged up sweet cream frae her own cow, corded in brown paper. Carry it up Farndale AFTER DARK an’ set it on t’ hearthstone at Dale End — freely given, nowt asked. Step soft, an’ keep thi eyes sharp.',
+      offer: 'You can offer the visitor the mending of the Dale End matter: you have jugged up sweet cream from your own cow, corded in brown paper, and they must carry it up Farndale AFTER DARK and set it on the farm’s hearthstone, the old way — freely given, nothing asked. Tell them to step soft and keep their eyes sharp: them that leaves the jug kindly sometimes gets a glimpse of the little man himself, and no harm in it. And warn them, as your granny warned you: never offer a hob clothes, however kind you mean it — a clad hob leaves forever.',
+      grantOnAccept: [[I.PARCEL, 1]],
+      steps: [
+        { kind: 'visit', x: farm.x, z: farm.z, r: 6, night: true, requireItem: I.PARCEL, effect: 'hobGlimpse',
+          objective: 'Leave t’ jug o’ cream on t’ Dale End hearthstone, after dark' },
+      ],
+      turnIn: 'auto',
+      truth: 'CRITICAL FACT: the jug of cream has NOT yet been left on the Dale End hearthstone. The hob is still slighted and the farm still failing. Do not claim the custom is restored.',
+      doneNote: 'The visitor carried your jug of sweet cream up Farndale after dark and set it on the Dale End hearthstone, the old way. They glimpsed the hob himself — a little brown man, there and gone in a blink — and come morning the jug stood empty, washed, and set neat on the step.',
+      reward: { items: [], trust: [['glinda', 3]], text: 'Come t’ grey o’ dawn t’ jug stands empty, washed, an’ set neat on t’ step. Somewhere under t’ floor, summat little is whistling at its work.' },
+      clues: [
+        { holder: 'karen', text: 'If tha’s off up t’ dale at neet, tek a lantern an’ mind t’ becks. An’ don’t let cc hear owt about little men, or she’ll be leaving cream out on our step for a month.' },
+        { holder: 'harry', text: 'Tha’s taking CREAM to a HOB at NEET?! That’s t’ best thing I’ve ever heard. Granny says if tha’s quiet an’ kind, tha might even SEE him!' },
+      ],
+    },
+    hob4: {
+      id: 'hob4', giver: 'james', minStanding: 2, needs: 'hob3',
+      honour: { title: 'Friend o’ t’ Hob', standing: 2 },
+      title: 'T’ Hob’s Back at Work',
+      desc: 'Word’s come down t’ dale: Dale End’s mending — gates fast, sheep folded, butter come sweet at first churning. Walk up by daylight, see t’ farm put right, then bring James t’ news so t’ whole tale can be told on t’ green.',
+      offer: 'You can offer the visitor the last of the Dale End matter: word has come down the dale that the farm is mending — gates fast, sheep folded, the butter come sweet at first churning, and the new wife leaves the jug herself now, every night without fail. You want the visitor to walk up by daylight, see the farm put right with their own eyes, and bring you the news proper, so the whole tale can be told on the green.',
+      steps: [
+        { kind: 'visit', x: farm.x, z: farm.z, r: 14,
+          objective: 'See Dale End Farm put right, by daylight' },
+      ],
+      turnIn: 'james',
+      truth: 'The visitor has NOT yet been back up to Dale End to see the farm mended. You have only word of it; the tale is not finished until they report back to you.',
+      doneNote: 'The visitor saw Dale End Farm thriving again — gates fast, sheep folded, the cream jug on the hearthstone every night — and the whole village heard the tale on the green. The hob of Farndale is at his work again, and the visitor is called Friend o’ t’ Hob for it.',
+      reward: {
+        items: [[I.COOKED_MUTTON, 4], [B.WOOL, 2]],
+        trust: [['james', 4], ['glinda', 4], ['karen', 2]],
+        text: 'James shakes thi hand, grinning. “Gates fast, butter come sweet, an’ t’ jug goes out every neet — tha’s mended more than a farm. Folk’s calling thee Friend o’ t’ Hob, an’ they’ll not stop.”',
+      },
+      clues: [
+        { holder: 'karen', text: 'T’ wife at Dale End leaves t’ jug hersen now, every neet wi’out fail — says she’d sooner go wi’out her own supper than miss it. Wonders never cease.' },
+        { holder: 'glinda', text: 'Keep faith wi’ t’ little folk an’ they keep faith wi’ thee. But mind: niver leave him clothes, however kind tha means it. A clad hob’s a gone hob — an’ Dale End’s had grief enough.' },
+      ],
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // The arc: Count Dracula on t' Moors (separate mystery — Whitby to abbey to neet)
 // Completing it makes t' open moor kinder after dark.
 // ---------------------------------------------------------------------------
@@ -530,6 +638,10 @@ export class Quests {
     this.game = game;
     this.geo = game.world.gen.geo;
     this.arc = buildArc(this.geo);
+    // T' Hob o' Farndale: a second curated folklore arc, offered through the
+    // same giver flow as the Barghest arc (hobNext in refreshOffers). Kid-safe
+    // (mischief, never horror), so it runs in every world, bairns' included.
+    this.hobArc = buildHobArc(this.geo);
     // The Dracula arc is too dark for any children's world (bairns AND the free kids' world),
     // both of which use the real-Moors seed that would otherwise enable it. Shard-aware via
     // rooms.js so e.g. bairns-2 / bairns-free-2 are covered too.
@@ -607,6 +719,20 @@ export class Quests {
       if (this.completed.includes(id)) continue;
       if (this.active.some(q => q.id === id)) return null;
       const def = this.arc[id];
+      if (def.needs && !this.completed.includes(def.needs)) return null;
+      return def;
+    }
+    return null;
+  }
+
+  // Next hob chapter wanting an offer — the exact arcNext contract: null while a
+  // chapter is active or the chain's needs aren't met. hob1 needs 'arc2', so the
+  // whole arc stays hidden until the White Lady chapter is done.
+  hobNext() {
+    for (const id of ['hob1', 'hob2', 'hob3', 'hob4']) {
+      if (this.completed.includes(id)) continue;
+      if (this.active.some(q => q.id === id)) return null;
+      const def = this.hobArc[id];
       if (def.needs && !this.completed.includes(def.needs)) return null;
       return def;
     }
@@ -833,13 +959,21 @@ export class Quests {
       this.lastShameDay = day;
     }
 
-    // arc chapter goes to its giver
+    // arc chapter goes to its giver; then t' hob arc's, through t' same slots
     const arcDef = this.arcNext();
+    const hobDef = this.hobNext();
     const givers = ['james', 'glinda', 'harry', 'karen', 'cc'];
     for (const g of givers) {
       if (this.offers[g] || this.active.some(q => q.giver === g)) continue;
       if (arcDef && arcDef.giver === g && sIdx >= arcDef.minStanding) {
         this.offers[g] = this.buildArcInstance(arcDef);
+        continue;
+      }
+      // T' Hob o' Farndale: same instance shape, same accept/turn-in flow. The
+      // Barghest arc wins a contested giver slot (it comes first above), so the
+      // hob chapter simply waits its turn — no chapter is ever lost.
+      if (hobDef && hobDef.giver === g && sIdx >= hobDef.minStanding) {
+        this.offers[g] = this.buildArcInstance(hobDef);
         continue;
       }
       // errands, gated by standing
@@ -886,7 +1020,8 @@ export class Quests {
       truth: def.truth, doneNote: def.doneNote,
       steps: def.steps.map(s => ({ ...s, progress: 0 })),
       stepIdx: 0, state: 'offered', turnIn: def.turnIn, reward: def.reward, arc: true,
-      honour: def.honour || null,   // opt-in: an earned title + standing on finish (future arcs)
+      honour: def.honour || null,   // opt-in: an earned title + standing on finish (hob4, future arcs)
+      grantOnAccept: def.grantOnAccept || null,   // e.g. Glinda's jug o' cream (hob3); accept() grants it
     };
   }
 
@@ -1226,6 +1361,16 @@ export class Quests {
         ? `Tha pours holy water on t\u2019 grave-earth \u2014 it hisses an\u2019 goes cold. <b>Box ${this.boxesSanctified} o\u2019 3 sanctified.</b>`
         : `Tha breaks t\u2019 box open \u2014 foreign grave-earth, but no holy water to bless it true. <b>Box ${this.boxesSanctified} o\u2019 3.</b>`, 6000);
       g.audio.pickup();
+    } else if (name === 'hobHeard') {
+      // hob2: gloaming by the Dale End dairy — heard, never seen. Mischief, not menace.
+      g.ui.toast('Frae inside t’ dairy: a clatter, patterin’ feet, an’ a little dry laugh. Nowt to be seen — but summat heard thee an’ all.', 6500);
+    } else if (name === 'hobGlimpse') {
+      // hob3: the jug (I.PARCEL) is left on the hearthstone — consumed exactly as
+      // 'deliver' consumes the errand parcel — and the hob shows himself for half a blink.
+      p.removeItem(I.PARCEL, 1);
+      g.ui.invDirty = true;
+      g.ui.toast('Tha sets t’ jug on t’ hearthstone... an’ for half a blink a <b>little brown man</b> wi’ bright eyes looks up at thee frae by t’ fire — then he’s gone, an’ t’ cream wi’ him.', 8000);
+      g.audio.pickup();
     } else if (name === 'deliver') {
       p.removeItem(I.PARCEL, 1);
       g.ui.invDirty = true;
@@ -1462,6 +1607,11 @@ export class Quests {
     }
     if (this.completed.includes('arc1') && !this.completed.includes('arc5')) {
       parts.push('Known to the whole village: a sheep was taken in the night a while back, and the visitor tracked it to the Wainstones, coming back with a scrap of cold black hide. Folk whisper it is a barghest. The matter is not settled yet.');
+    }
+    if (this.completed.includes('hob4')) {
+      parts.push('Known to the whole village: the mischief at Dale End Farm up Farndale was a slighted hob — the new wife had stopped his nightly jug of cream. The visitor restored the old custom, the hob went back to his work, and the farm thrives again. Folk call the visitor Friend o’ t’ Hob.');
+    } else if (this.completed.includes('hob1')) {
+      parts.push('Known about the village: Dale End Farm up Farndale has gone wrong — gates opened in the night, sheep scattered, milk soured — and the visitor has been looking into it. The matter is not settled yet.');
     }
 
     // a job they can offer

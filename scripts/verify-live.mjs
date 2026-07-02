@@ -16,6 +16,10 @@
 //      client's roster.js consumes (id/name/state) hasn't drifted.
 //   4. relay WebSocket — join a scratch room (verify-harness), get the init the
 //      client's multiplayer.js resolves on, round-trip a timeq, close clean.
+//   5. bot-player protocol round-trip — TWO sockets in verify-harness; A's join,
+//      pos and edit broadcasts must all reach B (the relay never echoes a sender
+//      its own message back, so a second socket is the only honest witness).
+//      The edit is made and then reverted (id back to 0), leaving the room clean.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { cmp } from '../src/update-check.js';
@@ -115,5 +119,111 @@ await new Promise((resolve, reject) => {
   };
   ws.onerror = () => { /* onclose carries the story */ };
 });
+
+// ---- 5. bot-player protocol round-trip ------------------------------------------
+// Two bot players prove the relay still RELAYS, not merely answers. Facts checked
+// against the live relay source (~/moorstead/worldsvc/server.py on the EVO):
+//   - join/pos/edit are broadcast with skip=<sender> — a sender NEVER receives its
+//     own message back, so B (not A) must witness everything A sends.
+//   - pos is rebroadcast raw and immediately (pid stamped in, no aggregation) to
+//     everyone in the room regardless of distance; only chat is range-limited.
+//   - edits are refused until the client's acked epoch >= room epoch (epoch_gate
+//     may_persist) — so the bot mimics the client's post-init {type:'epochack'}.
+//   - relay edit bounds: 0 <= y < 64, 0 <= id < 64, |x|,|z| < 100000.
+//   - an edit with id == was POPS the room's edit-ledger entry, so editing air
+//     0 -> 3 -> 0 asserts two broadcasts AND leaves the ledger exactly as found.
+//   - pids beginning with 'a' are treated as invited accounts and demand a token;
+//     bot pids must not start with 'a' (ours start 'verify-').
+console.log('== relay protocol round-trip (two bot players) ==');
+{
+  const run = Math.random().toString(36).slice(2, 8);
+  const EX = 77777, EY = 60, EZ = -77777, EID = 3; // scratch coord: air high over nowhere, inside relay bounds
+
+  class Bot {
+    constructor(tag, label) {
+      this.pid = `verify-bot-${tag}-${run}`;
+      this.label = label;
+      this.inbox = [];   // every non-init message, so nothing is lost between waits
+      this.waiters = []; // pending waitFor rescans
+      this.ws = null;
+    }
+    connect(timeoutMs = 15000) {
+      return new Promise((resolve, reject) => {
+        const url = `${WS_URL}?room=verify-harness&pid=${this.pid}&name=${encodeURIComponent(this.label)}&epoch=0`;
+        this.ws = new WebSocket(url);
+        let init = false;
+        this.ws.onmessage = (e) => {
+          let m; try { m = JSON.parse(e.data); } catch { return; }
+          if (m.type === 'init' && !init) { init = true; resolve(m); return; }
+          this.inbox.push(m);
+          for (const w of this.waiters.splice(0)) w();
+        };
+        this.ws.onclose = (ev) => { if (!init) reject(new Error(`${this.label}: relay closed before init (code ${ev.code})`)); };
+        this.ws.onerror = () => { /* onclose carries the story */ };
+        setTimeout(() => { if (!init) reject(new Error(`${this.label}: no init within ${timeoutMs}ms`)); }, timeoutMs);
+      });
+    }
+    send(obj) { this.ws.send(JSON.stringify(obj)); }
+    waitFor(pred, what, timeoutMs = 10000) {
+      const scan = () => { const i = this.inbox.findIndex(pred); return i === -1 ? null : this.inbox.splice(i, 1)[0]; };
+      return new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error(`${this.label}: did not receive ${what} within ${timeoutMs}ms`)), timeoutMs);
+        const attempt = () => { const m = scan(); if (m) { clearTimeout(t); resolve(m); } else this.waiters.push(attempt); };
+        attempt();
+      });
+    }
+    close() { try { this.ws?.close(1000); } catch { /* already down */ } }
+  }
+
+  const botB = new Bot('b', 'Verify Bot B');
+  const botA = new Bot('a', 'Verify Bot A');
+
+  const roundTrip = async () => {
+    // B joins FIRST so it is in the room to witness A's join broadcast.
+    const initB = await botB.connect();
+    ok(initB && Array.isArray(initB.edits), `bot B got init (epoch ${initB.epoch ?? '?'}, ${Object.keys(initB.players || {}).length} players already in)`);
+    const initA = await botA.connect();
+    ok(initA && Array.isArray(initA.edits), `bot A got init (epoch ${initA.epoch ?? '?'})`);
+    ok(initA.players && botA.pid !== botB.pid && botB.pid in initA.players, `A's init lists B among the players (distinct pids)`);
+
+    const join = await botB.waitFor(m => m.type === 'join' && m.pid === botA.pid, `join broadcast for ${botA.pid}`);
+    ok(join.pid === botA.pid, `B witnessed A's join broadcast (name "${join.name}")`);
+
+    // mimic the client's onInit: ack the room epoch, else may_persist refuses our edits
+    botA.send({ type: 'epochack', epoch: +initA.epoch || 0 });
+
+    // pos: A reports a position, B must hear it (relay skips only the sender)
+    const px = EX + 0.5, py = EY + 2, pz = EZ + 0.5, pyaw = 1.57;
+    botA.send({ type: 'pos', x: px, y: py, z: pz, yaw: pyaw });
+    const pos = await botB.waitFor(m => m.type === 'pos' && m.pid === botA.pid, `pos broadcast for ${botA.pid}`);
+    ok(Math.abs(pos.x - px) < 0.01 && Math.abs(pos.y - py) < 0.01 && Math.abs(pos.z - pz) < 0.01 && Math.abs(pos.yaw - pyaw) < 0.01,
+      `B received A's pos with the coords A sent (${pos.x}, ${pos.y}, ${pos.z}, yaw ${pos.yaw})`);
+
+    // edit: place a block (mirrors multiplayer.js sendEdit), B must hear the broadcast
+    botA.send({ type: 'edit', x: EX, y: EY, z: EZ, id: EID, was: 0, cat: 'build', day: 0, by: botA.pid });
+    const ed = await botB.waitFor(m => m.type === 'edit' && m.x === EX && m.y === EY && m.z === EZ, `edit broadcast at ${EX},${EY},${EZ}`);
+    ok(ed.id === EID, `B received A's block edit (id ${ed.id} at ${EX},${EY},${EZ}) — epochack was honoured`);
+
+    // inverse edit: id == was == 0 pops the ledger entry (room left clean) AND is
+    // itself broadcast, doubling as a second edit assertion.
+    botA.send({ type: 'edit', x: EX, y: EY, z: EZ, id: 0, was: 0, cat: 'build', day: 0, by: botA.pid });
+    const ed2 = await botB.waitFor(m => m.type === 'edit' && m.x === EX && m.y === EY && m.z === EZ, `inverse-edit broadcast at ${EX},${EY},${EZ}`);
+    ok(ed2.id === 0, `B received the inverse edit (id 0) — block restored, edit ledger left clean`);
+  };
+
+  let guardT;
+  const guard = new Promise((_, rej) => { guardT = setTimeout(() => rej(new Error('bot round-trip: overall 60s guard tripped — the section can never hang')), 60000); });
+  try {
+    await Promise.race([roundTrip(), guard]);
+  } catch (e) {
+    if (process.exitCode !== 1) { console.error(`  FAIL  ${e.message}`); process.exitCode = 1; }
+    throw e;
+  } finally {
+    clearTimeout(guardT);
+    botA.close();
+    botB.close();
+  }
+  info('both bot sockets closed clean (code 1000)');
+}
 
 console.log(`\nRESULT: PASS (${n} live checks green)`);
