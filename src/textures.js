@@ -203,6 +203,32 @@ const TILE_PAINTERS = {
     p.rect(0, 0, T, 2, shade(0x6e5535, 1));
     p.rect(2, 5, 3, 4, shade(0x55401f, 1)); p.rect(10, 5, 4, 5, shade(0x55401f, 1));
   },
+  [TILE.STRONGBOX_TOP](p) {
+    // dark oak lid, two iron straps riveted across it
+    p.speckle(0x5a4326, 0.12);
+    for (const y of [0, 5, 10, 15]) p.rect(0, y, T, 1, shade(0x3c2c16, 1)); // plank joins
+    p.dots(0x6e5330, 12); p.dots(0x46341c, 10);
+    for (const x of [3, 11]) {
+      p.rect(x, 0, 2, T, '#4e535b');                    // iron band
+      p.rect(x, 0, 1, T, '#5d636c');                    // worn highlight edge
+      for (const y of [2, 7, 13]) p.px(x + 1, y, '#767d87'); // rivets
+    }
+  },
+  [TILE.STRONGBOX_SIDE](p) {
+    // dark oak boards, iron banding, hasp an' keyhole plate front-centre
+    p.speckle(0x5a4326, 0.12);
+    for (const y of [0, 4, 8, 12]) p.rect(0, y, T, 1, shade(0x3c2c16, 1)); // boards
+    p.rect(0, 5, T, 1, shade(0x2a1e10, 1));             // lid seam
+    p.dots(0x6e5330, 12); p.dots(0x46341c, 10);
+    for (const x of [2, 12]) {
+      p.rect(x, 0, 2, T, '#4e535b');                    // iron band
+      p.rect(x, 0, 1, T, '#5d636c');
+      for (const y of [2, 7, 13]) p.px(x + 1, y, '#767d87'); // rivets
+    }
+    p.rect(6, 4, 4, 5, '#4e535b');                      // hasp plate over t' seam
+    p.rect(6, 4, 4, 1, '#5d636c');
+    p.px(7, 6, '#1c1f24'); p.rect(7, 7, 2, 1, '#1c1f24'); // keyhole
+  },
   [TILE.LANTERN](p) {
     p.speckle(0x2a2a30, 0.1);
     p.rect(3, 2, 10, 12, '#1c1c22');

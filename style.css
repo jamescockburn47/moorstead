@@ -567,6 +567,19 @@ html.touch .game { touch-action: none; }
 .touch-more-item { min-height: 44px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; }
 .touch-whistles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .inv-close { display: block; margin: 0 0 10px auto; padding: 6px 16px; }   /* top-right Done in the inventory */
+
+/* oak strongbox panel: 27-slot chest grid + brass well over thi pockets */
+.box-note { color: #b8b0a0; font-size: 13px; line-height: 1.35; margin: -2px 0 8px; max-width: 470px; }
+.brass-well {
+  margin: 12px 0 2px; padding: 8px 12px; max-width: 446px;
+  background: rgba(216, 185, 90, 0.07); border: 1px solid rgba(216, 185, 90, 0.35); border-radius: 6px;
+}
+.brass-well .brass-line { color: #d8d2c4; font-size: 14px; margin-bottom: 7px; }
+.brass-well .brass-line b { color: var(--gold); }
+.brass-well .brass-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.brass-well button.mc { width: auto; margin: 0; padding: 5px 12px; font-size: 13px; }
+.brass-well button.mc.unavail { opacity: 0.4; cursor: default; }
+.brass-well button.mc.unavail:hover { background: linear-gradient(#6e6658, #55503f); }
 .sleep-wake { margin-top: 18px; }                                          /* keyboard-free wake on the sleep screen */
 #lock-hint {                                                               /* shown when playing but pointer-lock was lost */
   position: fixed; inset: 0; display: none; align-items: center; justify-content: center;

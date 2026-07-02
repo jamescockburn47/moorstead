@@ -15,6 +15,7 @@ import { Quests, wantGiants, wantWreck, wantHound } from './quests.js';
 import { Economy, bestMarket, FREIGHT_ALLOWANCE, farmRegisterCheck, CHARTER_FEE, livestockPrice, droveValue, convertAt, marketTownName } from './economy.js';
 import { deedFee, weeklyUpkeep, isLapsed, DEED, findActiveDeed, findLapsedDeed, inDeed, makeDeed, lapsesUnderUpkeep } from './deeds.js';
 import { isFreeRoom, isBairnsRoom, baseRoom, FREE_STARTER } from './rooms.js';
+import { boxKey, makeBox, normalizeBox, spillBox } from './save.js';
 import { gatherContext, submitFeedback, reportQuiet } from './feedback.js';
 import { miningDigGuide } from './mining-guide.js';
 import { mayDigDeep, categoryOf } from './editledger.js';
@@ -416,6 +417,9 @@ class Game {
     this.entities.onKill = mob => { this.quests.onMobKilled(mob); this.milestones.onKill(mob.type); };
     window.moorstead = window.moorcraft = this; // a handle for t' dev console
     this.lastQuestDay = 1;
+    // oak strongboxes: contents keyed by block coordinate (boxKey). Rides meta.strongboxes
+    // in solo; the shared moor loads its own room-keyed copy in joinShared (local-only v1).
+    this.world.strongboxes = new Map();
 
     if (meta) {
       this.player.deserialize(meta.player);
@@ -428,6 +432,8 @@ class Game {
       this.world.treeRegrowth = new Map(meta.treeRegrowth || []); this.world.saplings = new Map(meta.saplings || []);
       this.world.fruitStumps = new Set(meta.fruitStumps || []); // which stumps regrow as fruit trees
       this.world.deeds = meta.deeds || [];
+      // strongbox contents (additive — old saves just have none)
+      this.world.strongboxes = new Map((meta.strongboxes || []).map(([k, b]) => [k, normalizeBox(b)]));
       if (!this.world.deeds.some(d => d.by === 'parish' && d.kind === 'quarry')) {
         this.world.deeds.push(
           { id: 'quarry_moorstead', kind: 'quarry', by: 'parish', cx: 40, cz: 60, radius: 10, paidUntilDay: Infinity, lapsedDay: null },
@@ -548,6 +554,9 @@ class Game {
         });
         if (toast) this.ui.toast('Thi things are lodged wi\u2019 t\u2019 parish. Champion.');
       }
+      // strongbox contents are LOCAL-ONLY on t' shared moor (v1): the relay knows nothing
+      // of 'em, so they keep in this browser, keyed by room \u2014 same as thi solo save would.
+      this.persistNetStrongboxes();
       return;
     }
     // storage nigh full? Say so ONCE a session, before the write, so a kid knows why their
@@ -576,6 +585,7 @@ class Game {
       treeRegrowth: [...this.world.treeRegrowth], saplings: [...this.world.saplings], // tree regrowth in progress
       fruitStumps: [...this.world.fruitStumps], // stumps that regrow as fruit trees, not oaks
       deeds: this.world.deeds, // staked deeds (claims + mine licences)
+      strongboxes: [...(this.world.strongboxes || new Map())], // oak strongbox contents, keyed by block coord
       savedAt: Date.now(),
     };
     await saveGame(meta, this.world.collectModified());
@@ -741,7 +751,7 @@ class Game {
         }
         const num = parseInt(e.key);
         if (num >= 1 && num <= 9) { this.player.hotbar = num - 1; this.ui.invDirty = true; }
-      } else if (this.state === 'inv' || this.state === 'range') {
+      } else if (this.state === 'inv' || this.state === 'range' || this.state === 'box') {
         if (e.code === 'KeyE' || e.code === 'Escape') this.closeScreens();
       } else if (this.state === 'board' || this.state === 'museum') {
         if (e.code === 'KeyQ' || e.code === 'Escape') this.closeScreens();
@@ -1201,10 +1211,48 @@ class Game {
   }
 
   closeScreens() {
+    const wasBox = this.state === 'box';
     this.ui.closeInventory(this.player);
     this.state = 'playing';
     this.ui.show(null);
     this.lockPointer();
+    if (wasBox) this.saveNow(false); // a stash is only worth owt if it keeps — persist on close
+  }
+
+  // ---------------- oak strongbox ----------------
+  // Right-click a placed strongbox: open its chest panel (27 slots + a brass well).
+  // Contents are keyed by block coordinate; no locks in v1 — on t' shared moor kids
+  // share bases, so anyone may open or break a box.
+  openStrongbox(x, y, z) {
+    const store = this.world.strongboxes || (this.world.strongboxes = new Map());
+    const key = boxKey(x, y, z);
+    let box = store.get(key);
+    if (!box) { box = makeBox(); store.set(key, box); }
+    this.state = 'box';
+    this.mouseDown = [false, false, false];
+    this.clearKeys();
+    document.exitPointerLock?.();
+    this.ui.openStrongbox(this.player, box);
+  }
+
+  // Shared-moor strongbox persistence (v1, LOCAL-ONLY): the relay knows nothing — a box's
+  // contents are thine own browser's memory, kept in localStorage keyed by room. (Storage
+  // keys keep t' owd 'moorcraft' prefix, same as the rest.) Solo worlds ride meta.strongboxes
+  // through saveGame/loadGame instead.
+  netBoxStorageKey() { return 'moorcraft.strongboxes.' + (this.netRoom || 'moor'); }
+
+  persistNetStrongboxes() {
+    if (!this.netActive || !this.world || !this.world.strongboxes) return;
+    try { localStorage.setItem(this.netBoxStorageKey(), JSON.stringify([...this.world.strongboxes])); }
+    catch { /* storage full or blocked — t' boxes keep in memory for t' session */ }
+  }
+
+  loadNetStrongboxes() {
+    if (!this.world) return;
+    try {
+      const raw = localStorage.getItem(this.netBoxStorageKey());
+      if (raw) this.world.strongboxes = new Map(JSON.parse(raw).map(([k, b]) => [k, normalizeBox(b)]));
+    } catch { /* corrupt or blocked — start wi' empty boxes rather than crash t' join */ }
   }
 
   // ---------------- villagers & chat ----------------
@@ -1903,6 +1951,7 @@ class Game {
     const idx = Math.floor(hash2i(ss(who), 7, 99) * this.world.gen.geo.villages.length);
     this.spawn = this.world.gen.findSpawnAt(idx);
     this.player.pos = { ...this.spawn };
+    this.loadNetStrongboxes(); // thi stashes on this moor, frae this browser's memory (local-only v1)
     this.ui.toast(`Walking up onto <b>T\u2019 Shared Moor</b> \u2014 tha wakes in <b>${this.spawn.village}</b>. Builds, pockets an\u2019 ventures all keep. <b>T</b> to talk (speech carries ~60m).`, 10000);
     this.enforceBairnRules();
   }
@@ -3482,6 +3531,24 @@ class Game {
       this.ui.toast('Thi base flag&rsquo;s down &mdash; plant a new un to set thi home.', 5000);
       if (this.saveNow) this.saveNow(false);
     }
+    // breaking a strongbox spills its contents as drops — never vaporises 'em.
+    // No locks in v1: on t' shared moor kids share bases, so anyone may break a box
+    // (its brass goes to whoever breaks it, same as the spilled goods).
+    if (hit.id === B.STRONGBOX && this.world.strongboxes) {
+      const bk = boxKey(hit.x, hit.y, hit.z);
+      const box = this.world.strongboxes.get(bk);
+      if (box) {
+        const { drops, brass } = spillBox(box);
+        for (const [id, n] of drops) this.entities.spawnDrop(hit.x + 0.5, hit.y + 0.4, hit.z + 0.5, id, n);
+        if (brass > 0) {
+          this.player.brass = (this.player.brass || 0) + brass;
+          this.ui.toast(`T&rsquo; box&rsquo;s brass &mdash; <b>${this.economy ? this.economy.format(brass) : brass}</b> &mdash; goes in thi purse.`, 5000);
+        }
+        this.world.strongboxes.delete(bk);
+        this.ui.invDirty = true;
+        this.saveNow(false);
+      }
+    }
     this.entities.blockBurst(hit.x, hit.y, hit.z, hit.id);
     this.audio.breakBlock();
     if (!this.player.creative && !noDrop && def.drop !== null && def.drop !== undefined) {
@@ -3603,6 +3670,7 @@ class Game {
       const wgeo = this.world.gen.geo;
       if (wgeo.worksAt) { const w = wgeo.worksAt(hit.x, hit.z); if (w) { this.openWorks(w); return; } }
       if (hit.id === B.BENCH) { this.openInventory(); return; }
+      if (hit.id === B.STRONGBOX) { this.openStrongbox(hit.x, hit.y, hit.z); return; }
       if (hit.id === B.BOARD) {
         const geo = this.world.gen.geo;
         if (geo.isMuseumBoard(hit.x, hit.z)) { this.openMuseum(); return; }
@@ -3754,6 +3822,13 @@ class Game {
 
     this.world.setBlock(px, py, pz, held.id);
     if (held.id === B.HOME_FLAG) this.setHomeBase(px, py, pz); // planting a flag marks thi home
+    // a fresh strongbox starts empty: clear any stale contents left keyed at this coord
+    // (e.g. the block was broken by another player on t' shared moor — edits sync, local
+    // box data doesn't, an' a new box mustn't inherit a ghost stash)
+    // placing a strongbox where a stash already lives ADOPTS it rather than wiping it —
+    // on t' shared moor thi contents are thine own browser's memory, so if another soul
+    // broke thi box, re-placing one on t' same spot gets thi goods back (no dupe: the
+    // stash only ever exists in one browser's store, an' breaking thi own box spills it)
     this.entities.lastBuild = { x: px + 0.5, z: pz + 0.5, t: performance.now() }; // so nosy folk can come have a look
     if (!this.player.creative) this.player.consumeHeld();
     this.audio.place();
@@ -4529,6 +4604,7 @@ class Game {
         } else if (hit.id === B.SIGNPOST) hint = 'Right-click: read t\u2019 waymark';
         else if (hit.id === B.BENCH) hint = 'Right-click: joiner\u2019s bench (craftin\u2019)';
         else if (hit.id === B.RANGE) hint = 'Right-click: t\u2019 range (cookin\u2019 an\u2019 smeltin\u2019)';
+        else if (hit.id === B.STRONGBOX) hint = 'Right-click: oak strongbox (stash thi goods an\u2019 brass)';
         this.ui.interactHint.textContent = hint;
       } else if (this.entities && this.entities.mobs.some(m => m && !m.dead && m.droving && m.type === 'sheep')) {
         // mid-drove — keep 'em bunched; the whistles still drive 'em

@@ -1,5 +1,6 @@
 // All DOM UI: title, HUD, inventory/crafting/smelting, chat, quests, pause, death, minimap, toasts.
 import { B, I, RECIPES, SMELTS, FUELS, FOODS, TOOLS, itemName, maxStack, CREATIVE_ITEMS, CHUNK, WATER_LEVEL } from './defs.js';
+import { containerClick, transferBrass } from './save.js';
 import { FARM_THRESHOLD, CHARTER_FEE, farmRegisterCheck, droveValue, spreadHint } from './economy.js';
 import { deedFee, weeklyUpkeep } from './deeds.js';
 import { getIconURL } from './textures.js';
@@ -441,6 +442,7 @@ export class UI {
 <li><b>THE GREAT FOG.</b> Every few days, a thick fog descends on the <b>high tops</b> for half a day. Visibility drops to five yards, and <b>your map and bearings are disabled</b> (no minimap, no coordinates). Valleys and the coast remain clear. If caught on the tops: <b>stop</b>. Find a waymark stone or wall and follow it; signposts still show the way to shelters. Alternatively, place torches as breadcrumbs and wait it out.</li>
 <li><b>Sleep the night away.</b> Find a <b>roof and a light</b> (a villager's house, the pub, a shelter, or your own cottage with a torch inside) and press <b>N</b> to sleep until morning. You will wake up with <b>full health</b> and a small appetite. In multiplayer, the night only passes when <b>everyone</b> sleeps.</li>
 <li><b>Dying:</b> you wake at your base flag (or somewhere fresh) with your <b>tools, pets and animals safe</b>. On the <b>Free Moor</b> that is the whole of it — nothing else is lost. Everywhere else, <b>half your materials and half your brass</b> go with you — so spend spare brass before a risky venture, and plant a <b>Base Flag</b> so you wake at home.</li>
+<li><b>Oak Strongbox:</b> craft one at a bench (6 planks + 1 iron ingot), place it at home, and right-click to stash goods and bank brass. <b>Whatever is boxed does not fall with you</b> — the death penalty only takes what you carry. There are no locks: anyone can open or break a box (breaking spills the contents, they are never lost). On the shared moor a box's contents are kept in <b>your own browser's memory</b>, so open your stash from the same device you filled it on.</li>
 </ul>
 <h3>Claims and build decay</h3>
 <ul>
@@ -633,6 +635,7 @@ export class UI {
 <ul>
 <li>Press <b>E</b> to open your pockets. Basic recipes (planks, sticks, bench, thatch) can be crafted anywhere. Advanced recipes require you to be <b>stood near a joiner's bench</b>.</li>
 <li>Key recipes: pickaxes, axes, spades, and swords (wood, gritstone, and iron), <b>ranges</b> (8 cobble), <b>lanterns</b> (ingot + coal), dressed stone, thatch, and windows for your cottage.</li>
+<li><b>Oak Strongbox</b> (6 planks + 1 iron ingot, at a bench): home storage — right-click it to stash goods and bank brass. Stashed goods and banked brass <b>survive death</b>; see <i>Staying Alive</i>.</li>
 <li>A free bench and range are available in the pub (The Black Sheep, on the west side of the village green).</li>
 </ul>
 <h3>The Range (cooking & smelting)</h3>
@@ -1730,6 +1733,12 @@ export class UI {
             if (left2 > 0) this.game.dropAtPlayer(r.out, left2);
             this.game.audio.craft();
             this.game.milestones.onCraft(r.out);
+            // first strongbox ever crafted on this save: one nudge about what it's FOR
+            // (a player flag, one-shot like the milestones — rides player.serialize)
+            if (r.out === B.STRONGBOX && !player.strongboxHinted) {
+              player.strongboxHinted = true;
+              this.toast('Stash thi goods an&rsquo; brass at home &mdash; what&rsquo;s boxed doesn&rsquo;t fall wi&rsquo; thee.', 8000);
+            }
             this.invDirty = true;
             this.openInventory(player, nearBench); // re-render
           });
@@ -1798,6 +1807,73 @@ export class UI {
     }
     this.tooltip.classList.add('hidden');
     this.invDirty = true;
+  }
+
+  // ============ oak strongbox ============
+  // Chest panel: 27 box slots (9x3) + a brass well + thi pockets underneath. Item moves
+  // reuse the pockets' click-based cursor idiom (containerClick — the same pure logic,
+  // testable headless), so mouse an' touch behave exactly like the inventory screen.
+  openStrongbox(player, box) {
+    this.invPanel.innerHTML = '';
+    const close = this.el('button', 'mc inv-close', this.invPanel, 'Done');
+    close.addEventListener('click', () => this.game.closeScreens());
+
+    this.el('div', 'inv-title', this.invPanel, 'Oak Strongbox');
+    this.el('div', 'box-note', this.invPanel,
+      'What&rsquo;s boxed doesn&rsquo;t fall wi&rsquo; thee &mdash; stash goods an&rsquo; brass here afore a risky venture.');
+    const boxGrid = this.el('div', 'inv-grid', this.invPanel);
+    for (let i = 0; i < box.slots.length; i++) {
+      const s = this.el('div', 'slot', boxGrid);
+      this.renderSlot(s, box.slots[i]);
+      if (box.slots[i]) this.bindTooltip(s, itemName(box.slots[i].id));
+      s.addEventListener('mousedown', e => { e.preventDefault(); this.boxSlotClick(player, box, box.slots, i, e.button); });
+      s.addEventListener('contextmenu', e => e.preventDefault());
+    }
+
+    // brass well: bank thi pence in t' box — banked brass doesn't halve when tha falls
+    const fmt = n => (this.game.economy ? this.game.economy.format(n) : n + 'd');
+    const well = this.el('div', 'brass-well', this.invPanel);
+    this.el('div', 'brass-line', well,
+      `In t&rsquo; box: <b>${fmt(box.brass)}</b> &middot; In thi purse: <b>${fmt(player.brass)}</b>`);
+    const row = this.el('div', 'brass-btns', well);
+    const btn = (label, on, can) => {
+      const b = this.el('button', 'mc' + (can ? '' : ' unavail'), row, label);
+      if (can) b.addEventListener('mousedown', e => { e.preventDefault(); on(); });
+      b.addEventListener('contextmenu', e => e.preventDefault());
+    };
+    const move = (src, dst, n) => {
+      if (transferBrass(src, dst, n) > 0) {
+        if (this.game.audio && this.game.audio.craft) this.game.audio.craft();
+        this.invDirty = true;
+        this.openStrongbox(player, box);
+      }
+    };
+    btn('Put in 10', () => move(player, box, 10), player.brass >= 1);
+    btn('Put in 100', () => move(player, box, 100), player.brass >= 1);
+    btn('Tek out 10', () => move(box, player, 10), box.brass >= 1);
+    btn('Tek out 100', () => move(box, player, 100), box.brass >= 1);
+
+    this.el('div', 'inv-title', this.invPanel, 'Thi Pockets');
+    const grid = this.el('div', 'inv-grid', this.invPanel);
+    const order = [];
+    for (let i = 9; i < 36; i++) order.push(i);
+    for (let i = 0; i < 9; i++) order.push(i);
+    for (const idx of order) {
+      const s = this.el('div', 'slot' + (idx < 9 ? ' sel' : ''), grid);
+      if (idx < 9) s.style.borderColor = '#8a8062';
+      this.renderSlot(s, player.slots[idx]);
+      if (player.slots[idx]) this.bindTooltip(s, itemName(player.slots[idx].id));
+      s.addEventListener('mousedown', e => { e.preventDefault(); this.boxSlotClick(player, box, player.slots, idx, e.button); });
+      s.addEventListener('contextmenu', e => e.preventDefault());
+    }
+    this.show('invScreen');
+  }
+
+  boxSlotClick(player, box, slots, idx, button) {
+    this.drag = containerClick(slots, idx, this.drag, button, maxStack);
+    this.refreshDrag();
+    this.invDirty = true;
+    this.openStrongbox(player, box);
   }
 
   bindTooltip(el, text) {

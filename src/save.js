@@ -110,6 +110,95 @@ export async function clearSave() {
   db.close();
 }
 
+// ---- Oak strongbox containers (pure — verify-strongbox runs these headless) ----
+// A strongbox is home storage keyed by its block coordinate. Contents ride the save meta
+// (meta.strongboxes = [...Map]) in solo; on the shared moor they live in localStorage per
+// room (main.persistNetStrongboxes) — the relay knows nothing in v1. The box record carries
+// a schema version `v` so a future relay-synced v2 can adopt an' migrate these containers.
+
+export const BOX_SLOTS = 27; // 9 x 3, a third of thi pockets
+
+export function boxKey(x, y, z) { return x + ',' + y + ',' + z; }
+
+export function makeBox() {
+  return { v: 1, slots: new Array(BOX_SLOTS).fill(null), brass: 0 };
+}
+
+// Coerce a loaded/foreign box record into a well-formed one (corrupt saves must never
+// NaN a purse or shrink a grid — same defensive stance as player.deserialize).
+export function normalizeBox(b) {
+  const box = makeBox();
+  if (b && Array.isArray(b.slots)) {
+    for (let i = 0; i < BOX_SLOTS; i++) {
+      const s = b.slots[i];
+      if (s && typeof s.id === 'number' && typeof s.n === 'number' && s.n > 0) {
+        box.slots[i] = s.dur !== undefined ? { id: s.id, n: Math.floor(s.n), dur: s.dur } : { id: s.id, n: Math.floor(s.n) };
+      }
+    }
+  }
+  if (b && Number.isFinite(b.brass) && b.brass > 0) box.brass = Math.floor(b.brass);
+  return box;
+}
+
+// One click on a container slot, mirroring ui.slotClick's cursor semantics exactly:
+//   left  (button 0): pick up / put down / merge stack / swap
+//   right (button 2): split half onto t' cursor / place one off it
+// Mutates `slots[idx]`; returns the NEW cursor stack (or null). `maxStackOf` gates merging
+// (tools have max stack 1, so they swap rather than merge — same as t' pockets).
+export function containerClick(slots, idx, cursor, button, maxStackOf = () => 64) {
+  const cur = slots[idx];
+  if (cursor) {
+    if (button === 2) { // place one
+      if (!cur) {
+        slots[idx] = cursor.dur !== undefined ? { id: cursor.id, n: 1, dur: cursor.dur } : { id: cursor.id, n: 1 };
+        cursor.n--;
+      } else if (cur.id === cursor.id && cur.n < maxStackOf(cur.id)) {
+        cur.n++; cursor.n--;
+      }
+      return cursor.n <= 0 ? null : cursor;
+    }
+    if (!cur) { slots[idx] = cursor; return null; }
+    if (cur.id === cursor.id && cur.n < maxStackOf(cur.id)) { // merge
+      const take = Math.min(cursor.n, maxStackOf(cur.id) - cur.n);
+      cur.n += take; cursor.n -= take;
+      return cursor.n <= 0 ? null : cursor;
+    }
+    slots[idx] = cursor; // swap
+    return cur;
+  }
+  if (!cur) return null;
+  if (button === 2) { // split half
+    const half = Math.ceil(cur.n / 2);
+    const out = cur.dur !== undefined ? { id: cur.id, n: half, dur: cur.dur } : { id: cur.id, n: half };
+    cur.n -= half;
+    if (cur.n <= 0) slots[idx] = null;
+    return out;
+  }
+  slots[idx] = null; // pick up
+  return cur;
+}
+
+// Move brass between two purses ({brass} holders — player or box). Clamped: tha can't
+// overdraw, an' nowt ever goes negative. Returns what actually moved.
+export function transferBrass(src, dst, amount) {
+  const have = Math.max(0, Math.floor(src.brass || 0));
+  const n = Math.max(0, Math.min(Math.floor(amount) || 0, have));
+  src.brass = have - n;
+  dst.brass = Math.max(0, Math.floor(dst.brass || 0)) + n;
+  return n;
+}
+
+// Breaking a strongbox must never vaporise its contents: empty the box and hand back
+// everything in it — item stacks to spawn as drops, brass to refund to the breaker.
+export function spillBox(box) {
+  const drops = [];
+  for (const s of box.slots) if (s && s.n > 0) drops.push([s.id, s.n]);
+  const brass = Math.max(0, Math.floor(box.brass || 0));
+  box.slots = new Array(box.slots.length).fill(null);
+  box.brass = 0;
+  return { drops, brass };
+}
+
 export async function hasSave() {
   const db = await openDB();
   const meta = await new Promise(resolve => {

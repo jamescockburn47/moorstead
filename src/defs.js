@@ -27,6 +27,7 @@ export const TILE = {
   SNOWBALL: 79,
   WREATH: 80, ROBIN: 81, HOLLY_SPRIG: 82, COTTONGRASS: 83,
   HOME_FLAG: 84,
+  STRONGBOX_TOP: 85, STRONGBOX_SIDE: 86,
 };
 
 // ---- Block ids ----
@@ -54,6 +55,7 @@ export const B = {
   ORCHARD_LEAVES: 58,
   COTTONGRASS: 59, // white-tufted sedge of the wet moor flushes
   HOME_FLAG: 60,   // a planted base flag — marks thi home; tha respawns here if tha falls
+  STRONGBOX: 61,   // oak strongbox wi' iron banding — stash goods an' brass; what's boxed doesn't fall wi' thee
 };
 
 // ---- Item ids (blocks double as items; pure items start at 64) ----
@@ -142,6 +144,10 @@ D[B.BOARD] = { name: 'Notice Board', kind: 'solid', tex: { t: TILE.PLANKS, s: TI
 D[B.TORCH] = { name: 'Torch', kind: 'cutout', tex: { t: TILE.TORCH, s: TILE.TORCH, b: TILE.TORCH }, hard: 0.05, tool: null, drop: B.TORCH, light: true };
 D[B.SIGNPOST] = { name: 'Waymark Signpost', kind: 'cutout', tex: { t: TILE.SIGNPOST, s: TILE.SIGNPOST, b: TILE.SIGNPOST }, hard: 1.0, tool: 'axe', drop: B.SIGNPOST };
 D[B.HOME_FLAG] = { name: 'Base Flag', kind: 'cutout', tex: { t: TILE.HOME_FLAG, s: TILE.HOME_FLAG, b: TILE.HOME_FLAG }, hard: 0.6, tool: null, drop: B.HOME_FLAG };
+// The oak strongbox: home storage wi' counterplay against the death penalty — stashed goods
+// an' banked brass are NOT carried, so they don't halve when tha falls. Breaking it spills
+// its contents as drops (main.finishBreak), never vaporises 'em.
+D[B.STRONGBOX] = { name: 'Oak Strongbox', kind: 'solid', tex: { t: TILE.STRONGBOX_TOP, s: TILE.STRONGBOX_SIDE, b: TILE.PLANKS }, hard: 2.5, tool: 'axe', drop: B.STRONGBOX };
 D[B.SAND] = { name: 'Bay Sand', kind: 'solid', tex: { t: TILE.SAND, s: TILE.SAND, b: TILE.SAND }, hard: 0.5, tool: 'shovel', drop: B.SAND };
 D[B.GORSE] = { name: 'Gorse', kind: 'cutout', tex: { t: TILE.GORSE, s: TILE.GORSE, b: TILE.GORSE }, hard: 0.05, tool: null, drop: B.GORSE };
 D[B.BRAMBLE] = { name: 'Bramble', kind: 'cutout', tex: { t: TILE.BRAMBLE, s: TILE.BRAMBLE, b: TILE.BRAMBLE }, hard: 0.1, tool: null, drop: B.BRAMBLE };
@@ -311,6 +317,7 @@ export const RECIPES = [
   { out: B.PIT_PROPS, n: 1, needs: [[B.LOG, 2], [I.STICK, 2]] },
   { out: B.SAFETY_LAMP, n: 1, needs: [[I.IRON_INGOT, 2], [B.TORCH, 1]], bench: true },
   { out: B.WINCH, n: 1, needs: [[B.PLANKS, 3], [I.STICK, 2], [I.IRON_INGOT, 1]], bench: true },
+  { out: B.STRONGBOX, n: 1, needs: [[B.PLANKS, 6], [I.IRON_INGOT, 1]], bench: true }, // oak chest, iron-banded — stashed goods survive death
   { out: I.WOOL_COAT, n: 1, needs: [[B.WOOL, 3]], bench: true },
 ];
 
@@ -351,7 +358,7 @@ export const CREATIVE_ITEMS = [
   B.LOG, B.PLANKS, B.LEAVES, B.THATCH, B.WOOL, B.HEATHER, B.BRACKEN,
   B.TUSSOCK, B.BILBERRY_BUSH, B.FERN, B.FOXGLOVE, B.DOG_ROSE, B.ELDER, B.MONKEY_LEAVES,
   B.COAL_ORE, B.IRON_ORE, B.JET_ORE,
-  B.BENCH, B.RANGE, B.LANTERN, B.WINDOW, B.TORCH, B.SIGNPOST, B.HOME_FLAG, B.BOARD,
+  B.BENCH, B.RANGE, B.STRONGBOX, B.LANTERN, B.WINDOW, B.TORCH, B.SIGNPOST, B.HOME_FLAG, B.BOARD,
   B.MINE_ENTRANCE, B.PIT_PROPS, B.SAFETY_LAMP, B.WINCH, B.ALUM_SHALE, B.POLYHALITE, B.ROCK_SALT,
   I.W_PICK, I.S_PICK, I.I_PICK, I.W_AXE, I.S_AXE, I.I_AXE,
   I.W_SHOVEL, I.S_SHOVEL, I.I_SHOVEL, I.W_SWORD, I.S_SWORD, I.I_SWORD,
