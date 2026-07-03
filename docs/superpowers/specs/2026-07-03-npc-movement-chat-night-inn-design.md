@@ -136,9 +136,37 @@ village unlocks that village's basics.
   makes the inn door read as a game threshold.
 - Rollout: flagship first — **The Station Tavern, Grosmont** (the village's genuine
   pub, apt for the junction village; there is no Moorstead village in the 1900s world).
-  Then a per-village template with seeded variation (layout, hearth position, which
-  game tables), each inn named (real pub names where they exist, period-plausible
-  otherwise).
+  Then every other town gets its inn from the same builder.
+
+### One builder, many inns (visuals are key — and cheap to replicate)
+
+The inn is a **parameterised template**, not a hand-built one-off:
+
+- `innPlan(villageName, seed)` → a deterministic plan object: parlour dimensions
+  (within bounds), hearth position, snug/settle arrangement, which game tables and
+  where, beam rhythm, window and door positions, panelling/flagstone palette pick,
+  exterior footprint + door face. Every village's inn is generated from this one
+  builder with per-(village, seed) variation — replicating to a new town is a data
+  row, not new code. Verify: `verify-inn-interior` asserts plan determinism per seed
+  and that all variants stay within the pocket bounds and pass the prop/collision
+  sanity checks.
+- **Seasonal dressing hooks**: the plan exposes mount points (mantel, beams, door,
+  windows, tables) that the existing seasonal/festival machinery dresses per season —
+  holly, ivy and extra candles in deep winter; May garlands and blossom jars in
+  spring; sheaves and corn dollies at harvest; moor wildflowers in summer; festival
+  kit overrides during festivals (the `festivalKit.js` dressing pattern, reused, not
+  duplicated). Hearth burns taller in winter. Exterior follows suit: warm window
+  glow after dark, snow on sills and lintel in winter, a wreath on the door at
+  Christmas.
+- **The name on the front wall**: every inn carries its name as a painted sign
+  board above the door — procedural canvas-texture lettering (the established
+  nameplate/bubble technique), period letterforms, plus a hanging bracket sign at
+  the corner. Names come from a per-village registry: genuine village pub names
+  where they existed c.1900 (Station Tavern Grosmont; candidates to confirm during
+  implementation: Board Inn Lealholm, Duke of Wellington Danby, Birch Hall Inn
+  Beck Hole, White Swan Pickering, Postgate Egton), with a seeded period-plausible
+  generator as fallback ("The Black Bull", "The Plough", "The Fleece" school —
+  never two identical names on the moor).
 - **Opening hours:** the inn opens after lunch (~13:00 game time) and stays open
   through the night; mornings it is shut (door interaction says so, in voice).
 - **Player notes.** Players can leave short written notes for each other at the inn
