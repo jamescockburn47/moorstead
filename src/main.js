@@ -846,7 +846,10 @@ class Game {
     if (this.hearthLayer) this.hearthLayer.clear();
     this.hearthLayer = new HearthLayer(this.scene, this.world);
     if (this.innDecor) this.innDecor.clear();
-    this.innDecor = new InnDecorLayer(this.scene, this.world);
+    // D4: the bragging board reads the LOCAL player's gameRecord — a plain
+    // reference is enough (innDecor never mutates it), rev-keyed so the
+    // 0.4s throttle knows when to rebuild the canvas texture.
+    this.innDecor = new InnDecorLayer(this.scene, this.world, this.player);
     if (this.dripLayer) this.dripLayer.dispose();
     this.dripLayer = new DripLayer(this.scene, this.world, { plain: this.gfxQuality !== 'fine' });
     if (this.footprints) this.footprints.clear();

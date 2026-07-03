@@ -10,7 +10,7 @@ import { buildActivityDigest } from './activity.js';
 import { isChildrensWorld } from './rooms.js';
 import { buildFactsCard, trainLines } from './factscard.js';
 import { marketIntel, PRICES } from './economy.js';
-import { SKILLS, canVouch, commissionPrice, COMMISSION_WAIT_DAYS, promiseState } from './ledgers.js';
+import { SKILLS, canVouch, commissionPrice, COMMISSION_WAIT_DAYS, promiseState, gameStatsRows } from './ledgers.js';
 import { canonicalRole } from './entities.js';
 import { playerInParlour } from './parlour.js';
 
@@ -1762,6 +1762,9 @@ export class Quests {
       trainRows: deps ? trainLines(stationName, deps) : [],
       marketRows: marketIntel(stationName || ''),
       innkeeperRows,
+      // D4: not presence-gated — your table reputation is yours anywhere,
+      // any villager can bring it up in conversation.
+      gameStatsRows: gameStatsRows(g.player.gameRecord, g.economy ? (p => g.economy.format(p)) : undefined),
     });
     if (card) parts.push(card);
     const sIdx = this.standingIndex();

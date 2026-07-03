@@ -13,12 +13,16 @@
 //      (addWindowGlow, gated on nightFactor());
 //   4. two subtle interior paraffin-lamp glow quads on the parlour walls;
 //   5. one seasonal dressing prop at the mantel mount (+ door lintel for
-//      yule), keyed on festivalState(season.yearPhase).active.
+//      yule), keyed on festivalState(season.yearPhase).active;
+//   6. [D4] a bragging board above the servery: the LOCAL player's pub-games
+//      record (gameStatsRows), rebuilt on gameRecord revision.
 import * as THREE from 'three';
 import { TILE } from './defs.js';
 import { isFine, nightFromSkyTime, addWindowGlow, addBillboard } from './festivalKit.js';
 import { festivalState } from './festivals.js';
 import { Fire, makeSmoke, registerFxMat, unregisterFxMat } from './fire.js';
+import { gameStatsRows } from './ledgers.js';
+import { formatBrass } from './economy.js';
 
 const RADIUS = 48;
 const REBUILD_MOVE = 8;
@@ -113,10 +117,38 @@ function makeSignTexture(text) {
   return tex;
 }
 
+// -- bragging board canvas texture ---------------------------------------------
+// Same dark-board/cream-lettering house style as makeSignTexture, but a
+// multi-line list rather than a single fitted headline: header row bold-ish
+// (bigger), stat rows smaller monospace-ish serif, left-aligned.
+function makeBoardTexture(lines) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 320;
+  const x = c.getContext('2d');
+  x.fillStyle = SIGN_BOARD_COLOR;
+  x.fillRect(0, 0, c.width, c.height);
+  x.textAlign = 'left'; x.textBaseline = 'middle';
+  x.fillStyle = SIGN_TEXT_COLOR;
+  const pad = 22;
+  const rowH = c.height / Math.max(lines.length, 1);
+  lines.forEach((line, i) => {
+    const isHeader = i === 0;
+    x.font = `${isHeader ? 'bold 34' : '22'}px "Georgia", "Times New Roman", serif`;
+    const maxw = c.width - pad * 2;
+    let str = String(line);
+    while (x.measureText(str).width > maxw && str.length > 3) str = str.slice(0, -2) + '…';
+    x.fillText(str, pad, rowH * i + rowH / 2);
+  });
+  return new THREE.CanvasTexture(c);
+}
+
 export class InnDecorLayer {
-  constructor(scene, world) {
+  // player is optional (verify harness constructs with 2 args) — the bragging
+  // board simply doesn't build without one; every other prop is unaffected.
+  constructor(scene, world, player = null) {
     this.scene = scene;
     this.world = world;
+    this.player = player;
     this.objects = [];
     this.center = null;
     this.key = null;
@@ -136,7 +168,8 @@ export class InnDecorLayer {
     const night = nightFromSkyTime(time, yearPhase);
     const nightBucket = Math.round(night * 4);
     const fest = festivalState(yearPhase).active || '-';
-    const key = `${nightBucket}|${fest}|${isFine() ? 'F' : 'P'}`;
+    const rev = (this.player && this.player._gameRecRev) || 0;
+    const key = `${nightBucket}|${fest}|${isFine() ? 'F' : 'P'}|${rev}`;
     if (this.center &&
         Math.abs(cx - this.center[0]) < REBUILD_MOVE &&
         Math.abs(cz - this.center[1]) < REBUILD_MOVE &&
@@ -165,6 +198,7 @@ export class InnDecorLayer {
       if (night > 0.1) this.buildWindowGlow(plan);
       this.buildLampGlow(plan);
       this.buildSeasonalMounts(plan, fest);
+      this.buildBraggingBoard(plan);
     }
   }
 
@@ -287,6 +321,47 @@ export class InnDecorLayer {
       const lintelProp = this.objects[this.objects.length - 1];
       lintelProp.userData.seasonalMount = true;
     }
+  }
+
+  // -- 6. [D4] bragging board: the LOCAL player's pub-games record, on the
+  // parlour wall nearest the servery. Per-room SHARED standings need relay
+  // persistence and are deferred alongside PvP (D4 non-goals) — this board
+  // only ever shows what the visitor themself has won or lost.
+  buildBraggingBoard(plan) {
+    if (!this.player) return;
+    const furnish = plan.furnish;
+    if (!furnish || !furnish.servery) return;
+    const { w: pw, l: pl, floorY } = plan.parlour;
+    const s = furnish.servery;
+    // distance to each of the 4 interior wall lines (local coords; walls sit
+    // one ring outside the 0..pw-1 / 0..pl-1 interior box — same box the
+    // furnish carve in worldgen.js bounds-checks against).
+    const dist = { n: s.z, s: (pl - 1) - s.z, w: s.x, e: (pw - 1) - s.x };
+    let nearest = 'n', best = dist.n;
+    for (const side of ['s', 'w', 'e']) if (dist[side] < best) { best = dist[side]; nearest = side; }
+
+    const ix0 = plan.origin.x - Math.floor(pw / 2), iz0 = plan.origin.z - Math.floor(pl / 2);
+    // world position flush against the chosen wall face, 0.06 out from it,
+    // facing INTO the room (opposite the sign's outward-facing convention).
+    let wx = ix0 + s.x + 0.5, wz = iz0 + s.z + 0.5, yaw = 0;
+    if (nearest === 'n') { wz = iz0 - 0.06; yaw = 0; }              // wall at z=-1, face +z (into room)
+    else if (nearest === 's') { wz = iz0 + pl + 0.06; yaw = Math.PI; } // wall at z=pl, face -z
+    else if (nearest === 'w') { wx = ix0 - 0.06; yaw = Math.PI / 2; }  // wall at x=-1, face +x
+    else { wx = ix0 + pw + 0.06; yaw = -Math.PI / 2; }                // wall at x=pw, face -x
+
+    const rows = gameStatsRows(this.player.gameRecord, formatBrass).slice(0, 4);
+    const lines = ['TAVERN GAMES', ...(rows.length ? rows : ["nowt won nor lost yet."])].slice(0, 5);
+    const tex = makeBoardTexture(lines);
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: false, side: THREE.DoubleSide });
+    const geo = new THREE.PlaneGeometry(2.2, 1.5);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.y = yaw;
+    mesh.position.set(wx, floorY + 2.2, wz);
+    mesh.frustumCulled = false;
+    mesh.userData.ownGeometry = true;
+    mesh.userData.braggingBoard = true;
+    this.scene.add(mesh);
+    this.objects.push(mesh);
   }
 
   clear() {
