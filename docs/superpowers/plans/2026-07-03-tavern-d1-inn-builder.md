@@ -911,7 +911,7 @@ In `docs/ARCHITECTURE.md`, in the module-map table (row format confirmed at
 | Inn threshold | `src/main.js` `crossThreshold()` | door interact → fade → teleport → fade in, both directions | interact dispatch | manual (Task 6 Step 4) |
 ```
 
-- [ ] **Step 4: In-browser proof pass**
+- [x] **Step 4: In-browser proof pass**
 
 Start the dev server via the preview tools (`moorcraft-dev`, per CLAUDE.md).
 `window.moorstead.debug.warp('Grosmont')`. Confirm, in order: (a) the Station
