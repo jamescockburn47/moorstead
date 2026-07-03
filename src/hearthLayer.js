@@ -11,50 +11,56 @@
 import * as THREE from 'three';
 import { hash2i } from './noise.js';
 import { isFine } from './festivalKit.js';
+import { solarState } from './sky.js';
 import { registerFxMat, unregisterFxMat } from './fire.js';
 
 const RADIUS = 48;
 const REBUILD_MOVE = 8;
 
-// Evening/night window on sky.time (0..1 day fraction; sunrise 0.25, noon 0.5,
-// sunset 0.75 — see sky.js sun-angle maths). Dusk starts a shade before sunset
-// dims out, night runs through to just before dawn. Mirrors isNight()'s span
-// (sky.js:586) widened slightly at the front so windows catch dusk, not just
-// full dark.
-const EVENING_START = 0.72; // just ahead of sunset (0.75) — folk light up at dusk
-const NIGHT_END = 0.22;     // just ahead of sunrise (0.25) — early risers snuff out
-// Span of the lit window in hours (EVENING_START through midnight, then
-// midnight through NIGHT_END) — bedtimes are drawn over exactly this span so
-// "hour 0" means "evening just started" and "hour SPAN" means "window closing".
-// Getting this wrong (e.g. hashing bedtimes over a raw 0..18 clock-hour instead
-// of hours-INTO-the-window) means most households would already be "asleep"
-// the instant the window opens — caught in the headless smoke test.
-const WINDOW_SPAN = (1 - EVENING_START) + NIGHT_END; // ≈ 0.50 of a day ≈ 12h
+// Evening/night window on sky.time — [SOLAR] anchored to the SEASONAL sunset
+// and sunrise now (solarState, sky.js): the window opens EVENING_LEAD before
+// the solar sunset (folk light up at dusk) and closes DAWN_LEAD before the
+// solar sunrise (early risers snuff out). At the equinox this is the old
+// 0.72 / 0.22 pair exactly; a midwinter window runs ~0.62 → ~0.32 (long lamp-lit
+// evenings), midsummer a short ~0.82 → ~0.14.
+const EVENING_LEAD = 0.03; // window opens this far ahead of solar sunset
+const DAWN_LEAD = 0.03;    // and closes this far ahead of solar sunrise
+function windowEdges(yearPhase = 0.125) {
+  const s = solarState(0.5, yearPhase); // sunrise/sunset depend on yearPhase only
+  const start = s.sunsetT - EVENING_LEAD, end = s.sunriseT - DAWN_LEAD;
+  // Span of the lit window in day-fraction (start through midnight to end) —
+  // bedtimes are drawn over exactly this span so "hour 0" means "evening just
+  // started" and "hour SPAN" means "window closing". Hashing over a raw clock
+  // hour instead would put most households "asleep" the instant the window
+  // opens — caught in the headless smoke test.
+  return { start, end, span: (1 - start) + end };
+}
 
-// Hours-into-the-lit-window (0 at EVENING_START, ticking up through midnight to
-// NIGHT_END) — used for BOTH the bedtime hash and the rebuild key, so
-// households wink out one at a time as the night wears on rather than all at
-// once at dusk or all surviving till dawn. Returns -1 outside the window (the
-// caller gates on inEveningWindow() before using this).
-function hourOf(time) {
+// Hours-into-the-lit-window (0 at the window's open, ticking up through
+// midnight to its close) — used for BOTH the bedtime hash and the rebuild key,
+// so households wink out one at a time as the night wears on rather than all
+// at once at dusk or all surviving till dawn.
+function hourOf(time, yearPhase = 0.125) {
   const t = (time % 1 + 1) % 1;
-  const sinceStart = t >= EVENING_START ? t - EVENING_START : (1 - EVENING_START) + t;
+  const { start } = windowEdges(yearPhase);
+  const sinceStart = t >= start ? t - start : (1 - start) + t;
   return Math.floor(sinceStart * 24);
 }
 
-function inEveningWindow(time) {
+function inEveningWindow(time, yearPhase = 0.125) {
   const t = (time % 1 + 1) % 1;
-  return t >= EVENING_START || t < NIGHT_END;
+  const { start, end } = windowEdges(yearPhase);
+  return t >= start || t < end;
 }
 
 // Bedtime hash per dwelling: a stable [0,1) draw off the building footprint,
-// scaled to hours-into-the-window (0..WINDOW_SPAN*24, i.e. the full span from
-// dusk to the window closing) so every household gets a real chance to be lit
-// at SOME point in the night, not just in the last sliver before the window
-// re-closes. Deterministic: same seed, same building, same bedtime, every
-// client.
-function bedtimeHour(bx, bz, seed) {
-  return hash2i(bx, bz, seed ^ 0x4845) * (WINDOW_SPAN * 24); // 'HE' — hearth salt, distinct from chimney's 0x484d
+// scaled to hours-into-the-window (0..span*24, i.e. the full span from dusk to
+// the window closing — [SOLAR] a LONGER spread on long winter nights) so every
+// household gets a real chance to be lit at SOME point in the night, not just
+// in the last sliver before the window re-closes. Deterministic: same seed,
+// same building, same season, same bedtime, every client.
+function bedtimeHour(bx, bz, seed, yearPhase = 0.125) {
+  return hash2i(bx, bz, seed ^ 0x4845) * (windowEdges(yearPhase).span * 24); // 'HE' — hearth salt, distinct from chimney's 0x484d
 }
 
 const DWELLING_TYPES = new Set(['cottage', 'farmhouse']);
@@ -190,6 +196,7 @@ export class HearthLayer {
     this._builtOnce = false;
     this._flickerMats = []; // this build's flicker materials — unregistered on clear()
     this._t = 0;
+    this._yearPhase = 0.125; // [SOLAR] refreshed each update() from sky.yearPhase
   }
 
   update(dt, playerPos, sky) {
@@ -199,8 +206,12 @@ export class HearthLayer {
     this.timer = 0.4; // same throttle as SeasonalLayer's windowed rebuild
     const cx = Math.floor(playerPos.x), cz = Math.floor(playerPos.z);
     const time = sky ? sky.time : 0;
-    const evening = inEveningWindow(time);
-    const hour = hourOf(time);
+    // [SOLAR] the live Sky caches its yearPhase each update; headless stubs
+    // without one fall back to the equinox (= the old fixed 0.72/0.22 window).
+    const yp = (sky && sky.yearPhase != null) ? sky.yearPhase : 0.125;
+    this._yearPhase = yp; // build() reads it for the bedtime hash
+    const evening = inEveningWindow(time, yp);
+    const hour = hourOf(time, yp);
     // Rebuild key: position window (via center-move check below) is NOT enough
     // on its own — the SAME position must also rebuild when night falls, when
     // an hour ticks over (households going dark one by one), or when Fine/Plain
@@ -253,7 +264,7 @@ export class HearthLayer {
         // bedtime yet — so households go dark one by one as the night wears on,
         // and the SAME houses are lit at the SAME hour for every client (no
         // Math.random; hash2i seeded off the world seed + building footprint).
-        const bedtime = bedtimeHour(b.x0, b.z1, gen.geo.seed);
+        const bedtime = bedtimeHour(b.x0, b.z1, gen.geo.seed, this._yearPhase != null ? this._yearPhase : 0.125);
         if (hour >= bedtime) continue;
         const panes = facadePanes(gen, b);
         if (!panes.length) continue;

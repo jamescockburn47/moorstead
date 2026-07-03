@@ -1764,7 +1764,10 @@ export class Entities {
       // dracC), so the gate is satisfiable in the stylised fight too.
       const boxes = this.game?.quests?.boxesSanctified || 0;
       const t = this.game?.sky?.time ?? 0.5;
-      const nearDawn = t >= 0.14 && t < 0.18;            // the last sliver of night, ~0.04 before dawn
+      // [SOLAR] "the grey of dawn" is the SEASONAL night's end now (sunrise − 0.07,
+      // the isNight edge) — equinox = the old fixed 0.14..0.18 exactly
+      const _dawnEdge = this.game?.sky?.sol ? this.game.sky.sol.sunriseT - 0.07 : 0.18;
+      const nearDawn = t >= _dawnEdge - 0.04 && t < _dawnEdge;  // the last sliver of night, ~0.04 before dawn
       const canFinish = withStake && boxes >= 3 && nearDawn;
       if (withStake && !canFinish && mob.hp - dmg <= 0) {
         // would be fatal, but the gate isn't met: stagger instead, leave him on 1 hp
@@ -2396,7 +2399,9 @@ export class Entities {
       // red grouse drum an' display at spring dawn
       if (mob.type === 'grouse' && this.game && this.game.season && this.game.season.greenness > 0.5) {
         const tm = this.game.sky ? this.game.sky.time : 0.5;
-        if (tm > 0.18 && tm < 0.33) {
+        // [SOLAR] the lek rides the SEASONAL dawn (sunrise −0.07 … +0.08; equinox = the old 0.18..0.33)
+        const _sr = this.game.sky && this.game.sky.sol ? this.game.sky.sol.sunriseT : 0.25;
+        if (tm > _sr - 0.07 && tm < _sr + 0.08) {
           mob.drumCd = (mob.drumCd || 0) - dt;
           if (mob.drumCd <= 0) {
             mob.drumCd = 4 + Math.random() * 6;
@@ -2776,10 +2781,16 @@ export class Entities {
     // way lies folk wedged on walls. People only — animals, remote players an'
     // train-riders already returned above.
     const skyT = this.game && this.game.sky ? this.game.sky.time : 0.5;
-    const DUSK = 0.76, BEDTIME = 0.88, DAWN = 0.16; // DUSK/DAWN match t' old vanish window; BEDTIME is deeper
+    // [SOLAR] t' evening schedule rides t' SEASONAL sun (sky.sol cached by sky.update):
+    // DUSK/BEDTIME hang off t' solar sunset, DAWN off t' sunrise — at t' equinox these
+    // are t' owd 0.76 / 0.88 / 0.16 literals exactly (t' headless-stub fallback keeps
+    // them, so verify-eveninglife's contract is unchanged). Winter folk head in early
+    // (~0.66) an' rise late; midsummer they stand about t' doorstep till ~0.86.
+    const _sol = this.game && this.game.sky && this.game.sky.sol;
+    const DUSK = _sol ? _sol.sunsetT + 0.01 : 0.76, BEDTIME = _sol ? _sol.sunsetT + 0.13 : 0.88, DAWN = _sol ? _sol.sunriseT - 0.09 : 0.16;
     // evening: a housed body's on their doorstep; latening: any body's talk turns to dusk
     const evening = !!mob.house && skyT > DUSK && skyT <= BEDTIME;
-    const latening = skyT > 0.7 && skyT <= BEDTIME;
+    const latening = skyT > DUSK - 0.06 && skyT <= BEDTIME; // [SOLAR] talk turns to dusk as t' seasonal light dies (equinox = t' owd 0.7)
     const abed = mob.house ? (skyT > BEDTIME || skyT < DAWN) : (skyT > DUSK || skyT < DAWN);
     if (abed && !mob.chatting) {
       if (mob.model.group.visible) mob.model.group.visible = false;
@@ -3121,8 +3132,10 @@ export class Entities {
     this.updateSteam(dt);
     this.updatePrints(dt);
     // t' barghest's dawn-prints: a fading trail left on t' moor at first light
+    // ([SOLAR] first light = t' seasonal sunrise now; equinox = t' owd 0.17..0.24)
     const sky = this.game && this.game.sky;
-    if (sky && sky.time > 0.17 && sky.time < 0.24 && this.printDay !== sky.day) {
+    const _sr2 = sky && sky.sol ? sky.sol.sunriseT : 0.25;
+    if (sky && sky.time > _sr2 - 0.08 && sky.time < _sr2 - 0.01 && this.printDay !== sky.day) {
       this.printDay = sky.day;
       if (Math.random() < 0.6) this.spawnDawnPrints(player);
     }

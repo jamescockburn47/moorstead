@@ -530,11 +530,13 @@ class Game {
       // only (guarded by this branch); Plain never reaches here, so it stays byte-identical.
       if (this.sky) {
         const sky = this.sky;
-        // dayness mirrors t' sky.js sun curve (same math as t' frame loop's dayness); nightness
-        // its complement; golden = a low-sun factor that peaks at t' horizon hours an' self-zeroes
-        // by full daylight OR deep neet (sun below −0.05 kills it, so it's dusk/dawn only).
-        const sunY = Math.sin((sky.time - 0.25) * Math.PI * 2);
-        const dayness = Math.max(0, Math.min(1, (sunY + 0.12) * 3));
+        // [SOLAR] sunY/dayness read frae t' ONE solar API (sky.sol, cached by
+        // sky.update each frame) — t' owd sin((time−0.25)·2π) replica is retired;
+        // nightness its complement; golden = a low-sun factor that peaks at t' horizon
+        // hours an' self-zeroes by full daylight OR deep neet (sun below −0.05 kills it) —
+        // NOTE a low winter noon now keeps a touch o' golden all day, as it should.
+        const sunY = sky.sol.sunAlt;
+        const dayness = sky.sol.dayness;
         const nightness = 1 - dayness;
         const golden = sunY > -0.05 ? Math.max(0, 1 - Math.abs(sunY) / 0.30) : 0;
 
@@ -3734,8 +3736,8 @@ class Game {
     this.seaRing.position.set(p.x, WATER_LEVEL - 0.12, p.z); // 25.88: one block under the rippling surface plane
     // colour eases toward the water colour, dimmed with the daylight (a Basic
     // material is unlit — a constant colour would glow at night); module-scratch
-    // Color, nowt allocated per frame. Sun formula mirrors sky.js (sunrise t=0.25).
-    const dayness = Math.max(0, Math.min(1, (Math.sin((this.sky.time - 0.25) * Math.PI * 2) + 0.12) * 3));
+    // Color, nowt allocated per frame. [SOLAR] dayness read frae the one solar API.
+    const dayness = this.sky.sol.dayness;
     _seaRingCol.set(SEA_RING_COL).multiplyScalar(0.18 + 0.82 * dayness);
     this.seaRing.material.color.lerp(_seaRingCol, Math.min(1, dt * 2));
   }
@@ -4667,7 +4669,9 @@ class Game {
     const q = this.quests.activeManifestation && this.quests.activeManifestation('giants');
     const lm = q && this.quests.resolveLandmark(q);             // {x,z} of Wade's Causeway
     // dusk/night/midnight window: from dusk onset, through the night, into pre-dawn
-    const dusk = !!(this.sky && (this.sky.isNight() || this.sky.time >= 0.74 || this.sky.time < 0.2));
+    // ([SOLAR]: anchored to the seasonal sunset/sunrise — equinox = the old 0.74/0.2 exactly)
+    const _sol = this.sky && this.sky.sol;
+    const dusk = !!(this.sky && (this.sky.isNight() || this.sky.time >= _sol.sunsetT - 0.01 || this.sky.time < _sol.sunriseT - 0.05));
     const near = !!(lm && Math.hypot(this.player.pos.x - lm.x, this.player.pos.z - lm.z) < 220);
     // any giant we spawned that's since been cleared (world reset) — forget them
     if (this._giants && this._giants.some(g => g.dead)) this._giants = null;
@@ -4981,7 +4985,9 @@ class Game {
           this.cancelSleep('Summat’s at thee! No sleeping through that.');
         } else if (!(this.netActive && this.net && this.net.connected) && this.sleepT > 2.2) {
           if (this.sky.time > 0.5) this.sky.day++;
-          this.sky.time = 0.25;
+          // [SOLAR] wake at t' SEASONAL sunrise (equinox = t' owd 0.25): a winter
+          // kip runs long, a summer one's ower afore tha knows it
+          this.sky.time = this.sky.sol ? this.sky.sol.sunriseT : 0.25;
           this.sky.weather = 'misty';
           this.finishWake();
         }
@@ -5084,10 +5090,12 @@ class Game {
       // so every player watches the same wave cross the same hillside (invariant 6).
       setGustPhase((Date.now() / 1000) % 4096);
       setWindAmt(this.sky.liveWind != null ? this.sky.liveWind : 0.35); // real Goathland windiness, tier-flat
-      // dayness mirrors t' sky.js sun curve — hoisted out o' t' Fine block so t' TIER-FLAT
-      // wetness dry-rate can read it too (overnight rain lingers to morning).
-      const _sunY = Math.sin((this.sky.time - 0.25) * Math.PI * 2);
-      const dayness = Math.max(0, Math.min(1, (_sunY + 0.12) * 3));
+      // [SOLAR] sunY/dayness frae t' one solar API (sky.sol carries LAST frame's
+      // state here — sky.update runs below — one frame o' lag, invisible). Hoisted
+      // out o' t' Fine block so t' TIER-FLAT wetness dry-rate can read it too
+      // (overnight rain lingers to morning; short winter days dry slower an' all).
+      const _sunY = this.sky.sol.sunAlt;
+      const dayness = this.sky.sol.dayness;
       // [9/17]+[D6]+[D10] wet ground: soaks fast while it's rainin', dries slow after,
       // t' dry rate scaled by warmth × daylight (pure stepGroundWet, snow.js idiom).
       // rainAmount is t' shared live-feed sample, warmth t' shared season clock, dayness
@@ -5109,29 +5117,32 @@ class Game {
         // [moonglint] t' shimmer dies wi' t' sun (dayness, as ever) — an' a MOON drive
         // fades in ower t' same −0.02 threshold t' sky.js light rig swaps at (moonVis
         // easing), scaled by t' phase illumination fraction: a full-moon blade reads
-        // clear but calmer than day (×0.45), a crescent's barely there. Both terms are
+        // clear but calmer than day (×0.45), a crescent's barely there. [SOLAR] a
+        // second factor tracks t' moon's OWN altitude (sky.lun — phase-lagged seat),
+        // so a new moon down wi' t' sun leaves t' water dark. Both terms are
         // near-zero through t' dusk handover, so max() picks t' dominant lamp wi'out
         // a visible switch (no double-drive — one azimuth, one strength).
-        const moonVis = Math.max(0, Math.min(1, (-_sunY - 0.02) * 6));
+        const _lun = this.sky.lun;
+        const moonVis = Math.max(0, Math.min(1, (-_sunY - 0.02) * 6)) * Math.max(0, Math.min(1, (_lun.alt + 0.05) * 8));
         const illum = 0.5 - 0.5 * Math.cos(moonPhase(this.sky.day) * Math.PI * 2);
         const sunGlit = dayness * (1 - overcast);
         const moonGlit = moonVis * illum * (1 - overcast) * 0.45;
         setGlitter(Math.max(sunGlit, moonGlit));
         // [sword] glint corridor drive: camera world pos + t' TRUE on-screen azimuth o'
-        // whichever lamp owns t' blade. sky.js parks t' sunSprite at player +
-        // (sunX·160, ·, −60) an' t' moonSprite at player + (−sunX·160, ·, +60) — t'
-        // EXACT mirror, includin' t' constant z placement offset — so t' blade points
-        // at t' disc tha actually SEES, not an idealised z=0 celestial body. uSunLow:
-        // 0 at zenith (broad pool, k 6) → 1 at t' horizon (narrow blazin' blade, k 24),
-        // read frae t' drivin' lamp's elevation (moon elevation = −sunY: sprite y rides
-        // −sunY·150). Scalar setters only — nowt allocated per frame.
+        // whichever lamp owns t' blade. [SOLAR] sky.js parks BOTH sprites at player +
+        // dir·160 frae t' real solar/lunar direction vectors (sky.sol.dir / sky.lun.dir)
+        // — t' blade re-derives its azimuth frae t' SAME vectors, so it points at t'
+        // disc tha actually SEES through every season an' phase. uSunLow: 0 at zenith
+        // (broad pool, k 6) → 1 at t' horizon (narrow blazin' blade, k 24), read frae
+        // t' drivin' lamp's true elevation (sin alt). Scalar setters only — nowt
+        // allocated per frame.
         const _cp = this.camera.position;
         setCamPos(_cp.x, _cp.y, _cp.z);
-        const _sunX = Math.cos((this.sky.time - 0.25) * Math.PI * 2);
+        const _sd = this.sky.sol.dir, _md = _lun.dir;
         const moonDrive = moonGlit > sunGlit;
-        const _ax = moonDrive ? -_sunX * 160 : _sunX * 160, _az = moonDrive ? 60 : -60, _al = Math.hypot(_ax, _az);
+        const _ax = (moonDrive ? _md[0] : _sd[0]) * 160, _az = (moonDrive ? _md[2] : _sd[2]) * 160, _al = Math.hypot(_ax, _az) || 1;
         setSunAzim(_ax / _al, _az / _al);
-        const _elev = moonDrive ? -_sunY : _sunY;
+        const _elev = moonDrive ? _lun.alt : _sunY;
         setSunLow(Math.max(0, Math.min(1, 1 - Math.max(0, _elev) * 1.1)));
         // [9] wet sheen tint: puddles/wet tops pick up t' LIVE sky colour at grazing
         // angles (Fine only — uSheen stamped 0.5 in applyQuality). scene.fog.color IS t'
@@ -5154,7 +5165,8 @@ class Game {
         // [D8] dew / after-rain glisten: droplets sparkle on flora AFTER a shower clears
         // (groundWet high, rain stopped, some light), and again at a clear summer dawn.
         const glisten = this.groundWet * (1 - this.sky.rainAmount) * dayness;
-        const dawnDew = Math.max(0, 1 - Math.abs(this.sky.time - 0.25) / 0.07) * (1 - overcast) * Math.max(0, season.warmth) * (this.sky.rainAmount < 0.05 ? 1 : 0);
+        // [SOLAR] t' dawn band tracks t' SEASONAL sunrise (sky.sol.sunriseT), not t' owd fixed 0.25
+        const dawnDew = Math.max(0, 1 - Math.abs(this.sky.time - this.sky.sol.sunriseT) / 0.07) * (1 - overcast) * Math.max(0, season.warmth) * (this.sky.rainAmount < 0.05 ? 1 : 0);
         setDew(Math.max(glisten, dawnDew));
       }
       const sbk = Math.floor(season.yearPhase * 40);
@@ -5530,7 +5542,7 @@ class Game {
         this._onCoast = geo.coastT(px, pz) > 0 ? 1 : 0;
         let vd = 1e9;
         for (const v of geo.villages) { const d = Math.hypot(v.x - p.x, v.z - p.z); if (d < vd) vd = d; }
-        const evening = this.sky.time > 0.6 || this.sky.time < 0.05; // dusk through t' small hours
+        const evening = this.sky.time > this.sky.sol.sunsetT - 0.15 || this.sky.time < 0.05; // [SOLAR] dusk through t' small hours (equinox = t' owd 0.6)
         this._nearInn = (evening && vd < 16) ? 1 : 0;
         let water = 0;
         for (const [dx, dz] of [[0, 0], [3, 0], [-3, 0], [0, 3], [0, -3], [4, 4], [-4, 4], [4, -4], [-4, -4]]) {

@@ -12,21 +12,22 @@
 import * as THREE from 'three';
 import { mulberry32 } from './noise.js';
 import { registerFxMat, unregisterFxMat } from './fire.js';
+import { solarState } from './sky.js';
 
 export const MURMUR_COUNT_FINE = 600;
 export const MURMUR_COUNT_PLAIN = 250;
 
 // ---- dusk / season gate (pure — headlessly testable) ---------------------
-// Narrow band either side of sunset (sky.time's sun-angle zero-crossing on the
-// way down — see sky.js sunY maths, mirrored here exactly like festivalKit's
-// nightFromSkyTime). Murmurations happen at last light, not full dark.
-const DUSK_LO = 0.70;  // sky.time: light dropping toward evening
-const DUSK_HI = 0.80;  // past this the flock's long since gone to roost
-export function duskGate(time) {
+// Narrow band either side of the SOLAR sunset ([SOLAR] James 2026-07-03: the
+// band rides solarState(…).sunsetT now, not the old 0.70–0.80 literals — at
+// the equinox the two are identical, mid-autumn dusk lands ~0.71, deep-winter
+// ~0.65). Murmurations happen at last light, not full dark.
+const DUSK_HALF = 0.05;  // half-width of the last-light band about sunsetT
+export function duskGate(time, yearPhase = 0.125) {
   const t = ((time % 1) + 1) % 1;
-  if (t < DUSK_LO || t > DUSK_HI) return 0;
-  const mid = (DUSK_LO + DUSK_HI) / 2, half = (DUSK_HI - DUSK_LO) / 2;
-  return 1 - Math.abs(t - mid) / half; // 0 at the edges, 1 at dead centre
+  const mid = solarState(t, yearPhase).sunsetT; // peak at the solar sunset itself
+  if (t < mid - DUSK_HALF || t > mid + DUSK_HALF) return 0;
+  return 1 - Math.abs(t - mid) / DUSK_HALF; // 0 at the edges, 1 at dead centre
 }
 
 // Season gate: bump scalars frae season.js — autumn is prime murmuration
@@ -45,7 +46,9 @@ export function murmurationGate(time, season, rainAmount) {
   if (dry <= 0) return 0;
   const s = seasonGate(season);
   if (s <= 0) return 0;
-  const d = duskGate(time);
+  // [SOLAR] the dusk band follows the season's own sunset (equinox default when
+  // the season carries no yearPhase — e.g. headless stubs)
+  const d = duskGate(time, season && season.yearPhase != null ? season.yearPhase : 0.125);
   if (d <= 0) return 0;
   return Math.min(1, s) * d * dry;
 }
