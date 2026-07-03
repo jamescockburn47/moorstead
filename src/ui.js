@@ -1129,6 +1129,50 @@ export class UI {
         this.renderChatActions();
       });
     }
+    // --- necessity spine: teach / commission / collect / vouch, all earned in conversation ---
+    const g = this.game;
+    const sk = q.teachableBy(v);
+    if (sk) {
+      const b = this.el('button', 'mc chat-btn quest-btn', this.chatQuestRow,
+        `Teach me <b>${SKILLS[sk].label}</b>`);
+      b.addEventListener('click', () => {
+        q.teach(v, sk);
+        this.renderChatLog(); this.renderChatActions();
+      });
+    }
+    const co = q.commissionOffer(v);
+    if (co) {
+      const b = this.el('button', 'mc chat-btn', this.chatQuestRow,
+        `Commission: <b>${itemName(co.item)}</b> (${co.price}d)`);
+      if (g.player.brass >= co.price) {
+        b.addEventListener('click', () => {
+          if (q.placeCommission(v, co)) {
+            this.renderChatLog(); this.renderChatActions();
+          }
+        });
+      } else {
+        b.classList.add('locked');
+        this.bindTooltip(b, `Tha needs ${co.price}d for that.`);
+      }
+    }
+    const cr = q.commissionReady(v);
+    if (cr) {
+      const b = this.el('button', 'mc chat-btn', this.chatQuestRow,
+        `Collect thi <b>${itemName(cr.item)}</b>`);
+      b.addEventListener('click', () => {
+        q.collectCommission(v, cr);
+        this.renderChatLog(); this.renderChatActions();
+      });
+    }
+    if (!g.freeWorld() && g.player.vouches.length === 0 && q.canAskVouch(v)) {
+      const b = this.el('button', 'mc chat-btn', this.chatQuestRow,
+        `Ask ${v.displayName || v.t.name} to vouch for thee`);
+      b.addEventListener('click', () => {
+        if (q.askVouch(v)) {
+          this.renderChatLog(); this.renderChatActions();
+        }
+      });
+    }
     const econ = this.game.economy;
     if (econ) {
       // regional price whisper: a line under a trade row when this village pays well off par

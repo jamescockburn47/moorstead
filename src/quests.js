@@ -10,7 +10,8 @@ import { buildActivityDigest } from './activity.js';
 import { isChildrensWorld } from './rooms.js';
 import { buildFactsCard, trainLines } from './factscard.js';
 import { marketIntel } from './economy.js';
-import { SKILLS } from './ledgers.js';
+import { SKILLS, canVouch, commissionPrice, COMMISSION_WAIT_DAYS } from './ledgers.js';
+import { canonicalRole } from './entities.js';
 
 const STANDINGS = ['Newcomer', 'Known', 'Welcomed', 'Respected', 'Treasured'];
 const STANDING_THRESHOLDS = [0, 5, 20, 50, 100];
@@ -1535,6 +1536,58 @@ export class Quests {
       if (n.includes(g)) return inst;
     }
     return null;
+  }
+
+  // --- necessity spine: what this villager can do for the visitor, in conversation ---
+  teachableBy(v) {           // -> skill key or null
+    for (const [key, s] of Object.entries(SKILLS)) {
+      if (s.teacher === canonicalRole(v.role) && !this.game.player.taught[key]
+          && this.standingIndex() >= s.minStanding) return key;
+    }
+    return null;
+  }
+  teach(v, key) {
+    this.game.player.taught[key] = true;
+    v.chatLog.push({ who: 'sys', text: `${v.displayName || v.t.name} shows thee the way of ${SKILLS[key].label}. Tha can craft it thissen now.` });
+    this.game.ui.toast(`Tha's learned ${SKILLS[key].label}!`, 6000);
+  }
+  commissionOffer(v) {       // -> {item, price} or null  (first gated good the player CAN'T craft)
+    if (canonicalRole(v.role) !== 'craftsman' && canonicalRole(v.role) !== 'miner') return null;
+    for (const [key, s] of Object.entries(SKILLS)) {
+      if (s.teacher !== canonicalRole(v.role) || this.game.player.taught[key]) continue;
+      const item = s.goods[0];
+      const open = this.game.player.commissions.some(c => c.item === item && c.state === 'open');
+      if (!open) return { item, price: commissionPrice(item) };
+    }
+    return null;
+  }
+  placeCommission(v, offer) {
+    const p = this.game.player;
+    if (p.brass < offer.price) { this.game.ui.toast("Tha's not got the brass for that."); return false; }
+    p.brass -= offer.price;
+    p.commissions.push({ id: 'c' + Date.now(), item: offer.item, price: offer.price,
+                         giver: v.t.name, readyAtDay: this.game.sky.day + COMMISSION_WAIT_DAYS, state: 'open' });
+    v.chatLog.push({ who: 'sys', text: `Commission agreed: ${itemName(offer.item)}, ${offer.price}d — ready day ${this.game.sky.day + COMMISSION_WAIT_DAYS}. Come back for it.` });
+    return true;
+  }
+  commissionReady(v) {       // -> commission or null
+    return this.game.player.commissions.find(c => c.state === 'open' && c.giver === v.t.name
+      && this.game.sky.day >= c.readyAtDay) || null;
+  }
+  collectCommission(v, c) {
+    c.state = 'done';
+    this.game.player.addItem(c.item, 1);
+    v.chatLog.push({ who: 'sys', text: `${v.displayName || v.t.name} hands ower thi ${itemName(c.item)}. Good work an' all.` });
+  }
+  canAskVouch(v) {           // ui-facing wrapper: keeps ledger rules out of ui.js
+    return canVouch(v, this.standingIndex());
+  }
+  askVouch(v) {
+    if (!canVouch(v, this.standingIndex())) return false;
+    const p = this.game.player;
+    if (!p.vouches.some(x => x.by === v.t.name)) p.vouches.push({ by: v.t.name, day: this.game.sky.day });
+    v.chatLog.push({ who: 'sys', text: `${v.displayName || v.t.name} gives thee their word. Tha can stake a claim now.` });
+    return true;
   }
 
   // What's true near t' player just now (feeds relevant lore)
