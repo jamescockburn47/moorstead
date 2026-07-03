@@ -824,6 +824,12 @@ export class RosterClient {
   // m._parlourIdx set to her stable seat index, or null when she's not in.
   // Cached per mob per poll interval (m._parlourCheckAt) — parlourCrowd/hash
   // work is cheap but there's no need to redo it every frame for ~100 NPCs.
+  // COUPLING (review 2026-07-03): the crowd is computed from THIS CLIENT's
+  // post-_thin() roster. Today that's identical on every client because
+  // RENDER_FRACTION is a global constant and the thinning cut is id-hashed —
+  // but if render fraction ever becomes per-client (perf slider), two players
+  // in the same parlour would see DIFFERENT drinkers. If that ships, feed
+  // parlourCrowd the UN-thinned id list instead.
   _parlourPlanFor(m, e) {
     const village = m.village;
     if (!village) return null;
