@@ -1053,6 +1053,7 @@ class Game {
   }
 
   async quitToTitle() {
+    this._abandonGameSession('quit'); // settle a mid-game session's ledger BEFORE the save below persists gameRecord
     await this.saveNow(false);
     if (this.net) { this.net.disconnect(); this.net = null; }
     this.netActive = false;
@@ -1936,6 +1937,25 @@ class Game {
       this.player.vel = { x: 0, y: 0, z: 0 };
     }
     this._gameCamSnapshot = null;
+  }
+
+  // Death or quit-to-title mid-game: the stake was spent at sit-down, so the
+  // loss must land in the ledger (else brass and gameRecord drift apart — the
+  // stat/brass symmetry every other exit path keeps), and every session field
+  // must clear so nothing stale survives into the next world/respawn. Unlike
+  // endGameSession this does NOT touch state/UI/pointer — the caller owns those
+  // (death flips to 'dead' itself; quitToTitle shows the title screen itself).
+  _abandonGameSession(reason) {
+    let session = this._gameSession;
+    if (session && !session.over) {
+      session = sessionForfeit(session);
+      recordGameResult(this.player.gameRecord, session.gameId, session.result, 0);
+      this.player._gameRecRev = (this.player._gameRecRev || 0) + 1;
+    }
+    void reason;
+    this._gameSession = null;
+    this._gameTable = null;
+    this._gameCamSnapshot = null; // deliberately NOT restored — death/quit repositions the player itself
   }
 
   // ---------------- oak strongbox ----------------
@@ -5659,6 +5679,7 @@ class Game {
 
       // death
       if (this.player.dead && this.state !== 'dead') {
+        this._abandonGameSession('death'); // records the loss + clears session state BEFORE the state flip (review 2026-07-04)
         this.state = 'dead';
         this.chatOpen = false;          // dying mid-chat must not permanently silence the parish
         this.mouseDown = [false, false, false];
