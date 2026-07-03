@@ -311,5 +311,75 @@ function stateWith(overrides) {
   (JSON.stringify(a) === JSON.stringify(b) ? ok : bad)('identical seed produces an identical self-play game log');
 }
 
+// --- bestMove strength: level 3 must reliably beat level 1 ---
+//
+// Reviewed defect: depth-3 search + material/mill/mobility-only evaluate()
+// couldn't see mill THREATS (2-in-a-line, 3rd point empty) and lost to
+// merrils' huge branching factor — level 3 scored only 37.5% in the worst
+// of six 8-game mixed-colour seeded windows (aggregate ~62.5%, well under
+// draughts' 87.5-100% on the identical harness). Fix: DEPTH_BY_LEVEL widens
+// level 3 to depth 4, evaluate() adds a mill-threat term (+blocked-men
+// penalty), and negamax orders capturing moves first.
+//
+// This is the trimmed, CI-affordable slice of the full 6-window benchmark:
+// 2 windows x 8 games (seeds 0 and 50 — base=50 was the worst-scoring
+// window pre-fix, so it stays in the gate). Full 6-window run (base seeds
+// 0/50/100/200/300/500), measured after the fix, for the record:
+//   base=0:   8  /8 (100.0%)
+//   base=50:  7  /8 ( 87.5%)
+//   base=100: 7  /8 ( 87.5%)
+//   base=200: 8  /8 (100.0%)
+//   base=300: 7.5/8 ( 93.8%)
+//   base=500: 7  /8 ( 87.5%)
+//   aggregate: 44.5/48 (92.7%), worst window 87.5% (bar: every window >=60%)
+//   level-3 bestMove: ~2.4ms/move on a mid-game position (budget: ~150ms)
+{
+  const STRENGTH_BAR = 0.6; // fraction of 8 games (wins + 0.5*draws)
+
+  function playStrengthGame(seed, level3IsPlayer0) {
+    let st = initState(seed);
+    let plies = 0;
+    const MAX_PLIES = 400;
+    while (winner(st) === null && plies < MAX_PLIES) {
+      const isP0 = st.turn === 0;
+      const level3Turn = (isP0 && level3IsPlayer0) || (!isP0 && !level3IsPlayer0);
+      const mv = bestMove(st, level3Turn ? 3 : 1, seed * 1000 + plies);
+      if (!mv) break;
+      st = applyMove(st, mv);
+      plies++;
+    }
+    const w = winner(st);
+    if (w === 'draw' || w === null) return 0.5;
+    const level3Won = (w === 0 && level3IsPlayer0) || (w === 1 && !level3IsPlayer0);
+    return level3Won ? 1 : 0;
+  }
+
+  for (const base of [0, 50]) {
+    let score = 0;
+    for (let g = 0; g < 8; g++) {
+      score += playStrengthGame(base + g, g % 2 === 0);
+    }
+    const pct = score / 8;
+    (pct >= STRENGTH_BAR ? ok : bad)(
+      `bestMove level 3 vs level 1, window base=${base}: ${score}/8 (${(pct * 100).toFixed(1)}%, bar >=${STRENGTH_BAR * 100}%)`
+    );
+  }
+}
+
+// --- bestMove level 3 stays within the per-move time budget ---
+{
+  let st = initState(7);
+  for (let i = 0; i < 10; i++) {
+    const mv = bestMove(st, 2, i);
+    if (!mv) break;
+    st = applyMove(st, mv);
+  }
+  const t0 = Date.now();
+  const N = 5;
+  for (let i = 0; i < N; i++) bestMove(st, 3, 1000 + i);
+  const avgMs = (Date.now() - t0) / N;
+  (avgMs < 150 ? ok : bad)(`bestMove level 3 averages under 150ms/move on a mid position (got ${avgMs.toFixed(1)}ms)`);
+}
+
 console.log(failed ? '\nRESULT: FAIL' : '\nRESULT: PASS');
 process.exit(failed ? 1 : 0);

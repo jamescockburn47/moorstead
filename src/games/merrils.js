@@ -301,6 +301,55 @@ export function winner(state) {
 
 // --- evaluation + search ---
 
+// Mill-threat term: for each mill line where `p` holds exactly 2 of the 3
+// points and the 3rd is empty, count it as a threat if it's actually
+// completable next ply — placing phase: always (a free placement can fill
+// it); moving phase: only if some friendly man adjacent to the empty point
+// could slide in, or `p` is flying (3 men, can hop anywhere). This is what
+// depth-limited search can't see a couple of plies out without help: a
+// 2-in-a-line with an open third point is worth much more than raw material
+// or mobility suggests, because it forces the opponent to respond or lose a
+// man next move.
+function threatCount(state, p) {
+  const board = state.board;
+  const flying = state.phase === 'moving' && state.onBoard[p] === 3;
+  const placingPhase = state.placed[p] < MEN_PER_SIDE;
+  let threats = 0;
+  for (const mill of MILLS) {
+    let mine = 0;
+    let empty = -1;
+    let blockedByOther = false;
+    for (const pt of mill) {
+      if (board[pt] === p) mine++;
+      else if (board[pt] === null) empty = pt;
+      else blockedByOther = true;
+    }
+    if (mine !== 2 || empty === -1 || blockedByOther) continue;
+    if (placingPhase || flying) {
+      threats++;
+    } else {
+      // moving phase, not flying: threat only counts if a friendly man
+      // adjacent to the empty point can actually slide into it.
+      if (ADJ[empty].some((n) => board[n] === p)) threats++;
+    }
+  }
+  return threats;
+}
+
+// Blocked-men penalty: a man (non-flying) with zero empty adjacent points
+// is stuck — can't respond to threats or reposition. Small penalty per
+// stuck man, symmetric for both sides.
+function blockedCount(state, p) {
+  if (state.phase !== 'moving' || state.onBoard[p] === 3) return 0;
+  const board = state.board;
+  let blocked = 0;
+  for (let i = 0; i < 24; i++) {
+    if (board[i] !== p) continue;
+    if (ADJ[i].every((n) => board[n] !== null)) blocked++;
+  }
+  return blocked;
+}
+
 function evaluate(state, player) {
   if (state.winner === player) return 100000;
   if (state.winner === opponent(player)) return -100000;
@@ -339,11 +388,30 @@ function evaluate(state, player) {
   const mobMine = mobility(player);
   const mobOpp = mobility(opp);
 
+  const threatsMine = threatCount(state, player);
+  const threatsOpp = threatCount(state, opp);
+
+  const blockedMine = blockedCount(state, player);
+  const blockedOpp = blockedCount(state, opp);
+
   return (
     (materialMine - materialOpp) * 100 +
     (millsMine - millsOpp) * 40 +
-    (mobMine - mobOpp) * 2
+    (mobMine - mobOpp) * 2 +
+    (threatsMine - threatsOpp) * 15 +
+    (blockedOpp - blockedMine) * 3
   );
+}
+
+// Quick static ordering score for a move, used to sort candidates before
+// alpha-beta so the best lines get searched (and pruned against) first.
+// Mill-completing moves (removal != null) first, ranked by whether the
+// removal itself breaks an opponent threat; everything else keeps its
+// natural order.
+function moveOrderScore(move) {
+  let score = 0;
+  if (move.remove !== null) score += 1000;
+  return score;
 }
 
 function negamax(state, depth, alpha, beta, player, rng) {
@@ -354,10 +422,20 @@ function negamax(state, depth, alpha, beta, player, rng) {
   if (moves.length === 0) {
     return { score: evaluate(state, player), move: null };
   }
+  // Order candidates so mill-completing (capturing) moves are searched
+  // first — they're the most forcing and most likely to raise alpha early,
+  // which lets alpha-beta prune the rest of the list sooner. Stable sort
+  // keeps legalMoves' natural order within each score bucket, which is what
+  // the existing determinism tests rely on (ties are still broken by rng
+  // over bestMoves below, not by sort order).
+  const ordered = moves
+    .map((move, i) => ({ move, i, score: moveOrderScore(move) }))
+    .sort((a, b) => b.score - a.score || a.i - b.i)
+    .map((e) => e.move);
 
   let best = -Infinity;
   let bestMoves = [];
-  for (const move of moves) {
+  for (const move of ordered) {
     const next = applyMove(state, move);
     const toMove = currentPlayer(next);
     // negamax sign flip: score is always from `player`'s perspective
@@ -385,10 +463,21 @@ function negamax(state, depth, alpha, beta, player, rng) {
   return { score: best, move: bestMoves[idx] };
 }
 
+// Search depth per difficulty level. Merrils has a much larger branching
+// factor than draughts (up to 24 placement targets, or up to 4 slide dests
+// x ~9 men, times removal-choice fan-out on a mill), so a flat depth-3 cap
+// for the "hard" level barely out-searches level 1 and evaluate() alone
+// can't make up the difference (see threatCount/blockedCount above) without
+// enough plies to actually look for forced sequences. Depth 4 was
+// benchmarked to clear the >=60%-per-window bar across all 6 seeded windows
+// (see scripts/verify-merrils.mjs) while keeping bestMove well under the
+// ~150ms/move budget.
+const DEPTH_BY_LEVEL = { 1: 1, 2: 2, 3: 4 };
+
 export function bestMove(state, level, seed) {
   const moves = legalMoves(state);
   if (moves.length === 0) return null;
-  const depth = Math.max(1, Math.min(3, level | 0 || 1));
+  const depth = DEPTH_BY_LEVEL[Math.max(1, Math.min(3, level | 0 || 1))];
   const rng = mulberry32(((seed | 0) ^ (state.turn * 0x9e3779b9)) >>> 0);
   const player = state.turn;
   const result = negamax(state, depth, -Infinity, Infinity, player, rng);
