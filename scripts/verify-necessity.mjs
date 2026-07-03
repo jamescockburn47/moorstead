@@ -58,6 +58,12 @@ const mainSrc = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
 check(/canVouch|vouches/.test(mainSrc), 'deed staking consults the vouch ledger');
 const fc = readFileSync(new URL('../src/factscard.js', import.meta.url), 'utf8');
 check(/taught|commission|promise/i.test(fc), 'facts card carries ledger rows');
+const q = readFileSync(new URL('../src/quests.js', import.meta.url), 'utf8');
+check(/promiseLog\.kept\+\+/.test(q), 'turn-in before the deadline keeps the promise');
+check(/promiseLog\.broken\+\+/.test(q), 'the day-clock breaks a missed promise');
+check(/quality: 'dull'/.test(q) && /quality: 'good'/.test(q), 'jobs carry a quality (dull board work, good conversation work)');
+check(/quality !== 'dull'/.test(q), 'boardOffers guard: the board never carries a good job');
+check(/buildContract\(/.test(q) && /deadlineDay/.test(q), 'delivery contracts carry a deadline');
 
 console.log(failed ? 'RESULT: FAIL' : 'RESULT: PASS');
 process.exit(failed ? 1 : 0);

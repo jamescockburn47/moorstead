@@ -1390,10 +1390,19 @@ export class UI {
       const stakeFee = deedFee('claim', 8);
       this.el('div', 'r-needs', this.boardPanel,
         `Stake a <b>claim</b> to hold a plot (8m round) for <b>${g.economy.format(stakeFee)}</b>, then a little upkeep each week. (Claims protect thi builds, that lands soon.)`);
+      // necessity spine: t' parish registers nowt for a stranger — mirror the
+      // hard gate in game.stakeClaim/stakeMine as needs-text (no dead buttons).
+      const vouchGated = !g.freeWorld() && !g.player.creative
+        && !(g.player.vouches || []).length && g.quests.standingIndex() < 3;
+      const VOUCH_MSG = 'T&rsquo; parish won&rsquo;t register a deed for a stranger &mdash; ask a friend to vouch for thee first.';
       const stakeRow = this.el('div', 'recipe quest-row', this.boardPanel);
       stakeRow.innerHTML = `<div class="r-name"><b>Stake a claim where tha stands</b><br><span class="r-needs">${g.economy.format(stakeFee)} charter</span></div>`;
-      const sb = this.el('button', 'mc chat-btn', stakeRow, 'Stake');
-      sb.addEventListener('click', () => { if (g.stakeClaim(8)) this.openBoard(fromBoard); });
+      if (vouchGated) {
+        this.el('div', 'r-needs', this.boardPanel, VOUCH_MSG);
+      } else {
+        const sb = this.el('button', 'mc chat-btn', stakeRow, 'Stake');
+        sb.addEventListener('click', () => { if (g.stakeClaim(8)) this.openBoard(fromBoard); });
+      }
 
       // Find unlicensed mine entrance near player
       let nearUnlicensedMine = null;
@@ -1422,12 +1431,16 @@ export class UI {
         const mineFee = deedFee('mine', 5, 10);
         const mineRow = this.el('div', 'recipe quest-row', this.boardPanel);
         mineRow.innerHTML = `<div class="r-name"><b>Buy Mining Licence</b><br><span class="r-needs">${g.economy.format(mineFee)} fee (10m depth) for mine at ${nearUnlicensedMine.x}, ${nearUnlicensedMine.z}</span></div>`;
-        const mb = this.el('button', 'mc chat-btn', mineRow, 'Licence');
-        mb.addEventListener('click', () => {
-          if (g.stakeMine(nearUnlicensedMine.x, nearUnlicensedMine.z, 10)) {
-            this.openBoard(fromBoard);
-          }
-        });
+        if (vouchGated) {
+          this.el('div', 'r-needs', this.boardPanel, VOUCH_MSG);
+        } else {
+          const mb = this.el('button', 'mc chat-btn', mineRow, 'Licence');
+          mb.addEventListener('click', () => {
+            if (g.stakeMine(nearUnlicensedMine.x, nearUnlicensedMine.z, 10)) {
+              this.openBoard(fromBoard);
+            }
+          });
+        }
       }
 
       if (!deeds.length) {

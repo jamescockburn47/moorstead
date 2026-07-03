@@ -9,12 +9,25 @@ import * as npc from './npc.js';
 import { buildActivityDigest } from './activity.js';
 import { isChildrensWorld } from './rooms.js';
 import { buildFactsCard, trainLines } from './factscard.js';
-import { marketIntel } from './economy.js';
-import { SKILLS, canVouch, commissionPrice, COMMISSION_WAIT_DAYS } from './ledgers.js';
+import { marketIntel, PRICES } from './economy.js';
+import { SKILLS, canVouch, commissionPrice, COMMISSION_WAIT_DAYS, promiseState } from './ledgers.js';
 import { canonicalRole } from './entities.js';
 
 const STANDINGS = ['Newcomer', 'Known', 'Welcomed', 'Respected', 'Treasured'];
 const STANDING_THRESHOLDS = [0, 5, 20, 50, 100];
+
+// Delivery contracts ("promises"): what each trade plausibly wants brought in,
+// by canonical role. Every id is a real defs.js good with a PRICES entry, so the
+// reward can sit a fair step above the going rate. Contracts are offered in
+// CONVERSATION only — never pinned to the notice board.
+const CONTRACT_GOODS = {
+  trader: [B.WOOL, I.SEA_FISH],
+  publican: [I.BILBERRIES, I.COOKED_MUTTON],
+  railway: [I.COAL_LUMP],
+  farmer: [B.PEAT, B.PLANKS],
+};
+// The stylised world's curated givers, by trade (only James keeps a farm).
+const CONTRACT_GIVER_ROLES = { james: 'farmer' };
 
 export function compassDir(dx, dz) {
   // north is +x, east is +z (the map reads with Whitby/the coast at the top)
@@ -989,6 +1002,7 @@ export class Quests {
       if ((g === 'james' || g === 'harry') && sIdx >= 1) pool.push(() => this.buildLostLamb(g, rng));
       if (g === 'james' && sIdx >= 2) pool.push(() => this.buildWallMending(rng));
       if ((g === 'james' || g === 'glinda') && sIdx >= 1) pool.push(() => this.buildCommission(rng));
+      if (CONTRACT_GIVER_ROLES[g]) pool.push(() => this.buildContract(g, rng));
       if (!pool.length) continue;
       if (rng() < 0.75) {
         this.offers[g] = pool[(rng() * pool.length) | 0]();
@@ -996,16 +1010,24 @@ export class Quests {
       }
     }
 
-    // board notices: deliveries, hunts, treasure riddles
+    // board notices: deliveries, hunts, treasure riddles — dull work only. Owt
+    // 'good' (a promise, a lamb, a favour) is offered face to face, never pinned up.
     while (this.boardOffers.length < (sIdx >= 2 ? 3 : 2)) {
       const kinds = ['deliver'];
       if (sIdx >= 1) kinds.push('hunt');
       if (sIdx >= 2) kinds.push('treasure');
       const k = kinds[(rng() * kinds.length) | 0];
-      if (k === 'deliver') this.boardOffers.push(this.buildDelivery(rng));
-      else if (k === 'hunt') this.boardOffers.push(this.buildHunt(rng));
-      else this.boardOffers.push(this.buildTreasure(rng));
+      let inst;
+      if (k === 'deliver') inst = this.buildDelivery(rng);
+      else if (k === 'hunt') inst = this.buildHunt(rng);
+      else inst = this.buildTreasure(rng);
+      if (inst.quality !== 'dull') continue;   // invariant: boardOffers never carries a 'good' job
+      this.boardOffers.push(inst);
     }
+
+    // delivery contracts from live roster tradesfolk (moors world): t' publican
+    // wants bilberries in, t' stationmaster coal — conversation offers ONLY.
+    this.refreshContractOffers(rng, day);
 
     // v2 folklore quests: offered by live roster NPCs in the moors world only.
     // (No-op in the stylised world, where this.folklore is empty.)
@@ -1015,6 +1037,31 @@ export class Quests {
     // Bess the herbwife) in the moors world only. No-op in the stylised world, where the
     // museum board (museumOffer) opens the arc instead.
     this.refreshDraculaOffer();
+  }
+
+  // Delivery-contract offers from live roster tradesfolk (moors world only; the
+  // stylised world's contracts come through the curated-giver pool above). Binds
+  // each contract to the NPC's name so the existing offerFor/turnInFor flow just
+  // works. Kept scarce: a couple of open promises about the world is plenty.
+  refreshContractOffers(rng, day) {
+    const rc = this.game.rosterClient;
+    if (!rc || !rc.npcs) return;
+    let live = this.active.filter(q => q.contract).length
+      + Object.values(this.offers).filter(o => o && o.contract).length;
+    if (live >= 2) return;
+    for (const [, e] of rc.npcs) {
+      const d = e && e.data;
+      if (!d || !d.name) continue;
+      const role = canonicalRole(d.role);
+      if (!role || !CONTRACT_GOODS[role]) continue;
+      const key = d.name.toLowerCase();
+      if (this.offers[key] || this.active.some(a => a.giver === d.name)) continue;
+      if ((this.lastOfferDay[key] || 0) >= day) continue;
+      if (rng() < 0.6) continue;               // not every tradesman, every day
+      this.offers[key] = this.buildContract(d.name, rng, role);
+      this.lastOfferDay[key] = day;
+      if (++live >= 2) return;
+    }
   }
 
   buildArcInstance(def) {
@@ -1047,13 +1094,39 @@ export class Quests {
     };
   }
 
+  // A promise: bring the giver what their trade wants, by a deadline the
+  // day-clock enforces (ledgers.promiseState decides; the sweep in update()
+  // collects on broken word). Reward is brass a fair step over the going rate.
+  buildContract(giver, rng, role = CONTRACT_GIVER_ROLES[giver]) {
+    const goods = CONTRACT_GOODS[role] || CONTRACT_GOODS.farmer;
+    const item = goods[(rng() * goods.length) | 0];
+    const n = 3 + ((rng() * 4) | 0);                                   // 3-6
+    const deadlineDay = this.game.sky.day + 2;
+    const brass = Math.max(8, Math.ceil((PRICES[item] || 4) * n * 1.4));
+    const disp = this.dispName(giver);
+    return {
+      id: this.eid(), giver, arc: false, contract: true, quality: 'good',
+      deadlineDay,
+      title: `A promise: ${n}× ${itemName(item)} for ${disp}`,
+      desc: `${disp} wants ${n}× ${itemName(item)} bringing in by day ${deadlineDay}. “Bring me them by then an’ I’ll see thee right — ${brass}d, ower t’ going rate. But a promise made is a promise kept, on t’ moors.”`,
+      offer: `You can ask the visitor for a firm promise: bring you ${n} ${itemName(item)} by day ${deadlineDay} and you will see them right — ${brass}d, over the going rate. Make plain it is a PROMISE with a deadline, not idle board work: break it and folk will hear of it.`,
+      clues: [],
+      steps: [{ kind: 'collect', item, n, objective: `Bring ${n}× ${itemName(item)} to ${disp} — by day ${deadlineDay}`, progress: 0 }],
+      stepIdx: 0, state: 'offered', turnIn: (giver || '').toLowerCase(),
+      consume: [[item, n]],
+      truth: `The visitor PROMISED you ${n} ${itemName(item)} by day ${deadlineDay} and has NOT delivered yet. Do not claim it is done, and do not forget the deadline.`,
+      doneNote: `The visitor kept their promise: ${n} ${itemName(item)}, delivered by the day agreed. Their word is good.`,
+      reward: { items: [], brass, trust: [[giver, 3]], text: `${disp} counts ower ${brass}d. “Kept thi word. That’s worth more than t’ brass, round here.”` },
+    };
+  }
+
   buildSparkle(rng) {
     const ang = rng() * Math.PI * 2, dist = 55 + rng() * 55;
     const x = Math.floor(this.geo.village.x + Math.cos(ang) * dist);
     const z = Math.floor(this.geo.village.z + Math.sin(ang) * dist);
     const dir = compassDir(x - this.geo.village.x, z - this.geo.village.z);
     return {
-      id: this.eid(), giver: 'cc', arc: false,
+      id: this.eid(), giver: 'cc', arc: false, quality: 'good',
       title: 'Sparkle\u2019s Lost. AGAIN.',
       desc: `cc\u2019s left Sparkle somewhere out on t\u2019 moor, roughly ${dir} o\u2019 t\u2019 village. She is devastated (every other day).`,
       offer: `You can ask the visitor for URGENT help: Sparkle, your one-eyed unicorn teddy, is LOST on the moor. You think you left him somewhere ${dir === 'N' ? 'toward the cold-wind way' : dir} of the village when you were having an adventure. This is the worst thing that has ever happened.`,
@@ -1073,7 +1146,7 @@ export class Quests {
     const z = Math.floor(this.geo.village.z + Math.sin(ang) * dist);
     const dir = compassDir(x - this.geo.village.x, z - this.geo.village.z);
     return {
-      id: this.eid(), giver, arc: false,
+      id: this.eid(), giver, arc: false, quality: 'good',
       title: 'T\u2019 Lost Lamb',
       desc: `A lamb\u2019s wandered off t\u2019 fell, somewhere ${dir} o\u2019 t\u2019 village. Find it an\u2019 walk it home afore summat else does.`,
       offer: `You can offer the visitor a job: a lamb has wandered off, last seen ${dir} of the village, out on the open moor. You need someone to find it and lead it home before nightfall or the bogs or worse get it.`,
@@ -1151,7 +1224,7 @@ export class Quests {
     let x = spot.x, z = spot.z;
     if (spot.abbey) { const ab = this.geo.abbeySite(); x = ab.x + 8; z = ab.z + 3; }
     return {
-      id: this.eid(), giver: 'board', arc: false,
+      id: this.eid(), giver: 'board', arc: false, quality: 'dull',
       title: `Parcel for ${spot.name}`,
       desc: `NOTICE: parcel wants carrying to ${spot.name}. Payment on delivery. Mind t\u2019 weather an\u2019 t\u2019 bogs.`,
       offer: null, clues: [],
@@ -1164,7 +1237,7 @@ export class Quests {
   buildHunt(rng) {
     const boggart = rng() < 0.6;
     return {
-      id: this.eid(), giver: 'board', arc: false,
+      id: this.eid(), giver: 'board', arc: false, quality: 'dull',
       title: boggart ? 'Boggarts on t\u2019 Mires' : 'A Barghest Abroad',
       desc: boggart
         ? 'NOTICE: boggarts have been at folk\u2019s wash-lines again. Three o\u2019 t\u2019 blighters seen off will be paid for. They walk at neet.'
@@ -1191,7 +1264,7 @@ export class Quests {
     const dx = dir === 'E' ? paces : dir === 'W' ? -paces : 0;
     const dz = dir === 'S' ? paces : dir === 'N' ? -paces : 0;
     return {
-      id: this.eid(), giver: 'board', arc: false,
+      id: this.eid(), giver: 'board', arc: false, quality: 'dull',
       title: 'An Owd Treasure Riddle',
       desc: `A yellowed paper pinned wi\u2019 a rusty nail: \u201cFrae ${base.name}, ${TREASURE_RIDDLE_DIRS[dir]}, ${paces} paces \u2014 then dig, an\u2019 what were buried is thine.\u201d`,
       offer: null,
@@ -1234,6 +1307,17 @@ export class Quests {
   update(dt) {
     const g = this.game, p = g.player;
     this.updateCroft(dt);
+    // promise deadlines: once a day, t' clock collects on broken word
+    const day = g.sky.day;
+    if (day !== this._lastPromiseDay) {
+      this._lastPromiseDay = day;
+      for (const inst of this.active.filter(q => q.contract && promiseState(q, day) === 'broken')) {
+        this.active = this.active.filter(q => q.id !== inst.id);
+        p.promiseLog.broken++;
+        this.addShame(2, 'Tha broke thi word to ' + this.dispName(inst.giver) + '.');
+        g.ui.toast(`<b>${inst.title}</b> — t’ day’s come an’ gone, an’ t’ promise wi’ it. ${this.dispName(inst.giver)}’ll remember.`, 6000);
+      }
+    }
     for (const inst of [...this.active]) {
       if (inst.state !== 'active') continue;
       const s = this.step(inst);
@@ -1417,6 +1501,8 @@ export class Quests {
     if (inst.consume) {
       for (const [id, n] of inst.consume) this.game.player.removeItem(id, n);
     }
+    // a contract handed in before the sweep caught it is a promise KEPT
+    if (inst.contract) this.game.player.promiseLog.kept++;
     this.finish(inst, villager);
   }
 
@@ -1435,6 +1521,7 @@ export class Quests {
       const left = this.game.player.addItem(id, n);
       if (left > 0) this.game.dropAtPlayer(id, left);
     }
+    if (r.brass) this.game.economy.earn(r.brass);   // contracts pay in brass, ower t' going rate
     this.game.ui.invDirty = true;
     this.game.audio.craft();
     if (villager) villager.chatLog.push({ who: 'sys', text: r.text });

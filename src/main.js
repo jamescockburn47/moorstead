@@ -3226,6 +3226,12 @@ class Game {
 
   // ---- Living Moor Slice 2: deeds — stake a plot, keep it with upkeep (effects land in Slices 3-4) ----
   stakeClaim(radius = 8, free = false) {
+    // necessity spine: t' parish registers no deed for a stranger — a friend's
+    // word (vouches) or Respected standing first. Free worlds stay relaxed.
+    if (!this.freeWorld() && !this.player.creative && !(this.player.vouches || []).length && this.quests.standingIndex() < 3) {
+      this.ui.toast('T&rsquo; parish won&rsquo;t register a deed for a stranger &mdash; ask a friend to vouch for thee first.', 6000);
+      return false;
+    }
     const fee = deedFee('claim', radius);
     if (!free && !this.economy.canAfford(fee)) { this.ui.toast(`A claim here is <b>${this.economy.format(fee)}</b> &mdash; tha&rsquo;s not the brass.`, 5000); return false; }
     const p = this.player.pos, cx = Math.round(p.x), cz = Math.round(p.z);
@@ -3241,6 +3247,11 @@ class Game {
   }
 
   stakeMine(cx, cz, depth = 10, free = false) {
+    // necessity spine: same vouch gate as stakeClaim — no licence for a stranger
+    if (!this.freeWorld() && !this.player.creative && !(this.player.vouches || []).length && this.quests.standingIndex() < 3) {
+      this.ui.toast('T&rsquo; parish won&rsquo;t register a deed for a stranger &mdash; ask a friend to vouch for thee first.', 6000);
+      return false;
+    }
     const fee = deedFee('mine', 5, depth);
     if (!free && !this.economy.canAfford(fee)) { this.ui.toast(`A mine license here is <b>${this.economy.format(fee)}</b> &mdash; tha&rsquo;s not the brass.`, 5000); return false; }
     if (this.world.deeds.some(d => d.kind === 'mine' && !d.lapsedDay && Math.hypot(d.cx - cx, d.cz - cz) < d.radius + 5)) {
