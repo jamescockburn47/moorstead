@@ -133,6 +133,16 @@ export function sessionNpcReply(session) {
   return sessionMove(session, move);
 }
 
+// Whose go is it? True when the NPC (player 1) is to move. The caller that
+// builds a fresh session MUST check this — dominoes' opening rule can hand
+// the first move to the NPC (whoever holds the highest double), and the
+// reply timer only runs after a PLAYER move, so an unchecked NPC opening
+// deadlocks the table (found live, D4 proof pass 2026-07-04).
+export function npcToMove(session) {
+  if (session.over) return false;
+  return ENGINES[session.gameId].currentPlayer(session.state) === 1;
+}
+
 // sessionForfeit(session) -> session over, player loses (ESC mid-game, or
 // the player has no legal move and declines to continue). PURE.
 export function sessionForfeit(session) {

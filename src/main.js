@@ -54,7 +54,7 @@ import { startLiveWeather } from './weather-live.js';
 import { temperatureTarget, stepTemperature } from './temperature.js';
 import { boardingFolk } from './trainfolk.js';
 import { innOpen, playerInParlour, MURMUR_LINES } from './parlour.js';
-import { tableAt, newSession, sessionMove, sessionNpcReply, sessionForfeit, settleWager, opponentSeed, gameLabel } from './gameTable.js';
+import { tableAt, newSession, sessionMove, sessionNpcReply, sessionForfeit, settleWager, opponentSeed, gameLabel, npcToMove } from './gameTable.js';
 import { recordGameResult, wagerAllowed, WAGER_MAX } from './ledgers.js';
 import { CarolBox } from './carolBox.js';
 import { RosterClient, invalidateSurfCache } from './roster.js';
@@ -1855,6 +1855,25 @@ class Game {
     this.clearKeys();
     document.exitPointerLock?.();
     this.ui.openGameTable(session);
+    // dominoes' opening rule can hand the FIRST move to the NPC (highest
+    // double opens) — without this the table deadlocks on "their go"
+    // (found live, D4 proof pass 2026-07-04)
+    if (npcToMove(session)) this._scheduleNpcReply(session);
+  }
+
+  // The NPC's reply after a short pause — guarded: still gaming, and still
+  // the SAME session (not superseded by a rematch/forfeit/stand-up). Chained:
+  // if the engine hands the NPC ANOTHER turn (dominoes after the player
+  // knocks), schedule again rather than stall.
+  _scheduleNpcReply(forSession) {
+    setTimeout(() => {
+      if (this.state !== 'gaming' || this._gameSession !== forSession) return;
+      const replied = sessionNpcReply(forSession);
+      this._gameSession = replied;
+      if (replied.over) { this._finishGameSession(); return; }
+      this.ui.openGameTable(replied);
+      if (npcToMove(replied)) this._scheduleNpcReply(replied);
+    }, 500);
   }
 
   // The player's move from the board panel: sessionMove, re-render, and (if
@@ -1866,16 +1885,7 @@ class Game {
     this._gameSession = after;
     if (after.over) { this._finishGameSession(); return; }
     this.ui.openGameTable(after);
-    const forSession = after;
-    setTimeout(() => {
-      // guard: still gaming, and still the SAME session (not superseded by a
-      // rematch/forfeit/stand-up in the meantime)
-      if (this.state !== 'gaming' || this._gameSession !== forSession) return;
-      const replied = sessionNpcReply(forSession);
-      this._gameSession = replied;
-      if (replied.over) { this._finishGameSession(); return; }
-      this.ui.openGameTable(replied);
-    }, 500);
+    if (npcToMove(after)) this._scheduleNpcReply(after);
   }
 
   // A game reached a winner/draw: settle brass, record the ledger, toast, and

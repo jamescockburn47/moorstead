@@ -2,7 +2,7 @@
 // board rendering. run wi': node scripts/verify-gametable.mjs
 import {
   tableAt, newSession, sessionMove, sessionNpcReply, sessionForfeit,
-  settleWager, renderBoard, levelForRole, ENGINES,
+  settleWager, renderBoard, levelForRole, ENGINES, npcToMove,
 } from '../src/gameTable.js';
 import { Gen } from '../src/worldgen.js';
 
@@ -147,6 +147,36 @@ for (const gameId of Object.keys(ENGINES)) {
   const s = newSession({ gameId, opponent: { name: 'X', role: 'rambler' }, wager: 0, seed: 9 });
   const board = renderBoard(s);
   check(typeof board === 'string' && board.length > 0, `${gameId}: renderBoard returns a non-empty string for a fresh session`);
+}
+
+// --- NPC-opens deadlock regression (found live, D4 proof pass 2026-07-04):
+// dominoes' opening rule can hand the FIRST move to the NPC (highest double
+// opens); npcToMove must say so on the fresh session and sessionNpcReply must
+// advance it — the reply timer only chains off npcToMove now. ---
+{
+  let found = null;
+  for (let seed = 1; seed <= 40 && !found; seed++) {
+    const s = newSession({ gameId: 'dominoes', opponent: { name: 'X', role: 'rambler' }, wager: 0, seed });
+    if (npcToMove(s)) found = s;
+  }
+  check(!!found, 'dominoes: some seed within 40 deals the NPC the opening move');
+  if (found) {
+    const replied = sessionNpcReply(found);
+    check(replied.plies === found.plies + 1, 'npcToMove + sessionNpcReply advances an NPC-opening session (deadlock regression)');
+    check(!npcToMove(replied) || replied.over, 'after the NPC opening it is the player\'s go (strict alternation)');
+  }
+  // and the player-opens case must NOT flag the NPC
+  let playerOpens = null;
+  for (let seed = 1; seed <= 40 && !playerOpens; seed++) {
+    const s = newSession({ gameId: 'dominoes', opponent: { name: 'X', role: 'rambler' }, wager: 0, seed });
+    if (!npcToMove(s)) playerOpens = s;
+  }
+  check(!!playerOpens, 'dominoes: some seed within 40 deals the PLAYER the opening move (npcToMove false)');
+  // merrils/draughts/shoveha: the challenger always opens
+  for (const gameId of ['merrils', 'draughts', 'shoveha']) {
+    const s = newSession({ gameId, opponent: { name: 'X', role: 'rambler' }, wager: 0, seed: 3 });
+    check(!npcToMove(s), `${gameId}: the challenger opens (npcToMove false on a fresh session)`);
+  }
 }
 
 console.log(failed ? '\nRESULT: FAIL' : '\nRESULT: PASS');
