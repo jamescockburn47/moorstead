@@ -207,6 +207,25 @@ The inn must be impossible to destroy or mine into, in both shells:
   morning. Any interior + fire helps; the inn is best.
 - Bairns/free worlds get a much gentler chill curve.
 
+### Tiredness: the honest push toward sleep
+
+A fatigue meter alongside chill, pushing the player toward shelter and bed on its own
+terms rather than waiting for the midnight quorum:
+
+- Fatigue climbs with time spent awake (a slow background rise) and faster with
+  exertion (mining, fighting, hauling, running). It resets on sleeping.
+- As it rises: vision blurs softly at the edges, footstep pace flags, an occasional
+  yawn animation/sound, and — high enough — camera sway. **No damage, no forced
+  collapse, no blackout: misery and clumsiness, not incapacitation.**
+- Resolution is any of: sleeping (quorum sleep, below), sitting a while by a hearth
+  (partial relief, no full reset — a doze, not a night's rest), or simply time (fatigue
+  caps rather than compounds forever, so it's a nudge, not a punishing clock).
+- **Feeds quorum sleep directly**: a tired player is the one who most wants the
+  suggestion to fire, and heading indoors for warmth (cold) and rest (fatigue)
+  together are why players cluster at the inn well before midnight, not just at it.
+- Bairns/free worlds: fatigue rises much slower, or is cosmetic-only (yawns, no blur) —
+  tuned alongside the chill relaxation.
+
 ### Quorum sleep
 
 The shared-world sleep mechanic returns, anchored on the inns:
@@ -238,8 +257,8 @@ The shared-world sleep mechanic returns, anchored on the inns:
   other changes ride existing types or the brain HTTP API. Additive; unknown types
   fall through (INVARIANTS rule 3).
 - Roster state: `rail` gains `dep`/`arr`; old clients ignore them.
-- Save: new per-player fields (taught list, commissions, promises, vouches, chill).
-  Additive save-version bump with forward-refuse per INVARIANTS.
+- Save: new per-player fields (taught list, commissions, promises, vouches, chill,
+  fatigue). Additive save-version bump with forward-refuse per INVARIANTS.
 - No `minClientVersion` bump required for any of this.
 
 ## Verify scripts (new)
@@ -249,6 +268,7 @@ The shared-world sleep mechanic returns, anchored on the inns:
 (taught/commission/vouch/promise ledger gates), `verify-inn-protection`,
 `verify-inn-interior` (pocket geometry, threshold round-trip, Plain fallback),
 `verify-merrils` / `verify-draughts` / `verify-dominoes`, `verify-chill`,
+`verify-fatigue` (rise/exertion/decay curve, bairns relaxation, no forced collapse),
 `verify-quorum-sleep` (50% trigger, shelter timer, caught-out wake state),
 `verify-inn-notes` (persistence round-trip shape),
 `verify-etiquette` (speech token exclusivity, suppression while chatting).
