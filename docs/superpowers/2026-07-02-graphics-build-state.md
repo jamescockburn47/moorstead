@@ -66,6 +66,11 @@ Specs: grep `### [n]` / `### [Dn]` in 2026-07-02-graphics-wow-audit.md. Codebase
 - [ ] [20] seasonal colour fronts (L) · [37] cinematic title plates
 
 ## RESUME LOG (day 2)
+- STOPPED + DEPLOYED on James's instruction: merged a899faf to main, deployed **v1.1.19**
+  (verify:live 18/18 green; pre-deploy GL probe: 72 programs, 0 broken). S2c (rain-rings/
+  spate/freeze-float), D16 (midges), D17 (swallows) were killed MID-EDIT and their partial
+  tree changes DISCARDED — re-run each cleanly from the audit specs; none of their work is
+  in the deploy. Remaining queue otherwise unchanged: S2d/e, S4c/d, S5b/d, [20], [37].
 - BATCH 2 (S3c+S5a+hearth+drips): flora sway+gust fronts (shared-clock), dew/after-rain glisten (+bilberry-glint bug fixed), snow polish; living exposure/bloom/grade v2; lit cottage windows; eave drips. TWO REAL shader bugs found via preview (headless gate blind to them): (1) uGlintTime redefinition — non-idempotent onBeforeCompile double-injected on recompile; fixed w/ sentinel-marker guard that still re-binds uniforms. (2) water fresnel used vNormal (flat-strippable varying, latent since S2a) → live compile fail; fixed to normal at opaque_fragment + regression-guard assertion. Both preview-confirmed (terrain+water render, probe shows fixed code). Gate green. NOTE: preview console tool buffers stale errors across reloads — trust the render+probe, not the buffer.
 - S3b wet ground (darken + puddles in hollows + slow-dry + mud lanes) + S4b rainbow/aurora COMMITTED. Gate green 231 graphics + verify-wetground. Preview-confirmed: wet darkening reads, double bow renders (PALE — brighten literal for James), aurora curtains render but SUBTLE on moonlit night (raise 1.6 gain), night sky lovely, 0 console errors. Fixed stale aurora-cadence comment.
 
