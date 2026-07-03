@@ -1046,6 +1046,11 @@ class Game {
     await this.saveNow(false);
     if (this.net) { this.net.disconnect(); this.net = null; }
     this.netActive = false;
+    // a quit mid-threshold-fade would otherwise leave the canvas black until the
+    // pending fade-in timer fires — clear the cross-fade state before the title shows
+    this.renderer.domElement.style.transition = '';
+    this.renderer.domElement.style.opacity = '1';
+    this._thresholdBusy = false;
     this.state = 'title';
     document.exitPointerLock?.();
     this.ui.show('titleScreen');
@@ -2537,7 +2542,10 @@ class Game {
   }
 
   // Landing spot just outside the exterior door, one block out from the door
-  // cell on the doorSide, stood on the ground.
+  // cell on the doorSide. Lands at groundY+2 and lets gravity settle the final
+  // half-block, warp()'s idiom — the landing cell sits one block PAST the
+  // site-scan's flatness-checked corners, so its true ground can differ by ±1
+  // and a hard-place at groundY+1 could embed the player in a slope.
   _innExteriorLanding(plan) {
     const { x0, z0, x1, z1 } = plan.footprint;
     const midX = Math.round((x0 + x1) / 2), midZ = Math.round((z0 + z1) / 2);
@@ -2545,7 +2553,7 @@ class Game {
       : plan.doorSide === 's' ? { x: midX, z: z1 + 1 }
       : plan.doorSide === 'e' ? { x: x1 + 1, z: midZ }
       : { x: x0 - 1, z: midZ };
-    return { x: out.x + 0.5, y: plan.groundY + 1, z: out.z + 0.5 };
+    return { x: out.x + 0.5, y: plan.groundY + 2, z: out.z + 0.5 };
   }
 
   readSignpost() {
