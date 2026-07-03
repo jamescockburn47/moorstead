@@ -509,6 +509,14 @@ const FOG_KNEE = 60;  // open-weather targets (rain 90 / misty 120 / clear 160) 
 const SHADOW_TEXEL = 140 / 2048;
 const _SNAP_UP = new THREE.Vector3(0, 1, 0);
 const _snapZ = new THREE.Vector3(), _snapX = new THREE.Vector3(), _snapY = new THREE.Vector3();
+// T' texel snap below freezes TRANSLATION, but t' lamp's DIRECTION sweeps continuously
+// wi' time o' day — every frame t' depth grid rotates a fraction of a texel an' every
+// shadow edge boils/flickers (James 2026-07-03). Quantisin' t' light-offset components
+// to a coarse grid steps t' direction ~0.4° at a time: diffuse lighting can't show a
+// step that small, an' between steps t' shadow edges stand rock still. Fine-rig only —
+// Plain has no shadow map an' keeps its byte-identical smooth lamp.
+const SHADOW_DIR_STEP = 0.5; // blocks on t' ~70-block offset arm ≈ 0.007 rad
+const _dirQ = v => Math.round(v / SHADOW_DIR_STEP) * SHADOW_DIR_STEP;
 
 // ---- graphics quality (pure helpers — headless-testable, no DOM, no GL) ----
 // Two rigs: 'fine' (ACES tone mapping, sun/moon shadows, bloom + grade post stack)
@@ -1031,7 +1039,7 @@ export class Sky {
       if (moonUp) {
         // [SOLAR] t' lamp stands where t' moon actually is (phase-lagged, ecliptic
         // declination) — t' y clamp keeps a sane rig through moon-down dark nights
-        this.sun.position.set(playerPos.x + lun.dir[0] * 70, playerPos.y + Math.max(8, lun.alt * 85), playerPos.z + lun.dir[2] * 70);
+        this.sun.position.set(playerPos.x + _dirQ(lun.dir[0] * 70), playerPos.y + _dirQ(Math.max(8, lun.alt * 85)), playerPos.z + _dirQ(lun.dir[2] * 70));
         // phase-scaled moonlight (James 2026-07-03): a full moon genuinely lights t'
         // moor (~2.9x t' owd flat curve, soft shadows read), a thin crescent stays
         // near t' owd faint glow. Same shadow rig follows — position/target swap an'
@@ -1041,7 +1049,7 @@ export class Sky {
       } else {
         // [SOLAR] real azimuth: t' day sun arcs on t' −Z (sky-south) side, low
         // an' southerly in winter, high wi' NE/NW risings in summer
-        this.sun.position.set(playerPos.x + sol.dir[0] * 70, playerPos.y + Math.max(5, sunY * 85), playerPos.z + sol.dir[2] * 70);
+        this.sun.position.set(playerPos.x + _dirQ(sol.dir[0] * 70), playerPos.y + _dirQ(Math.max(5, sunY * 85)), playerPos.z + _dirQ(sol.dir[2] * 70));
         this.sun.intensity = (0.34 + dayness * 1.72) * (1 - this.dread * 0.35) + flashLift; // golden hoisted above ([22])
         this.sun.color.setHSL(0.07 + 0.045 * (1 - golden), 0.45 + golden * 0.45, 0.74 + (1 - golden) * 0.12);
       }

@@ -157,7 +157,7 @@ function addSnow(mat, key = 'terrain-snow', glint = false) {
       + '  return step(0.82, h) * max(0.0, sin(t + h * 6.2831)); }\n'
       + shader.fragmentShader
       .replace('#include <color_fragment>',
-        '#include <color_fragment>\n  float drift = 0.6 + 0.4 * sin(vSnowWX * 0.15) * cos(vSnowWZ * 0.15);\n'
+        '#include <color_fragment>\n  float drift = 0.6 + 0.3 * uSnowAmt + 0.4 * sin(vSnowWX * 0.15) * cos(vSnowWZ * 0.15);\n'
         + '  float snowRaw = drift * vSnowExp * smoothstep(uSnowLine, uSnowLine + 10.0, vSnowY) * smoothstep(0.05, 0.55, vSnowUp);\n'
         // [14](a) drift edges: light frost stays soft (linear), deepenin' cover crusts into
         // banked drift patches wi' defined edges. t' band sharpens as uSnowAmt rises — a
@@ -169,7 +169,9 @@ function addSnow(mat, key = 'terrain-snow', glint = false) {
         + '  diffuseColor.rgb = mix(diffuseColor.rgb, snowCol, clamp(snow * 1.25, 0.0, 1.0));\n'
         // [14](c) frost sparkle: daylight twinkle on t' snow tops via t' SHARED sparkle-cell
         // helper. Fires only where t' snow wash is active (× snow), Fine-only (uSparkle 0 Plain).
-        + '  diffuseColor.rgb += snow * uSparkle * sparkleCell(vec2(vSnowWX, vSnowWZ), 6.0, uGlintTime * 3.0) * 0.45;\n'
+        // scale 22 (sub-texel points, not 1/6-block tiles) + strength 0.18 + fast phase:
+        // reads as a twinkling glint, never a pulsing square (James 2026-07-03).
+        + '  diffuseColor.rgb += snow * uSparkle * sparkleCell(vec2(vSnowWX, vSnowWZ), 22.0, uGlintTime * 6.0) * 0.18;\n'
         // [D10] shelter signal frae data already in t' vertex stream: vSnowExp says
         // 'rain an' sun reach here', vColor luminance (baked 4-level AO) says 'this is
         // a sheltered crevice'. wetEff shapes ONE scalar (uGroundWet) into spatially-

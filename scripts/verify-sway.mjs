@@ -168,13 +168,13 @@ console.log('\n-- [14] snow polish + the SHARED sparkle-cell helper (landed once
 ((mesherSrc.match(/float sparkleCell\(vec2 wxz, float scale, float t\)/g) || []).length === 1
   ? ok : bad)('sparkleCell helper defined EXACTLY once — shared by [14] frost + [D8] dew (single-ownership)');
 {
-  // both consumers reference the one helper (frost sparkle uses scale 6.0, dew uses 3.0)
+  // both consumers reference the one helper (frost sparkle uses scale 22.0, dew uses 3.0)
   const uses = (mesherSrc.match(/sparkleCell\(/g) || []).length;
   (uses >= 3 ? ok : bad)(`sparkleCell called by both frost and dew consumers (${uses} call sites: def + frost + dews)`);
 }
 (mesherSrc.includes('vec3(0.78, 0.85, 1.0)') ? ok : bad)('[14](b) shadow-blue snow: AO\'d snow cools toward blue');
 (mesherSrc.includes('smoothstep(0.34, 0.5, snowRaw)') ? ok : bad)('[14](a) drift edges: smoothstep band sharpens with deep cover');
-(mesherSrc.includes('uSparkle') && mesherSrc.includes('* 0.45') ? ok : bad)('[14](c) frost sparkle rides uSparkle (Fine-only), added over the snow wash');
+(mesherSrc.includes('uSparkle') && mesherSrc.includes('22.0, uGlintTime * 6.0) * 0.18') ? ok : bad)('[14](c) frost sparkle rides uSparkle (Fine-only): sub-texel twinkle, not pulsing squares');
 
 console.log('\n-- Plain / byte-parity: every new uniform defaults to today --\n');
 

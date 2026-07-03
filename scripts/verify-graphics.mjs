@@ -239,6 +239,12 @@ ok(mesherSrc.includes('map: getCutoutAtlas()'), 'cutout material samples the no-
 ok(skySrc.includes('SHADOW_TEXEL = 140 / 2048'), 'shadow frustum snapped to whole texels');
 ok(skySrc.includes('_snapShadowCamera() {') && skySrc.includes('if (fine) this._snapShadowCamera()'),
   'texel snap exists and is Fine-gated (Plain has no shadow map)');
+// Direction quantise (2026-07-03): translation snap alone still boiled — t' lamp's
+// direction sweeps continuously wi' time o' day, rotating t' depth grid sub-texel
+// every frame. Both Fine lamp paths (sun AND moon) must ride _dirQ; Plain stays smooth.
+ok(skySrc.includes('SHADOW_DIR_STEP = 0.5'), 'shadow lamp direction is quantised (~0.4° steps)');
+ok((skySrc.match(/_dirQ\(/g) || []).length >= 6, 'both Fine lamp paths (sun + moon, all offset components) ride _dirQ');
+ok(skySrc.includes('this.sun.position.set(playerPos.x + sol.dir[0] * 60'), 'Plain lamp stays smooth (no _dirQ — no shadow map to boil)');
 // Re-tuned 2026-07-03 (DELIBERATE, not a weakening): world.renderDist raised 6→7 so the
 // fog line could move out — James found clear-weather 84 too close in. The budget maths
 // below is the SAME contract at the new radius: full occlusion inside the meshed edge.

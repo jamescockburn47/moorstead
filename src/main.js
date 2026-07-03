@@ -5201,6 +5201,7 @@ class Game {
         this.footprints.update(dt, fpNow, walkers);
       } else if (this.footprints) this.footprints.clear();
       this.snowAccum = stepAccumulation(this.snowAccum, season, dt);
+      this.player.snowAccum = this.snowAccum; // drift slowdown reads this (player.js driftDepth)
       setSnowLevel(this.snowAccum); // height-gated snow on the tops (cheap uniform)
       const _frozen = isFrozen(season);
       setFrozen(_frozen);

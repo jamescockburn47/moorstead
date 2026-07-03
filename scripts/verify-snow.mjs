@@ -1,6 +1,6 @@
 // Snow maths — run wi': node scripts/verify-snow.mjs
 import { TrampleBuffer } from '../src/footprints.js';
-import { stepAccumulation, accumulationTarget, snowfallIntensity, showerOscillation, snowLineFor } from '../src/snow.js';
+import { stepAccumulation, accumulationTarget, snowfallIntensity, showerOscillation, snowLineFor, driftDepth } from '../src/snow.js';
 import { seasonStateAtPhase, YEAR, ANCHOR_SEC, ANCHOR_PHASE } from '../src/season.js';
 
 let failed = false;
@@ -26,7 +26,7 @@ const nowAtPhase = p => (ANCHOR_SEC + (p - ANCHOR_PHASE) * YEAR) * 1000 + 1;
   const winter = seasonStateAtPhase(0.875), summer = seasonStateAtPhase(0.375);
   (accumulationTarget(winter) > 0.9 ? ok : bad)('deep winter wants near-full cover (' + accumulationTarget(winter).toFixed(2) + ')');
   (accumulationTarget(summer) === 0 ? ok : bad)('summer wants no snow');
-  (accumulationTarget({ frost: 0.5, warmth: -0.2 }) === Math.min(1, 0.5 * 0.6 + 0.2) ? ok : bad)('partial cover for a mild cold snap (' + accumulationTarget({ frost: 0.5, warmth: -0.2 }).toFixed(2) + ')');
+  (accumulationTarget({ frost: 0.5, warmth: -0.2 }) === Math.min(1, 0.5 * 0.75 + 0.2) ? ok : bad)('partial cover for a mild cold snap (' + accumulationTarget({ frost: 0.5, warmth: -0.2 }).toFixed(2) + ')');
   (Math.abs(stepAccumulation(accumulationTarget(winter), winter, 1) - accumulationTarget(winter)) < 0.01 ? ok : bad)('accum seeded to target stays put');
 }
 // deterministic snowfall: reliably present through winter, ~0 in summer
@@ -47,6 +47,24 @@ const nowAtPhase = p => (ANCHOR_SEC + (p - ANCHOR_PHASE) * YEAR) * 1000 + 1;
 {
   (snowLineFor(0) > snowLineFor(1) ? ok : bad)('snow-line is higher with less snow');
   (snowLineFor(1) <= 30 ? ok : bad)('full snow blankets down to the valley floor (' + snowLineFor(1) + ')');
+}
+
+// banked drifts: deep winter only, patchy (crests slow, hollows walkable),
+// zero below the snow-line band, deterministic per column
+{
+  (driftDepth(10, 10, 40, 0.3) === 0 ? ok : bad)('no drifts under light cover');
+  (driftDepth(10, 10, 10, 1) === 0 ? ok : bad)('no drifts below the snow-line band');
+  let deep = 0, shallow = 0;
+  for (let x = 0; x < 60; x++) for (let z = 0; z < 60; z++) {
+    const d = driftDepth(x, z, 60, 1);
+    if (d > 0.5) deep++; else if (d === 0) shallow++;
+  }
+  (deep > 0 ? ok : bad)('deep winter has banked drift crests (' + deep + ' cells)');
+  (shallow > deep ? ok : bad)('hollows outnumber banks — the moor stays walkable (' + shallow + ' clear)');
+  (driftDepth(7, 9, 60, 0.95) === driftDepth(7, 9, 60, 0.95) ? ok : bad)('drift depth is deterministic');
+  let inRange = true;
+  for (let x = 0; x < 40; x++) { const d = driftDepth(x, x * 2, 60, 1); if (d < 0 || d > 1) inRange = false; }
+  (inRange ? ok : bad)('drift depth stays in [0,1]');
 }
 
 {

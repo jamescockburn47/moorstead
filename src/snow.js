@@ -9,7 +9,7 @@ import { noise2 } from './noise.js';
 export function accumulationTarget(season) {
   const snowing = season.frost;                           // 0..1, winter half-year (= max(0,-warmth))
   const cold = season.warmth < 0 ? -season.warmth : 0;    // 0..1
-  return Math.min(1, snowing * 0.6 + cold);
+  return Math.min(1, snowing * 0.75 + cold);              // midwinter lies deep — full blanket, banked drifts
 }
 
 // New accumulation [0,1] after `dt` GAME-seconds, given the current season state.
@@ -41,7 +41,22 @@ export function snowfallIntensity(now, season) {
 // Snow-line height for a coverage amount [0,1]: high (tops only) -> valley floor.
 export function snowLineFor(amount) {
   const a = amount < 0 ? 0 : amount > 1 ? 1 : amount;
-  return 64 - a * 40;                                     // 64 (tops) down to 24 (valley)
+  return 64 - a * 44;                                     // 64 (tops) down to 20 (deep-winter valley floor)
+}
+
+// Banked-drift depth [0,1] at a world column. MUST mirror the shader's drift
+// pattern (mesher.js: 0.6 + amp*sin(x*0.15)*cos(z*0.15)) so the banks tha SEES
+// are the banks that slow thee — visuals and legs agree on where the drifts lie.
+// Zero below ~0.55 cover (drifts only bank up once winter has properly set in),
+// zero below the snow-line band, and only the crests of the pattern count.
+export function driftDepth(x, z, y, accum) {
+  const a = accum < 0 ? 0 : accum > 1 ? 1 : accum;
+  if (a <= 0.55) return 0;
+  const line = snowLineFor(a);
+  const hg = Math.min(1, Math.max(0, (y - line) / 10));   // same 10-block band as the shader
+  const drift = 0.6 + 0.4 * Math.sin(x * 0.15) * Math.cos(z * 0.15);
+  const bank = Math.max(0, (drift - 0.72) / 0.28);        // crests only — hollows stay walkable
+  return bank * ((a - 0.55) / 0.45) * hg;
 }
 
 // Split precipitation into snow (winter) vs rain (otherwise). `livePrecip` is the

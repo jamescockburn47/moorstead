@@ -3,7 +3,7 @@ import { B, BLOCKS, FOODS, TOOLS, maxStack, isLiquid } from './defs.js';
 import { HOT_FOODS } from './temperature.js';
 import { STARTING_BRASS } from './economy.js';
 import { moveEntity, boxCollides, unstick, SWIM, submersion, swimWish, swimVerticalWish, swimVerticalStep, currentAt } from './physics.js';
-import { freezableWater, isFrozen } from './snow.js';
+import { freezableWater, isFrozen, driftDepth } from './snow.js';
 import { validatePlayerLook, DEFAULT_PLAYER_LOOK } from './entities.js';
 
 const GRAVITY = 26;
@@ -133,6 +133,12 @@ export class Player {
     if (!swimming) {
       if (inBog && !onFrozen) speed *= 0.3;
       else if (inWater && !onFrozen) speed *= 0.55;
+      else if (this.onGround && !this.flying && !onFrozen) {
+        // deep-winter drifts: wading a banked drift is heavy going — up on a
+        // pony tha ploughs through easier. snowAccum is fed by t' main loop.
+        const dd = driftDepth(this.pos.x, this.pos.z, this.pos.y, this.snowAccum || 0);
+        if (dd > 0) speed *= 1 - dd * (this.mounted ? 0.3 : 0.55);
+      }
     }
     if (!this.creative && !this.god && this.temperature < 6) speed *= 0.75; // cold stiffens t' limbs
     this.sprinting = sprinting;

@@ -38,6 +38,8 @@ export default defineConfig({
   },
   plugins: [emitVersionJson()],
   server: {
+    // honour an assigned port (preview harness sets PORT); default stays 5173
+    port: Number(process.env.PORT) || 5173,
     proxy: {
       '/brain': {
         target: 'https://moorstead.sovren.xyz',

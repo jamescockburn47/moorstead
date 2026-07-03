@@ -224,36 +224,45 @@ export function buildChristmas(ctx) {
   }
 }
 
+// The fir's base tier is hw=3 (see the carol-singer comment in buildChristmas),
+// so a valid site needs every cell within FIR_CLEAR of the trunk clear of ALL
+// building footprints — the old single-cell check let the canopy wedge into a
+// snicket between two walls (James's screenshot, 2026-07-03).
+const FIR_CLEAR = 4;
+function clearOfBuildings(v, x, z, r = FIR_CLEAR) {
+  return !(v.buildings || []).some(b =>
+    x >= b.x0 - r && x <= b.x1 + r && z >= b.z0 - r && z <= b.z1 + r);
+}
+
 // Re-site the parish fir to the chapel forecourt (south / z0 face).
-// Scans a few candidate cells 2-4 blocks south of the chapel's centre-x,
-// picks the first open ground cell not inside any building footprint.
-// Falls back to the original firPlacement() if no chapel in the village or
-// no clear cell is found close enough to the chapel front.
+// Scans candidate cells south of the chapel front, picks the first open-ground
+// cell whose WHOLE canopy footprint clears every building. Falls back to the
+// green/open-ground scan (also clearance-checked) if the forecourt is hemmed in.
 function chapelFirPlacement(world, v) {
   const gen = world.gen;
   const chapel = (v.buildings || []).find(b => b.type === 'chapel');
   if (chapel) {
     const centreX = Math.floor((chapel.x0 + chapel.x1) / 2);
-    // try a small arc of candidates south (z < z0) of the chapel front
-    for (let dz = 2; dz <= 5; dz++) {
-      for (let dx = -2; dx <= 2; dx++) {
+    // start FIR_CLEAR out so the canopy clears the chapel wall itself
+    for (let dz = FIR_CLEAR; dz <= FIR_CLEAR + 5; dz++) {
+      for (let dx = -4; dx <= 4; dx++) {
         const x = centreX + dx;
         const z = chapel.z0 - dz; // south of the front (south = lower z in this world)
-        // must not fall inside any building footprint
-        const inBuilding = (v.buildings || []).some(b => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1);
-        if (inBuilding) continue;
+        if (!clearOfBuildings(v, x, z)) continue;
         const sy = gen.height(x, z);
         if (world.getBlock(x, sy + 1, z) === B.AIR) return { x, z };
       }
     }
     // chapel found but forecourt is hemmed in — fall back below
   }
-  // fallback: original green/path/any-open scan
+  // fallback: green/path/any-open scan, same clearance rule
   return firPlacement(world, v);
 }
 
-// Return a deterministic open cell near village centre for the fir.
-// Scans expanding rings r=2..10 with 16 angle steps per radius.
+// Return a deterministic open cell near the village for the fir — expanding
+// rings out to the village edge, so a tight-packed centre pushes the tree OUT
+// toward the green/edge rather than wedging it between roofs.
+// Scans expanding rings with 16 angle steps per radius.
 // Pass 1 prefers green/closes/path kinds (open ground); pass 2 accepts any
 // non-building column so every village style (capital, cluster, longgreen,
 // clifftop) gets a fir even when no green/closes cell exists near centre.
@@ -268,9 +277,10 @@ function firPlacement(world, v) {
     const sy = gen.height(x, z);
     return world.getBlock(x, sy + 1, z) === B.AIR;
   };
+  const maxR = Math.max(14, Math.round(v.radius || 14)); // out to the village edge
   // Pass 1: preferred kinds (green/closes/path) — gives a good spot on
-  // village greens and market squares first.
-  for (let r = 2; r <= 10; r++) {
+  // village greens and market squares first. Canopy clearance enforced.
+  for (let r = 4; r <= maxR; r++) {
     for (let ai = 0; ai < 16; ai++) {
       const angle = (ai / 16) * Math.PI * 2;
       const x = v.x + Math.round(r * Math.cos(angle));
@@ -278,19 +288,21 @@ function firPlacement(world, v) {
       if (x === v.x && z === v.z) continue; // skip the stone cross
       const col = gen.geo.villageColumn(x, z);
       if (!col || !isPreferred(col.kind)) continue;
+      if (!clearOfBuildings(v, x, z)) continue;
       if (!isOpen(x, z, col)) continue;
       return { x, z };
     }
   }
   // Pass 2: any non-building open column (handles village styles where the
   // centre is all closes with no explicit green/path near the cross).
-  for (let r = 2; r <= 10; r++) {
+  for (let r = 4; r <= maxR; r++) {
     for (let ai = 0; ai < 16; ai++) {
       const angle = (ai / 16) * Math.PI * 2;
       const x = v.x + Math.round(r * Math.cos(angle));
       const z = v.z + Math.round(r * Math.sin(angle));
       if (x === v.x && z === v.z) continue;
       const col = gen.geo.villageColumn(x, z);
+      if (!clearOfBuildings(v, x, z)) continue;
       if (!isOpen(x, z, col)) continue;
       return { x, z };
     }
