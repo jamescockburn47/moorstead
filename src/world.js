@@ -97,8 +97,21 @@ export class World {
     return this.chunks.has(key(Math.floor(x / CHUNK), Math.floor(z / CHUNK)));
   }
 
+  // True if (x,z) sits inside any inn's protected box (tavern spec,
+  // "Indestructible, both shells") — checked for EVERY setBlock call, place or
+  // break, regardless of y, so the exterior walls/roof and the whole underground
+  // parlour+shell are covered by one rule. Worldgen's own carve is unaffected:
+  // stampInns writes chunk data directly during generation, never through here.
+  isProtected(x, z) {
+    for (const p of this.gen.inns.values()) {
+      if (x >= p.protectedBox.x0 && x <= p.protectedBox.x1 && z >= p.protectedBox.z0 && z <= p.protectedBox.z1) return true;
+    }
+    return false;
+  }
+
   setBlock(x, y, z, id) {
     if (y < 0 || y >= HEIGHT) return;
+    if (this.isProtected(x, z)) return;
     const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
     const c = this.chunks.get(key(cx, cz));
     if (!c) return;
