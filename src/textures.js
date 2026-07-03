@@ -4,7 +4,14 @@ import { TILE, I, BLOCKS, TOOLS } from './defs.js';
 import { mulberry32 } from './noise.js';
 
 export const ATLAS_TILES = 16; // tiles per row
-const T = 16; // pixels per tile
+const T = 16;   // pixels per tile payload (t' art stays 16px)
+const PAD = 4;  // gutter each side o' t' payload, edge-replicated so mips don't bleed neighbours
+const CELL = T + PAD * 2; // 24px atlas cell: gutter + 16px payload + gutter (atlas 384x384)
+
+// top-left o' a tile's 16px payload on t' atlas canvas
+function tilePx(tile) {
+  return [(tile % ATLAS_TILES) * CELL + PAD, Math.floor(tile / ATLAS_TILES) * CELL + PAD];
+}
 
 function shade(hex, f) {
   const r = Math.min(255, Math.max(0, Math.round(((hex >> 16) & 255) * f)));
@@ -1095,32 +1102,92 @@ const TILE_PAINTERS = {
   },
 };
 
+// [16] shoreline foam: white lace on a TRANSPARENT ground — it rides t' CUTOUT
+// pass (alphaTest 0.5), so t' gaps in t' lace show t' water beneath. Same canvas
+// idiom as WATER's streaks; goes through t' one atlas pipeline (base paint →
+// gutter replication → mipped atlas + no-mip cutout twin) like every other tile.
+TILE_PAINTERS[TILE.FOAM] = (p) => {
+  p.clear();
+  for (let i = 0; i < 9; i++) {
+    const y = (p.rng() * T) | 0, x = (p.rng() * 10) | 0, w = 3 + ((p.rng() * 6) | 0);
+    p.rect(x, y, w, 1, shade(0xf2f6f8, 0.9 + p.rng() * 0.18));
+    if (p.rng() < 0.6) p.rect(Math.min(x + 1, T - 2), Math.min(y + 1, T - 1), Math.max(2, w - 2), 1, shade(0xdde8ee, 0.88 + p.rng() * 0.2));
+  }
+  p.dots(0xffffff, 26); p.dots(0xcfdde6, 12);
+};
+
 let atlasCanvas = null;   // the LIVE atlas (may be season-tinted)
 let baseCanvas = null;    // untinted base, kept so seasonal tints don't compound
-let atlasTexture = null;
+let atlasTexture = null;        // mipped: opaque + liquid terrain
+let cutoutAtlasTexture = null;  // NO mips, same canvas: alphaTest flora must not fizzle at range
+
+// Edge-replicate a tile's 16px payload into its 4px gutters — 4 strip copies +
+// 4 corner floods — so mip downsampling never averages a tile wi' its neighbour.
+// Headless-safe: only drawImage, an' t' canvas comes in as an argument (t' verify
+// stubs' 2d contexts have no .canvas property).
+function replicateGutters(ctx, canvas, tile) {
+  const [px, py] = tilePx(tile);
+  // clear t' gutter ring first: drawImage composites source-over, so a transparent
+  // replicated edge (cutout tiles) would otherwise leave painter overspill behind
+  ctx.clearRect(px - PAD, py - PAD, T + PAD * 2, PAD); // top band + corners
+  ctx.clearRect(px - PAD, py + T, T + PAD * 2, PAD);   // bottom band + corners
+  ctx.clearRect(px - PAD, py, PAD, T);                 // left band
+  ctx.clearRect(px + T, py, PAD, T);                   // right band
+  // strips: stretch t' 1px edge row/column across t' gutter
+  ctx.drawImage(canvas, px, py, T, 1, px, py - PAD, T, PAD);            // top
+  ctx.drawImage(canvas, px, py + T - 1, T, 1, px, py + T, T, PAD);      // bottom
+  ctx.drawImage(canvas, px, py, 1, T, px - PAD, py, PAD, T);            // left
+  ctx.drawImage(canvas, px + T - 1, py, 1, T, px + T, py, PAD, T);      // right
+  // corners: flood each PADxPAD corner wi' t' nearest payload corner pixel
+  ctx.drawImage(canvas, px, py, 1, 1, px - PAD, py - PAD, PAD, PAD);                  // TL
+  ctx.drawImage(canvas, px + T - 1, py, 1, 1, px + T, py - PAD, PAD, PAD);            // TR
+  ctx.drawImage(canvas, px, py + T - 1, 1, 1, px - PAD, py + T, PAD, PAD);            // BL
+  ctx.drawImage(canvas, px + T - 1, py + T - 1, 1, 1, px + T, py + T, PAD, PAD);      // BR
+}
 
 export function buildAtlas() {
   // paint t' untinted base once
   baseCanvas = document.createElement('canvas');
-  baseCanvas.width = baseCanvas.height = ATLAS_TILES * T;
+  baseCanvas.width = baseCanvas.height = ATLAS_TILES * CELL;
   const bctx = baseCanvas.getContext('2d');
+  bctx.imageSmoothingEnabled = false; // gutter strip-stretches must copy pixels, not blur 'em
   bctx.clearRect(0, 0, baseCanvas.width, baseCanvas.height);
   for (const [tileId, fn] of Object.entries(TILE_PAINTERS)) {
     const id = +tileId;
-    const tx = (id % ATLAS_TILES) * T, ty = Math.floor(id / ATLAS_TILES) * T;
+    const [tx, ty] = tilePx(id);
     fn(new Painter(bctx, tx, ty, 1000 + id * 7));
   }
+  // gutters AFTER every painter has run: a painter may overspill its payload by a
+  // few px (fern fronds an' t' like) — t' spill lands in gutter an' is overwritten here
+  for (const tileId of Object.keys(TILE_PAINTERS)) replicateGutters(bctx, baseCanvas, +tileId);
   // t' live atlas starts as a copy o' t' base
   atlasCanvas = document.createElement('canvas');
-  atlasCanvas.width = atlasCanvas.height = ATLAS_TILES * T;
-  atlasCanvas.getContext('2d', { willReadFrequently: true }).drawImage(baseCanvas, 0, 0);
+  atlasCanvas.width = atlasCanvas.height = ATLAS_TILES * CELL;
+  const actx = atlasCanvas.getContext('2d', { willReadFrequently: true });
+  actx.imageSmoothingEnabled = false;
+  actx.drawImage(baseCanvas, 0, 0);
+  // main terrain texture: mipped so t' distant moor stops shimmerin'. Nearest mag
+  // keeps t' pixel-art identity up close; r166 is WebGL2-only so NPOT (384) mips
+  // are fine. three clamps anisotropy to t' renderer's max at upload, so a flat 4
+  // is safe wi'out reachin' t' renderer frae here.
   atlasTexture = new THREE.CanvasTexture(atlasCanvas);
   atlasTexture.magFilter = THREE.NearestFilter;
-  atlasTexture.minFilter = THREE.NearestFilter;
-  atlasTexture.generateMipmaps = false;
+  atlasTexture.minFilter = THREE.NearestMipmapLinearFilter;
+  atlasTexture.generateMipmaps = true;
+  atlasTexture.anisotropy = 4;
   atlasTexture.colorSpace = THREE.SRGBColorSpace;
+  // second texture ower t' SAME canvas, no mips: alphaTest 0.5 cutouts thin to
+  // nowt at range if their alpha shrinks through mip levels
+  cutoutAtlasTexture = new THREE.CanvasTexture(atlasCanvas);
+  cutoutAtlasTexture.magFilter = THREE.NearestFilter;
+  cutoutAtlasTexture.minFilter = THREE.NearestFilter;
+  cutoutAtlasTexture.generateMipmaps = false;
+  cutoutAtlasTexture.colorSpace = THREE.SRGBColorSpace;
   return atlasTexture;
 }
+
+// t' no-mip twin for alpha-tested materials (cutout terrain, leaf-shadow depth pass)
+export function getCutoutAtlas() { return cutoutAtlasTexture; }
 
 // ---- seasonal re-tint o' t' growing things (re-paints tiles in place; no chunk re-mesh) ----
 const SEASON_TILES = [TILE.GRASS_TOP, TILE.GRASS_SIDE, TILE.HEATHER, TILE.BRACKEN, TILE.FERN, TILE.BILBERRY, TILE.GORSE, TILE.LEAVES, TILE.MONKEY_LEAVES, TILE.BRAMBLE, TILE.ORCHARD_LEAVES];
@@ -1165,26 +1232,31 @@ export function retintAtlasForSeason(season) {
   if (!atlasCanvas || !baseCanvas || !atlasTexture) return;
   const ctx = atlasCanvas.getContext('2d', { willReadFrequently: true });
   for (const tile of SEASON_TILES) {
-    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
-    ctx.clearRect(tx, ty, T, T);
-    ctx.drawImage(baseCanvas, tx, ty, T, T, tx, ty, T, T); // reset frae base so tints don't stack
-    const img = ctx.getImageData(tx, ty, T, T);
+    const cx = (tile % ATLAS_TILES) * CELL, cy = Math.floor(tile / ATLAS_TILES) * CELL;
+    ctx.clearRect(cx, cy, CELL, CELL);
+    ctx.drawImage(baseCanvas, cx, cy, CELL, CELL, cx, cy, CELL, CELL); // reset frae base so tints don't stack
+    // tint t' WHOLE cell, gutters included: base gutters are exact copies o' edge
+    // pixels an' seasonShiftPx is pure per-pixel, so this equals tint-then-replicate
+    const img = ctx.getImageData(cx, cy, CELL, CELL);
     const d = img.data;
     for (let i = 0; i < d.length; i += 4) {
       if (d[i + 3] < 8) continue; // leave t' transparent cutout background be
       seasonShiftPx(tile, d, i, season);
     }
-    ctx.putImageData(img, tx, ty);
+    ctx.putImageData(img, cx, cy);
   }
-  atlasTexture.needsUpdate = true;
+  atlasTexture.needsUpdate = true;                                // re-uploads + regenerates mips
+  if (cutoutAtlasTexture) cutoutAtlasTexture.needsUpdate = true;  // t' no-mip twin re-uploads an' all
   tileColorCache.clear();
 }
 
-// UV rect for a tile: returns [u0, v0, u1, v1] (v0 = bottom)
+// UV rect for a tile: returns [u0, v0, u1, v1] (v0 = bottom),
+// inset to t' 16px payload inside its 24px gutter-padded cell
 export function tileUV(tile) {
   const c = tile % ATLAS_TILES, r = Math.floor(tile / ATLAS_TILES);
-  const s = 1 / ATLAS_TILES;
-  return [c * s, 1 - (r + 1) * s, (c + 1) * s, 1 - r * s];
+  const s = 1 / ATLAS_TILES;    // one cell in UV space
+  const g = s * (PAD / CELL);   // gutter inset in UV space
+  return [c * s + g, 1 - (r + 1) * s + g, (c + 1) * s - g, 1 - r * s - g];
 }
 
 // ---------- Item icons (32px canvases, cached) ----------
@@ -1423,12 +1495,12 @@ const ITEM_ICON_PAINTERS = {
   [I.CEP](ctx) {
     // draw tile frae atlas scaled up — matches the world tile
     const tile = TILE.CEP;
-    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    const [tx, ty] = tilePx(tile);
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
   [I.CHANTERELLE](ctx) {
     const tile = TILE.CHANTERELLE;
-    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    const [tx, ty] = tilePx(tile);
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
   [I.COOKED_MUSHROOMS](ctx) {
@@ -1459,57 +1531,57 @@ const ITEM_ICON_PAINTERS = {
   },
   [I.WILD_GARLIC](ctx) {
     const tile = TILE.WILD_GARLIC;
-    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    const [tx, ty] = tilePx(tile);
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
   [I.SORREL](ctx) {
     const tile = TILE.SORREL;
-    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    const [tx, ty] = tilePx(tile);
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
   [I.BLACKBERRY](ctx) {
     const tile = TILE.BLACKBERRY;
-    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    const [tx, ty] = tilePx(tile);
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
   [I.ROSEHIP](ctx) {
     const tile = TILE.ROSEHIP;
-    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    const [tx, ty] = tilePx(tile);
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
   [I.SLOE](ctx) {
     const tile = TILE.SLOE;
-    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    const [tx, ty] = tilePx(tile);
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
   [I.ELDERBERRY](ctx) {
     const tile = TILE.ELDERBERRY;
-    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    const [tx, ty] = tilePx(tile);
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
   [I.HAZELNUT](ctx) {
     const tile = TILE.HAZELNUT;
-    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    const [tx, ty] = tilePx(tile);
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
   [I.APPLE](ctx) {
     const tile = TILE.APPLE;
-    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    const [tx, ty] = tilePx(tile);
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
   [I.PEAR](ctx) {
     const tile = TILE.PEAR;
-    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    const [tx, ty] = tilePx(tile);
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
   [I.PLUM](ctx) {
     const tile = TILE.PLUM;
-    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    const [tx, ty] = tilePx(tile);
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
   [I.SNOWBALL](ctx) {
     const tile = TILE.SNOWBALL;
-    const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+    const [tx, ty] = tilePx(tile);
     ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
   },
   [I.STORM_LANTERN](ctx) {
@@ -1580,13 +1652,13 @@ export function getIconURL(itemId) {
     const def = BLOCKS[itemId];
     if (def && def.tex) {
       const tile = def.kind === 'cutout' ? def.tex.t : (def.tex.s ?? def.tex.t);
-      const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+      const [tx, ty] = tilePx(tile);
       if (def.kind === 'cutout' || def.kind === 'liquid') {
         ctx.drawImage(atlasCanvas, tx, ty, T, T, 2, 2, 28, 28);
       } else {
         // pseudo-3D cube icon
         const topTile = def.tex.t;
-        const ttx = (topTile % ATLAS_TILES) * T, tty = Math.floor(topTile / ATLAS_TILES) * T;
+        const [ttx, tty] = tilePx(topTile);
         ctx.save();
         ctx.setTransform(1, -0.5, 1, 0.5, 4, 12);
         ctx.drawImage(atlasCanvas, ttx, tty, T, T, 0, 0, 12, 12);
@@ -1619,7 +1691,7 @@ const tileColorCache = new Map();
 export function tileColor(tile) {
   if (tileColorCache.has(tile)) return tileColorCache.get(tile);
   const ctx = atlasCanvas.getContext('2d');
-  const tx = (tile % ATLAS_TILES) * T, ty = Math.floor(tile / ATLAS_TILES) * T;
+  const [tx, ty] = tilePx(tile);
   const d = ctx.getImageData(tx, ty, T, T).data;
   let r = 0, g = 0, b = 0, n = 0;
   for (let i = 0; i < d.length; i += 4) {

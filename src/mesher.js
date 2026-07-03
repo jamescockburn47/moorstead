@@ -1,11 +1,17 @@
 // Chunk meshing: culled faces with per-vertex AO; opaque, cutout and liquid passes.
 import * as THREE from 'three';
-import { B, BLOCKS, CHUNK, HEIGHT, isOpaque, isLiquid, isCutout } from './defs.js';
-import { tileUV, buildAtlas } from './textures.js';
-import { hash2i } from './noise.js';
+import { B, BLOCKS, CHUNK, HEIGHT, TILE, WATER_LEVEL, isOpaque, isLiquid, isCutout } from './defs.js';
+import { tileUV, buildAtlas, getCutoutAtlas } from './textures.js';
+import { hash2i, noise2 } from './noise.js';
 import { snowLineFor, freezableWater } from './snow.js';
 
 let materials = null;
+
+// Sentinel comment dropped at t' head o' t' addSnow fragment prefix. T' handler's
+// idempotency guard tests for it so a second onBeforeCompile pass over an already-
+// injected shader re-wires t' uniforms but skips t' (non-idempotent) string prepends.
+const SNOW_INJECT_MARK = '// __MOORSTEAD_SNOW_INJECT__';
+const WATER_INJECT_MARK = '// __MOORSTEAD_WATER_INJECT__';
 
 // snow-on-t'-tops: a height-gated white wash injected into t' opaque terrain
 // material, gated to up-facing faces above a snow-line. Driven each frame frae
@@ -13,6 +19,65 @@ let materials = null;
 const snowUniforms = { uSnowLine: { value: 64 }, uSnowAmt: { value: 0 } };
 const glintUniform = { uGlintTime: { value: 0 } };
 export function setGlintTime(t) { glintUniform.uGlintTime.value = t; }
+// [0] cloud shadows: soft dark patches glidin' ower t' moor in time wi' t' dome
+// clouds. Module uniforms shared by BOTH addSnow materials (t' glintUniform
+// pattern). uCloudTime rides sky.cloudT — t' SAME accumulator t' dome scrolls
+// by, churn speed-up an' all — an' t' fragment drifts by t' same wind vector
+// (uTime * vec2(0.012, 0.007)), so ground shadows an' sky clouds move together.
+// uCloudShadowAmt defaults 0 an' applyQuality parks it there on Plain: t'
+// >0.001 branch never runs, terrain output stays byte-identical. Fine re-drives
+// it every frame frae cover × dayness × clear-sky (self-zeroes at neet an' in
+// full overcast by construction).
+const cloudUniforms = { uCloudTime: { value: 0 }, uCloudShadowAmt: { value: 0 } };
+export function setCloudTime(t) { cloudUniforms.uCloudTime.value = t; }
+export function setCloudShadow(v) { cloudUniforms.uCloudShadowAmt.value = v; }
+// [9/17 merged]+[D6]+[D10] wet ground: ONE coherent system, all in t' addSnow handler.
+// Module uniforms shared by BOTH addSnow materials (t' glintUniform/cloudUniforms
+// pattern). All default 0 so a fresh compile is today's terrain byte-identical, an'
+// applyQuality parks 'em on Plain. uWetness is t' raw soak (diffuse darkenin', tier-flat);
+// uGroundWet is t' SHAPED drive input ([D10] pow-shapin' + [D6] puddle threshold slide) —
+// kept distinct so t' shaping is explicit; uSheen gates t' Fine-only grazing sheen; uWetSky
+// carries t' live sky/fog colour under Fine (black on Plain, so puddles darken but don't tint).
+const wetUniforms = {
+  uWetness: { value: 0 },   // raw soak [0,1] — diffuse cool-damp darkening, both tiers
+  uGroundWet: { value: 0 }, // shaped drive: puddle threshold slide + [D10] dry shaping
+  uSheen: { value: 0 },     // Fine-only grazing-angle wet sheen strength
+  uWetSky: { value: new THREE.Color(0, 0, 0) }, // live sky colour (Fine); black on Plain
+};
+export function setWetness(v) { wetUniforms.uWetness.value = v; }
+export function setGroundWet(v) { wetUniforms.uGroundWet.value = v; }
+export function setSheen(v) { wetUniforms.uSheen.value = v; }
+export function setWetSky(r, g, b) { wetUniforms.uWetSky.value.setRGB(r, g, b); }
+// [10]+[D14] wind sway + gust fronts, [D8] dew, [14] snow polish: ONE coherent slice, all in
+// t' addSnow handler. Module uniforms shared by BOTH addSnow materials (t' glint/cloud/wet
+// pattern). Every one defaults so a fresh compile is today's look byte-identical:
+//   uSwayAmp=0  → t' whole sway term (an' [D14]'s gust amplitude) multiplies to nowt.
+//   uWindAmt=0  → gust band modulation + t' pale-underside flash collapse to [10]'s baseline
+//                 (which, at uSwayAmp=0, is today).
+//   uDew=0      → t' dew channel contributes exactly 0; base forage glint is preserved to t'
+//                 bit (step(0.75,vGlint)*0.12 unchanged).
+//   uSparkle=0  → frost sparkle skipped (Fine-only; Plain 0).
+// [D14] DETERMINISM (INVARIANTS rule 6): uGustPhase MUST be t' shared wall-clock (Date.now),
+// NOT uGlintTime (a per-client accumulator) — else gust fronts sit at different places per
+// client. main.js feeds setGustPhase((Date.now()/1000)%4096) each frame. uWindDir is baked
+// as a fixed prevailing sou'wester (geographically true for t' NYM, period-safe, zero feed
+// risk); a setter's provided if t' feed ever grows wind_direction_10m.
+const swayUniforms = {
+  uSwayAmp: { value: 0 },                                  // per-corner sway amplitude (Fine ~0.06, Plain 0)
+  uWindAmt: { value: 0 },                                  // live windiness [0,1] — gust band + flash strength
+  uGustPhase: { value: 0 },                                // SHARED wall-clock (Date.now/1000 % 4096) — NOT uGlintTime
+  uGustSpeed: { value: 0.5 },                              // travel speed of t' gust front along uWindDir
+  uWindDir: { value: new THREE.Vector2(0.83, 0.55) },      // prevailing sou'wester (fixed, period-true)
+  uDew: { value: 0 },                                      // [D8] dew glisten strength (after-rain + summer dawn)
+  uSparkle: { value: 0 },                                  // [14] frost sparkle strength (Fine only)
+};
+export function setSwayAmp(v) { swayUniforms.uSwayAmp.value = v; }
+export function setWindAmt(v) { swayUniforms.uWindAmt.value = v; }
+export function setGustPhase(t) { swayUniforms.uGustPhase.value = t; }
+export function setGustSpeed(v) { swayUniforms.uGustSpeed.value = v; }
+export function setWindDir(x, y) { swayUniforms.uWindDir.value.set(x, y); }
+export function setDew(v) { swayUniforms.uDew.value = v; }
+export function setSparkle(v) { swayUniforms.uSparkle.value = v; }
 export function setSnowLevel(snowiness) {
   const s = snowiness < 0 ? 0 : snowiness > 1 ? 1 : snowiness;
   snowUniforms.uSnowAmt.value = s;
@@ -22,37 +87,279 @@ function addSnow(mat, key = 'terrain-snow', glint = false) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uSnowLine = snowUniforms.uSnowLine;
     shader.uniforms.uSnowAmt = snowUniforms.uSnowAmt;
-    shader.vertexShader = 'attribute float aSnowExp;\nvarying float vSnowExp;\nvarying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\n' + shader.vertexShader
+    shader.uniforms.uCloudTime = cloudUniforms.uCloudTime;
+    shader.uniforms.uCloudShadowAmt = cloudUniforms.uCloudShadowAmt;
+    shader.uniforms.uWetness = wetUniforms.uWetness;
+    shader.uniforms.uGroundWet = wetUniforms.uGroundWet;
+    shader.uniforms.uSheen = wetUniforms.uSheen;
+    shader.uniforms.uWetSky = wetUniforms.uWetSky;
+    // [10]+[D14] sway/gust uniforms wired into BOTH addSnow materials (one handler slot).
+    // uSwayAmp/uWindAmt default 0 so opaque terrain (which never writes aSway) is untouched,
+    // an' t' cutout's flora only sways under Fine.
+    shader.uniforms.uSwayAmp = swayUniforms.uSwayAmp;
+    shader.uniforms.uWindAmt = swayUniforms.uWindAmt;
+    shader.uniforms.uGustPhase = swayUniforms.uGustPhase;
+    shader.uniforms.uGustSpeed = swayUniforms.uGustSpeed;
+    shader.uniforms.uWindDir = swayUniforms.uWindDir;
+    // [10]/[D8]/[14]: uGlintTime is now wired into BOTH programs (was glint-only) — t' shared
+    // sway oscillator, t' grass-top dew phase an' t' frost-sparkle phase all ride it. [D8] uDew
+    // + [14] uSparkle likewise shared; both default 0 so a fresh/Plain compile is byte-identical.
+    shader.uniforms.uGlintTime = glintUniform.uGlintTime;
+    shader.uniforms.uDew = swayUniforms.uDew;
+    shader.uniforms.uSparkle = swayUniforms.uSparkle;
+    // IDEMPOTENCY GUARD (three r166): onBeforeCompile string-prepends MUST be no-ops on a
+    // second pass over an ALREADY-injected shader object — else every `uniform`/helper in t'
+    // prefix redefines (uGlintTime is just t' first t' compiler rejects: 0:NN redefinition).
+    // Three can hand this handler a shader it already ran through (a recompile path re-entering
+    // t' same {shader} object before it's cached), so t' prepends are non-idempotent as-is. T'
+    // uniforms above are re-wired EVERY pass on purpose — three needs shader.uniforms.X set on
+    // each compile — but t' GLSL below is applied ONCE. Sentinel: SNOW_INJECT_MARK, dropped at
+    // t' head o' t' fragment prefix; if it's already there, t' strings are done — early-out.
+    if (shader.fragmentShader.includes(SNOW_INJECT_MARK)) return;
+    // [D6] aWet packs hollowness (int part) + soak-bias (fraction) on solid tops; missing
+    // attribute defaults to 0 on cutout geometry an' un-rebuilt meshes (the aGlint idiom).
+    // [10] aSway: 1 on t' TWO top corners o' plant flora, 0 on structural cutouts an' every
+    // solid/liquid vert — same missing-attribute-defaults-0 idiom, so torches/signs/ground
+    // stay rigid an' opaque geometry is byte-identical.
+    shader.vertexShader = 'attribute float aSnowExp;\nattribute float aWet;\nattribute float aSway;\nuniform float uSwayAmp;\nuniform float uWindAmt;\nuniform float uGustPhase;\nuniform float uGustSpeed;\nuniform float uGlintTime;\nuniform vec2 uWindDir;\nvarying float vSnowExp;\nvarying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\nvarying float vWet;\nvarying float vSway;\nvarying float vGust;\n'
+      + 'float vn1(float x){ float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);\n'
+      + '  float a = fract(sin(i * 12.9898) * 43758.5453), b = fract(sin((i + 1.0) * 12.9898) * 43758.5453);\n'
+      + '  return mix(a, b, f) * 2.0 - 1.0; }\n' + shader.vertexShader
       .replace('#include <begin_vertex>',
-        '#include <begin_vertex>\n  vec4 wSnowPos = modelMatrix * vec4(transformed, 1.0);\n  vSnowY = wSnowPos.y;\n  vSnowWX = wSnowPos.x;\n  vSnowWZ = wSnowPos.z;\n  vSnowUp = normalize(mat3(modelMatrix) * objectNormal).y;\n  vSnowExp = aSnowExp;');
-    shader.fragmentShader = 'uniform float uSnowLine;\nuniform float uSnowAmt;\nvarying float vSnowExp;\nvarying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\n' + shader.fragmentShader
+        '#include <begin_vertex>\n  vec4 wSnowPos = modelMatrix * vec4(transformed, 1.0);\n  vSnowY = wSnowPos.y;\n  vSnowWX = wSnowPos.x;\n  vSnowWZ = wSnowPos.z;\n  vSnowUp = normalize(mat3(modelMatrix) * objectNormal).y;\n  vSway = aSway;\n  vSnowExp = aSnowExp;')
+      // [10]+[D14] anchored AFTER wSnowPos (replace 'vSnowExp = aSnowExp;', NOT begin_vertex)
+      // so t' gust phase reads t' PRE-displacement world pos — t' red-team string-ordering
+      // catch. [D14] gust front: a plane wave travelling along uWindDir on t' SHARED wall-clock
+      // (uGustPhase = Date.now/1000). vn1 is a 1-D value noise (~8 ALU) — a plane wave is what
+      // a gust front is. sway amplitude rides (0.45 + 0.9*gust*uWindAmt): still days go glassy,
+      // squally days get fast trains o' waves. Displacement zeroes at uSwayAmp=0 (Plain/today).
+      .replace('vSnowExp = aSnowExp;',
+        'vSnowExp = aSnowExp;\n  vWet = aWet;\n'
+        + '  float gp = dot(wSnowPos.xz, uWindDir);\n'
+        + '  vGust = vn1(gp * 0.045 - uGustPhase * uGustSpeed);\n'
+        + '  float swayA = aSway * uSwayAmp * (0.45 + 0.9 * vGust * uWindAmt);\n'
+        + '  transformed.xz += swayA * vec2(sin(uGlintTime * 1.4 + wSnowPos.x * 0.7), cos(uGlintTime * 1.1 + wSnowPos.z * 0.8));');
+    // [0] t' dome's hash/noise idiom (sky.js dome fragment), fbm capped at TWO
+    // octaves on terrain — t' perf rulin's hard cap. cs- prefix keeps t' names
+    // clear o' owt three.js chunks define.
+    shader.fragmentShader = SNOW_INJECT_MARK + '\nuniform float uSnowLine;\nuniform float uSnowAmt;\nuniform float uCloudTime;\nuniform float uCloudShadowAmt;\nuniform float uWetness;\nuniform float uGroundWet;\nuniform float uSheen;\nuniform vec3 uWetSky;\nuniform float uGlintTime;\nuniform float uDew;\nuniform float uSparkle;\nuniform float uWindAmt;\nvarying float vSnowExp;\nvarying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\nvarying float vWet;\nvarying float vSway;\nvarying float vGust;\n'
+      + 'float csHash(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }\n'
+      + 'float csNoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);\n'
+      + '  float a = csHash(i), b = csHash(i + vec2(1.0, 0.0)), c = csHash(i + vec2(0.0, 1.0)), d = csHash(i + vec2(1.0, 1.0));\n'
+      + '  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y); }\n'
+      + 'float csFbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 2; i++){ v += a * csNoise(p); p *= 2.0; a *= 0.5; } return v; }\n'
+      // [14]/[D8] THE SHARED SPARKLE-CELL HELPER — landed ONCE here, reused by BOTH t' frost
+      // sparkle ([14]) an' t' dew droplets ([D8]) so neither ships its own copy (t' red-team
+      // single-ownership ruling). Cellular: floor(world xz * scale) buckets space into cells,
+      // csHash gives each cell a static point + a per-cell phase into t' sin, so bright points
+      // pop at sub-block scale (Fine bloom catches 'em) an' read as droplets/frost, not a wash.
+      + 'float sparkleCell(vec2 wxz, float scale, float t){ vec2 c = floor(wxz * scale); float h = csHash(c);\n'
+      + '  return step(0.82, h) * max(0.0, sin(t + h * 6.2831)); }\n'
+      + shader.fragmentShader
       .replace('#include <color_fragment>',
-        '#include <color_fragment>\n  float drift = 0.6 + 0.4 * sin(vSnowWX * 0.15) * cos(vSnowWZ * 0.15);\n  float snow = uSnowAmt * drift * vSnowExp * smoothstep(uSnowLine, uSnowLine + 10.0, vSnowY) * smoothstep(0.05, 0.55, vSnowUp);\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.96, 0.98, 1.0), clamp(snow * 1.25, 0.0, 1.0));');
+        '#include <color_fragment>\n  float drift = 0.6 + 0.4 * sin(vSnowWX * 0.15) * cos(vSnowWZ * 0.15);\n'
+        + '  float snowRaw = drift * vSnowExp * smoothstep(uSnowLine, uSnowLine + 10.0, vSnowY) * smoothstep(0.05, 0.55, vSnowUp);\n'
+        // [14](a) drift edges: light frost stays soft (linear), deepenin' cover crusts into
+        // banked drift patches wi' defined edges. t' band sharpens as uSnowAmt rises — a
+        // smoothstep on t' SAME world-space drift pattern, so t' phase is client-identical.
+        + '  float snow = mix(snowRaw * uSnowAmt, smoothstep(0.34, 0.5, snowRaw) * uSnowAmt, smoothstep(0.4, 0.8, uSnowAmt));\n'
+        // [14](b) shadow-blue snow: AO'd snow (against walls, in crevices) cools toward blue.
+        // vColor luminance is t' baked 4-level AO — occluded snow (low luminance) leans blue.
+        + '  vec3 snowCol = mix(vec3(0.96, 0.98, 1.0), vec3(0.78, 0.85, 1.0), 1.0 - clamp(dot(vColor.rgb, vec3(0.33)), 0.0, 1.0));\n'
+        + '  diffuseColor.rgb = mix(diffuseColor.rgb, snowCol, clamp(snow * 1.25, 0.0, 1.0));\n'
+        // [14](c) frost sparkle: daylight twinkle on t' snow tops via t' SHARED sparkle-cell
+        // helper. Fires only where t' snow wash is active (× snow), Fine-only (uSparkle 0 Plain).
+        + '  diffuseColor.rgb += snow * uSparkle * sparkleCell(vec2(vSnowWX, vSnowWZ), 6.0, uGlintTime * 3.0) * 0.45;\n'
+        // [D10] shelter signal frae data already in t' vertex stream: vSnowExp says
+        // 'rain an' sun reach here', vColor luminance (baked 4-level AO) says 'this is
+        // a sheltered crevice'. wetEff shapes ONE scalar (uGroundWet) into spatially-
+        // varying dry times — exposed tops (exponent 1.7) cross t' visibility floor
+        // early, AO-dark corners (0.45) hold damp longest. No new attributes/state.
+        + '  float shel = clamp((1.0 - vSnowExp * 0.6) + (1.0 - dot(vColor.rgb, vec3(0.33))) * 0.9, 0.0, 1.0);\n'
+        + '  float wetEff = pow(uGroundWet, mix(1.7, 0.45, shel));\n'
+        // [9/17 merged] wet darkening: exposed up-facin' ground soaks through, cool-damp
+        // shift (vec3(0.92,0.96,1.04) blue-lean). uWetness gates t' magnitude (tier-flat),
+        // wetEff shapes WHERE it lingers. drift-sine idiom breaks up t' patch edges.
+        + '  float wet = uWetness * wetEff * vSnowExp * smoothstep(0.4, 0.9, vSnowUp) * (0.7 + 0.3 * sin(vSnowWX * 0.11) * cos(vSnowWZ * 0.13));\n'
+        + '  diffuseColor.rgb *= mix(vec3(1.0), vec3(0.62) * vec3(0.92, 0.96, 1.04), wet);\n'
+        // [D6] puddles: hollowness (int part o' aWet) + soak-bias (fraction) + a hash
+        // to break t' block-square edges; threshold slides wi' uGroundWet so puddles
+        // grow/shrink; mirror-dark mix toward diffuse*0.35 + uWetSky*0.25. uWetSky is
+        // BLACK on Plain (darkening only, no sky tint — tier-flat darkenin' by design);
+        // t' whole term rides wetEff so AO-dark hollows fill first an' dry last.
+        + '  float hol = floor(vWet), bias = fract(vWet);\n'
+        + '  float pud = smoothstep(1.0 - uGroundWet * 1.4, 1.08 - uGroundWet * 1.4, bias * 0.5 + hol * 0.25 + csHash(vec2(floor(vSnowWX), floor(vSnowWZ))) * 0.3) * vSnowExp * step(0.9, vSnowUp) * wetEff;\n'
+        + '  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.35 + uWetSky * 0.25, pud);\n'
+        // [D14] pale-underside flash: as a gust turns t' foliage it flashes momentarily paler —
+        // t' silvery wave that reads at 100+ blocks where t' geometric sway is sub-pixel. Gated
+        // by vSway (0 on grass tops/opaque, so ground never flashes) an' uWindAmt (0 = today).
+        + '  diffuseColor.rgb *= 1.0 + vGust * uWindAmt * 0.05 * vSway;\n'
+        // [D8] grass-top dew: t' SAME jewelled droplets t\' flora gets, on t\' open growin\'
+        // ground. Fine bloom catches t\' points. Fires on up-facin\', sky-exposed tops only
+        // (step(0.9,vSnowUp) × vSnowExp), through t\' shared sparkle-cell helper. uDew=0 → 0.
+        + '  diffuseColor.rgb += uDew * vSnowExp * step(0.9, vSnowUp) * sparkleCell(vec2(vSnowWX, vSnowWZ), 3.0, uGlintTime * 2.0) * 0.14;')
+      // [0] cloud shadows: dim DIRECT sun only (ambient untouched, so shade stays
+      // readable), sampled at world XZ ~0.012/block an' drifted by t' dome's wind
+      // vector on t' shared cloud clock. Zero uniform skips t' whole term (Plain).
+      .replace('#include <lights_fragment_end>',
+        '#include <lights_fragment_end>\n'
+        + '  if (uCloudShadowAmt > 0.001) {\n'
+        + '    vec2 csP = vec2(vSnowWX, vSnowWZ) * 0.012 + uCloudTime * vec2(0.012, 0.007);\n'
+        + '    float csCloud = smoothstep(0.38, 0.62, csFbm(csP));\n'
+        + '    reflectedLight.directDiffuse *= 1.0 - csCloud * uCloudShadowAmt;\n'
+        + '  }')
+      // [9] Fine-only wet sheen: t' RED-TEAM-VERIFIED-CORRECT fresnel (normal·view, NOT
+      // [17]'s wrong view-space-y term). Grazing angles pick up t' sky colour off wet
+      // tops an' paths — t' village street glistens after rain. `wet` shares main()'s
+      // scope frae t' color_fragment injection (r166 Lambert), vViewPosition is real
+      // here. uSheen=0 on Plain kills t' whole term (multiplies to nowt) — byte-parity.
+      .replace('#include <opaque_fragment>',
+        '  float fres = pow(1.0 - max(dot(normalize(normal), normalize(vViewPosition)), 0.0), 3.0);\n'
+        + '  outgoingLight += uSheen * wet * fres * uWetSky;\n'
+        + '#include <opaque_fragment>');
     if (glint) {
-      shader.uniforms.uGlintTime = glintUniform.uGlintTime;
+      // uGlintTime/uDew are declared in t' SHARED fragment prefix now (wired into BOTH
+      // programs) — this branch only adds t' glint-specific varyings. vSnowWX/vSnowWZ (world
+      // xz) already ride t' shared vertex block, so t' dew droplets get real world coords.
       shader.vertexShader = 'attribute float aGlint;\nvarying float vGlint;\nvarying float vGlintH;\n' + shader.vertexShader
         .replace('#include <begin_vertex>',
           '#include <begin_vertex>\n  vGlint = aGlint;\n  vGlintH = transformed.x * 1.7 + transformed.z * 2.3;');
-      shader.fragmentShader = 'uniform float uGlintTime;\nvarying float vGlint;\nvarying float vGlintH;\n' + shader.fragmentShader
+      // [D8] SPLIT CHANNELS. base: t' always-on forage beacon — step(0.75,vGlint)*0.12 is
+      // preserved EXACTLY, so at uDew=0 forage looks identical to t' bit (byte-parity; forage
+      // bakes aGlint=1 → step passes; dew flora bakes 0.4 → step fails → base contributes 0).
+      // dew: vGlint*uDew*0.18, made CELLULAR through t' shared sparkle-cell helper so it reads
+      // as moving droplets on t' foliage, not a flat wash — every scatter cross, berry adornment
+      // an' heather clump (all now carryin' aGlint≥0.4) glistens after rain / on a summer dawn.
+      shader.fragmentShader = 'varying float vGlint;\nvarying float vGlintH;\n' + shader.fragmentShader
         .replace('#include <color_fragment>',
-          '#include <color_fragment>\n  float gl = vGlint * 0.12 * (0.5 + 0.5 * sin(uGlintTime * 2.0 + vGlintH));\n  diffuseColor.rgb += gl;');
+          '#include <color_fragment>\n'
+          + '  float glBase = step(0.75, vGlint) * 0.12 * (0.5 + 0.5 * sin(uGlintTime * 2.0 + vGlintH));\n'
+          + '  float glDew = vGlint * uDew * 0.18 * sparkleCell(vec2(vSnowWX, vSnowWZ), 3.0, uGlintTime * 2.0 + vGlintH);\n'
+          + '  diffuseColor.rgb += glBase + glDew;');
     }
   };
-  mat.customProgramCacheKey = () => key;
+  // [0]/[D6] '-cloud-wet' extends BOTH snow keys ('snow-opaque', 'snow-cutout-glint')
+  // so t' new cloud + wet-ground uniforms/GLSL fork fresh programs — still t' same
+  // program COUNT (3), just t' one identity per material carrying every addSnow term.
+  mat.customProgramCacheKey = () => key + '-cloud-wet';
   return mat;
 }
 
 const iceUniform = { uFrozen: { value: 0 } };
 export function setFrozen(frozen) { iceUniform.uFrozen.value = frozen ? 1 : 0; }
-function addIce(mat) {
+
+// [15]+[D0] living water: module uniforms shared by t' ONE liquid material (same
+// pattern as glintUniform). All default 0 = today's flat still water, so Plain is
+// byte-identical; applyQuality (main.js) stamps t' Fine amps an' setGlitter is
+// re-driven each frame frae dayness × clear-sky. setWaterTime rides t' existing
+// glint clock in main.js — no new tick.
+const waterUniforms = {
+  uWaterTime: { value: 0 },  // shared water clock (seconds)
+  uRippleAmp: { value: 0 },  // isotropic surface bob amplitude (sea/tarns), Fine ~0.05
+  uFlowAmp: { value: 0 },    // downstream wavelet amplitude (becks), Fine ~0.05
+  uGlitter: { value: 0 },    // sun-sparkle strength, driven per frame under Fine
+  uFresnel: { value: 0 },    // grazing-angle alpha lift (glassy water), Fine ~0.35
+};
+export function setWaterTime(t) { waterUniforms.uWaterTime.value = t; }
+export function setRippleAmp(v) { waterUniforms.uRippleAmp.value = v; }
+export function setFlowAmp(v) { waterUniforms.uFlowAmp.value = v; }
+export function setGlitter(v) { waterUniforms.uGlitter.value = v; }
+export function setFresnel(v) { waterUniforms.uFresnel.value = v; }
+
+// [D0] chainage wrap for aFlow.z: baked as s % FLOW_WRAP (K = 1 block⁻¹). 50π is
+// chosen so EVERY sinusoid the shader hangs off vFlowS completes whole cycles across
+// t' wrap — coefficients 1.6, 1.6·2.7 = 4.32 an' 2.2 give 80π, 216π an' 110π, all
+// even multiples o' π — so t' phase is seamless at t' wrap an' float32 never sees a
+// chainage beyond ~157 (t' Esk runs to thousands o' blocks; raw s would lose t'
+// sub-radian precision t' wavelets need).
+export const FLOW_WRAP = Math.PI * 50;
+const FLOW_ZERO = [0, 0, 0];
+
+// --- [16] shoreline: depth tint + foam fringe (mesh-time, tier-flat, no shader) ---
+// Depth tint: every liquid TOP face scans down its own column to t' first
+// non-liquid block an' scales t' vertex colour by depth — 1.0 at depth 1 (pale,
+// glassy shallows) down to 0.55 at depth 8+ (dark slate off Whitby). Mesh-time
+// vertex colour only: deterministic, identical on both tiers, zero runtime cost,
+// NO shader change (so no cache-key change either). DEPTH_TINT_AMP = 0 restores
+// today's flat water colour exactly.
+export const DEPTH_TINT_AMP = 1;
+export function waterDepthTint(depth, amp = DEPTH_TINT_AMP) {
+  if (!amp) return 1;
+  const d = depth < 1 ? 1 : depth > 8 ? 8 : depth;
+  return 1 - 0.45 * amp * ((d - 1) / 7);
+}
+// Foam fringe: where a WATER top face at sea level (y === WATER_LEVEL) horizontally
+// neighbours solid SAND or GRAVEL, ONE flat quad goes into t' CUTOUT builder 0.01
+// ABOVE t' water surface (cutout writes depth an' renders afore t' translucent
+// liquid — a sub-surface quad would show tinted through t' 0.78-opacity water).
+// Foam verts carry aGlint = 1, so t' compiled cutout glint shimmers 'em for free.
+// Capped per chunk; FOAM_CAP = 0 is t' kill switch.
+export const FOAM_CAP = 32;
+
+// T' liquid shader: ice tint (winter freeze, unchanged semantics — uFrozen stays t'
+// binary addIce had; S2c will float it), plus [15] ripple/glitter an' [D0] downstream
+// wavelets/lace. ONE handler, one cache key — still exactly 3 terrain programs.
+//   aTop   — 1 on every corner carrying t' 0.12 top-drop (incl. side-face top edges,
+//            so edges ripple wi' t' surface an' no cracks open); 0 elsewhere.
+//   aFlow  — vec3(tx·bank, tz·bank, s % FLOW_WRAP): xy is t' downstream unit tangent
+//            scaled by bank (1 mid-channel → 0 at t' bank), so ONE attribute carries
+//            direction, strength an' phase; t' shader recovers bank as length(aFlow.xy).
+//            Zero-filled off-river an' in t' stylised world → collapses to [15].
+function addWater(mat) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uFrozen = iceUniform.uFrozen;
-    shader.vertexShader = 'attribute float aFreeze;\nvarying float vFreeze;\n' + shader.vertexShader
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vFreeze = aFreeze;');
-    shader.fragmentShader = 'uniform float uFrozen;\nvarying float vFreeze;\n' + shader.fragmentShader
-      .replace('#include <color_fragment>', '#include <color_fragment>\n  float ice = uFrozen * vFreeze;\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.88, 0.95), ice);');
+    shader.uniforms.uWaterTime = waterUniforms.uWaterTime;
+    shader.uniforms.uRippleAmp = waterUniforms.uRippleAmp;
+    shader.uniforms.uFlowAmp = waterUniforms.uFlowAmp;
+    shader.uniforms.uGlitter = waterUniforms.uGlitter;
+    shader.uniforms.uFresnel = waterUniforms.uFresnel;
+    // Same idempotency guard as addSnow (see there): re-wire uniforms every pass, apply t'
+    // GLSL prepends ONCE. Without it, a second onBeforeCompile pass over an already-injected
+    // liquid shader redefines every uniform in t' prefix (uFrozen first). WATER_INJECT_MARK
+    // is dropped at t' head o' t' fragment prefix below.
+    if (shader.fragmentShader.includes(WATER_INJECT_MARK)) return;
+    shader.vertexShader = 'attribute float aFreeze;\nattribute float aTop;\nattribute vec3 aFlow;\nuniform float uFrozen;\nuniform float uWaterTime;\nuniform float uRippleAmp;\nuniform float uFlowAmp;\nvarying float vFreeze;\nvarying float vWX;\nvarying float vWZ;\nvarying float vFlowS;\nvarying vec2 vFlowDir;\n' + shader.vertexShader
+      .replace('#include <begin_vertex>',
+        '#include <begin_vertex>\n'
+        + '  vFreeze = aFreeze;\n'
+        // world pos via modelMatrix (t' addSnow idiom) so ripple phase never repeats per chunk
+        + '  vec4 wWaterPos = modelMatrix * vec4(transformed, 1.0);\n'
+        + '  vWX = wWaterPos.x; vWZ = wWaterPos.z;\n'
+        + '  vFlowS = aFlow.z; vFlowDir = aFlow.xy;\n'
+        // [15] isotropic bob, [D0] directional downstream wavelet; blended by bank
+        // strength (smoothstep, not a hard step, so t' beck meets t' sea wi'out a crack)
+        + '  float wIso = sin(uWaterTime * 1.3 + wWaterPos.x * 0.9) * cos(uWaterTime * 1.1 + wWaterPos.z * 0.7);\n'
+        + '  float wPh = aFlow.z * 1.6 - uWaterTime * 2.4;\n'
+        + '  float wDir = 0.8 * sin(wPh) + 0.2 * sin(wPh * 2.7);\n'
+        + '  float wFm = smoothstep(0.01, 0.06, length(aFlow.xy));\n'
+        + '  transformed.y += aTop * (1.0 - aFreeze * uFrozen) * mix(uRippleAmp * wIso, uFlowAmp * wDir, wFm);');
+    shader.fragmentShader = WATER_INJECT_MARK + '\nuniform float uFrozen;\nuniform float uWaterTime;\nuniform float uFlowAmp;\nuniform float uGlitter;\nuniform float uFresnel;\nvarying float vFreeze;\nvarying float vWX;\nvarying float vWZ;\nvarying float vFlowS;\nvarying vec2 vFlowDir;\n' + shader.fragmentShader
+      .replace('#include <color_fragment>',
+        '#include <color_fragment>\n'
+        + '  float ice = uFrozen * vFreeze;\n'
+        + '  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.88, 0.95), ice);\n'
+        // [15] world-space sun glitter (NOT a UV scroll), phase sheared downstream by
+        // dot(wpos.xz, flow) so sparkle streaks elongate along t' current ([D0])
+        + '  vec2 wGp = vec2(vWX, vWZ);\n'
+        + '  wGp -= vFlowDir * dot(wGp, vFlowDir) * 0.5;\n'
+        + '  float wG = pow(max(0.0, sin(wGp.x * 2.3 + uWaterTime * 0.8) * sin(wGp.y * 1.9 - uWaterTime * 0.6)), 8.0);\n'
+        + '  diffuseColor.rgb += wG * uGlitter * (1.0 - ice);\n'
+        // [D0] travelling lace bands running downstream, strongest mid-channel;
+        // 3×uFlowAmp keeps 'em subtle (max +0.15) an' Plain-safe (amp 0 → nowt)
+        + '  float wBank = length(vFlowDir);\n'
+        + '  float wLace = smoothstep(0.55, 0.95, 0.5 + 0.5 * sin(vFlowS * 2.2 - uWaterTime * 3.0)) * wBank;\n'
+        + '  diffuseColor.rgb += wLace * uFlowAmp * 3.0 * (1.0 - ice);')
+      // [15] Fine-only fresnel: grazing-angle water reads glassy (alpha lift). Injected at
+      // <opaque_fragment> (AFTER normal_fragment_begin) so it reads `normal` — the computed
+      // fragment normal three always provides, flat OR smooth — NOT the raw `vNormal` varying,
+      // which three strips under FLAT_SHADED an' some program variants (a live compile fail).
+      // Matches t' wet-ground fresnel idiom; still writes diffuseColor.a before opaque uses it.
+      .replace('#include <opaque_fragment>',
+        '  float wFres = pow(1.0 - abs(dot(normalize(vViewPosition), normalize(normal))), 3.0);\n'
+        + '  diffuseColor.a = min(1.0, diffuseColor.a + wFres * uFresnel);\n'
+        + '#include <opaque_fragment>');
   };
-  mat.customProgramCacheKey = () => 'liquid-ice';
+  mat.customProgramCacheKey = () => 'liquid-ice-water';
   return mat;
 }
 
@@ -60,8 +367,8 @@ export function initMaterials() {
   const atlas = buildAtlas();
   materials = {
     opaque: addSnow(new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true }), 'snow-opaque'),
-    cutout: addSnow(new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }), 'snow-cutout-glint', true),
-    liquid: addIce(new THREE.MeshLambertMaterial({
+    cutout: addSnow(new THREE.MeshLambertMaterial({ map: getCutoutAtlas(), vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }), 'snow-cutout-glint', true),
+    liquid: addWater(new THREE.MeshLambertMaterial({
       map: atlas, vertexColors: true, transparent: true, opacity: 0.78,
       depthWrite: false, side: THREE.DoubleSide,
     })),
@@ -91,20 +398,87 @@ function faceTile(def, faceIdx, x, z) {
   return def.tex.s;
 }
 
+// --- per-block top-face variation (S1c): hue jitter + dryness skew + UV rotation ---
+// Only TOP faces (f===3) o' t' growing ground — grass tops, leaf canopies, peat
+// moor-top — get a seeded brightness jitter, a slow dryness field (exposed tops
+// strawier, dale floors lusher) and one o' four texture rotations, so t' moor
+// stops reading as a grid of identical tiles. Building blocks (stone, brick,
+// planks…) stay perfectly uniform. Mesh-time only, seeded frae WORLD x/z —
+// deterministic, identical on both quality tiers, zero per-frame cost.
+// TOP_VARY_AMP = 0 restores today's output exactly (identity tint, rotation 0).
+export const TOP_VARY_AMP = 1;
+const VARIED_TOP_TILES = new Set([
+  TILE.GRASS_TOP, TILE.LEAVES, TILE.MONKEY_LEAVES, TILE.ORCHARD_LEAVES, TILE.PEAT,
+]);
+
+// [D6] puddle soak-bias by top-tile family: how readily a flat patch of that ground
+// holds standing water. Loose/absorbent-but-poorly-drained ground (gravel yards,
+// packed dirt lanes, peat hags) pools soonest; dressed stone/cobble a touch less;
+// grass drinks it in; free-draining beach sand barely at all. Keyed on def.tex.t
+// (t' top tile faceTile returns for f===3). Unlisted tiles take t' default 0.5.
+// SOAK_DEFAULT + this table are t' only tuning dials for how eagerly ground puddles.
+export const SOAK_DEFAULT = 0.5;
+const SOAK_BIAS = new Map([
+  [TILE.GRAVEL, 0.85], [TILE.DIRT, 0.85], [TILE.PEAT, 0.85], [TILE.BOG, 0.85],
+  [TILE.STONE, 0.7], [TILE.COBBLE, 0.7], [TILE.STONEBRICK, 0.7], [TILE.SLATE, 0.7],
+  [TILE.GRASS_TOP, 0.45],
+  [TILE.SAND, 0.1],
+]);
+export function soakBias(tile) { const b = SOAK_BIAS.get(tile); return b === undefined ? SOAK_DEFAULT : b; }
+// t' four rotations o' t' corner UV frame (u,v within t' tile rect)
+const UV_ROT = [
+  (u, v) => [u, v],
+  (u, v) => [v, 1 - u],
+  (u, v) => [1 - u, 1 - v],
+  (u, v) => [1 - v, u],
+];
+// Pure + exported so a verify script can assert variation at amp 1 and exact
+// identity at amp 0 without building a chunk.
+export function topFaceVariation(wx, wz, amp = TOP_VARY_AMP) {
+  if (!amp) return { r: 1, g: 1, b: 1, rot: 0 };
+  const j = 1 + amp * (0.92 + hash2i(wx, wz, 7) * 0.16 - 1); // brightness jitter, 0.92..1.08 at amp 1
+  const dry = noise2(wx * 0.02, wz * 0.02, 9);               // slow dryness field in [-1,1]
+  const skew = amp * 0.04 * dry;                             // dry -> +red/-blue (strawy); wet -> t' reverse (lush)
+  return { r: j * (1 + skew), g: j, b: j * (1 - skew), rot: (hash2i(wx, wz, 8) * 4) | 0 };
+}
+
 class GeoBuilder {
-  constructor() { this.pos = []; this.norm = []; this.uv = []; this.col = []; this.exp = []; this.frz = []; this.idx = []; this.n = 0; }
-  quad(corners, normal, uvRect, aos, light, exp = 1, frz = 0) {
+  constructor() { this.pos = []; this.norm = []; this.uv = []; this.col = []; this.exp = []; this.frz = []; this.top = []; this.flow = []; this.gli = []; this.hasGlint = false; this.wet = []; this.hasWet = false; this.sway = []; this.hasSway = false; this.idx = []; this.n = 0; }
+  // tops: per-corner aTop floats (liquid only); flow: per-quad [fx, fz, s] aFlow vec3
+  // (liquid only). Solid/cutout passes never push 'em, so build() skips t' attributes
+  // an' t' big opaque geometry carries nowt extra.
+  // glint: per-quad aGlint float ([16] foam = 1). T' builder never wrote aGlint afore
+  // — chunk cutout geometry leant on t' disabled-attribute default (0), only
+  // floraLayer set it — so t' attribute is baked ONLY when a quad carries a non-zero
+  // value; every other geometry stays byte-identical wi' t' default-0 behaviour.
+  // wet: per-quad aWet float ([D6] packed hollowCount + soakBias, solid tops only). Same
+  // bake-only-when-nonzero idiom as glint — non-top faces an' cutout geometry keep t'
+  // disabled-attribute default (0), so t' puddle branch collapses there.
+  // sway: [10] PER-CORNER aSway — when truthy, t' TWO top corners (c[4]===1) bake 1, t' two
+  // rooted bottom corners bake 0, so t' plant hinges at its base an' t' top waves. Same
+  // bake-only-when-nonzero idiom: solid/structural/foam quads pass 0 → attribute omitted →
+  // GLSL disabled-attribute default 0 → torches, signs an' ground stay perfectly rigid.
+  quad(corners, normal, uvRect, aos, light, exp = 1, frz = 0, tint = null, tops = null, flow = null, glint = 0, wet = 0, sway = 0) {
     const [u0, v0, u1, v1] = uvRect;
     for (const c of corners) {
       this.pos.push(c[0], c[1], c[2]);
       this.norm.push(normal[0], normal[1], normal[2]);
       this.uv.push(u0 + (u1 - u0) * c[3], v0 + (v1 - v0) * c[4]);
       this.exp.push(exp);
+      this.sway.push(sway ? c[4] : 0);   // per-corner: top verts (v==1) sway, rooted base stays put
     }
+    if (sway) this.hasSway = true;
     this.frz.push(frz, frz, frz, frz);
+    this.gli.push(glint, glint, glint, glint);
+    if (glint) this.hasGlint = true;
+    this.wet.push(wet, wet, wet, wet);
+    if (wet) this.hasWet = true;
+    if (tops) this.top.push(tops[0], tops[1], tops[2], tops[3]);
+    if (flow) for (let i = 0; i < 4; i++) this.flow.push(flow[0], flow[1], flow[2]);
     for (let i = 0; i < 4; i++) {
       const b = AO_LEVELS[aos[i]] * light;
-      this.col.push(b, b, b);
+      if (tint) this.col.push(b * tint.r, b * tint.g, b * tint.b);
+      else this.col.push(b, b, b);
     }
     // flip quad to avoid AO anisotropy artefacts
     if (aos[0] + aos[3] > aos[1] + aos[2]) {
@@ -123,6 +497,11 @@ class GeoBuilder {
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     g.setAttribute('aSnowExp', new THREE.Float32BufferAttribute(this.exp, 1));
     g.setAttribute('aFreeze', new THREE.Float32BufferAttribute(this.frz, 1));
+    if (this.top.length) g.setAttribute('aTop', new THREE.Float32BufferAttribute(this.top, 1));
+    if (this.flow.length) g.setAttribute('aFlow', new THREE.Float32BufferAttribute(this.flow, 3));
+    if (this.hasGlint) g.setAttribute('aGlint', new THREE.Float32BufferAttribute(this.gli, 1));
+    if (this.hasWet) g.setAttribute('aWet', new THREE.Float32BufferAttribute(this.wet, 1));
+    if (this.hasSway) g.setAttribute('aSway', new THREE.Float32BufferAttribute(this.sway, 1));
     g.setIndex(this.idx);
     g.computeBoundingSphere();
     return new THREE.Mesh(g, material);
@@ -155,6 +534,41 @@ export function buildChunkMeshes(world, chunk) {
   };
   const occludes = (x, y, z) => isOpaque(get(x, y, z));
 
+  // [D0] per-COLUMN river flow, memoised (t' y-loop is outermost, so each water column
+  // is visited many times). Moors world only — t' stylised geo has no riverFlow (t'
+  // worldgen.js typeof idiom), so t' attribute zero-fills an' behaviour collapses to [15].
+  const geo = world.gen.geo;
+  const flowMemo = new Map();
+  const flowAt = (lx, lz) => {
+    const k = lx + lz * CHUNK;
+    let f = flowMemo.get(k);
+    if (f === undefined) {
+      const rf = (typeof geo.riverFlow === 'function') ? geo.riverFlow(x0 + lx, z0 + lz) : null;
+      f = rf ? [rf.tx * rf.bank, rf.tz * rf.bank, rf.s % FLOW_WRAP] : FLOW_ZERO;
+      flowMemo.set(k, f);
+    }
+    return f;
+  };
+
+  // [16] per-COLUMN water depth tint, memoised like flowAt (keyed on t' surface y an'
+  // all, so a rare second liquid run higher up t' same column recomputes honestly).
+  // Scan stays inside t' column — t' get() closure never leaves this chunk's data.
+  const depthMemo = new Map();
+  const depthTintAt = (lx, y, lz) => {
+    const k = lx + lz * CHUNK;
+    let m = depthMemo.get(k);
+    if (m === undefined || m.y !== y) {
+      let d = 1;
+      while (d < 8 && isLiquid(get(lx, y - d, lz))) d++;
+      const t = waterDepthTint(d);
+      m = { y, tint: t === 1 ? null : { r: t, g: t, b: t } };
+      depthMemo.set(k, m);
+    }
+    return m.tint;
+  };
+  const foamUV = tileUV(TILE.FOAM);
+  let foamN = 0; // [16] foam quads this chunk, capped at FOAM_CAP
+
   for (let y = 0; y < HEIGHT; y++) {
     for (let lz = 0; lz < CHUNK; lz++) {
       for (let lx = 0; lx < CHUNK; lx++) {
@@ -185,10 +599,14 @@ export function buildChunkMeshes(world, chunk) {
             const ht = 0.85 + hash2i(wx, wz, 5) * 0.35;    // 0.85..1.20 height
             const cA = Math.cos(a) * rad, sA = Math.sin(a) * rad;
             for (const [dx, dz] of [[cA, sA], [-sA, cA]]) {
+              // [10] sway=1 (top corners hinge in t' wind) + [D8] glint=0.4 (t' dew channel:
+              // step(0.75) fails so t' always-on forage beacon stays off, but t' dew term
+              // fires) — so every heather/gorse/fern/bracken clump waves AND glistens after rain.
               cutout.quad(
                 [[lx + cxj - dx, y, lz + czj - dz, 0, 0], [lx + cxj + dx, y, lz + czj + dz, 1, 0],
                  [lx + cxj - dx, y + ht, lz + czj - dz, 0, 1], [lx + cxj + dx, y + ht, lz + czj + dz, 1, 1]],
-                [0, 1, 0], [u0, v0, u1, v1], [3, 3, 3, 3], 0.95, exposedAt(lx, y, lz)
+                [0, 1, 0], [u0, v0, u1, v1], [3, 3, 3, 3], 0.95, exposedAt(lx, y, lz),
+                0, null, null, null, 0.4, 0, 1
               );
             }
           }
@@ -198,6 +616,7 @@ export function buildChunkMeshes(world, chunk) {
         if (isLiquid(id)) {
           const uvr = tileUV(def.tex.t);
           const drop = 0.12;
+          const flow = flowAt(lx, lz);
           for (let f = 0; f < FACES.length; f++) {
             const { dir, corners } = FACES[f];
             const nb = get(lx + dir[0], y + dir[1], lz + dir[2]);
@@ -207,18 +626,44 @@ export function buildChunkMeshes(world, chunk) {
               const yy = (c[1] === 1) ? y + 1 - drop : y;
               return [lx + c[0], yy, lz + c[2], c[3], c[4]];
             });
-            const frz = freezableWater(id, world.gen.geo.coastT(x0 + lx, z0 + lz), B) ? 1 : 0;
-            liquid.quad(cs, dir, uvr, [3, 3, 3, 3], FACE_LIGHT[f], 1, frz);
+            const frz = freezableWater(id, geo.coastT(x0 + lx, z0 + lz), B) ? 1 : 0;
+            // [16] TOP faces only: depth tint (null at depth 1 = today's colour), an'
+            // t' foam fringe where sea-level WATER meets solid SAND/GRAVEL abeam
+            let tint = null;
+            if (f === 3) {
+              tint = depthTintAt(lx, y, lz);
+              if (id === B.WATER && y === WATER_LEVEL && foamN < FOAM_CAP) {
+                const e = get(lx + 1, y, lz), w = get(lx - 1, y, lz),
+                      s = get(lx, y, lz + 1), n = get(lx, y, lz - 1);
+                if (e === B.SAND || e === B.GRAVEL || w === B.SAND || w === B.GRAVEL
+                  || s === B.SAND || s === B.GRAVEL || n === B.SAND || n === B.GRAVEL) {
+                  foamN++;
+                  // 0.01 ABOVE t' surface, into t' CUTOUT builder (depth-writing, drawn
+                  // afore t' translucent water); aGlint = 1 rides t' compiled glint
+                  // shimmer for free. exp 0: t' snow wash leaves foam be.
+                  const fy = y + 1 - drop + 0.01;
+                  cutout.quad(
+                    [[lx, fy, lz + 1, 1, 1], [lx + 1, fy, lz + 1, 0, 1],
+                     [lx, fy, lz, 1, 0], [lx + 1, fy, lz, 0, 0]],
+                    [0, 1, 0], foamUV, [3, 3, 3, 3], 1.0, 0, 0, null, null, null, 1);
+                }
+              }
+            }
+            // aTop = 1 exactly where t' 0.12 top-drop applied (c[1] === 1) — INCLUDING
+            // side-face top edges, so edges ripple wi' t' surface an' no cracks open
+            liquid.quad(cs, dir, uvr, [3, 3, 3, 3], FACE_LIGHT[f], 1, frz,
+              tint, corners.map(c => c[1]), flow);
           }
           continue;
         }
 
         // solid block faces
+        const swx = x0 + lx, swz = z0 + lz; // WORLD coords, so t' pattern doesn't repeat per chunk
         for (let f = 0; f < FACES.length; f++) {
           const { dir, corners } = FACES[f];
           const nb = get(lx + dir[0], y + dir[1], lz + dir[2]);
           if (isOpaque(nb)) continue;
-          const uvr = tileUV(faceTile(def, f, x0 + lx, z0 + lz));
+          const uvr = tileUV(faceTile(def, f, swx, swz));
           // per-vertex AO
           const aos = [];
           const axis = dir[0] !== 0 ? 0 : dir[1] !== 0 ? 1 : 2;
@@ -236,7 +681,29 @@ export function buildChunkMeshes(world, chunk) {
             const co = occludes(pc[0], pc[1], pc[2]) ? 1 : 0;
             aos.push(s1 && s2 ? 0 : 3 - (s1 + s2 + co));
           }
-          solid.quad(corners.map(c => [lx + c[0], y + c[1], lz + c[2], c[3], c[4]]), dir, uvr, aos, FACE_LIGHT[f], f === 3 ? exposedAt(lx, y, lz) : 0);
+          // per-block variation on growing tops only (S1c) — identity when amp is 0
+          let tint = null, uvRot = UV_ROT[0], aWet = 0;
+          if (f === 3) {
+            if (VARIED_TOP_TILES.has(def.tex.t)) {
+              tint = topFaceVariation(swx, swz);
+              uvRot = UV_ROT[tint.rot];
+            }
+            // [D6] puddle bake: hollowCount = how many o' t' 4 horizontal neighbours
+            // carry an opaque block one course UP (walls/lips round this patch — a
+            // genuine dip). Four extra occludes() beside t' AO scan already here (cheap).
+            // Pack aWet = hollowCount (int, 0-4) + soakBias (fraction, tile family). A pit
+            // t' player digs bakes hol>0 next remesh, so it collects a puddle next rain.
+            let hol = 0;
+            if (occludes(lx + 1, y + 1, lz)) hol++;
+            if (occludes(lx - 1, y + 1, lz)) hol++;
+            if (occludes(lx, y + 1, lz + 1)) hol++;
+            if (occludes(lx, y + 1, lz - 1)) hol++;
+            aWet = hol + soakBias(faceTile(def, 3, swx, swz));
+          }
+          solid.quad(corners.map(c => {
+            const [ru, rv] = uvRot(c[3], c[4]);
+            return [lx + c[0], y + c[1], lz + c[2], ru, rv];
+          }), dir, uvr, aos, FACE_LIGHT[f], f === 3 ? exposedAt(lx, y, lz) : 0, 0, tint, null, null, 0, aWet);
         }
       }
     }

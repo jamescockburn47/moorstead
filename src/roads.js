@@ -15,6 +15,12 @@ const WINDOW = 220;        // chainage either side o' t' player kept dressed
 const REBUILD_MOVE = 80;   // rebuild when t' player's drifted this far
 const STRIDE = 0.4;        // rasterise the centreline this fine so diagonals stay a connected row
 
+// [D6] mud lanes: t' packed-earth lane darkens to churned mud as t' ground wets through.
+// Dry lane 0x6e5a3e -> wet mud 0x4a3a26, lerped by groundWet. Module scratch Colors so
+// t' per-frame lerp allocates nowt ([22] hoist lesson); shared across every RoadLayer.
+const LANE_DRY = new THREE.Color(0x6e5a3e);
+const LANE_WET = new THREE.Color(0x4a3a26);
+
 // Block sets for the lane. SOFT = natural soil the lane beds onto. BUILDING = structures the lane
 // must SKIRT (never tiled, never cleared). CLEAR = what the lane CARVES out of its column so nowt
 // pokes through the track: trees, moor foliage, drystone walls (cobble/loose stone), an' field
@@ -80,7 +86,11 @@ export class RoadLayer {
     return { s: pts[best].s, d: bd };
   }
 
-  update(dt, playerPos) {
+  update(dt, playerPos, groundWet = 0) {
+    // [D6] mud: darken t' shared lane material toward mud by groundWet, EVERY frame
+    // (afore t' rebuild throttle early-returns) so wet lanes read even when t' tiles
+    // aren't being rebuilt. One CPU lerp, no alloc — LANE_DRY.lerp writes into earthMat.
+    this.earthMat.color.copy(LANE_DRY).lerp(LANE_WET, groundWet < 0 ? 0 : groundWet > 1 ? 1 : groundWet);
     this.timer -= dt;
     if (this.timer > 0) return;
     this.timer = 0.5;

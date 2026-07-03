@@ -4,7 +4,7 @@
 // decisions — rain-vs-snow by season, and the flash/thunder schedule — are
 // testable. Mirrors the verify-*.mjs pattern (a counter; a single OK line).
 import assert from 'node:assert';
-import { stormPrecip, nextFlashInterval, thunderDelay } from '../src/storm.js';
+import { stormPrecip, nextFlashInterval, thunderDelay, boltStrands, BOLT_MAX_POINTS } from '../src/storm.js';
 import { seasonStateAtPhase } from '../src/season.js';
 
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
@@ -61,6 +61,55 @@ let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
   // a near strike is always sooner than a far one (so the cue genuinely tracks distance)
   ok(thunderDelay(0, () => 1) < thunderDelay(1, () => 0),
     `the longest near delay is shorter than the shortest far delay`);
+}
+
+// --- the forked bolt (item 36): seeded, arena-anchored, allocation-free ---
+{
+  const arena = { x: 1824, z: 3079, r: 16 };   // the shipped draculaArena() spot
+  const groundAt = () => 27;                    // East Cliff clifftop height
+  const seed = 12345;
+  // Math.random is POISONED for the whole block: the bolt's shape must come
+  // exclusively frae mulberry32(index ^ worldSeed) — invariant 6.
+  const realRandom = Math.random;
+  Math.random = () => { throw new Error('boltStrands touched Math.random'); };
+  try {
+    for (let i = 0; i < 24; i++) {
+      const ptsA = new Float32Array(BOLT_MAX_POINTS * 3), countsA = [0, 0, 0];
+      const ptsB = new Float32Array(BOLT_MAX_POINTS * 3), countsB = [0, 0, 0];
+      boltStrands(i, seed, arena, groundAt, ptsA, countsA);
+      boltStrands(i, seed, arena, groundAt, ptsB, countsB);
+      // determinism: two calls write the identical floats + counts
+      ok(ptsA.join(',') === ptsB.join(','), `strike #${i}: two calls lay identical point buffers`);
+      ok(countsA.join(',') === countsB.join(','), `strike #${i}: two calls report identical strand counts`);
+      // trunk: 8..12 segments -> 9..13 points
+      ok(countsA[0] >= 9 && countsA[0] <= 13, `strike #${i}: trunk has 9-13 points (${countsA[0]})`);
+      // first branch always forks (4..6 points); second is absent or 4..6
+      ok(countsA[1] >= 4 && countsA[1] <= 6, `strike #${i}: first branch has 4-6 points (${countsA[1]})`);
+      ok(countsA[2] === 0 || (countsA[2] >= 4 && countsA[2] <= 6),
+        `strike #${i}: second branch is 0 or 4-6 points (${countsA[2]})`);
+      const total = countsA[0] + countsA[1] + countsA[2];
+      ok(total <= BOLT_MAX_POINTS, `strike #${i}: ${total} points fit BOLT_MAX_POINTS (${BOLT_MAX_POINTS})`);
+      // trunk endpoints exact: cloud base y=120 down to groundAt - 1.5
+      ok(ptsA[1] === 120, `strike #${i}: trunk starts at cloud base y=120 (${ptsA[1]})`);
+      const tip = (countsA[0] - 1) * 3;
+      ok(ptsA[tip + 1] === 27 - 1.5, `strike #${i}: trunk tip buried at groundAt - 1.5 (${ptsA[tip + 1]})`);
+      // the strike point is hashed near the arena (just outside to ~1.5r beyond)
+      const d = Math.hypot(ptsA[tip] - arena.x, ptsA[tip + 2] - arena.z);
+      ok(d <= arena.r * 1.5 + 1e-3, `strike #${i}: tip lands within 1.5r of the arena (${d.toFixed(1)} <= ${arena.r * 1.5})`);
+      // the trunk only ever descends (a walk down the sky, no kinks upward)
+      let descending = true;
+      for (let p = 1; p < countsA[0]; p++) if (ptsA[p * 3 + 1] >= ptsA[(p - 1) * 3 + 1]) descending = false;
+      ok(descending, `strike #${i}: trunk y is strictly decreasing`);
+    }
+    // the world seed genuinely folds into the shape: two worlds, two bolts
+    const pts1 = new Float32Array(BOLT_MAX_POINTS * 3), c1 = [0, 0, 0];
+    const pts2 = new Float32Array(BOLT_MAX_POINTS * 3), c2 = [0, 0, 0];
+    boltStrands(0, 111, arena, groundAt, pts1, c1);
+    boltStrands(0, 222, arena, groundAt, pts2, c2);
+    ok(pts1.join(',') !== pts2.join(','), 'different worldSeed (111 vs 222) lays a different bolt');
+  } finally {
+    Math.random = realRandom;
+  }
 }
 
 console.log(`verify-storm: ${n} assertions OK`);

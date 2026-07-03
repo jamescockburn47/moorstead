@@ -28,6 +28,7 @@ export const TILE = {
   WREATH: 80, ROBIN: 81, HOLLY_SPRIG: 82, COTTONGRASS: 83,
   HOME_FLAG: 84,
   STRONGBOX_TOP: 85, STRONGBOX_SIDE: 86,
+  FOAM: 87, // [16] shoreline foam fringe — white lace on transparent, rides t' cutout pass
 };
 
 // ---- Block ids ----

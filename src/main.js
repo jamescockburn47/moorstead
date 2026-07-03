@@ -7,12 +7,14 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_HASHES } from './defs.js';
 import { strSeed } from './noise.js';
 import { protectedAt } from './landmarks.js';
-import { initMaterials, setSnowLevel, setFrozen, setGlintTime, getMaterials } from './mesher.js';
-import { stepAccumulation, accumulationTarget, isFrozen } from './snow.js';
-import { getIconURL, retintAtlasForSeason } from './textures.js';
+import { initMaterials, setSnowLevel, setFrozen, setGlintTime, setWaterTime, setRippleAmp, setFlowAmp, setGlitter, setFresnel, setCloudTime, setCloudShadow, setWetness, setGroundWet, setSheen, setWetSky, setSwayAmp, setWindAmt, setGustPhase, setDew, setSparkle, getMaterials } from './mesher.js';
+import { stepGroundWet } from './wetness.js';
+import { stepAccumulation, accumulationTarget, isFrozen, overcastGrey } from './snow.js';
+import { getIconURL, retintAtlasForSeason, getCutoutAtlas } from './textures.js';
 import { World } from './world.js';
 import { Player } from './player.js';
 import * as npc from './npc.js';
@@ -33,8 +35,12 @@ import { buildTrain } from './train.js';
 import { Rails } from './rails.js';
 import { RoadLayer } from './roads.js';
 import { FloraLayer } from './floraLayer.js';
+import { HearthLayer } from './hearthLayer.js';
+import { DripLayer } from './dripLayer.js';
 import { SeasonalLayer } from './seasonalLayer.js';
 import { FireLayer } from './fireLayer.js';
+import { MurmurationLayer } from './birds.js';
+import { HarbourLight } from './lighthouse.js';
 import { tickFires } from './fire.js';
 import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase } from './season.js';
@@ -103,37 +109,125 @@ import { raycast, boxCollides } from './physics.js';
 
 const REACH = 5.5;
 
+// [16] The horizon sea ring (replaces t' owd UNFOGGED sea-plane backdrop, which
+// poked through t' S1d fog clamp as a hard blue streak at t' fog line, visible
+// even inland). One flat annulus o' sea round t' player wi' fog: true — THAT is
+// t' point: it inherits t' scene fog an' dissolves at t' fog line exactly like
+// t' chunk water, so t' sea still runs unbroken to t' horizon off Whitby an'
+// nowt shows inland frae t' tops. SEA_RING = false is t' kill switch.
+const SEA_RING = true;
+const SEA_RING_COL = 0x3a5e7a;            // base water colour (TILE.WATER's speckle base)
+const _seaRingCol = new THREE.Color();    // module scratch — no per-frame allocation
+
+// [25] deterministic eye-adaptation base: t' exposure a bright clear midday settles to.
+// renderFrame eases toneMappingExposure toward EXPOSURE_BASE-relative targets frae sky
+// state (no luminance readback). Fine-only — Plain runs NoToneMapping, so it's inert.
+const EXPOSURE_BASE = 1.25;
+
 // Final full-screen pass o' t' 'Fine' post stack (after tone mapping/OutputPass, so it
 // works in display sRGB): a gentle vignette, a period colour grade — slightly lifted
 // blacks, warm highlights / cool shadows, t' watercolour-plate feel, kept SUBTLE —
 // an' a one-LSB dither to kill t' banding in t' sky gradient.
 const GradeShader = {
   name: 'MoorGradeShader',
-  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 } },
+  uniforms: {
+    tDiffuse: { value: null }, uTime: { value: 0 },
+    uSharp: { value: 0 },                                      // CAS strength — ~0 at full res, rises as t' governor steps t' resolution down
+    uTexel: { value: new THREE.Vector2(1 / 1920, 1 / 1080) },  // 1 / render-target pixel; kept honest by applyResolution()
+    // [26] GradeShader v2 (Fine-only — Plain has no composer/grade). All default 0 so a
+    // fresh compile is today's plate exactly; driven per frame frae sky state in renderFrame.
+    uDread: { value: 0 },                                      // [26] Dracula dread: desaturate toward luma + tighten t' vignette
+    uGrain: { value: 0.015 },                                  // [26] period photographic-plate grain, luminance-scaled (stronger in shadow)
+    uWarmth: { value: 0 },                                     // [26] golden-hour warmth: leans t' split-tone toward amber (0..1)
+  },
   vertexShader: /* glsl */`
     varying vec2 vUv;
     void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: /* glsl */`
     uniform sampler2D tDiffuse;
     uniform float uTime;
+    uniform float uSharp;
+    uniform vec2 uTexel;
+    uniform float uDread;   // [26]
+    uniform float uGrain;   // [26]
+    uniform float uWarmth;  // [26]
     varying vec2 vUv;
     float hash12(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
       vec3 c = texture2D(tDiffuse, vUv).rgb;
+      // AMD-CAS-shaped sharpen: puts crispness back when t' frame-time governor drops
+      // t' render resolution. 4 cross-taps, local min/max, contrast-adaptive weight.
+      vec3 nN = texture2D(tDiffuse, vUv + vec2(0.0, -uTexel.y)).rgb;
+      vec3 nS = texture2D(tDiffuse, vUv + vec2(0.0,  uTexel.y)).rgb;
+      vec3 nW = texture2D(tDiffuse, vUv + vec2(-uTexel.x, 0.0)).rgb;
+      vec3 nE = texture2D(tDiffuse, vUv + vec2( uTexel.x, 0.0)).rgb;
+      vec3 mn = min(c, min(min(nN, nS), min(nW, nE)));
+      vec3 mx = max(c, max(max(nN, nS), max(nW, nE)));
+      vec3 w = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, vec3(1e-4)), 0.0, 1.0)) * uSharp;
+      c = max(vec3(0.0), c * (1.0 + 4.0 * w) - (nN + nS + nW + nE) * w); // kernel weights sum to 1
+      // [26] corner fringe — a whisper o' chromatic aberration only at t' extreme corners,
+      // as if shot through a period lens: 2 extra taps re-sample red/blue pushed radially
+      // out by q·dot(q,q)·0.0015 (nil in t' centre where dot(q,q)→0). Centre is untouched.
+      vec2 qf = vUv - 0.5;
+      vec2 fr = qf * dot(qf, qf) * 0.0015;
+      c.r = texture2D(tDiffuse, vUv + fr).r;
+      c.b = texture2D(tDiffuse, vUv - fr).b;
       float lum = dot(c, vec3(0.299, 0.587, 0.114));
-      // cool shadows, warm highlights — a Victorian hand-tinted plate, not teal-an'-orange
+      // cool shadows, warm highlights — a Victorian hand-tinted plate, not teal-an'-orange.
+      // [26] uWarmth leans t' warm-highlight vector further amber at golden hour (killed [3]'s
+      // warmth lands here as t' single owner): 1.045,1.005,0.955 -> ~1.07,1.01,0.92.
+      vec3 hiTone = mix(vec3(1.045, 1.005, 0.955), vec3(1.07, 1.01, 0.92), uWarmth);
       c = mix(c, c * vec3(0.965, 0.99, 1.055), (1.0 - smoothstep(0.0, 0.45, lum)) * 0.5);
-      c = mix(c, c * vec3(1.045, 1.005, 0.955), smoothstep(0.55, 1.0, lum) * 0.5);
+      c = mix(c, c * hiTone, smoothstep(0.55, 1.0, lum) * 0.5);
+      // [26] dread desaturate — t' Dracula window bleeds t' colour toward luma (uDread·0.35)
+      c = mix(c, vec3(lum), uDread * 0.35);
       // gently lifted blacks
       c = c * 0.965 + 0.014;
-      // vignette — soft, drawn in at t' corners only
+      // vignette — soft, drawn in at t' corners only. [26] dread TIGHTENS it (0.42 -> +uDread·0.2)
+      // so t' storm-window closes in on thee, not merely dims t' lights.
       vec2 q = vUv - 0.5;
-      c *= 1.0 - dot(q, q) * 0.42;
+      c *= 1.0 - dot(q, q) * (0.42 + uDread * 0.2);
+      // [26] film grain — a monochrome plate grain, stronger in t' shadows (1 - lum·0.7), like a
+      // period photographic emulsion. Reuses hash12 + uTime (viewer-local cosmetic, deterministic).
+      c += (hash12(vUv * 913.7 + fract(uTime) * 61.0) - 0.5) * uGrain * (1.0 - lum * 0.7);
       // ordered-ish temporal dither (±0.5 LSB) — kills sky banding
       c += (hash12(vUv * vec2(3141.59, 2718.28) + fract(uTime) * 17.0) - 0.5) / 255.0;
       gl_FragColor = vec4(c, 1.0);
     }`,
 };
+
+// ---- frame-time resolution governor: PURE decision logic -----------------------
+// GOV-PURE-BEGIN (self-contained: no THREE, no window, no closures over module state.
+// main.js can't be imported under Node — it boots t' game at module scope — so a verify
+// script slices this block out o' t' source text, strips t' `export `s, an' evals it.)
+export const GOV_SCALES = [1.5, 1.25, 1.0]; // pixel-ratio ladder, full res first
+export const GOV_SLOW_MS = 26;   // EMA'd frame ms above this…
+export const GOV_SLOW_HOLD = 3;  // …sustained this many seconds -> step DOWN a rung
+export const GOV_FAST_MS = 18;   // EMA'd frame ms below this…
+export const GOV_FAST_HOLD = 20; // …sustained this many seconds -> step back UP
+// One rung per decision. Going down: 4x MSAA -> FXAA first (t' cheap AA), THEN pixel
+// ratio down GOV_SCALES. Recovery climbs t' pixel ratio back one step at a time but
+// never re-arms MSAA — a machine that buckled under it once would only oscillate.
+// state = { level, aa: 'msaa'|'fxaa', badSince, goodSince }; dtEmaMs = smoothed frame
+// time in ms; nowSec = a monotonic seconds clock. Returns t' NEXT state (never mutates
+// t' input) plus { scale, changed } — t' caller applies scale/aa when changed is true.
+export function stepGovernor(state, dtEmaMs, nowSec) {
+  let { level, aa, badSince, goodSince } = state;
+  badSince = dtEmaMs > GOV_SLOW_MS ? (badSince == null ? nowSec : badSince) : null;
+  goodSince = dtEmaMs < GOV_FAST_MS ? (goodSince == null ? nowSec : goodSince) : null;
+  let changed = false;
+  if (badSince != null && nowSec - badSince >= GOV_SLOW_HOLD) {
+    if (aa === 'msaa') { aa = 'fxaa'; changed = true; }                       // rung 1: drop MSAA for FXAA
+    else if (level < GOV_SCALES.length - 1) { level += 1; changed = true; }   // then: resolution down
+    if (changed) { badSince = null; goodSince = null; }
+    else badSince = nowSec;  // floor o' t' ladder — nowt left to shed, keep watching quietly
+  } else if (goodSince != null && nowSec - goodSince >= GOV_FAST_HOLD) {
+    if (level > 0) { level -= 1; changed = true; }                            // one step back up
+    badSince = null; goodSince = null;  // restart t' clock (or stop it, if fully restored)
+  }
+  return { level, aa, badSince, goodSince, scale: GOV_SCALES[level], changed };
+}
+// GOV-PURE-END
 
 class Game {
   constructor() {
@@ -149,15 +243,23 @@ class Game {
     this.seasonOverride = null; // dev: set 0..1 to force a year phase (moorstead.debug.setSeason)
     this.season = null;         // cached per-frame season, read by sky/audio/foraging
     this.snowAccum = 0;         // lagged snow accumulation [0,1]; eases in/out with season
+    this.groundWet = 0;         // [D6]/[D10] lagged ground wetness [0,1]; soaks fast in rain, dries slow
     this._seasonBucket = -1;    // throttles the atlas re-tint to ~40 steps a year
     this.trainFolk = [];        // local folk ridin' t' carriage right now
     this.lastDwellStation = -1; // which platform she's stood at (for boarding)
     this.mount = null;          // the moorland pony tha's ridin', or null
     this.boat = null;           // the coble tha's sailin', or null
 
+    // frame-time resolution governor (Fine only — see stepGovernor above)
+    this._resScale = 1.5;   // pixel-ratio cap: t' real DPR is min(devicePixelRatio, this)
+    this._dtEma = 1 / 60;   // EMA'd frame dt (seconds) — t' governor's ear to t' ground
+    this._govT = 0;         // decision cadence: t' pure step runs twice a second, not per frame
+    this._govState = null;  // { level, aa, badSince, goodSince } — made on first Fine
+    this._texLoader = null; // shared TextureLoader for t' held-item viewmodel icon
+
     // renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this._resScale));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.domElement.className = 'game';
     document.getElementById('app').appendChild(this.renderer.domElement);
@@ -170,7 +272,9 @@ class Game {
     // cutout foliage casts leaf-shaped shadows, not quad-shaped ones: t' shadow-map
     // depth pass needs its own alpha-tested depth material (shared, one instance)
     this._cutoutDepth = new THREE.MeshDepthMaterial({
-      depthPacking: THREE.RGBADepthPacking, map: this.atlas, alphaTest: 0.5,
+      // t' NO-MIP twin o' t' atlas: t' main atlas is mipped now, an' alphaTest 0.5
+      // through shrinking mip alpha would fizzle t' leaf-shaped shadows at range
+      depthPacking: THREE.RGBADepthPacking, map: getCutoutAtlas(), alphaTest: 0.5,
     });
 
     this.audio = new AudioEngine();
@@ -248,13 +352,49 @@ class Game {
   applyQuality(q) {
     this.gfxQuality = q;
     const fine = q === 'fine';
+    // [15]/[D0] living water: effect amps stamped per tier. Plain = all 0, so t' liquid
+    // shader terms multiply out to nowt an' t' output stays byte-identical flat water
+    // (t' aTop/aFlow attributes are inert data). uGlitter is re-driven every frame under
+    // Fine (dayness × clear sky); parked at 0 here so Plain never sparkles.
+    setRippleAmp(fine ? 0.05 : 0);
+    setFlowAmp(fine ? 0.05 : 0);
+    setGlitter(0);
+    setFresnel(fine ? 0.35 : 0);
+    // [0] cloud shadows parked at 0: on Plain t' shader branch never executes an'
+    // terrain stays byte-identical; Fine re-drives it every frame (frame loop).
+    setCloudShadow(0);
+    // [9/17]+[D6]+[D10] wet ground: t' diffuse darkening + puddle mask are TIER-FLAT
+    // (uWetness/uGroundWet re-driven every frame both tiers — weather readin' on t'
+    // ground helps tablets most). Only t' Fine-only sheen + t' sky-colour puddle tint
+    // are parked here: uSheen=0 kills t' grazing term, uWetSky=BLACK so a puddle on
+    // Plain darkens but takes no sky colour (darkenin' stays, tint is Fine-only).
+    setSheen(fine ? 0.5 : 0);
+    setWetSky(0, 0, 0);
+    // [10]+[D14] flora sway: Plain runs a gentler 0.04 amp (vertex-only, tablet-safe) so
+    // t' moor still breathes; [14] frost sparkle + [D8] dew are Fine-only (bloom-flattered).
+    setSwayAmp(fine ? 0.06 : 0.04);
+    setSparkle(fine ? 0.4 : 0);
+    setDew(0);
     const r = this.renderer;
     if (fine) {
       r.toneMapping = THREE.ACESFilmicToneMapping;
-      r.toneMappingExposure = 1.25; // tuned by eye on t' summer moor — 1.15 ran a touch murky at dawn
+      // [25] deterministic eye adaptation: base exposure EXPOSURE_BASE = 1.25 (tuned by eye on
+      // t' summer moor — 1.15 ran a touch murky at dawn); renderFrame eases it toward a
+      // per-frame target frae dayness/roof/lantern state (bright midday ~1.15 -> neet ~1.32,
+      // +0.15 under cover, +0.05 wi' a flame lit). Inert on Plain (NoToneMapping ignores it).
+      r.toneMappingExposure = EXPOSURE_BASE;
       r.outputColorSpace = THREE.SRGBColorSpace;
       r.shadowMap.enabled = true;
       r.shadowMap.type = THREE.PCFSoftShadowMap;
+      // AA opening stance under Fine: FXAA for touch-primary/mobile (MSAA bandwidth is
+      // dear on tile GPUs), 4x MSAA for t' desktop. Learned governor state (rungs already
+      // shed this session) survives a Plain round-trip on purpose — t' machine hasn't changed.
+      if (!this._govState) {
+        const mobile = isTouchPrimary(q => window.matchMedia(q), navigator)
+          || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '');
+        this._govState = { level: 0, aa: mobile ? 'fxaa' : 'msaa', badSince: null, goodSince: null };
+      }
+      this._resScale = GOV_SCALES[this._govState.level];
       this.setupComposer();
     } else {
       // Plain path: leave t' renderer untouched (library defaults, no composer, no shadows)
@@ -262,7 +402,9 @@ class Game {
       r.toneMappingExposure = 1;
       r.outputColorSpace = THREE.SRGBColorSpace;
       r.shadowMap.enabled = false;
-      if (this.composer) { this.composer.dispose(); this.composer = null; this.gradePass = null; this.bloomPass = null; }
+      this.teardownComposer();
+      this._resScale = 1.5;    // Plain always runs t' full min(dpr, 1.5) — as it allus did
+      this.applyResolution();
     }
     if (this.sky) {
       this.sky.gfx = q; // sky swaps in its ACES-retuned day/dusk/night curves under Fine
@@ -295,16 +437,66 @@ class Game {
 
   setupComposer() {
     if (this.composer) return;
-    this.composer = new EffectComposer(this.renderer);
+    // Scene target is explicit so it can carry MSAA (r166 is WebGL2-only): half-float,
+    // 4 samples on t' desktop rung. T' composer clones it for ping-pong an' t' GL layer
+    // resolves t' multisample buffer afore bloom ever samples it. FXAA rung (an' t'
+    // touch/mobile opening stance) runs samples:0 wi' t' FXAA pass enabled instead.
+    const size = this.renderer.getSize(new THREE.Vector2());
+    const pr = this.renderer.getPixelRatio();
+    const rt = new THREE.WebGLRenderTarget(size.x * pr, size.y * pr, {
+      type: THREE.HalfFloatType,
+      samples: this._govState && this._govState.aa === 'msaa' ? 4 : 0,
+    });
+    this.composer = new EffectComposer(this.renderer, rt);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     // subtle threshold — only genuine lights bloom: lantern flames, lit windows at
     // dusk, t' sun itsen, an' a whisper on t' bright horizon at golden hour
-    const size = this.renderer.getSize(new THREE.Vector2());
     this.bloomPass = new UnrealBloomPass(size, 0.32, 0.5, 0.85);
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass()); // tone mapping + sRGB out
+    // FXAA sits AFTER OutputPass (it wants display-space sRGB luma) an' BEFORE t' grade
+    // (so t' temporal dither stays crisp, laid on top o' t' antialiased image)
+    this.fxaaPass = new ShaderPass(FXAAShader);
+    this.fxaaPass.enabled = !!this._govState && this._govState.aa === 'fxaa';
+    this.composer.addPass(this.fxaaPass);
     this.gradePass = new ShaderPass(GradeShader); // vignette + period grade + dither (display space)
     this.composer.addPass(this.gradePass);
+    this.applyResolution(); // normalise composer size/pixel-ratio + feed FXAA/CAS their texel sizes
+  }
+
+  teardownComposer() {
+    if (!this.composer) return;
+    // passes hold their own GPU targets/materials — t' composer doesn't dispose 'em
+    if (this.bloomPass) this.bloomPass.dispose();
+    if (this.gradePass) this.gradePass.dispose();
+    if (this.fxaaPass) this.fxaaPass.dispose();
+    this.composer.dispose(); this.composer = null; this.gradePass = null; this.bloomPass = null; this.fxaaPass = null;
+  }
+
+  // Governor rung 1 (desktop): swap t' 4x MSAA scene target for FXAA — t' sample count
+  // is baked into t' render targets, so t' whole stack comes down an' goes back up.
+  rebuildComposer() {
+    if (!this.composer) return;
+    this.teardownComposer();
+    this.setupComposer(); // reads this._govState.aa for samples/FXAA-enable
+  }
+
+  // T' one place t' real canvas resolution is resolved: min(devicePixelRatio, governor
+  // scale). Called at composer build, on resize (re-reads DPR — dragging t' window to
+  // another monitor used to be ignored), an' whenever t' governor steps a rung.
+  applyResolution() {
+    const pr = Math.min(window.devicePixelRatio || 1, this._resScale);
+    const w = window.innerWidth, h = window.innerHeight;
+    this.renderer.setPixelRatio(pr);
+    this.renderer.setSize(w, h);
+    if (this.composer) { this.composer.setPixelRatio(pr); this.composer.setSize(w, h); }
+    if (this.fxaaPass) this.fxaaPass.material.uniforms.resolution.value.set(1 / (w * pr), 1 / (h * pr));
+    if (this.gradePass) {
+      this.gradePass.uniforms.uTexel.value.set(1 / (w * pr), 1 / (h * pr));
+      // CAS strength rides t' GOVERNOR step, not raw DPR — a 1x monitor at full
+      // quality gets no sharpen; only a stepped-down rung does
+      this.gradePass.uniforms.uSharp.value = Math.max(0, (1.5 - this._resScale) * 0.5);
+    }
   }
 
   // Chunk meshes are built off-thread o' this file (world.js/mesher.js), so shadow
@@ -333,6 +525,45 @@ class Game {
   renderFrame(dt) {
     if (this.composer && this.gfxQuality === 'fine') {
       if (this.gradePass) this.gradePass.uniforms.uTime.value = (this.gradePass.uniforms.uTime.value + dt) % 64;
+      // [25]/[26]/[27] living exposure/bloom/grade — three coordinated, DETERMINISTIC drives
+      // frae sky state already in hand (no luminance readback, no per-frame alloc). All Fine-
+      // only (guarded by this branch); Plain never reaches here, so it stays byte-identical.
+      if (this.sky) {
+        const sky = this.sky;
+        // dayness mirrors t' sky.js sun curve (same math as t' frame loop's dayness); nightness
+        // its complement; golden = a low-sun factor that peaks at t' horizon hours an' self-zeroes
+        // by full daylight OR deep neet (sun below −0.05 kills it, so it's dusk/dawn only).
+        const sunY = Math.sin((sky.time - 0.25) * Math.PI * 2);
+        const dayness = Math.max(0, Math.min(1, (sunY + 0.12) * 3));
+        const nightness = 1 - dayness;
+        const golden = sunY > -0.05 ? Math.max(0, 1 - Math.abs(sunY) / 0.30) : 0;
+
+        // A) [25] deterministic eye adaptation — ease toneMappingExposure toward a target frae
+        // dayness (bright midday ~1.15 -> neet ~1.32), +0.15 under a roof so lantern-lit interiors
+        // read, +0.05 while a flame's lit. Slow lag (dt·0.4) sells step-in/step-out.
+        const r = this.renderer;
+        let expTarget = EXPOSURE_BASE - 0.10 + nightness * 0.17; // 1.15 clear midday -> 1.32 outdoors neet
+        if (this._covered) expTarget += 0.15;
+        if (this._stormHeld || (this.torchLight && this.torchLight.intensity > 0)) expTarget += 0.05;
+        r.toneMappingExposure += (expTarget - r.toneMappingExposure) * Math.min(1, dt * 0.4);
+
+        // B) [27] living bloom — swells frae a daytime whisper to a proper amber halo at neet,
+        // wi' a golden-hour horizon flare. Constructor literals (0.32/0.5/0.85) stand; these are
+        // plain property writes UnrealBloomPass re-reads each render (r166) — no rebuild.
+        if (this.bloomPass) {
+          this.bloomPass.strength = 0.32 + nightness * 0.14 + golden * 0.1;
+          this.bloomPass.threshold = 0.85 - nightness * 0.06;
+        }
+
+        // C) [26] GradeShader v2 uniforms — dread frae t' live storm level (Dracula window
+        // desaturates + tightens t' vignette), warmth frae t' golden factor (amber split-tone),
+        // grain constant. Deterministic pure functions of sky state.
+        if (this.gradePass) {
+          const gu = this.gradePass.uniforms;
+          gu.uDread.value = sky.dread || 0;
+          gu.uWarmth.value = golden;
+        }
+      }
       this.composer.render();
     } else {
       this.renderer.render(this.scene, this.camera);
@@ -578,8 +809,21 @@ class Game {
     this.seasonalLayer = new SeasonalLayer(this.scene, this.world);
     if (this.fireLayer) this.fireLayer.dispose();
     this.fireLayer = new FireLayer(this.scene, this.world);
+    if (this.hearthLayer) this.hearthLayer.clear();
+    this.hearthLayer = new HearthLayer(this.scene, this.world);
+    if (this.dripLayer) this.dripLayer.dispose();
+    this.dripLayer = new DripLayer(this.scene, this.world, { plain: this.gfxQuality !== 'fine' });
     if (this.footprints) this.footprints.clear();
     this.footprints = new Footprints(this.scene, this.world);
+    if (this.murmuration) this.murmuration.dispose();
+    this.murmuration = new MurmurationLayer({
+      scene: this.scene, world: this.world, sky: this.sky,
+      isFine: this.gfxQuality === 'fine',
+    });
+    if (this.harbourLight) { this.harbourLight.dispose(); this.harbourLight = null; }
+    if (this.world.gen.geo && typeof this.world.gen.geo.whitbyHarbour === 'function') {
+      this.harbourLight = new HarbourLight(this.scene, this.world.gen.geo, { plain: this.gfxQuality !== 'fine' });
+    }
     // seed snow cover + season so a world loaded in winter is snowy at once and
     // Merlin spawns as Father Christmas straight off (no one-frame wizard flash)
     this.season = (this.seasonOverride != null) ? seasonStateAtPhase(this.seasonOverride) : seasonState();
@@ -632,8 +876,13 @@ class Game {
     if (this.floraLayer) { this.floraLayer.clear(); this.floraLayer = null; }
     if (this.seasonalLayer) { this.seasonalLayer.clear(); this.seasonalLayer = null; }
     if (this.fireLayer) { this.fireLayer.dispose(); this.fireLayer = null; }
+    if (this.hearthLayer) { this.hearthLayer.clear(); this.hearthLayer = null; }
+    if (this.dripLayer) { this.dripLayer.dispose(); this.dripLayer = null; }
     if (this.footprints) { this.footprints.clear(); this.footprints = null; }
+    if (this.murmuration) { this.murmuration.dispose(); this.murmuration = null; }
+    if (this.harbourLight) { this.harbourLight.dispose(); this.harbourLight = null; }
     if (this.carolBox) { this.carolBox.dispose(); this.carolBox = null; }
+    if (this.seaRing) { this.scene.remove(this.seaRing); this.seaRing.geometry.dispose(); this.seaRing.material.dispose(); this.seaRing = null; }
     this.entities.clear();
     for (const c of this.world.chunks.values()) {
       if (c.meshes) for (const m of c.meshes) { this.scene.remove(m); m.geometry.dispose(); }
@@ -1004,8 +1253,8 @@ class Game {
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
-      this.renderer.setSize(window.innerWidth, window.innerHeight);
-      if (this.composer) this.composer.setSize(window.innerWidth, window.innerHeight);
+      // re-reads devicePixelRatio an' all — a drag onto another monitor never used to land
+      this.applyResolution();
     });
 
     window.addEventListener('beforeunload', () => {
@@ -3433,25 +3682,36 @@ class Game {
     }));
   }
 
-  // A SOLID sea-plane backdrop so the open sea reaches the horizon from the train. The chunk
-  // water is fogged (fades to sky by ~160) so from a moving/elevated viewpoint the sea melts
-  // into the haze and reads as "drained". This plane carries the sea on regardless: fog OFF so
-  // it stays sea-coloured all the way out, big (1400) so it fills past the view, at the surface,
-  // a backdrop (depthWrite off) so near chunk-water still renders over it with its real seabed.
-  // Moors only — stylised world untouched.
-  _updateSeaPlane() {
+  // [16] The horizon sea ring — see the SEA_RING constant up top for the why.
+  // Ring inner 90 sits just outside the meshed radius (96 worst-case, fog fully
+  // occluded by 84), outer 500 reaches the dome; near-field sea is real chunk
+  // water drawn over it (the ring writes no depth). Shown when the camera's high
+  // OR the player's over coastal ground (coastT > 0); hidden inland at ground
+  // level, so no streak from T' High Moor. Built ONCE, disposed in teardownWorld.
+  // Moors only — stylised world untouched (same gate as the old backdrop).
+  _updateSeaRing(dt) {
     const geo = this.world.gen.geo;
-    if (!geo.realWorld) { if (this.seaPlane) this.seaPlane.visible = false; return; }
-    if (!this.seaPlane) {
-      const mat = new THREE.MeshBasicMaterial({ color: 0x3a5e7a, fog: false, depthWrite: false });
-      this.seaPlane = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), mat);
-      this.seaPlane.rotation.x = -Math.PI / 2;
-      this.seaPlane.renderOrder = -0.5;     // after the sky dome (-1), before the chunks (0)
-      this.seaPlane.frustumCulled = false;
-      this.scene.add(this.seaPlane);
+    if (!SEA_RING || !geo.realWorld) { if (this.seaRing) this.seaRing.visible = false; return; }
+    if (!this.seaRing) {
+      // RingGeometry is XY-plane — rotate -PI/2 about X to lie flat (red-team catch)
+      const mat = new THREE.MeshBasicMaterial({ color: SEA_RING_COL, fog: true, depthWrite: false });
+      this.seaRing = new THREE.Mesh(new THREE.RingGeometry(90, 500, 48), mat);
+      this.seaRing.rotation.x = -Math.PI / 2;
+      this.seaRing.renderOrder = -0.5;     // after the sky dome (-1), before the chunks (0)
+      this.seaRing.frustumCulled = false;
+      this.scene.add(this.seaRing);
     }
-    this.seaPlane.visible = true;
-    this.seaPlane.position.set(this.player.pos.x, WATER_LEVEL + 0.9, this.player.pos.z);
+    const p = this.player.pos;
+    const camY = this.camera ? this.camera.position.y : p.y;
+    this.seaRing.visible = camY > 60 || geo.coastT(Math.round(p.x), Math.round(p.z)) > 0;
+    if (!this.seaRing.visible) return;
+    this.seaRing.position.set(p.x, WATER_LEVEL - 0.12, p.z); // 25.88: one block under the rippling surface plane
+    // colour eases toward the water colour, dimmed with the daylight (a Basic
+    // material is unlit — a constant colour would glow at night); module-scratch
+    // Color, nowt allocated per frame. Sun formula mirrors sky.js (sunrise t=0.25).
+    const dayness = Math.max(0, Math.min(1, (Math.sin((this.sky.time - 0.25) * Math.PI * 2) + 0.12) * 3));
+    _seaRingCol.set(SEA_RING_COL).multiplyScalar(0.18 + 0.82 * dayness);
+    this.seaRing.material.color.lerp(_seaRingCol, Math.min(1, dt * 2));
   }
 
   // The BRANCH trains: a steam train on every OTHER line (Esk Valley, Coast Line), running its
@@ -4586,7 +4846,7 @@ class Game {
         if (this._seasonBucket !== 90 + this._titleSceneIdx) { this._seasonBucket = 90 + this._titleSceneIdx; retintAtlasForSeason(lightSeason); }
         this.sky.update(dt, this.player.pos, lightSeason, false);
         if (this.rails) this.rails.update(dt, { x: ax, z: az });
-        if (this.roads) this.roads.update(dt, { x: ax, z: az });
+        if (this.roads) this.roads.update(dt, { x: ax, z: az }, this.groundWet);
         if (this.rosterClient) { this.rosterClient.update(dt); this._titlePopulateTrain(br); } // drive the roster + keep the watched train busy with boarders
         this.entities.update(dt, this.player, false, this.audio, () => {});
         const orbitCam = () => {
@@ -4655,7 +4915,7 @@ class Game {
       this.updateTrainWorld(dt);
       this.updateBranchTrains(dt); // …an' a train on every other line — the whole network's alive
       if (this.rails) this.rails.update(dt, this.player.pos);
-      if (this.roads) this.roads.update(dt, this.player.pos);
+      if (this.roads) this.roads.update(dt, this.player.pos, this.groundWet);
       if (this.state === 'riding' && this.ride) {
         this.updateRide(dt);
       } else if (this.state === 'driving') {
@@ -4678,7 +4938,7 @@ class Game {
 
       // streaming
       this.world.update(this.player.pos.x, this.player.pos.z);
-      this._updateSeaPlane(); // keep the open sea reaching the horizon (Moors only)
+      this._updateSeaRing(dt); // keep the open sea reaching the horizon, fogged honestly (Moors only)
 
       // entities
       this.entities.day = this.sky.day;
@@ -4774,6 +5034,9 @@ class Game {
       if (this.floraLayer) this.floraLayer.update(dt, this.player.pos, season);
       if (this.seasonalLayer) this.seasonalLayer.update(dt, this.player.pos, season, this.snowAccum);
       if (this.fireLayer) this.fireLayer.update(dt, this.player.pos, this.camera);
+      if (this.murmuration) this.murmuration.update(dt, season);
+      if (this.harbourLight) this.harbourLight.update(dt, this.camera, this.sky);
+      if (this.hearthLayer) this.hearthLayer.update(dt, this.player.pos, this.sky);
       // ONE global flame tick: drives the shared flame material's uTime, every
       // hero fire's embers/smoke, an' the pulsing bonfire light — so torches
       // (FireLayer) AND the festival bonfire (SeasonalLayer) animate off one clock.
@@ -4787,8 +5050,61 @@ class Game {
       } else if (this.footprints) this.footprints.clear();
       this.snowAccum = stepAccumulation(this.snowAccum, season, dt);
       setSnowLevel(this.snowAccum); // height-gated snow on the tops (cheap uniform)
-      setFrozen(isFrozen(season));
+      const _frozen = isFrozen(season);
+      setFrozen(_frozen);
       this._glintT = (this._glintT || 0) + dt; setGlintTime(this._glintT); // drive forage glint animation
+      setWaterTime(this._glintT); // [15]/[D0] water ripples + becks ride t' same clock — no new tick
+      // [D14] gust fronts ride the SHARED wall-clock (NOT the per-client _glintT accumulator)
+      // so every player watches the same wave cross the same hillside (invariant 6).
+      setGustPhase((Date.now() / 1000) % 4096);
+      setWindAmt(this.sky.liveWind != null ? this.sky.liveWind : 0.35); // real Goathland windiness, tier-flat
+      // dayness mirrors t' sky.js sun curve — hoisted out o' t' Fine block so t' TIER-FLAT
+      // wetness dry-rate can read it too (overnight rain lingers to morning).
+      const _sunY = Math.sin((this.sky.time - 0.25) * Math.PI * 2);
+      const dayness = Math.max(0, Math.min(1, (_sunY + 0.12) * 3));
+      // [9/17]+[D6]+[D10] wet ground: soaks fast while it's rainin', dries slow after,
+      // t' dry rate scaled by warmth × daylight (pure stepGroundWet, snow.js idiom).
+      // rainAmount is t' shared live-feed sample, warmth t' shared season clock, dayness
+      // t' shared sun curve — deterministic. uWetness/uGroundWet are TIER-FLAT (both tiers
+      // read t' weather on t' ground); uWetness == groundWet raw, uGroundWet is t' shaped
+      // drive (t' shader pow-shapes it for [D10] an' slides t' [D6] puddle threshold).
+      this.groundWet = stepGroundWet(this.groundWet, this.sky.rainAmount, season.warmth, dayness, dt);
+      setWetness(this.groundWet);
+      setGroundWet(this.groundWet);
+      // [D9] eaves drip for minutes after t' rain stops: only in t' just-stopped window,
+      // fadin' as t' ground dries (reads groundWet + live rain + frozen).
+      if (this.dripLayer) this.dripLayer.update(dt, this.player.pos, { groundWet: this.groundWet, rainAmount: this.sky.rainAmount, frozen: _frozen });
+      // [15] sun-sparkle on t' water: full glitter at clear noon, nowt at neet or under
+      // cloud. overcast mirrors sky.js's overcastGrey call (eased snowAmount stands in for
+      // t' instantaneous snowfall). Fine only — applyQuality parks uGlitter at 0 an' Plain
+      // never touches it again.
+      if (this.gfxQuality === 'fine') {
+        const overcast = overcastGrey(this.sky.weather, this.sky.snowAmount || 0, this.sky.rainAmount);
+        setGlitter(dayness * (1 - overcast));
+        // [9] wet sheen tint: puddles/wet tops pick up t' LIVE sky colour at grazing
+        // angles (Fine only — uSheen stamped 0.5 in applyQuality). scene.fog.color IS t'
+        // live horizon/sky colour sky.js writes every frame (dawn-glow tint an' all), so
+        // t' street glistens amber at dusk. Scratch-free: setWetSky copies into t' module
+        // Color's channels, no per-frame alloc ([22] hoist lesson).
+        const fc = this.sky.scene.fog.color;
+        setWetSky(fc.r, fc.g, fc.b);
+        // [0] cloud shadows sweep t' moor: t' clock is sky.cloudT — t' SAME
+        // accumulator t' dome scrolls its clouds by (churn speed-up an' all) —
+        // so ground patches track t' dome exactly. Strength = cover × dayness ×
+        // clear-sky: uClouds (t' dome's eased cover) rises toward overcastGrey,
+        // so cover × (1 − overcast) peaks ~0.25 at half-cover an' self-zeroes
+        // both stone-clear an' full-overcast; dayness kills it at neet. ×1.4
+        // lands t' peak dimmin' at ~0.35, an' t' min() clamps t' odd frame where
+        // cover an' grey diverge (boss-storm churn drives cover, not grey).
+        setCloudTime(this.sky.cloudT || 0);
+        const cover = this.sky.domeMat.uniforms.uClouds.value;
+        setCloudShadow(Math.min(0.35, 1.4 * cover * dayness * (1 - overcast)));
+        // [D8] dew / after-rain glisten: droplets sparkle on flora AFTER a shower clears
+        // (groundWet high, rain stopped, some light), and again at a clear summer dawn.
+        const glisten = this.groundWet * (1 - this.sky.rainAmount) * dayness;
+        const dawnDew = Math.max(0, 1 - Math.abs(this.sky.time - 0.25) / 0.07) * (1 - overcast) * Math.max(0, season.warmth) * (this.sky.rainAmount < 0.05 ? 1 : 0);
+        setDew(Math.max(glisten, dawnDew));
+      }
       const sbk = Math.floor(season.yearPhase * 40);
       if (sbk !== this._seasonBucket) { this._seasonBucket = sbk; retintAtlasForSeason(season); } // heather purple, bracken rust…
       // is there a roof overhead? (stops rain fallin' through ceilings + drives wetness)
@@ -4798,6 +5114,7 @@ class Game {
         const ab = this.world.getBlock(_px, yy, _pz);
         if (ab !== B.AIR && ab !== B.WATER && !isCutout(ab)) { covered = true; break; }
       }
+      this._covered = covered; // [25] eye-adaptation reads t' roof flag in renderFrame (+0.15 exposure under cover)
       const msg = this.sky.update(dt, this.player.pos, season, covered);
 
       // economy on the game clock: deliver any due shipments and refill vendor drop-in purses.
@@ -4993,12 +5310,16 @@ class Game {
     if (heldId !== this.heldIconId) {
       this.heldIconId = heldId;
       if (held) {
-        const tex = new THREE.TextureLoader().load(getIconURL(held.id));
+        // one shared loader, an' t' outgoing icon texture DISPOSED — every swap used to
+        // leak a GPU texture (they're not GC'd), a slow bleed over a long session
+        const old = this.heldSprite.material.map;
+        const tex = (this._texLoader || (this._texLoader = new THREE.TextureLoader())).load(getIconURL(held.id));
         tex.magFilter = THREE.NearestFilter;
         tex.colorSpace = THREE.SRGBColorSpace;
         this.heldSprite.material.map = tex;
         this.heldSprite.material.needsUpdate = true;
         this.heldSprite.visible = true;
+        if (old) old.dispose();
       } else {
         this.heldSprite.visible = false;
       }
@@ -5235,6 +5556,25 @@ class Game {
     if (this.gfxQuality === 'fine') {
       this._shadowFlagT = (this._shadowFlagT || 0) - dt;
       if (this._shadowFlagT <= 0) { this._shadowFlagT = 0.6; this.applyShadowFlags(true); }
+    }
+    // Frame-time governor (Fine, in-world only — t' title's streaming bursts would mis-train
+    // it): EMA t' dt every frame (scalar, no allocation), take t' pure decision twice a
+    // second. Laboured >26 ms for 3 s -> shed a rung (MSAA->FXAA first, then pixel ratio);
+    // 20 s o' clear air under 18 ms -> climb one back.
+    this._dtEma = this._dtEma * 0.95 + dt * 0.05;
+    if (this.gfxQuality === 'fine' && this.composer) {
+      this._govT -= dt;
+      if (this._govT <= 0) {
+        this._govT = 0.5;
+        const g = stepGovernor(this._govState, this._dtEma * 1000, this.clock.elapsedTime);
+        const swapAA = g.aa !== this._govState.aa;
+        this._govState = g;
+        if (g.changed) {
+          this._resScale = g.scale;
+          if (swapAA) this.rebuildComposer(); // sample count is baked into t' targets
+          else this.applyResolution();
+        }
+      }
     }
     this.renderFrame(dt);
   }

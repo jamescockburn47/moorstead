@@ -1,7 +1,7 @@
 // Fire component + flame material — run wi': node scripts/verify-fire.mjs
 // Headless: three.js scene-graph builds fine under Node (no GL needed — we never render).
 import * as THREE from 'three';
-import { makeFlameMaterial, getFlameMaterial, Fire, tickFlame, tickFires } from '../src/fire.js';
+import { makeFlameMaterial, getFlameMaterial, Fire, tickFlame, tickFires, makeSmoke } from '../src/fire.js';
 
 let failed = false;
 const ok = m => console.log('  ok    ' + m);
@@ -107,6 +107,30 @@ tickFires(20.0);
   (mat.uniforms && mat.uniforms.uTime ? ok : bad)('shared flame material survives a hero dispose');
   // after disposing the only hero fire, ticking must not throw (registries clean)
   { let t2 = false; try { tickFires(1.0); } catch (e) { t2 = true; } (!t2 ? ok : bad)('tickFires is safe after the hero fire is disposed'); }
+}
+
+// --- makeSmoke(): the exported bare plume (chimney smoke rides this) ---
+{
+  (typeof makeSmoke === 'function' ? ok : bad)('makeSmoke(scale) is exported for external plumes');
+  const plume = makeSmoke(0.45);
+  (plume instanceof THREE.Mesh ? ok : bad)('makeSmoke() returns a Mesh');
+  const u = plume.material.uniforms;
+  (u && u.uGate && u.uGate.value === 1 ? ok : bad)('plume uGate uniform exists, defaults 1 (existing smoke unchanged)');
+  (u && u.uPhase && u.uPhase.value === 0 ? ok : bad)('plume uPhase uniform exists, defaults 0 (no desync unless asked)');
+  (u && u.uTime ? ok : bad)('plume material carries uTime (tickable via registerFxMat)');
+  plume.geometry.dispose(); plume.material.dispose();
+}
+
+// --- Fire({smoke:true})'s own plume is byte-for-byte today's look ---
+{
+  const hero = Fire({ scale: 3, big: true, smoke: true });
+  let smoke = null;
+  hero.traverse(o => { if (o.isMesh && o.userData.smokeMat) smoke = o; });
+  (smoke ? ok : bad)('Fire({smoke:true}) still builds its plume');
+  const u = smoke && smoke.material.uniforms;
+  (u && u.uGate.value === 1 ? ok : bad)('hero-fire plume uGate stays 1 (bonfire/festival smoke unchanged)');
+  (u && u.uPhase.value === 0 ? ok : bad)('hero-fire plume uPhase stays 0 (unchanged puff cycle)');
+  hero.dispose();
 }
 
 console.log('\nRESULT: ' + (failed ? 'FAIL' : 'PASS'));

@@ -313,18 +313,25 @@ function makeEmbers(scale, opts = {}) {
 // --- smoke plume --------------------------------------------------------------
 // A couple of large soft grey quads stacked above the flame that drift, rise an'
 // fade on uTime. Kept subtle (low alpha). Billboards toward the camera the same
-// way the flame does. GPU-animated; tickFires only pokes uTime.
+// way the flame does. GPU-animated; tickFires only pokes uTime. makeSmoke() below
+// is exported (see its own comment) so seasonalLayer.js can plant a chimney plume
+// wi'out building a whole Fire() — but a bare plume has no fire to ride tickFires
+// off, so ITS caller owns registerFxMat()/unregisterFxMat() around it, an' can
+// ramp the plume in/out via the uGate uniform (0..1, defaults to 1 — hero fires
+// never touch it, so bonfire/festival smoke is unchanged) an' desync it against
+// other plumes via uPhase (defaults to 0).
 const SMOKE_VERT = `
   attribute float aLayer;  // 0..1 — which puff in the stack (phase + base height)
   uniform float uTime;
   uniform float uScale;
+  uniform float uPhase;    // per-instance desync (0 for Fire()'s own smoke — unchanged look)
   varying vec2 vUv;
   varying float vLayer;
   void main(){
     vUv = uv;
     vLayer = aLayer;
     // rise + recycle on a per-layer phase; a slow lateral sway as it climbs
-    float t = fract(uTime * 0.10 + aLayer);
+    float t = fract(uTime * 0.10 + aLayer + uPhase);
     float rise = (0.9 + t * 2.4) * uScale;           // climbs well above the flame
     float sway = sin(uTime * 0.5 + aLayer * 6.28) * 0.18 * uScale * t;
     float grow = (0.6 + 1.1 * t);                    // billows wider as it rises
@@ -342,21 +349,41 @@ const SMOKE_FRAG = `
   varying vec2 vUv;
   varying float vLayer;
   uniform float uTime;
+  uniform float uPhase;  // per-instance desync — must mirror the vertex shader's t exactly
+  uniform float uGate;   // 0..1 — an external on/off ramp; defaults to 1 (hero fires, unchanged)
   void main(){
     vec2 d = vUv - vec2(0.5);
     float r = length(d);
     float soft = smoothstep(0.5, 0.08, r);       // soft round puff
-    float t = fract(uTime * 0.10 + vLayer);
+    float t = fract(uTime * 0.10 + vLayer + uPhase);
     // fade in low, thin out as it rises an' disperses
     float fade = smoothstep(0.0, 0.2, t) * (1.0 - smoothstep(0.55, 1.0, t));
-    float a = soft * fade * 0.16;                 // subtle
+    float a = soft * fade * 0.16 * uGate;         // subtle
     gl_FragColor = vec4(vec3(0.32, 0.30, 0.29), a);
   }
 `;
 
 const SMOKE_PUFFS = 3;
 
-function makeSmoke(scale) {
+// EXPORTED for external consumers (seasonalLayer's chimney-smoke dressing pass —
+// a plume per cottage isn't a "fire", so it doesn't want a whole Fire() group,
+// just the plume mesh). Signature UNCHANGED (still a bare scalar). The only
+// behaviour additions are uGate an' uPhase (below) — uniforms defaulting to
+// 1 an' 0 respectively, so Fire()'s own smoke (bonfire, festival hero fires) is
+// pixel-identical to before. An external caller can ramp uGate 0..1 to fade its
+// plume in/out without popping, an' set uPhase (any float) so several plumes
+// riding the ONE shared clock (tickFires) don't puff in lockstep.
+// NOTE the registration split: Fire({smoke:true}) pushes the plume's material
+// straight into the internal _emberMats array (see below) because it already
+// owns that registry; an external caller has no such access, so it MUST
+// register its own plume via registerFxMat(mesh.material) to get ticked, and
+// unregisterFxMat() on teardown. registerFxMat() is idempotent against a
+// DIFFERENT material instance per call — each makeSmoke() makes its own
+// material, so there is no double-tick risk between the two call sites; the
+// only hazard would be registering the SAME material instance twice (once
+// here, once via Fire()), which cannot happen since Fire() always builds its
+// own via this same factory.
+export function makeSmoke(scale) {
   // one quad per puff, stacked; each puff is a layer 0..1 (phase offset)
   const pos = [], uv = [], layer = [], idx = [];
   for (let p = 0; p < SMOKE_PUFFS; p++) {
@@ -374,7 +401,7 @@ function makeSmoke(scale) {
   g.setAttribute('aLayer', new THREE.Float32BufferAttribute(layer, 1));
   g.setIndex(idx);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uScale: { value: scale } },
+    uniforms: { uTime: { value: 0 }, uScale: { value: scale }, uPhase: { value: 0 }, uGate: { value: 1 } },
     vertexShader: SMOKE_VERT,
     fragmentShader: SMOKE_FRAG,
     transparent: true,
