@@ -5392,6 +5392,7 @@ class Game {
       // death
       if (this.player.dead && this.state !== 'dead') {
         this.state = 'dead';
+        this.chatOpen = false;          // dying mid-chat must not permanently silence the parish
         this.mouseDown = [false, false, false];
         document.exitPointerLock?.();
         this.audio.hurt();
