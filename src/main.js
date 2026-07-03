@@ -57,13 +57,12 @@ import { RosterClient, invalidateSurfCache } from './roster.js';
 import { TouchControls, isTouchPrimary } from './touch.js';
 import { startUpdateCheck } from './update-check.js';
 import { installKiosk } from './kiosk.js';
+import { DWELL_T, runProfile, legTime } from './railtime.js';
 
 // Harden the page against stray browser gestures (two-finger swipe-back, long-press menu, text drag)
 // an' take it fullscreen on first interaction — so a passing child can't navigate away from the game.
 installKiosk();
 
-const RAIL_VMAX = 11;  // blocks a second flat out — t' pace of a heritage steamer
-const RAIL_ACC = 0.18; // gentle acceleration: she works up to speed an' brakes early
 // driving t' engine yourself (take t' regulator):
 const DRIVE_MAXACC = 0.55; // tractive accel at full regulator + full boiler pressure
 const DRIVE_BRAKE = 1.4;   // braking decel when tha pulls t' brake on
@@ -71,26 +70,7 @@ const DRIVE_DRAG = 0.05;   // rolling resistance (per unit speed)
 const DRIVE_GRADE = 7;     // how hard t' gradients pull on her
 const DRIVE_VMAX = 13;     // flat-out, a touch brisker than t' timetabled service
 const DRIVE_RAKE = 11.6;   // keep t' whole rake on t' line (buffer stops)
-const DWELL_T = 30;    // thirty seconds stood at each platform, doors open
 
-// where is she an' how fast, tt seconds into a leg o' length len?
-// (trapezoid speed profile: accelerate, cruise, brake — closed form, so
-// every client computes t' same train frae t' same wall clock)
-function runProfile(len, tt) {
-  const dFull = RAIL_VMAX * RAIL_VMAX / (2 * RAIL_ACC);
-  let vPeak, tA;
-  if (len >= 2 * dFull) { vPeak = RAIL_VMAX; tA = RAIL_VMAX / RAIL_ACC; }
-  else { vPeak = Math.sqrt(RAIL_ACC * len); tA = vPeak / RAIL_ACC; }
-  const dA = 0.5 * RAIL_ACC * tA * tA;
-  const tCruise = vPeak >= RAIL_VMAX ? (len - 2 * dA) / RAIL_VMAX : 0;
-  const tTotal = 2 * tA + tCruise;
-  let dist, v;
-  if (tt <= tA) { dist = 0.5 * RAIL_ACC * tt * tt; v = RAIL_ACC * tt; }
-  else if (tt <= tA + tCruise) { dist = dA + (tt - tA) * vPeak; v = vPeak; }
-  else { const tb = Math.max(0, tTotal - tt); dist = len - 0.5 * RAIL_ACC * tb * tb; v = RAIL_ACC * tb; }
-  return { dist: Math.max(0, Math.min(len, dist)), v: Math.max(0, v), tTotal };
-}
-function legTime(len) { return runProfile(len, 0).tTotal; }
 // shortest-arc angle lerp, for turnin' t' loco round smoothly at t' termini
 function lerpAngle(a, b, t) {
   let d = (b - a) % (Math.PI * 2);
