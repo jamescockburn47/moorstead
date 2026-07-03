@@ -6,7 +6,9 @@
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { B, I, CHUNK, RECIPES, CREATIVE_ITEMS, itemName, maxStack } from '../src/defs.js';
-import { resolveQuality, lanternFlicker, buildStarField, moonPhase, auroraWindow, rainbowRising } from '../src/sky.js';
+import * as THREE from 'three';
+import { resolveQuality, lanternFlicker, buildStarField, moonPhase, auroraWindow, rainbowRising,
+  STAR_CATALOGUE, raDecDir, CELESTIAL_POLE, skyWheelAngle, MOON_CYCLE_DAYS } from '../src/sky.js';
 import { tileUV, ATLAS_TILES } from '../src/textures.js';
 
 let n = 0;
@@ -131,9 +133,11 @@ ok(mainSrc.includes('this.bloomPass.strength = 0.32 + nightness * 0.14 + golden 
   '[27] bloom strength drive: 0.32 + nightness·0.14 + golden·0.1 (swells at dusk/night)');
 ok(mainSrc.includes('this.bloomPass.threshold = 0.85 - nightness * 0.06;'),
   '[27] bloom threshold drive: 0.85 - nightness·0.06 (more of the scene blooms at night)');
-// nightness/golden derived frae sky.time the same way the S2a glitter / S3a cloud drives read dayness
-ok(mainSrc.includes('const sunY = Math.sin((sky.time - 0.25) * Math.PI * 2);') && mainSrc.includes('const nightness = 1 - dayness;'),
-  '[27] nightness = 1 - dayness, dayness frae the shared sky.time sun curve (same math as the glitter/cloud drives)');
+// [SOLAR] James 2026-07-03 (DELIBERATE re-pin): the exposure/bloom drives read the ONE
+// solar API (sky.sol, cached by sky.update) instead of re-deriving the retired
+// sin((time−0.25)·2π) replica — same values at the equinox, seasonal everywhere else.
+ok(mainSrc.includes('const sunY = sky.sol.sunAlt;') && mainSrc.includes('const nightness = 1 - dayness;'),
+  '[27]+[SOLAR] nightness = 1 - dayness, sunY/dayness read frae sky.sol (the one solar API — no formula replica)');
 ok(mainSrc.includes('const golden = sunY > -0.05 ? Math.max(0, 1 - Math.abs(sunY) / 0.30) : 0;'),
   '[27] golden = low-sun factor, peaks at the horizon hours, self-zeroes by full day OR deep night');
 // [26] GradeShader v2: uDread/uGrain/uWarmth uniforms + their GLSL, corner fringe, warmth split-tone
@@ -292,7 +296,11 @@ ok(/setRippleAmp\(fine \? 0\.05 : 0\);\s*\n\s*setFlowAmp\(fine \? 0\.05 : 0\);\s
 ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,1400}?setGlitter\(Math\.max\(sunGlit, moonGlit\)\);/.test(mainSrc), 'glitter driven per frame frae max(sun, moon) drive, Fine only');
 ok(mainSrc.includes('const sunGlit = dayness * (1 - overcast);'), '[moonglint] sun shimmer term unchanged: dayness × clear-sky — dies wi\' the sun through dusk');
 ok(mainSrc.includes('const moonGlit = moonVis * illum * (1 - overcast) * 0.45;'), '[moonglint] moon shimmer: moonVis × phase illumination × clear-sky × 0.45 — full-moon blade calmer than day, crescent barely there');
-ok(mainSrc.includes('const moonVis = Math.max(0, Math.min(1, (-_sunY - 0.02) * 6));'), '[moonglint] moonVis eases over the SAME −0.02 threshold the sky.js light rig swaps at');
+// [SOLAR] James 2026-07-03 (DELIBERATE re-pin): moonVis keeps its −0.02 night ease AND
+// gains a second factor off the moon's OWN altitude (sky.lun — the phase-lagged seat),
+// so a new moon down wi' the sun leaves the water dark. Same re-pin as sky.js's own moonVis.
+ok(mainSrc.includes('const moonVis = Math.max(0, Math.min(1, (-_sunY - 0.02) * 6)) * Math.max(0, Math.min(1, (_lun.alt + 0.05) * 8));'),
+  '[moonglint]+[SOLAR] moonVis = night ease (same −0.02 threshold) × the moon\'s own altitude ease');
 ok(mainSrc.includes('const illum = 0.5 - 0.5 * Math.cos(moonPhase(this.sky.day) * Math.PI * 2);'), '[moonglint] illumination fraction is the mwIllum formula off the shared game-day calendar');
 ok(mainSrc.includes('setWaterTime(this._glintT)'), 'water clock rides the existing glint tick — no new per-client accumulator');
 ok(mainSrc.includes('overcastGrey(this.sky.weather'), 'overcast term mirrors sky.js’s own overcastGrey call');
@@ -327,14 +335,18 @@ for (const s of ['setCamPos', 'setSunAzim', 'setSunLow'])
 ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,2600}?setSunAzim\(_ax \/ _al, _az \/ _al\);/.test(mainSrc),
   'lamp azimuth driven per frame in the Fine block (Plain: uGlitter stays 0, sword inert)');
 ok(mainSrc.includes('setCamPos(_cp.x, _cp.y, _cp.z)'), 'camera world pos driven scalar-wise (no per-frame alloc)');
-// [moonglint] the sword tracks whichever lamp is dominant: sun sprite offset (sunX·160, −60)
-// or its EXACT moon mirror (−sunX·160, +60) — both TRUE on-screen sprite offsets, z nicety included
-ok(mainSrc.includes('const _ax = moonDrive ? -_sunX * 160 : _sunX * 160, _az = moonDrive ? 60 : -60'),
-  'azimuth derived from the driving lamp\'s TRUE sprite offset: sun (sunX·160, −60) or the moon mirror (−sunX·160, +60)');
+// [SOLAR] James 2026-07-03 (DELIBERATE re-pin): the sprites ride the REAL solar/lunar
+// direction vectors now (sky.sol.dir / sky.lun.dir, ·160), so the blade re-derives its
+// azimuth from those SAME vectors — the old ±sunX·160/∓60 mirror is retired WITH the
+// sprite path it mirrored. Same contract: blade points at the disc tha actually sees.
+ok(mainSrc.includes('const _ax = (moonDrive ? _md[0] : _sd[0]) * 160, _az = (moonDrive ? _md[2] : _sd[2]) * 160, _al = Math.hypot(_ax, _az) || 1;'),
+  '[SOLAR] blade azimuth derived from the driving lamp\'s TRUE direction vector (sky.sol.dir / sky.lun.dir — the sprites\' own path)');
+ok(mainSrc.includes('const _sd = this.sky.sol.dir, _md = _lun.dir;'),
+  '[SOLAR] blade reads the cached solar/lunar dirs off the live sky — one computation site, no drift');
 ok(mainSrc.includes('const moonDrive = moonGlit > sunGlit;'), '[moonglint] dominant-lamp switch — no double-drive in the dusk overlap');
-ok(mainSrc.includes('const _elev = moonDrive ? -_sunY : _sunY;')
+ok(mainSrc.includes('const _elev = moonDrive ? _lun.alt : _sunY;')
   && mainSrc.includes('setSunLow(Math.max(0, Math.min(1, 1 - Math.max(0, _elev) * 1.1)));'),
-  '[moonglint] uSunLow reads the DRIVING lamp\'s elevation (moon elevation = −sunY) — low moon, narrow blade');
+  '[moonglint]+[SOLAR] uSunLow reads the DRIVING lamp\'s TRUE elevation (the moon\'s own sin-alt now, not the sun mirror) — low moon, narrow blade');
 
 // ---- S2b [16]: the shoreline — depth tint + foam (behaviour in verify-shoreline.mjs) + horizon sea ring ----
 ok(mesherSrc.includes('export const DEPTH_TINT_AMP = 1'), 'depth-tint kill switch exists, ships on');
@@ -471,32 +483,179 @@ ok(roadsSrc.includes('this.earthMat.color.copy(LANE_DRY).lerp(LANE_WET,'),
 ok(mainSrc.includes('this.roads.update(dt, this.player.pos, this.groundWet)'),
   'RoadLayer.update fed the live groundWet so the lanes muddy in the rain');
 
-// ---- S4a [4]: t' 1900 night sky — seeded stars, moon calendar, Milky Way, dawn-glow fog ----
-// functional determinism: the star field is pure, seeded, byte-identical on every client
+// ---- S4a [4] + [CONST]: t' 1900 night sky — REAL constellations ower a seeded field ----
+// [CONST] James 2026-07-03 ("can we have real constellations in the night sky?"):
+// buildStarField now returns STAR_CATALOGUE (~101 real J2000 stars) FIRST, then the
+// seeded background — background cut 1100 -> 700 (deliberate: real shapes stand
+// proud of a quieter field). The determinism/purity CONTRACT is unchanged and
+// re-asserted verbatim: byte-identical across calls, Math.random poisoned.
 {
   const realRandom = Math.random;
   Math.random = () => { throw new Error('buildStarField must not consult Math.random (invariant 6)'); };
   let A, B;
   try { A = buildStarField(); B = buildStarField(); }
   finally { Math.random = realRandom; }
-  ok(A.mag.length === 1100 && A.pos.length === 3300 && A.col.length === 3300, 'star field: 1100 seeded stars with pos/col/mag');
+  const nCat = STAR_CATALOGUE.length;
+  ok(nCat >= 80 && nCat <= 120, `catalogue holds ${nCat} real stars (spec 80..120)`);
+  ok(A.mag.length === nCat + 700 && A.pos.length === (nCat + 700) * 3 && A.col.length === (nCat + 700) * 3,
+    `star field: ${nCat} catalogue + 700 seeded background stars (total was 1100 background-only — James 2026-07-03)`);
   ok(Buffer.from(A.pos.buffer).equals(Buffer.from(B.pos.buffer))
     && Buffer.from(A.col.buffer).equals(Buffer.from(B.col.buffer))
     && Buffer.from(A.mag.buffer).equals(Buffer.from(B.mag.buffer)),
     'star field byte-identical across calls — t\' SAME heavens ower every moor');
+  // bright fraction now asserted on the BACKGROUND SLICE (its formulas are untouched;
+  // the whole-field version stopped being meaningful once the catalogue owns the bright end)
   let bright = 0;
-  for (let i = 0; i < A.mag.length; i++) if (A.mag[i] > 1.65) bright++;
-  const frac = bright / A.mag.length;
-  ok(frac > 0.03 && frac < 0.10, `power-law magnitudes: a bright minority (mag > 1.65 is ${(frac * 100).toFixed(1)}%, want 3..10%)`);
-  ok(Math.abs(moonPhase(29.53 / 2) - 0.5) < 1e-9 && Math.abs(moonPhase(29.53)) < 1e-9,
-    'moon calendar: full at 14.765, new wraps at 29.53');
+  for (let i = nCat; i < A.mag.length; i++) if (A.mag[i] > 1.65) bright++;
+  const frac = bright / 700;
+  ok(frac > 0.03 && frac < 0.10, `background power-law magnitudes: a bright minority (mag > 1.65 is ${(frac * 100).toFixed(1)}%, want 3..10%)`);
+  // catalogue look: real relative brightness — every aMag in [0.9, 3.4], at least ten
+  // first-magnitude stars over 2.3, and SIRIUS the single brightest point in the field
+  let catMin = 1e9, catMax = -1e9, firstMag = 0, brightestIdx = -1, brightest = -1e9;
+  for (let i = 0; i < nCat; i++) {
+    catMin = Math.min(catMin, A.mag[i]); catMax = Math.max(catMax, A.mag[i]);
+    if (A.mag[i] >= 2.3) firstMag++;
+  }
+  for (let i = 0; i < A.mag.length; i++) if (A.mag[i] > brightest) { brightest = A.mag[i]; brightestIdx = i; }
+  ok(catMin >= 0.9 - 1e-6 && catMax <= 3.4 + 1e-6, `catalogue aMag clamped to [0.9, 3.4] (got ${catMin.toFixed(2)}..${catMax.toFixed(2)})`);
+  ok(firstMag >= 10, `>=10 catalogue stars at aMag 2.3+ — the first-magnitude set reads (got ${firstMag})`);
+  ok(STAR_CATALOGUE[brightestIdx] && STAR_CATALOGUE[brightestIdx][0] === 'Sirius',
+    'Sirius is the brightest point in the whole field — no background star outshines the Dog Star');
+  let bgMax = -1e9;
+  for (let i = nCat; i < A.mag.length; i++) bgMax = Math.max(bgMax, A.mag[i]);
+  ok(bgMax < 2.05, `background tops out under the catalogue's bright end (max ${bgMax.toFixed(3)} < 2.05)`);
+  // [CONST] the field must cover the FULL celestial sphere now (it wheels; below-horizon
+  // stars have to exist to rise) — the owd build was upper-hemisphere only (y >= 5)
+  let minY = 1e9;
+  for (let i = nCat; i < A.mag.length; i++) minY = Math.min(minY, A.pos[i * 3 + 1]);
+  ok(minY < -120, `background spans the whole sphere (min y ${minY.toFixed(0)} — was hemisphere-only, James 2026-07-03)`);
+  // [SOLAR] James 2026-07-03 (DELIBERATE re-pin): the lunar month is ACCELERATED by the
+  // same ratio as the game year (192 game days per year ÷ 365.25 real days: cycle ≈ 15.52
+  // game days, was the real 29.53 — a real month outran the four-real-day year entirely).
+  ok(Math.abs(MOON_CYCLE_DAYS - (192 * 29.53 / 365.25)) < 1e-9,
+    `moon calendar: cycle = yearGameDays·29.53/365.25 ≈ ${MOON_CYCLE_DAYS.toFixed(3)} game days`);
+  ok(Math.abs(moonPhase(MOON_CYCLE_DAYS / 2) - 0.5) < 1e-9 && Math.abs(moonPhase(MOON_CYCLE_DAYS)) < 1e-9,
+    'moon calendar: full at half-cycle, new wraps at the full cycle');
+  ok(Math.abs((moonPhase(6) - moonPhase(5)) - 1 / MOON_CYCLE_DAYS) < 1e-9,
+    `moon phase visibly steps night to night (~${(100 / MOON_CYCLE_DAYS).toFixed(1)}%/night)`);
 }
-// source wiring: stars, twinkle, Milky Way, moon phase + halo, dawn-glow fog
+// ---- [CONST] catalogue geometry self-checks: a mistyped coordinate cannot ship ----
+// All separations computed through raDecDir — so these prove the RA/Dec table AND
+// the celestial-frame conversion together, against real astronomy.
+{
+  const S = Object.fromEntries(STAR_CATALOGUE.map(r => [r[0], r]));
+  const dir = n => raDecDir(S[n][1], S[n][2]);
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const sep = (a, b) => Math.acos(Math.max(-1, Math.min(1, dot(dir(a), dir(b))))) * 180 / Math.PI;
+  for (const n of ['Dubhe', 'Merak', 'Polaris', 'Alnitak', 'Alnilam', 'Mintaka', 'Vega', 'Deneb', 'Altair', 'Sirius', 'Caph', 'Schedar', 'Tsih', 'Ruchbah', 'Segin'])
+    ok(!!S[n], `catalogue names ${n}`);
+  const dm = sep('Dubhe', 'Merak');
+  ok(dm > 4.4 && dm < 6.4, `the Pointers: Dubhe-Merak ${dm.toFixed(2)}° (real 5.37, want 5.4±1)`);
+  const b1 = sep('Alnitak', 'Alnilam'), b2 = sep('Alnilam', 'Mintaka');
+  ok(b1 > 1.2 && b1 < 1.5, `Orion's belt: Alnitak-Alnilam ${b1.toFixed(2)}° (real 1.36)`);
+  ok(b2 > 1.2 && b2 < 1.5, `Orion's belt: Alnilam-Mintaka ${b2.toFixed(2)}° (real 1.39)`);
+  { // the belt bends gently (~7.6° between chords) — straight-ish, never scattered
+    const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    const nrm = v => { const l = Math.hypot(...v); return v.map(c => c / l); };
+    const d1 = nrm(sub(dir('Alnilam'), dir('Alnitak'))), d2 = nrm(sub(dir('Mintaka'), dir('Alnilam')));
+    const bend = Math.acos(Math.max(-1, Math.min(1, dot(d1, d2)))) * 180 / Math.PI;
+    ok(bend < 12, `the belt is a near-line (chord bend ${bend.toFixed(1)}° < 12°)`);
+  }
+  { // the Pointers' great circle passes within 3.5° of Polaris — the shepherd's road home
+    const a = dir('Merak'), b = dir('Dubhe');
+    const n = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const l = Math.hypot(...n);
+    const off = Math.asin(Math.abs(dot(n.map(c => c / l), dir('Polaris')))) * 180 / Math.PI;
+    ok(off < 3.5, `the Pointers' line passes ${off.toFixed(2)}° from Polaris (< 3.5°)`);
+  }
+  { // Polaris rides within 1° of the pole axis; the pole stands 54.4° up the +Z (aurora's) north
+    const pp = Math.acos(Math.max(-1, Math.min(1, dot(dir('Polaris'), CELESTIAL_POLE)))) * 180 / Math.PI;
+    ok(pp < 1, `Polaris ${pp.toFixed(2)}° off the celestial pole (< 1°)`);
+    ok(Math.abs(CELESTIAL_POLE[0]) < 1e-9
+      && Math.abs(CELESTIAL_POLE[1] - Math.sin(54.4 * Math.PI / 180)) < 1e-9
+      && Math.abs(CELESTIAL_POLE[2] - Math.cos(54.4 * Math.PI / 180)) < 1e-9,
+      'pole axis at +Z (the dome/aurora north), altitude 54.4° — Yorkshire\'s latitude');
+  }
+  // Summer Triangle — per-side against the true values (spec said "24-38°"; the real
+  // sides are 23.85/34.20/38.01, so per-side ±1.5° is asserted instead — tighter and
+  // honest about Vega-Deneb genuinely sitting just under 24. James 2026-07-03.)
+  const va = sep('Vega', 'Altair'), vd = sep('Vega', 'Deneb'), da = sep('Deneb', 'Altair');
+  ok(Math.abs(va - 34.2) < 1.5, `Summer Triangle: Vega-Altair ${va.toFixed(2)}° (real 34.2)`);
+  ok(Math.abs(vd - 23.8) < 1.5, `Summer Triangle: Vega-Deneb ${vd.toFixed(2)}° (real 23.8)`);
+  ok(Math.abs(da - 38.0) < 1.5, `Summer Triangle: Deneb-Altair ${da.toFixed(2)}° (real 38.0)`);
+  // Cassiopeia's W: four legs, each a hand's width (3..7°)
+  for (const [p, q] of [['Caph', 'Schedar'], ['Schedar', 'Tsih'], ['Tsih', 'Ruchbah'], ['Ruchbah', 'Segin']]) {
+    const s = sep(p, q);
+    ok(s > 3 && s < 7, `Cassiopeia leg ${p}-${q} ${s.toFixed(2)}° (3..7°)`);
+  }
+  // the built buffers actually carry the catalogue: entry 0 sits at raDecDir × 180
+  const A2 = buildStarField();
+  const d0 = raDecDir(STAR_CATALOGUE[0][1], STAR_CATALOGUE[0][2]);
+  ok(Math.abs(A2.pos[0] - d0[0] * 180) < 1e-3 && Math.abs(A2.pos[1] - d0[1] * 180) < 1e-3 && Math.abs(A2.pos[2] - d0[2] * 180) < 1e-3,
+    'catalogue stars head the buffers (entry 0 = raDecDir × star-sphere radius)');
+  // the Milky Way band is the REAL galactic plane: Deneb and Sadr sit within 6° of it
+  const mwPole = raDecDir(12.8572, 27.128);
+  for (const n of ['Deneb', 'Sadr']) {
+    const lat = Math.asin(Math.abs(dot(dir(n), mwPole))) * 180 / Math.PI;
+    ok(lat < 6, `${n} rides the Milky Way band (|galactic latitude| ${lat.toFixed(1)}° < 6°)`);
+  }
+}
+// ---- [CONST] t' sky wheels: pure, anchored to the seasons, moon-coherent ----
+{
+  ok(skyWheelAngle(0.37, 0.52) === skyWheelAngle(0.37, 0.52), 'skyWheelAngle is pure — same time, same angle, every client');
+  const w = skyWheelAngle(0.123, 0.875);
+  ok(w >= 0 && w < Math.PI * 2, 'wheel angle bounded [0, 2π)');
+  // anchor: deep-winter midnight (time 0, yearPhase 0.875) holds Orion's belt on the meridian
+  const alnilamRA = STAR_CATALOGUE.find(r => r[0] === 'Alnilam')[1];
+  ok(Math.abs(skyWheelAngle(0, 0.875) - (alnilamRA / 24) * Math.PI * 2) < 0.01,
+    'winter-solstice midnight: LST = Alnilam\'s RA — Orion transits due sky-south');
+  // summer midnight: Vega (t' Summer Triangle) within 1.5h of the meridian
+  const lstH = skyWheelAngle(0, 0.375) / (Math.PI * 2) * 24;
+  const vegaRA = STAR_CATALOGUE.find(r => r[0] === 'Vega')[1];
+  ok(Math.abs(lstH - vegaRA) < 1.5, `summer midnight LST ${lstH.toFixed(1)}h — Vega culminating (RA ${vegaRA.toFixed(1)}h)`);
+  // same time -> same QUATERNION (the one per-frame rotation write)
+  const axis = new THREE.Vector3().fromArray(CELESTIAL_POLE);
+  const q1 = new THREE.Quaternion().setFromAxisAngle(axis, skyWheelAngle(0.6, 0.2));
+  const q2 = new THREE.Quaternion().setFromAxisAngle(axis, skyWheelAngle(0.6, 0.2));
+  ok(q1.x === q2.x && q1.y === q2.y && q1.z === q2.z && q1.w === q2.w, 'same time → byte-same wheel quaternion');
+  // direction: as time advances, a transiting star moves toward −X — the SAME side the
+  // sun an' moon set (documented mirrored-chirality call in sky.js: coherence with the
+  // moon beats textbook handedness; one sin(ra) sign flips it if the sun ever turns)
+  const eq = new THREE.Vector3().fromArray(raDecDir(alnilamRA, 0));
+  const a0 = skyWheelAngle(0, 0.875);
+  const p1 = eq.clone().applyQuaternion(new THREE.Quaternion().setFromAxisAngle(axis, a0));
+  const p2 = eq.clone().applyQuaternion(new THREE.Quaternion().setFromAxisAngle(axis, a0 + 0.05));
+  ok(p2.x < p1.x, 'the wheel turns moon-coherent: transiting stars drift toward −X, where sun an\' moon set');
+  // circumpolar truth at 54.4°N: Dubhe (dec 61.75°) NEVER sets; Alnilam (dec −1.2°) does
+  const dub = new THREE.Vector3().fromArray(raDecDir(11.0622, 61.751));
+  let dubMin = 1e9, ornMin = 1e9;
+  for (let t = 0; t < 1; t += 0.02) {
+    const q = new THREE.Quaternion().setFromAxisAngle(axis, skyWheelAngle(t, 0.5));
+    dubMin = Math.min(dubMin, dub.clone().applyQuaternion(q).y);
+    ornMin = Math.min(ornMin, eq.clone().applyQuaternion(q).y);
+  }
+  ok(dubMin > 0.05, `the Plough is circumpolar — Dubhe's lowest point stays above the horizon (y ${dubMin.toFixed(2)})`);
+  ok(ornMin < -0.3, `Orion rises an' sets — Alnilam swings well below the horizon (min y ${ornMin.toFixed(2)})`);
+}
+// source wiring: stars, twinkle, wheel, horizon fade, Milky Way, moon phase + halo, dawn-glow fog
 ok(skySrc.includes('const field = buildStarField()'), 'stars built frae the seeded field (no per-star Math.random)');
 ok(skySrc.includes('gl_PointSize = size * aMag * twinkle;'), 'per-star magnitude + twinkle scale gl_PointSize in the injected vertex stage');
 ok(skySrc.includes("this._starU.uTwinkle.value = fine ? 1 : 0"), 'twinkle is Fine-gated (Plain leaves uTwinkle 0 — static field, same program)');
+ok(skySrc.includes('this.stars.quaternion.setFromAxisAngle(_POLE_AXIS, skyWheelAngle(this.time, season ? season.yearPhase : 0))'),
+  '[CONST] ONE quaternion write per frame wheels the whole field — no per-star CPU, pure in shared clocks');
+ok(skySrc.includes('vFade = smoothstep(-14.0, 26.0, (mat3(modelMatrix) * position).y)'),
+  '[CONST] horizon fade in the star vertex stage reads LOCAL rotated height (true altitude at any player height) — settin\' stars dim out, below-horizon stars never pierce the fog band');
+ok(skySrc.includes('this.stars.position.set(playerPos.x, playerPos.y, playerPos.z)'),
+  '[CONST] star sphere fully viewer-centred (y follows the player) — Polaris stands 54.4° up frae beach an\' moor-top alike (caught live, James 2026-07-03)');
+ok(skySrc.includes('vec4 diffuseColor = vec4( diffuse, opacity * vFade );'),
+  '[CONST] the fade lands on fragment alpha (both tiers — correctness for a rotatin\' sphere, not decoration)');
 ok(skySrc.includes('uStarAmt: { value: 0 }'), 'dome uStarAmt uniform exists, defaults 0 (fresh compile = today, no Milky Way)');
-ok(skySrc.includes('exp(-pow(dot(dir, GPOLE), 2.0) * 30.0)'), 'Milky Way: great-circle band about GPOLE (narrowed 16->30, James 2026-07-03)');
+ok(skySrc.includes('exp(-pow(dot(dir, uMWPole), 2.0) * 30.0)'),
+  'Milky Way: great-circle band about uMWPole — the REAL galactic pole, ridin\' the star wheel (was fixed GPOLE, James 2026-07-03)');
+ok(skySrc.includes('cu.uMWPole.value.copy(_MW_POLE0).applyQuaternion(this.stars.quaternion)')
+  && skySrc.includes('cu.uMWA.value.copy(_MW_A0).applyQuaternion(this.stars.quaternion)')
+  && skySrc.includes('cu.uMWB.value.copy(_MW_B0).applyQuaternion(this.stars.quaternion)'),
+  '[CONST] the band\'s frame rotates with the stars — three in-place uniform writes, no allocation');
 ok(skySrc.includes('cu.uStarAmt.value = starA * (1 - grey) * (1 - 0.55 * moonVis * mwIllum)'), 'Milky Way: night term, doused by overcast AND washed out by a bright moon (James 2026-07-03)');
 ok(skySrc.includes('if (this._moonDay !== this.day) this._drawMoonPhase()'), 'moon disc redrawn once per game DAY, never per frame');
 ok(skySrc.includes('this.moonSprite.add(this.moonHalo)'), 'halo parented to the moon sprite — rides it for free');
@@ -544,7 +703,10 @@ ok(skySrc.includes('STORM_CLOUD = new THREE.Color(0.06, 0.06, 0.08)'), 'near-bla
 ok(skySrc.includes('uRainbow: { value: 0 }'), 'dome uRainbow uniform exists, defaults 0 (no bow — today\'s sky)');
 ok(skySrc.includes('uSunDir: { value: new THREE.Vector3'), 'dome uSunDir uniform is a Vector3 (sun direction in dome dir space)');
 ok(skySrc.includes('float ca = dot(dir, -uSunDir);'), 'rainbow ca = cos angle to the ANTISOLAR point (−uSunDir)');
-ok(skySrc.includes('cu.uSunDir.value.set(sunX, sunY, 0).normalize()'), 'uSunDir fed frae the sun ANGLE (sunX/sunY, z=0), normalised — not the player-relative sprite');
+// [SOLAR] James 2026-07-03 (DELIBERATE re-pin): uSunDir carries the FULL true sun
+// direction now (sol.dir 3-vector — the z=0 flattening went with the old circular arc),
+// still the celestial direction, never the player-relative sprite.
+ok(skySrc.includes('cu.uSunDir.value.set(sol.dir[0], sol.dir[1], sol.dir[2]).normalize()'), '[SOLAR] uSunDir fed frae the true solar direction (sol.dir), normalised — not the player-relative sprite');
 ok(skySrc.includes('0.743') && skySrc.includes('0.629'), 'both bow radii present: primary cos(42°)=0.743, secondary cos(51°)=0.629');
 ok(skySrc.includes('cu.uRainbow.value = this._rainbowS * dayness * (1 - grey)'), 'uRainbow folds eased strength × dayness × clear-sky (a bow needs sun on rain)');
 ok(skySrc.includes('uAurora: { value: 0 }'), 'dome uAurora uniform exists, defaults 0 (no curtains — today\'s night)');

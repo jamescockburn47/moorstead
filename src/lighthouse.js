@@ -130,12 +130,26 @@ function makeLampMesh() {
   return m;
 }
 
-// --- the beam: two crossed elongated planes, ONE additive ShaderMaterial. Alpha
-// fades across width (u) and along length (v, base→tip) per the spec:
-//   alpha = (1 - |u-0.5|*2)^2 * (1 - v)
-// then the whole beam is dimmed/brightened by mistiness (thick air -> denser-
-// looking beam) via a uniform, so no per-frame geometry rebuild.
-const BEAM_LEN = 60, BEAM_W = 3.2;
+// --- the beam: ONE flared blade on one additive ShaderMaterial, billboarded
+// about its LONG axis each frame (James 2026-07-03: the old two-crossed-planes
+// X read as TWO laser beams from most angles, and 60 blocks of additive glow
+// read as a laser, not a paraffin harbour light — one plane, rolled toward the
+// camera in update(), reads as ONE beam from every angle).
+//
+// Geometry: length along local -Z (v 0 at the lamp hinge, v 1 at the tip),
+// width along X with a gentle cone flare (BEAM_W0 at the lamp -> BEAM_W1 at
+// the tip — a slightly diverging cone reads truer than a parallel bar), face
+// normal +Y so a roll about local Z bisects the face toward the camera.
+//
+// Alpha (paraffin, not laser):
+//   edge       = 1 - |u-0.5|*2                    soft width taper
+//   reach      = mix(0.45, 1.0, uMistiness)       clear air: the beam dies short
+//   lengthFade = (1 - clamp(v/reach,0,1))^2.5     hard die-off — the tip truly ends
+//   a = edge^2 * lengthFade * mix(0.10, 0.55, uMistiness)
+// so in CLEAR air the beam is a short faint blade (the lamp's emissive glow and
+// the eye-wink flare carry the effect) and in mist/rain it lengthens toward the
+// full BEAM_LEN and brightens — light needs vapour to be visible.
+const BEAM_LEN = 22, BEAM_W0 = 1.2, BEAM_W1 = 3.4;
 const BEAM_VERT = `
   varying vec2 vUv;
   void main() {
@@ -151,9 +165,11 @@ const BEAM_FRAG = `
   void main() {
     float edge = 1.0 - abs(vUv.x - 0.5) * 2.0;
     float widthFade = edge * edge;
-    float lengthFade = 1.0 - vUv.y;
+    float reach = mix(0.45, 1.0, uMistiness);   // clear air: short throw; mist carries it
+    float lv = clamp(vUv.y / reach, 0.0, 1.0);
+    float lengthFade = pow(1.0 - lv, 2.5);      // hard along-length falloff — the tip dies
     float a = widthFade * lengthFade;
-    a *= mix(0.25, 1.0, uMistiness);
+    a *= mix(0.10, 0.55, uMistiness);           // soft blade of light, brightening in vapour
     gl_FragColor = vec4(uColor, a);
   }
 `;
@@ -173,11 +189,27 @@ function getBeamMaterial() {
   }
   return _beamMat;
 }
+// One flared blade authored directly: 4 verts, 2 tris, hinged at the lamp
+// (local origin), running down local -Z. Front-face winding gives normal +Y —
+// the unrolled rest pose — so the per-frame roll about local Z in update()
+// (mesh.rotation.z only; the parent beamGroup owns the shared-clock yaw) turns
+// the face toward the camera without ever disturbing the sweep.
+function makeBeamGeometry() {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+    -BEAM_W0 / 2, 0, 0,          // lamp end, v=0
+     BEAM_W0 / 2, 0, 0,
+    -BEAM_W1 / 2, 0, -BEAM_LEN,  // tip, v=1 — flared wider than the base
+     BEAM_W1 / 2, 0, -BEAM_LEN,
+  ]), 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([
+    0, 0,  1, 0,  0, 1,  1, 1,
+  ]), 2));
+  g.setIndex([0, 1, 2, 2, 1, 3]);
+  return g;
+}
 function makeBeamPlane() {
-  const g = new THREE.PlaneGeometry(BEAM_W, BEAM_LEN, 1, 1);
-  g.translate(0, BEAM_LEN / 2, 0);          // hinge at the lamp end (v=0), tip fades out at v=1
-  g.rotateX(Math.PI / 2);                    // plane's local +y (length) -> local -z (forward)
-  return new THREE.Mesh(g, getBeamMaterial());
+  return new THREE.Mesh(makeBeamGeometry(), getBeamMaterial());
 }
 
 // --- eye-wink flare sprite: reuses the sky.js mkDisc canvas-radial-disc idiom
@@ -265,16 +297,18 @@ export class HarbourLight {
     this.group.add(lamp);
     this.lamp = lamp;
 
-    // the rotating beam assembly: two crossed planes hinged at the lamp, spun as
-    // a group each frame (one yaw write) rather than rebuilding geometry.
+    // the rotating beam assembly: ONE flared blade hinged at the lamp, spun as
+    // a group each frame (one yaw write). update() additionally rolls the blade
+    // about the beam's own axis so its face always bisects toward the camera —
+    // from every angle it reads as ONE beam (James 2026-07-03: the old crossed
+    // pair showed its X and looked like two lasers).
     const beamGroup = new THREE.Group();
     beamGroup.position.set(0, this._lampBaseY, 0);
-    const beamA = makeBeamPlane();
-    const beamB = makeBeamPlane();
-    beamB.rotation.y = Math.PI / 2; // crossed at 90°, so the sweep reads solid from any angle
-    beamGroup.add(beamA, beamB);
+    const beam = makeBeamPlane();
+    beamGroup.add(beam);
     this.group.add(beamGroup);
     this.beamGroup = beamGroup;
+    this.beam = beam;
   }
 
   // update(dt, camera, sky): dt in seconds, camera a THREE.PerspectiveCamera (for
@@ -298,30 +332,50 @@ export class HarbourLight {
     this.beamGroup.rotation.y = yaw;
 
     // mistiness from sky.fogFar: post the S1d horizon-fix knee-clamp (sky.js
-    // FOG_KNEE/FOG_FAR_MAX), fogFar's practical range is ~7 (the Great Fog) up
-    // to FOG_FAR_MAX=84 (clear); short fogFar (thick air) reads dense
-    // (mistiness -> 1), long fogFar (clear) reads thin (-> 0).
-    const fogFar = (sky && typeof sky.fogFar === 'number') ? sky.fogFar : 84;
-    const mistiness = clamp01((84 - fogFar) / 64);
+    // FOG_KNEE=60 / FOG_FAR_MAX=98), fogFar's practical range is ~7 (the Great
+    // Fog) up to 98 (clear); fog weather clamps to <=28. Anchors: clear (98)
+    // -> 0, fog weather (28) -> 1. Drives BOTH the beam's reach and its peak
+    // alpha in the shader — a paraffin beam is barely there in clear air and
+    // only becomes a long bright blade when there's vapour to light.
+    const fogFar = (sky && typeof sky.fogFar === 'number') ? sky.fogFar : 98;
+    const mistiness = clamp01((98 - fogFar) / 70);
     getBeamMaterial().uniforms.uMistiness.value = mistiness;
 
-    if (this.flare && camera) {
+    if (camera) {
       const lampWorld = _v1.setFromMatrixPosition(this.lamp.matrixWorld);
-      const toCam = _v2.copy(camera.position).sub(lampWorld).normalize();
-      // beam A's forward direction in world space (local -z rotated by the group's yaw)
-      const beamDir = _v3.set(-Math.sin(yaw), 0, -Math.cos(yaw));
-      const dot = beamDir.dot(toCam);
-      if (dot > 0.9995) {
-        this.flare.visible = true;
-        this.flare.position.set(0, 0, 0); // stays at the lamp (group-local origin)
-      } else {
-        this.flare.visible = false;
+      const c = _v2.copy(camera.position).sub(lampWorld);
+      const cy = Math.cos(yaw), sy = Math.sin(yaw);
+
+      // billboard the blade about its LONG axis: in beamGroup-local space the
+      // beam runs down -Z, so a roll about local Z spins the face without
+      // touching the shared-clock yaw above. Take the camera offset into
+      // group-local space (undo the yaw about Y: lx = x·cos - z·sin, ly = y);
+      // (lx, ly) IS the component of the offset perpendicular to the beam, and
+      // rolling the rest-pose +Y normal onto it is roll = atan2(-lx, ly).
+      // View-dependent by design — pure per-client cosmetics; the shared state
+      // (the sweep) stays the clock-derived yaw. Scalar maths, no allocation.
+      const lx = c.x * cy - c.z * sy;
+      this.beam.rotation.z = Math.atan2(-lx, c.y);
+
+      if (this.flare) {
+        const toCam = c.normalize();
+        // beam forward direction in world space (local -z rotated by the group's yaw)
+        const beamDir = _v3.set(-sy, 0, -cy);
+        const dot = beamDir.dot(toCam);
+        if (dot > 0.9995) {
+          this.flare.visible = true;
+          // at t' LAMP, not t' tower foot — t' group origin sits at t' base, t'
+          // lamp rides _lampBaseY up (pre-existing one-liner, James round 7)
+          this.flare.position.set(0, this._lampBaseY, 0);
+        } else {
+          this.flare.visible = false;
+        }
       }
     }
   }
 
   // dispose(): remove from scene, free anything not in the shared cache (the
-  // lamp's own geometry/material, the beam planes' geometry, the flare sprite's
+  // lamp's own geometry/material, the beam blade's geometry, the flare sprite's
   // texture/material). The beam ShaderMaterial and the box cache are module
   // singletons and are NOT freed here — they're cheap and may serve the next
   // HarbourLight this session (mirrors getFlameMaterial's "never disposed"

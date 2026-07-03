@@ -8,6 +8,7 @@ import { TILE, B } from './defs.js';
 import { tileUV } from './textures.js';
 import { getMaterials } from './mesher.js';
 import { registerFxMat, unregisterFxMat } from './fire.js';
+import { solarState } from './sky.js';
 
 // --- village open-ground placement (shared by every festival builder) -------------------------
 // Centrepieces + scatter (bonfire pile, maypole, corn stooks, pace-eggs, greenery) sit on open
@@ -121,18 +122,22 @@ export function isFine() {
   } catch { return false; }
 }
 
-// Pure: 0 (broad day) → 1 (full night) from the sky clock (sunrise t=0.25,
-// noon 0.5, sunset 0.75 — see sky.js sun-angle maths). Dusk ramps in smoothly.
-export function nightFromSkyTime(time) {
-  const sunY = Math.sin((time - 0.25) * Math.PI * 2);
+// Pure: 0 (broad day) → 1 (full night) from the sky clock. [SOLAR] the sun's
+// altitude comes from the one solar API (solarState, sky.js) so festival dark
+// falls at the SEASONAL sunset — early of a bonfire-night autumn, late of a
+// midsummer eve. Default yearPhase = the equinox (sunrise 0.25 / sunset 0.75,
+// the old fixed behaviour's shape).
+export function nightFromSkyTime(time, yearPhase = 0.125) {
+  const sunY = solarState(time, yearPhase).sunAlt;
   return Math.max(0, Math.min(1, (-sunY + 0.04) * 2.6));
 }
 
 // Live night factor off the running game's sky; 0 when headless (FX invisible).
 export function nightFactor() {
   try {
-    const sky = (typeof window !== 'undefined' && window.moorstead && window.moorstead.sky) || null;
-    return sky ? nightFromSkyTime(sky.time) : 0;
+    const g = (typeof window !== 'undefined' && window.moorstead) || null;
+    const sky = g && g.sky;
+    return sky ? nightFromSkyTime(sky.time, sky.yearPhase != null ? sky.yearPhase : 0.125) : 0;
   } catch { return 0; }
 }
 

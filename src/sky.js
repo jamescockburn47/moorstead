@@ -4,6 +4,7 @@ import { CHUNK } from './defs.js';
 import { currentWeather } from './weather-live.js';
 import { winterPrecip, overcastGrey, snowfallIntensity } from './snow.js';
 import { mulberry32, noise2 } from './noise.js';
+import { YEAR } from './season.js';
 
 const DAY_LENGTH = 1800; // seconds per full day — a proper half-hour, not a rush
 // (t' shared-moor relay must agree: worldsvc/server.py DAY_LENGTH)
@@ -16,24 +17,167 @@ const WEATHER_MSG = {
   fog: 'Fog’s rollin’ in thick. Mind tha doesn’t get lost.',
 };
 
-// ---- [4] t' 1900 night sky: a SEEDED star field ----
+// ---- [4]+[CONST] t' 1900 night sky: REAL constellations ower a seeded field ----
 // T' owd field rolled Math.random() per star — a live determinism-invariant breach
 // (INVARIANTS rule 6): every client saw a different heavens. One fixed constant
 // seed puts t' SAME stars ower every moor, every night, for every client — t'
 // heavens don't vary by world seed. Pure typed-array build (no THREE objects, no
 // DOM) so t' verify gate can prove determinism headlessly wi'out constructin' Sky.
+//
+// [CONST] James 2026-07-03: "can we have real constellations in the night sky?"
+// STAR_CATALOGUE below is ~100 real bright stars (J2000 RA/Dec, apparent mag,
+// colour temperature) — t' Plough, both Bears, Cassiopeia's W, Orion entire,
+// t' Pleiades, t' Summer Triangle, t' Northern Cross, Leo's sickle an' more.
+// They go in t' SAME buffers as t' seeded background (catalogue first, then
+// background), ride t' same twinkle/magnitude machinery, an' t' whole Points
+// object wheels about Polaris (skyWheelAngle below). Background count dropped
+// 1100 -> 700 so t' real shapes stand proud of a quieter field.
 const STAR_SEED = 1900;   // t' year, fittingly
-const STAR_COUNT = 1100;
+const STAR_COUNT = 700;   // background stars ([CONST]: was 1100 — catalogue stars now carry t' bright end)
+const STAR_R = 180;       // star-sphere radius (inside t' 500 dome, past fog.far)
+
+// ---- [CONST] t' celestial frame ----
+// Dome convention (Milky Way GPOLE / aurora precedent): +Z is SKY-NORTH, +Y up.
+// T' north celestial pole stands ower t' north horizon at Yorkshire's latitude —
+// 54.4° up: Polaris ower t' aurora, as it should be. NOTE t' minimap compass
+// (north = +x, east = +z — quests.js/mining-guide.js) is a DIFFERENT convention;
+// t' sky keeps t' dome's own (pre-existing: t' aurora already sits at +Z).
+//
+// CHIRALITY, documented deliberately: t' game's sun an' moon rise at +X an' set
+// at −X (t' sunX arc, below). T' star field MUST wheel t' same way — a moon
+// ploughin' BACKWARD through t' stars at ~0.5°/s would read broken inside a
+// minute. Wi' t' pole pinned at +Z, riser-side +X makes celestial EAST = +X,
+// which is t' MIRROR of t' true sky (real chirality wi' north +Z demands east
+// = −X). So t' heavens here are east-west mirrored: every angular separation,
+// every pointer relation, every season is REAL, but an astronomer would clock
+// t' flip (Leo's sickle curls t' other way). T' one line that flips it back —
+// if t' sun/moon path is ever reversed — is t' `sin(ra)` sign in raDecDir.
+const POLE_LAT = 54.4 * Math.PI / 180;            // Goathland's latitude, near enough
+export const CELESTIAL_POLE = [0, Math.sin(POLE_LAT), Math.cos(POLE_LAT)];
+// RA (hours) / Dec (degrees) -> unit vector in dome space, at hour angle H = −RA
+// (i.e. local sidereal time 0). Pure — t' verify gate proves t' catalogue's
+// angular separations (Pointers, Orion's belt, t' Summer Triangle) through this.
+export function raDecDir(raH, decDeg) {
+  const ra = raH * Math.PI / 12, dec = decDeg * Math.PI / 180;
+  const sp = Math.sin(POLE_LAT), cp = Math.cos(POLE_LAT);
+  const x = Math.cos(dec) * Math.sin(ra);   // east axis (+X — mirrored, see above)
+  const q = Math.cos(dec) * Math.cos(ra);   // toward t' equator's meridian point (sky-south, 35.6° up)
+  const p = Math.sin(dec);                  // toward t' pole
+  return [x, q * cp + p * sp, -q * sp + p * cp];
+}
+
+// ---- [CONST] t' catalogue: real stars, J2000 [name, RA h, Dec °, mag, warmth] ----
+// warmth 0 = blue-white (Rigel, Vega, Sirius) → 1 = amber (Betelgeuse, Aldebaran,
+// Arcturus) — feeds t' SAME temperature ramp as t' background field. Mistyped
+// coordinates can't ship a broken shape: verify-graphics asserts t' Pointers,
+// Polaris-on-pole, Orion's belt spacing, t' belt's gentle bend, Cassiopeia's W
+// an' t' Summer Triangle sides as angular separations through raDecDir.
+export const STAR_CATALOGUE = [
+  // Ursa Major — t' Plough, all seven, plus Alcor ridin' Mizar
+  ['Dubhe', 11.0622, 61.751, 1.79, 0.75], ['Merak', 11.0307, 56.383, 2.37, 0.10],
+  ['Phecda', 11.8972, 53.695, 2.44, 0.10], ['Megrez', 12.2571, 57.033, 3.31, 0.10],
+  ['Alioth', 12.9005, 55.960, 1.77, 0.10], ['Mizar', 13.3988, 54.925, 2.27, 0.10],
+  ['Alkaid', 13.7924, 49.313, 1.86, 0.05], ['Alcor', 13.4204, 54.988, 3.99, 0.15],
+  // Ursa Minor — Polaris an' t' Little Bear's arc down to t' bowl
+  ['Polaris', 2.5303, 89.264, 1.98, 0.40], ['Yildun', 17.5369, 86.586, 4.36, 0.15],
+  ['Epsilon UMi', 16.7661, 82.037, 4.23, 0.55], ['Zeta UMi', 15.7343, 77.795, 4.32, 0.15],
+  ['Eta UMi', 16.2915, 75.755, 4.95, 0.30], ['Kochab', 14.8451, 74.156, 2.08, 0.80],
+  ['Pherkad', 15.3455, 71.834, 3.05, 0.20],
+  // Cassiopeia — t' W, all five
+  ['Caph', 0.1530, 59.150, 2.28, 0.30], ['Schedar', 0.6751, 56.537, 2.24, 0.75],
+  ['Tsih', 0.9451, 60.717, 2.47, 0.05], ['Ruchbah', 1.4303, 60.235, 2.68, 0.25],
+  ['Segin', 1.9066, 63.670, 3.38, 0.10],
+  // Orion — shoulders, belt, sword, feet an' head
+  ['Betelgeuse', 5.9195, 7.407, 0.50, 1.00], ['Bellatrix', 5.4189, 6.350, 1.64, 0.05],
+  ['Mintaka', 5.5334, -0.299, 2.23, 0.05], ['Alnilam', 5.6036, -1.202, 1.69, 0.05],
+  ['Alnitak', 5.6793, -1.943, 1.77, 0.05], ['Saiph', 5.7959, -9.670, 2.09, 0.05],
+  ['Rigel', 5.2423, -8.202, 0.13, 0.05], ['Meissa', 5.5860, 9.934, 3.39, 0.05],
+  ['42 Ori', 5.5897, -4.838, 4.59, 0.05], ['Great Nebula', 5.5881, -5.389, 4.40, 0.05],
+  ['Hatysa', 5.5905, -5.910, 2.77, 0.05],
+  // Taurus — Aldebaran, t' horns' tips, t' Hyades V an' t' Pleiades knot
+  ['Aldebaran', 4.5987, 16.509, 0.85, 0.90], ['Elnath', 5.4382, 28.608, 1.65, 0.05],
+  ['Ain', 4.4769, 19.180, 3.53, 0.70], ['Gamma Tau', 4.3300, 15.628, 3.65, 0.70],
+  ['Alcyone', 3.7914, 24.105, 2.87, 0.05], ['Atlas', 3.8194, 24.053, 3.63, 0.05],
+  ['Electra', 3.7479, 24.113, 3.70, 0.05], ['Maia', 3.7634, 24.368, 3.87, 0.05],
+  ['Merope', 3.7722, 23.948, 4.18, 0.05], ['Taygeta', 3.7534, 24.467, 4.30, 0.05],
+  // Auriga — Capella's pentagon (Elnath, shared wi' Taurus, closes it)
+  ['Capella', 5.2782, 45.998, 0.08, 0.55], ['Menkalinan', 5.9922, 44.948, 1.90, 0.15],
+  ['Mahasim', 5.9953, 37.213, 2.65, 0.10], ['Hassaleh', 4.9498, 33.166, 2.69, 0.75],
+  ['Almaaz', 5.0328, 43.823, 3.03, 0.40],
+  // Gemini — t' twins stood on t' Milky Way's bank
+  ['Castor', 7.5766, 31.888, 1.58, 0.10], ['Pollux', 7.7553, 28.026, 1.14, 0.70],
+  ['Alhena', 6.6285, 16.399, 1.93, 0.10], ['Mebsuta', 6.7322, 25.131, 3.06, 0.60],
+  ['Tejat', 6.3827, 22.514, 2.87, 0.90],
+  // Canis Major an' Minor — Sirius, t' Dog Star, brightest of all
+  ['Sirius', 6.7525, -16.716, -1.46, 0.10], ['Mirzam', 6.3783, -17.956, 1.98, 0.05],
+  ['Adhara', 6.9771, -28.972, 1.50, 0.05], ['Wezen', 7.1399, -26.393, 1.83, 0.45],
+  ['Procyon', 7.6550, 5.225, 0.34, 0.35],
+  // Leo — Regulus an' t' sickle, Denebola at t' tail
+  ['Regulus', 10.1395, 11.967, 1.35, 0.10], ['Eta Leo', 10.1222, 16.763, 3.51, 0.15],
+  ['Algieba', 10.3329, 19.842, 2.08, 0.75], ['Adhafera', 10.2784, 23.417, 3.43, 0.35],
+  ['Rasalas', 9.8794, 26.007, 3.88, 0.70], ['Algenubi', 9.7641, 23.774, 2.98, 0.55],
+  ['Zosma', 11.2351, 20.524, 2.56, 0.15], ['Chertan', 11.2373, 15.430, 3.32, 0.10],
+  ['Denebola', 11.8177, 14.572, 2.14, 0.15],
+  // Boötes — Arcturus an' t' kite
+  ['Arcturus', 14.2610, 19.182, -0.05, 0.80], ['Muphrid', 13.9114, 18.398, 2.68, 0.40],
+  ['Izar', 14.7498, 27.074, 2.37, 0.70], ['Seginus', 14.5346, 38.308, 3.03, 0.20],
+  ['Nekkar', 15.0324, 40.390, 3.50, 0.55], ['Delta Boo', 15.2583, 33.315, 3.47, 0.55],
+  // Cygnus — t' Northern Cross, flyin' down t' Milky Way
+  ['Deneb', 20.6905, 45.280, 1.25, 0.15], ['Sadr', 20.3705, 40.257, 2.23, 0.40],
+  ['Albireo', 19.5120, 27.960, 3.05, 0.75], ['Gienah Cyg', 20.7702, 33.970, 2.48, 0.70],
+  ['Fawaris', 19.7495, 45.131, 2.86, 0.10],
+  // Lyra — Vega an' t' little parallelogram
+  ['Vega', 18.6156, 38.784, 0.03, 0.03], ['Sheliak', 18.8347, 33.363, 3.52, 0.20],
+  ['Sulafat', 18.9824, 32.690, 3.25, 0.10],
+  // Aquila — Altair flanked by Tarazed an' Alshain
+  ['Altair', 19.8464, 8.868, 0.76, 0.20], ['Tarazed', 19.7710, 10.613, 2.72, 0.80],
+  ['Alshain', 19.9219, 6.407, 3.71, 0.55],
+  // Perseus — Mirfak's arc an' Algol, t' winkin' demon
+  ['Mirfak', 3.4054, 49.861, 1.79, 0.40], ['Algol', 3.1361, 40.956, 2.12, 0.10],
+  ['Gamma Per', 3.0800, 53.506, 2.93, 0.60], ['Delta Per', 3.7152, 47.788, 3.01, 0.10],
+  ['Epsilon Per', 3.9642, 40.010, 2.89, 0.05], ['Atik', 3.9022, 31.884, 2.85, 0.10],
+  // Andromeda's arc an' t' Great Square o' Pegasus
+  ['Alpheratz', 0.1398, 29.091, 2.06, 0.05], ['Delta And', 0.6555, 30.861, 3.27, 0.70],
+  ['Mirach', 1.1622, 35.621, 2.05, 0.90], ['Almach', 2.0650, 42.330, 2.26, 0.75],
+  ['Scheat', 23.0629, 28.083, 2.42, 0.85], ['Markab', 23.0794, 15.205, 2.49, 0.10],
+  ['Algenib', 0.2206, 15.184, 2.83, 0.08], ['Enif', 21.7364, 9.875, 2.39, 0.75],
+  // Odd bright anchors: spring's Spica, summer's Antares low ower t' southern moor
+  ['Spica', 13.4199, -11.161, 0.97, 0.03], ['Antares', 16.4901, -26.432, 1.06, 1.00],
+  ['Alphecca', 15.5781, 26.715, 2.23, 0.10], ['Rasalhague', 17.5822, 12.560, 2.08, 0.20],
+  ['Hamal', 2.1196, 23.463, 2.00, 0.75],
+];
+
 export function buildStarField(count = STAR_COUNT, seed = STAR_SEED) {
+  const nCat = STAR_CATALOGUE.length;
+  const n = nCat + count;
+  const pos = new Float32Array(n * 3);
+  const col = new Float32Array(n * 3);
+  const mag = new Float32Array(n);
+  // catalogue first (indices 0..nCat-1): real positions via raDecDir; apparent
+  // magnitude maps linearly to aMag so Sirius/Vega/Capella stand visibly proud
+  // (aMag 3.3/2.8/2.8) while t' background tops out at 2.0 — first-magnitude
+  // stars outshine EVERY field star, as in life.
+  for (let i = 0; i < nCat; i++) {
+    const [, ra, dec, m, w] = STAR_CATALOGUE[i];
+    const d = raDecDir(ra, dec);
+    pos[i * 3] = d[0] * STAR_R; pos[i * 3 + 1] = d[1] * STAR_R; pos[i * 3 + 2] = d[2] * STAR_R;
+    const a = Math.min(3.4, Math.max(0.9, 2.4 - 0.38 * (m - 1)));
+    mag[i] = a;
+    const lum = Math.min(1, 0.42 + 0.30 * a);
+    col[i * 3] = (0.72 + 0.28 * w) * lum;
+    col[i * 3 + 1] = (0.82 - 0.02 * w) * lum;
+    col[i * 3 + 2] = (1.0 - 0.42 * w) * lum;
+  }
+  // seeded background after — t' owd formulas for magnitude an' temperature, but
+  // [CONST] positions now cover t' WHOLE celestial sphere (uniform, not t' owd
+  // upper hemisphere): t' field wheels about t' pole, so below-horizon stars
+  // must exist to RISE. T' horizon fade in t' star shader hides them till they do.
   const rnd = mulberry32(seed);
-  const pos = new Float32Array(count * 3);
-  const col = new Float32Array(count * 3);
-  const mag = new Float32Array(count);
-  for (let i = 0; i < count; i++) {
-    const a = rnd() * Math.PI * 2, b = rnd() * Math.PI * 0.5;
-    pos[i * 3] = Math.cos(a) * Math.cos(b) * 180;
-    pos[i * 3 + 1] = Math.sin(b) * 180 + 5;
-    pos[i * 3 + 2] = Math.sin(a) * Math.cos(b) * 180;
+  for (let i = nCat; i < n; i++) {
+    const a = rnd() * Math.PI * 2, y = rnd() * 2 - 1, r = Math.sqrt(1 - y * y);
+    pos[i * 3] = Math.cos(a) * r * STAR_R;
+    pos[i * 3 + 1] = y * STAR_R;
+    pos[i * 3 + 2] = Math.sin(a) * r * STAR_R;
     // power-law magnitudes: most stars faint, ~6% bright (rnd^4 tail); aMag in [0.45, 2.0]
     const m = 0.45 + Math.pow(rnd(), 4) * 1.55;
     mag[i] = m;
@@ -47,10 +191,145 @@ export function buildStarField(count = STAR_COUNT, seed = STAR_SEED) {
   return { pos, col, mag };
 }
 
-// [4] Moon phase for a game day: 0 = new, 0.5 = full, → 1 new again (t' 29.53-day
-// synodic month). Pure an' exported so t' verify gate can check t' calendar headlessly.
+// ---- [CONST] t' sky wheels: local sidereal angle, pure in (time, yearPhase) ----
+// One full wheel per game day frae sky.time, plus one slow EXTRA lap per year
+// frae t' season clock — t' sidereal sky, exactly as at 54°N. Driven frae
+// season.yearPhase (t' shared wall-clock season, season.js) rather than a raw
+// day count: single-player day counts are arbitrary against t' visible season,
+// but yearPhase IS t' season on t' ground — so snow underfoot an' Orion overhead
+// always agree, on every client, wi' no epoch guesswork.
+//
+// Anchor (t' documented mapping): at deep-winter midnight (time 0, yearPhase
+// 0.875) t' meridian holds RA 5.60h — Alnilam: ORION stands due sky-south.
+//   yearPhase 0.875 (midwinter)  midnight LST  5.6h → Orion transiting
+//   yearPhase 0.125 (spring)     midnight LST 11.6h → Leo up
+//   yearPhase 0.375 (midsummer)  midnight LST 17.6h → t' Summer Triangle ridin' high
+//   yearPhase 0.625 (autumn)     midnight LST 23.6h → t' Great Square/Andromeda
+// T' Plough, Cassiopeia an' t' Little Bear sit within 36° o' t' pole — circumpolar
+// at 54°N: they wheel but NEVER set. Orion (belt dec ~−1°) rises an' sets.
+const WINTER_MIDNIGHT_RA = 5.603; // Alnilam's RA: Orion's belt transits at midwinter midnight
+export function skyWheelAngle(time, yearPhase = 0) {
+  const turns = time + yearPhase + (WINTER_MIDNIGHT_RA / 24 - 0.875);
+  return (turns - Math.floor(turns)) * Math.PI * 2;
+}
+
+// [CONST] t' Milky Way rides t' wheel too: t' band is now t' REAL galactic plane
+// in t' same celestial frame as t' catalogue — pole at t' true north galactic
+// pole (RA 12.857h, +27.13°), mottle axes spanned frae t' galactic centre
+// (RA 17.761h, −29.01°). update() rotates these three base vectors by t' star
+// quaternion into t' dome's uMWPole/uMWA/uMWB each frame (three uniform writes,
+// no per-star CPU) — so Cygnus an' Cassiopeia KEEP their seats on t' band as
+// t' heavens turn, instead o' driftin' off t' owd fixed GPOLE arc.
+const _MW_POLE0 = new THREE.Vector3().fromArray(raDecDir(12.8572, 27.128));
+const _MW_A0 = new THREE.Vector3().fromArray(raDecDir(17.7611, -29.008));
+const _MW_B0 = new THREE.Vector3().crossVectors(_MW_POLE0, _MW_A0).normalize();
+const _POLE_AXIS = new THREE.Vector3().fromArray(CELESTIAL_POLE);
+
+// ---- [SOLAR] t' real sun ower t' seasonal meridian ------------------------
+// [SOLAR] James 2026-07-03: "can we have the sun follow the seasonal meridian
+// and control the day length?" This is t' textbook solar-position model at
+// Goathland's latitude (POLE_LAT, 54.4°N — t' SAME constant t' star frame
+// stands on): declination frae t' season clock, hour angle frae sky.time
+// (noon at 0.5), altitude an' azimuth frae t' spherical triangle. Day length
+// EMERGES — t' 1800 s DAY_LENGTH is untouched, only t' light/dark split
+// within it breathes wi' t' season:
+//   midwinter (yearPhase 0.875): ~7.0 h-equivalent o' daylight, noon sun 12.2° up
+//   equinoxes (0.125 / 0.625):   EXACTLY 12 h — sunrise 0.25, sunset 0.75,
+//                                 sunY = cos(54.4°)·sin((t−0.25)·2π): t' owd
+//                                 curve's exact shape, scaled — back-compat anchor
+//   midsummer (0.375):           ~17.0 h, noon sun 59.0° up, sunrise in t' NE
+// Geometric horizon, no refraction — deliberately, so t' equinox anchor lands
+// sunrise at 0.25 EXACTLY (refraction would buy winter ~+0.3 h but smear that).
+// Frame: t' dome's own celestial frame (+Z sky-north, celestial east = +X, t'
+// documented E-W mirror) — dir comes frae t' SAME maths as raDecDir wi'
+// ra = −H, so t' sun keeps rising +X an' shares t' star wheel's daily period
+// an' direction (t' stars gain their one extra sidereal lap frae yearPhase).
+const OBLIQUITY = 23.44 * Math.PI / 180;  // Earth's axial tilt
+const SPRING_EQUINOX_PHASE = 0.125;       // season.js: spring spans [0,0.25) — its midpoint is t' equinox
+                                          // (warmth peaks 0.375 = midsummer solstice, snowiness 0.875 = midwinter)
+
+// Declination for a year phase — t' spec'd first-order model: δ = ε·sin(2π·(phase − spring)).
+// Pure an' exported for t' verify gate.
+export function solarDeclination(yearPhase) {
+  return OBLIQUITY * Math.sin((yearPhase - SPRING_EQUINOX_PHASE) * Math.PI * 2);
+}
+
+// A body at declination `dec` an' hour angle H (0 at upper transit, +westward),
+// in t' dome frame — identical algebra to raDecDir wi' ra = −H, so sun, moon
+// an' stars share ONE frame an' one chirality (east = +X, t' documented mirror).
+function bodyDir(dec, H) {
+  const sp = Math.sin(POLE_LAT), cp = Math.cos(POLE_LAT);
+  const x = -Math.cos(dec) * Math.sin(H);   // east axis: +X before transit — rises +X, sets −X
+  const q = Math.cos(dec) * Math.cos(H);    // toward t' equator's meridian point (sky-south)
+  const p = Math.sin(dec);
+  return [x, q * cp + p * sp, -q * sp + p * cp];
+}
+
+// ---- [SOLAR] solarState: t' ONE sun API — every consumer re-anchors here ----
+// Pure in (time, yearPhase); memoised per exact argument pair (t' hot path is
+// many same-frame reads — sky.update caches its result on sky.sol, an' t'
+// pure-fn consumers (hearth/birds/festival gates) hit t' memo). Returns:
+//   sunAlt   — sin(altitude): t' drop-in replacement for t' owd sunY
+//   dir      — [x,y,z] unit sun direction in t' dome frame (dir[1] === sunAlt);
+//              sprite path, light rig an' t' water blade all derive frae this
+//   dayness / nightness / golden — t' shared light factors (owd formulas, new sun)
+//   sunriseT / sunsetT / dayFrac — t' emergent day: acos(−tanφ·tanδ)/π o' t' day
+let _ssT = NaN, _ssP = NaN, _ssV = null;
+export function solarState(time, yearPhase = SPRING_EQUINOX_PHASE) {
+  if (time === _ssT && yearPhase === _ssP) return _ssV;
+  const dec = solarDeclination(yearPhase);
+  const H = (time - 0.5) * Math.PI * 2;     // hour angle: noon at time 0.5
+  const dir = bodyDir(dec, H);
+  const sunAlt = dir[1];
+  const dayness = Math.max(0, Math.min(1, (sunAlt + 0.12) * 3));
+  // golden runs past 1 below t' horizon exactly as t' owd formula did — t'
+  // dawn-glow fog clamps its own copy (sky.update), same as afore
+  const golden = Math.max(0, 1 - sunAlt * 2.6);
+  const cosH0 = Math.max(-1, Math.min(1, -Math.tan(POLE_LAT) * Math.tan(dec)));
+  const dayFrac = Math.acos(cosH0) / Math.PI;   // 0.5 exactly at t' equinoxes
+  _ssT = time; _ssP = yearPhase;
+  _ssV = {
+    sunAlt, dir, dayness, nightness: 1 - dayness, golden,
+    dayFrac, sunriseT: 0.5 - dayFrac / 2, sunsetT: 0.5 + dayFrac / 2,
+  };
+  return _ssV;
+}
+
+// ---- [SOLAR] t' accelerated moon calendar ---------------------------------
+// James 2026-07-03: "the moon's phase should not follow the real moon, it
+// should be accelerated to the same degree the season/year are." T' game year
+// is YEAR seconds o' wall clock = YEAR/DAY_LENGTH game days (192); t' synodic
+// month compresses by t' SAME 365.25-day-year ratio, so t' phase visibly steps
+// night to night (~6.4%/night — new to full in ~8 game days).
+export const YEAR_GAME_DAYS = YEAR / DAY_LENGTH;                       // 192 game days per game year
+export const MOON_CYCLE_DAYS = YEAR_GAME_DAYS * 29.53 / 365.25;        // ≈ 15.52 game days per lunar month
+
+// [4]+[SOLAR] Moon phase for a game day: 0 = new, 0.5 = full, → 1 new again — on
+// t' ACCELERATED MOON_CYCLE_DAYS month (was t' real 29.53: a real month outran
+// t' four-real-day year). Pure an' exported so t' verify gate can check t'
+// calendar headlessly.
 export function moonPhase(day) {
-  return (((day % 29.53) + 29.53) % 29.53) / 29.53;
+  return (((day % MOON_CYCLE_DAYS) + MOON_CYCLE_DAYS) % MOON_CYCLE_DAYS) / MOON_CYCLE_DAYS;
+}
+
+// ---- [SOLAR] lunarState: t' moon's own seat in t' sky ----------------------
+// T' moon lags t' sun by its phase angle (full = opposite, as t' owd mirror
+// always was; new = near t' sun; crescents hug t' evening/morning horizons),
+// an' rides t' ecliptic first-order: its declination is t' sun's formula
+// evaluated a phase further round t' year circle — so a midwinter full moon
+// stands HIGH (opposite t' low sun), as ower t' real moor. Pure + memoised;
+// phase here reads (day + time) so t' position glides — t' drawn disc keeps
+// its once-a-day redraw off moonPhase(this.day).
+let _lsT = NaN, _lsP = NaN, _lsD = NaN, _lsV = null;
+export function lunarState(time, yearPhase = SPRING_EQUINOX_PHASE, day = 0) {
+  if (time === _lsT && yearPhase === _lsP && day === _lsD) return _lsV;
+  const phase = moonPhase(day + time);
+  const dec = solarDeclination(yearPhase + phase);            // ecliptic seat, a phase round frae t' sun
+  const H = (time - 0.5) * Math.PI * 2 - phase * Math.PI * 2; // lags t' sun by t' phase angle
+  const dir = bodyDir(dec, H);
+  _lsT = time; _lsP = yearPhase; _lsD = day;
+  _lsV = { dir, alt: dir[1], phase, illum: 0.5 - 0.5 * Math.cos(phase * Math.PI * 2) };
+  return _lsV;
 }
 
 // ---- [19] weather wi' weight: GPU-driven, wind-slanted rain an' snow ----
@@ -269,6 +548,12 @@ export class Sky {
     this.camera = camera;  // anchor precipitation to the viewer so snow fills the frame in any view (incl. the aerial title orbit)
     this.time = 0.3; // start mid-morning
     this.day = 1;
+    // [SOLAR] cached solar/lunar state — refreshed at t' top of every update()
+    // wi' t' live yearPhase; seeded at t' equinox here so isNight()/timeName()
+    // an' early readers (title screen, HUD) never see undefined.
+    this.yearPhase = 0.125;
+    this.sol = solarState(this.time, this.yearPhase);
+    this.lun = lunarState(this.time, this.yearPhase, this.day);
     this.weather = 'misty';
     this.weatherTimer = 60 + Math.random() * 60;
     this.fogFar = 90; this.fogTargetFar = 90;
@@ -355,6 +640,11 @@ export class Sky {
     // an' under Fine a gentle per-star twinkle breathes them (uTwinkle=1). Plain
     // leaves uTwinkle at 0 so t' twinkle term mixes to a constant 1.0 — same
     // compiled program on both tiers, no define fork, static field on Plain.
+    // [CONST] t' field is now t' FULL celestial sphere (catalogue + background)
+    // an' update() wheels this one Points object about t' polar axis — so a
+    // vFade horizon term dims stars as they set (world y +26 → −14) instead o'
+    // lettin' them hang bright below t' fog band. Both tiers: it's correctness
+    // for a rotatin' sphere, not decoration.
     const field = buildStarField();
     const starGeo = new THREE.BufferGeometry();
     starGeo.setAttribute('position', new THREE.BufferAttribute(field.pos, 3));
@@ -370,11 +660,21 @@ export class Sky {
       sh.uniforms.uStarTime = starU.uStarTime;
       sh.uniforms.uTwinkle = starU.uTwinkle;
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', 'attribute float aMag;\nuniform float uStarTime;\nuniform float uTwinkle;\n#include <common>')
+        .replace('#include <common>', 'attribute float aMag;\nuniform float uStarTime;\nuniform float uTwinkle;\nvarying float vFade;\n#include <common>')
         .replace('gl_PointSize = size;',
-          'float twH = fract(sin(dot(position, vec3(12.9898, 78.233, 37.719))) * 43758.5453);\n' +
+          // [CONST] horizon fade: LOCAL height o' t' ROTATED star — mat3(modelMatrix)
+          // applies t' wheel quaternion wi'out t' viewer-centred translation, so this
+          // is true altitude × radius whatever t' player's height. Full by +26
+          // (alt ~8°), gone by −14: settin' stars dim into t' horizon haze an'
+          // below-horizon stars never pierce t' fog band.
+          'vFade = smoothstep(-14.0, 26.0, (mat3(modelMatrix) * position).y);\n' +
+          '\tfloat twH = fract(sin(dot(position, vec3(12.9898, 78.233, 37.719))) * 43758.5453);\n' +
           '\tfloat twinkle = mix(1.0, 0.78 + 0.44 * (0.5 + 0.5 * sin(uStarTime * (1.5 + twH * 2.5) + twH * 6.2831)), uTwinkle);\n' +
           '\tgl_PointSize = size * aMag * twinkle;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', 'varying float vFade;\n#include <common>')
+        .replace('vec4 diffuseColor = vec4( diffuse, opacity );',
+          'vec4 diffuseColor = vec4( diffuse, opacity * vFade );');
     };
     this.stars = new THREE.Points(starGeo, starMat);
     this.scene.add(this.stars);
@@ -397,6 +697,11 @@ export class Sky {
         uFogBand: { value: 0.19 }, // horizon band height (dir.y) where t' dome holds t' fog colour
         uFlash: { value: 0 },      // lightning blink: whitens t' cloud term (defaults 0 — Plain untouched)
         uStarAmt: { value: 0 },    // [4] Milky Way strength: starA × (1 − grey), t' same night term as t' stars
+        // [CONST] t' Milky Way's frame rides t' star wheel: real galactic pole +
+        // in-band mottle axes, rotated by t' star quaternion each frame in update()
+        uMWPole: { value: _MW_POLE0.clone() },
+        uMWA: { value: _MW_A0.clone() },
+        uMWB: { value: _MW_B0.clone() },
         uSunDir: { value: new THREE.Vector3(0, 1, 0) }, // [30] sun direction in dome 'dir' space (frae t' sun ANGLE, not t' sprite)
         uRainbow: { value: 0 },    // [30] rainbow strength (defaults 0 — no bow, today's sky)
         uAurora: { value: 0 },     // [31] aurora strength (defaults 0 — no curtains, today's night)
@@ -413,15 +718,13 @@ export class Sky {
         uniform vec3 uSunDir;                 // [30] sun direction (dome dir space)
         uniform float uRainbow, uAurora;      // [30] rainbow / [31] aurora strengths
         varying vec3 vDir;
-        // [4] Milky Way frame: GPOLE is t' band's pole (unit vector, 12.7° off
-        // level), so t' great circle {dir·GPOLE = 0} tops out ~77° above t'
-        // horizon — t' band rises out o' t' north-east, arcs nigh overhead an'
-        // sets south-west, as t' Cygnus arm stood ower t' moor on a clear autumn
-        // evenin' at 54°N. GA/GB are unit axes spannin' t' band's plane, so t'
-        // fbm mottlin' is pinned to t' heavens (it does NOT drift wi' t' wind).
-        const vec3 GPOLE = vec3(0.6215, 0.2205, 0.7518);
-        const vec3 GA = vec3(0.7708, 0.0, -0.6372);
-        const vec3 GB = vec3(-0.1405, 0.9755, -0.1700);
+        // [4]+[CONST] Milky Way frame: uMWPole is t' REAL north galactic pole in
+        // t' catalogue's celestial frame, an' update() rotates it (wi' t' uMWA/uMWB
+        // mottle axes) by t' star-wheel quaternion each frame — so t' band turns
+        // WITH t' stars: Cygnus an' Cassiopeia keep their seats on it all night,
+        // as they do ower t' real moor. T' owd fixed GPOLE arc is retired
+        // (James 2026-07-03: real constellations need t' band they sit in).
+        uniform vec3 uMWPole, uMWA, uMWB;
         float hash(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
         float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
           float a = hash(i), b = hash(i + vec2(1.0, 0.0)), c = hash(i + vec2(0.0, 1.0)), d = hash(i + vec2(1.0, 1.0));
@@ -434,8 +737,8 @@ export class Sky {
           // [4] t' Milky Way: a faint great-circle band, mottled by t' same fbm t'
           // clouds already compile, faded at t' horizon; uStarAmt kills it by day,
           // under overcast an' at full it stays a whisper. Clouds mix OVER it below.
-          float mw = exp(-pow(dot(dir, GPOLE), 2.0) * 30.0)
-                   * (0.25 + 0.75 * fbm(vec2(dot(dir, GA), dot(dir, GB)) * 5.0 + 3.7))
+          float mw = exp(-pow(dot(dir, uMWPole), 2.0) * 30.0)
+                   * (0.25 + 0.75 * fbm(vec2(dot(dir, uMWA), dot(dir, uMWB)) * 5.0 + 3.7))
                    * smoothstep(0.02, 0.18, dir.y);
           col += vec3(0.52, 0.58, 0.70) * (mw * uStarAmt * 0.07);
           float up = clamp(dir.y, 0.0, 1.0);
@@ -586,15 +889,18 @@ export class Sky {
     scene.add(this.snow);
   }
 
-  isNight() { return this.time < 0.18 || this.time > 0.82; }
+  // [SOLAR] night now ends/starts a fixed ~0.07 twilight past t' SOLAR horizon
+  // crossings (equinox: 0.18/0.82 \u2014 byte-identical to t' owd literals; winter
+  // nights run ~0.284..0.717, midsummer keeps a short true night ~0.924..0.076).
+  isNight() { const s = this.sol; return this.time < s.sunriseT - 0.07 || this.time > s.sunsetT + 0.07; }
 
   timeName() {
-    const t = this.time;
-    if (t < 0.18) return 'Neet';
-    if (t < 0.3) return 'Morn';
+    const t = this.time, s = this.sol;   // [SOLAR] HUD names track t' seasonal sun (equinox = owd 0.18/0.3/0.55/0.75/0.82 exactly)
+    if (t < s.sunriseT - 0.07) return 'Neet';
+    if (t < s.sunriseT + 0.05) return 'Morn';
     if (t < 0.55) return 'Noontide';
-    if (t < 0.75) return "Evenin'";
-    if (t < 0.82) return 'Gloamin\u2019';
+    if (t < s.sunsetT) return "Evenin'";
+    if (t < s.sunsetT + 0.07) return 'Gloamin\u2019';
     return 'Neet';
   }
 
@@ -608,8 +914,17 @@ export class Sky {
     // [4] moon phase: one canvas redraw + CanvasTexture upload per game DAY, never
     // per frame (also catches deserialize() movin' this.day under us)
     if (this._moonDay !== this.day) this._drawMoonPhase();
+    // [SOLAR] t' one solar/lunar computation site: everything below (an' t'
+    // cached this.sol/this.lun main.js an' t' layers read) hangs off these.
+    const yp = this.yearPhase = season ? season.yearPhase : 0.125;
+    const sol = this.sol = solarState(this.time, yp);
+    const lun = this.lun = lunarState(this.time, yp, this.day);
     if (!prevNight && this.isNight()) msg = { type: 'night' };
-    else if (prevT < 0.74 && this.time >= 0.74) msg = { type: 'dusk' };
+    else {
+      // [SOLAR] dusk toast rides t' SOLAR sunset (equinox: t' owd 0.74 exactly)
+      const duskT = sol.sunsetT - 0.01;
+      if (prevT < duskT && this.time >= duskT) msg = { type: 'dusk' };
+    }
 
     // live moor weather frae Open-Meteo when we have a sample: it drives t'
     // weather state directly an' parks t' random timer. Falls back to t' random
@@ -652,15 +967,17 @@ export class Sky {
       this.weatherTimer = 80 + Math.random() * 140;
     }
 
-    // sun position
-    const ang = (this.time - 0.25) * Math.PI * 2; // sunrise at t=0.25... offset so noon t=0.5
-    const sunY = Math.sin(ang), sunX = Math.cos(ang);
-    const dayness = Math.max(0, Math.min(1, (sunY + 0.12) * 3));
+    // sun position — [SOLAR] frae t' real model: sunY is sin(altitude), sunX t'
+    // east component o' t' true sun direction (rises +X — t' star frame's
+    // documented chirality; at t' equinox sunX equals t' owd cos((t−0.25)·2π)
+    // exactly an' sunY is t' owd sine scaled by cos(54.4°)).
+    const sunY = sol.sunAlt, sunX = sol.dir[0];
+    const dayness = sol.dayness;
     // golden-hour factor: 1 at t' horizon → 0 by mid-morning (a long golden hour).
     // Hoisted out o' t' Fine day branch ([22]) so Plain reads it too for t'
-    // dawn-glow fog tint below. (Same formula, so it runs past 1 below t' horizon
-    // exactly as afore — t' fog tint clamps its own copy.)
-    const golden = Math.max(0, 1 - sunY * 2.6);
+    // dawn-glow fog tint below. (Same formula, off t' new sun, so it runs past 1
+    // below t' horizon exactly as afore — t' fog tint clamps its own copy.)
+    const golden = sol.golden;
     // lightning flash: decays fast (~200 ms from a full spike) and briefly floods
     // the scene lighting — spiked by the storm controller (sky.flash = 1).
     this.flash = Math.max(0, this.flash - dt / 0.22);
@@ -677,13 +994,19 @@ export class Sky {
       // rig follows whichever lamp's up. Positions ride relative to t' player's height
       // so a low sun stays a LOW sun (long dawn/dusk shadows reet across t' moor).
       const moonUp = sunY < -0.02;
-      const moonHigh = Math.max(0, Math.min(1, (-sunY - 0.02) * 3));
+      // [SOLAR] moonHigh reads t' moon's OWN altitude now (lun.alt), not t' sun's
+      // mirror: a new moon sits near t' sun (down all night — genuinely dark
+      // nights), a full moon opposite it as afore. T' phase term (mwIllum) already
+      // kills t' light at new moon, so t' two agree.
+      const moonHigh = Math.max(0, Math.min(1, (lun.alt - 0.02) * 3));
       // clear-night gate for t' moonlit lift below: instantaneous overcast estimate —
       // eased snowAmount stands in for snowFall (computed further down), t' same
       // stand-in main.js's glitter drive uses. Overcast nights stay properly dark.
       const greyNow = overcastGrey(this.weather, this.snowAmount, this.rainAmount);
       if (moonUp) {
-        this.sun.position.set(playerPos.x - sunX * 70, playerPos.y + Math.max(8, -sunY * 85), playerPos.z - 24);
+        // [SOLAR] t' lamp stands where t' moon actually is (phase-lagged, ecliptic
+        // declination) — t' y clamp keeps a sane rig through moon-down dark nights
+        this.sun.position.set(playerPos.x + lun.dir[0] * 70, playerPos.y + Math.max(8, lun.alt * 85), playerPos.z + lun.dir[2] * 70);
         // phase-scaled moonlight (James 2026-07-03): a full moon genuinely lights t'
         // moor (~2.9x t' owd flat curve, soft shadows read), a thin crescent stays
         // near t' owd faint glow. Same shadow rig follows — position/target swap an'
@@ -691,7 +1014,9 @@ export class Sky {
         this.sun.intensity = (0.07 + 0.38 * moonHigh) * (1 + 1.9 * mwIllum) * (1 - this.dread * 0.35) + flashLift;
         this.sun.color.set(0x9cbcf0); // cool blue moonlight
       } else {
-        this.sun.position.set(playerPos.x + sunX * 70, playerPos.y + Math.max(5, sunY * 85), playerPos.z + 20);
+        // [SOLAR] real azimuth: t' day sun arcs on t' −Z (sky-south) side, low
+        // an' southerly in winter, high wi' NE/NW risings in summer
+        this.sun.position.set(playerPos.x + sol.dir[0] * 70, playerPos.y + Math.max(5, sunY * 85), playerPos.z + sol.dir[2] * 70);
         this.sun.intensity = (0.34 + dayness * 1.72) * (1 - this.dread * 0.35) + flashLift; // golden hoisted above ([22])
         this.sun.color.setHSL(0.07 + 0.045 * (1 - golden), 0.45 + golden * 0.45, 0.74 + (1 - golden) * 0.12);
       }
@@ -701,8 +1026,11 @@ export class Sky {
       // directional ratio keeps t' full-moon shadows FAINT an' soft, never black-hard.
       this.ambient.intensity = (0.34 + dayness * 0.62 + moonHigh * (0.10 + 0.20 * mwIllum * (1 - greyNow))) * (1 - this.dread * 0.25) + flashLift * 0.7;
     } else {
-      // 'Plain': today's pipeline, untouched
-      this.sun.position.set(playerPos.x + sunX * 60, sunY * 80, playerPos.z + 20);
+      // 'Plain': today's light CURVES untouched (pinned below) — only t' lamp's
+      // bearing follows t' real sun now ([SOLAR]: seasonal day length is
+      // tier-flat; Plain shares t' same sun as Fine, an' at t' equinox this
+      // bearing matches t' owd path's shape exactly)
+      this.sun.position.set(playerPos.x + sol.dir[0] * 60, sunY * 80, playerPos.z + sol.dir[2] * 60);
       this.sun.intensity = (0.25 + dayness * 1.0) * (1 - this.dread * 0.35) + flashLift;
       this.ambient.intensity = (0.16 + dayness * 0.5) * (1 - this.dread * 0.25) + flashLift * 0.7;
       this.sun.color.setHSL(0.1, dayness < 0.4 ? 0.6 : 0.25, 0.85);
@@ -710,8 +1038,14 @@ export class Sky {
     this.sun.target.position.set(playerPos.x, playerPos.y, playerPos.z);
     if (fine) this._snapShadowCamera(); // whole-texel frustum steps — rock-steady shadow edges when walkin' (Plain has no shadow map)
 
-    this.sunSprite.position.set(playerPos.x + sunX * 160, sunY * 150 + playerPos.y * 0.3, playerPos.z - 60);
-    this.moonSprite.position.set(playerPos.x - sunX * 160, -sunY * 150 + playerPos.y * 0.3, playerPos.z + 60);
+    // [SOLAR] sprites ride t' real directions: t' sun's disc rises NE o' a summer
+    // morn, SE o' a winter one, an' crawls t' low southern meridian in midwinter;
+    // t' moon lags it by t' phase angle (full opposite — t' owd mirror — new near
+    // t' sun, crescents on t' twilight horizons). Same 160/150 sprite ellipse an'
+    // player-height parallax nicety as afore. T' water blade (main.js) derives its
+    // azimuth frae these SAME dir vectors, so blade an' disc stay one body.
+    this.sunSprite.position.set(playerPos.x + sol.dir[0] * 160, sol.dir[1] * 150 + playerPos.y * 0.3, playerPos.z + sol.dir[2] * 160);
+    this.moonSprite.position.set(playerPos.x + lun.dir[0] * 160, lun.dir[1] * 150 + playerPos.y * 0.3, playerPos.z + lun.dir[2] * 160);
 
     // sky colour — mixed in-place in t' module scratch _sky ([22] hoist): update()
     // allocates no Colors, every blend below writes ower t' scratch.
@@ -829,15 +1163,30 @@ export class Sky {
 
     const starA = Math.max(0, -sunY * 2) * (1 - grey * 0.8);
     this.stars.material.opacity = fine ? Math.min(1, starA * 1.6) : starA; // brighter stars ower a moonlit moor
-    this.stars.position.set(playerPos.x, 0, playerPos.z);
+    // [CONST] t' sphere is fully VIEWER-CENTRED now (y follows t' player an' all —
+    // was y=0): a celestial sphere sits at infinity, so Polaris must stand 54.4°
+    // up frae Whitby sands AND frae Urra Moor top. T' owd y=0 centre compressed
+    // star altitudes wi' player height (Polaris read ~38° frae a 66-block hill —
+    // caught live, James 2026-07-03). T' horizon fade reads LOCAL rotated height
+    // (mat3(modelMatrix)·position), so it measures true altitude regardless.
+    this.stars.position.set(playerPos.x, playerPos.y, playerPos.z);
+    // [CONST] t' heavens wheel about Polaris: ONE quaternion write turns t' whole
+    // Points object (catalogue + background) about t' polar axis — no per-star
+    // CPU. Pure in (sky.time, season.yearPhase), both shared clocks, so every
+    // client sees t' same sky at t' same moment (skyWheelAngle docs t' mapping:
+    // winter midnights carry Orion, summer t' Summer Triangle). Tier-flat, like
+    // t' moon calendar — t' heavens aren't a graphics setting.
+    this.stars.quaternion.setFromAxisAngle(_POLE_AXIS, skyWheelAngle(this.time, season ? season.yearPhase : 0));
     // [4] twinkle clock — Fine only (Plain's uTwinkle stays 0, so t' term mixes to
     // a constant 1.0). Unbounded accumulator: same precedent as cloudT/uTime below.
     this._starU.uStarTime.value += dt;
     this._starU.uTwinkle.value = fine ? 1 : 0;
     // [4] moon burr: mistiness² × moon-up × clear-of-overcast — t' shepherd's
     // rain-sign, only in properly damp air (squared mist kills t' faint cases).
-    // Moon-up eases in ower t' same -0.02 threshold t' Fine light rig swaps at.
-    const moonVis = Math.max(0, Math.min(1, (-sunY - 0.02) * 6));
+    // Night eases in ower t' same -0.02 threshold t' Fine light rig swaps at —
+    // an' [SOLAR] a second factor fades wi' t' moon's OWN altitude now, so a
+    // new moon (down wi' t' sun) casts no halo an' no Milky-Way wash.
+    const moonVis = Math.max(0, Math.min(1, (-sunY - 0.02) * 6)) * Math.max(0, Math.min(1, (lun.alt + 0.05) * 8));
     this.moonHalo.material.opacity = this._mistS * this._mistS * moonVis * (1 - grey) * 0.8;
 
     // drift t' dome clouds on t' wind; coverage frae t' weather, lit by day.
@@ -858,6 +1207,11 @@ export class Sky {
     // (16→30), dimmed (0.16→0.07), mottle deepened, moon-wash added.
     // (mwIllum hoisted above t' light rig — t' phase-scaled moonlight reads it too.)
     cu.uStarAmt.value = starA * (1 - grey) * (1 - 0.55 * moonVis * mwIllum);
+    // [CONST] rotate t' Milky Way's frame by t' same wheel as t' stars — copy +
+    // applyQuaternion mutate in place, nowt allocated ([22] rule holds)
+    cu.uMWPole.value.copy(_MW_POLE0).applyQuaternion(this.stars.quaternion);
+    cu.uMWA.value.copy(_MW_A0).applyQuaternion(this.stars.quaternion);
+    cu.uMWB.value.copy(_MW_B0).applyQuaternion(this.stars.quaternion);
     // t' cloud deck blinks white wi' each strike (squared, same easin' as flashLift)
     cu.uFlash.value = this.flash * this.flash;
     // horizon-band height follows fog thickness: open weather a low haze line (~0.19),
@@ -866,11 +1220,10 @@ export class Sky {
     cu.uFogBand.value = Math.min(0.55, Math.max(0.08, 16 / Math.max(1, this.fogFar)));
 
     // [30] rainbow after t' rain — driven, gated, eased (all allocation-free scalars).
-    // uSunDir frae t' sun ANGLE (sunX/sunY), not t' sprite position (which is
-    // player-relative an' wrong away frae t' origin): the antisolar bow then sits
-    // opposite t' true sun everywhere. z=0 — the sprite's constant −60 z offset is a
-    // placement nicety, not part o' t' sun's celestial direction.
-    cu.uSunDir.value.set(sunX, sunY, 0).normalize();
+    // uSunDir is t' TRUE unit sun direction ([SOLAR] — t' full 3-vector now, so
+    // t' antisolar bow sits opposite t' real seasonal sun), not t' player-relative
+    // sprite position (which is wrong away frae t' origin).
+    cu.uSunDir.value.set(sol.dir[0], sol.dir[1], sol.dir[2]).normalize();
     // rise when rain's DECAYIN' frae a real shower toward clear/misty wi' t' sun up;
     // rise briskly (~a few s), decay ower ~90s once t' condition lifts.
     const wantBow = rainbowRising(this.rainAmount, this._prevRain, sunY, this.weather);
