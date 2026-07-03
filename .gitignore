@@ -13,3 +13,4 @@ finetune/
 **/token_requests.json
 **/request_rate.json
 .superpowers/
+.worktrees/
