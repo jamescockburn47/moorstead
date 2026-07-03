@@ -179,6 +179,39 @@ const geo = new MoorsGeography();
 
     const sv = toWorld(plan.furnish.servery);
     (at(sv.x, floorY + 1, sv.z) === B.PLANKS ? ok : bad)('D2: servery cell holds a table block (PLANKS)');
+
+    // --- full-grid roof/ceiling/seal scan (review 2026-07-03: sampled probes let
+    // two write-order aliasing bugs through — scan EVERY footprint cell instead) ---
+    {
+      const gableHalf = Math.floor((fz1 - fz0) / 2);
+      const ridgeYExpect = g + wallH + 1 + gableHalf;
+      const chimneyX = fx0; // chimney gable end
+      let ceilOk = true, roofOk = true, sealOk = true, chimOk = true;
+      for (let wx = fx0; wx <= fx1; wx++) for (let wz = fz0; wz <= fz1; wz++) {
+        const interior = (wx > fx0 && wx < fx1 && wz > fz0 && wz < fz1);
+        const roofY = g + wallH + 1 + (gableHalf - Math.abs(wz - midZ));
+        // (i) every INTERIOR cell keeps a stone ceiling at g+wallH+1 (the D1 contract)
+        if (interior && at(wx, g + wallH + 1, wz) !== B.STONEBRICK) ceilOk = false;
+        // (ii) the roof skin is SLATE at its computed height on every cell
+        if (at(wx, roofY, wz) !== B.SLATE) roofOk = false;
+        // (iii) sealed: no AIR anywhere from the ceiling level up to the roof skin
+        // on the perimeter columns (interior loft air is fine — it is enclosed)
+        if (!interior) {
+          for (let y = g + wallH + 1; y <= roofY; y++) {
+            if (at(wx, y, wz) === B.AIR) sealOk = false;
+          }
+        }
+      }
+      // (iv) chimney: RBRICK column ridgeY+1..ridgeY+3 at the gable end, ON intact slate
+      for (let y = ridgeYExpect + 1; y <= ridgeYExpect + 3; y++) {
+        if (at(chimneyX, y, midZ) !== B.RBRICK) chimOk = false;
+      }
+      const chimneyBaseSlate = at(chimneyX, ridgeYExpect, midZ) === B.SLATE;
+      (ceilOk ? ok : bad)('D2 full-grid: every interior cell keeps its stone ceiling at g+wallH+1');
+      (roofOk ? ok : bad)('D2 full-grid: slate roof skin complete at every footprint cell');
+      (sealOk ? ok : bad)('D2 full-grid: perimeter columns sealed ceiling-to-roof (no AIR leak)');
+      (chimOk && chimneyBaseSlate ? ok : bad)('D2 full-grid: chimney column ridgeY+1..+3 sits ON intact ridge slate');
+    }
   }
 }
 

@@ -655,8 +655,11 @@ export class Gen {
         const roofY = g + wallH + 1 + (gableHalf - Math.abs(wz - midZ));
         put(wx, g, wz, B.PLANKS); // floor
         for (let y = g + 1; y <= g + wallH; y++) put(wx, y, wz, perim ? B.STONEBRICK : B.AIR);
-        // interior clear + a flat STONEBRICK ceiling at g+wallH+1, unchanged from
-        // D1 — the gable loft above it is a closed shell, empty air inside
+        // flat STONEBRICK ceiling at g+wallH+1 over every INTERIOR cell (the D1
+        // contract); on the two eave rows (wz=fz0/fz1) the slate write below lands
+        // at this same level, so the wall top reads as slate where roof meets wall —
+        // deliberate, still solid, still sealed. The gable loft above the ceiling is
+        // a closed shell, empty air inside.
         put(wx, g + wallH + 1, wz, B.STONEBRICK);
         for (let y = g + wallH + 2; y < roofY; y++) put(wx, y, wz, B.AIR);
         // gable-end triangles (short walls, wx=fx0/fx1): solid stone climbing to the ridge
@@ -677,11 +680,12 @@ export class Gen {
         }
       }
 
-      // chimney: a 1-block RBRICK column at one gable end (fx0), rising from the
-      // roof surface there to peak+2 — matches stampStations' chimney idiom.
+      // chimney: a 1-block RBRICK column at one gable end (fx0), sat ON the ridge
+      // slate (base at ridgeY+1 so the roof skin stays gapless) — stampStations'
+      // chimney idiom, worldgen review 2026-07-03 caught the base overwriting slate.
       {
         const chx = fx0;
-        for (let y = ridgeY; y <= ridgeY + 2; y++) put(chx, y, midZ, B.RBRICK);
+        for (let y = ridgeY + 1; y <= ridgeY + 3; y++) put(chx, y, midZ, B.RBRICK);
       }
 
       // --- underground parlour: hollow room + solid stone shell, directly below the site ---

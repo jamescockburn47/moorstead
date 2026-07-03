@@ -229,7 +229,7 @@ export class InnDecorLayer {
     if (gate() <= 0) return;
     const g = gableGeometry(plan);
     const plume = makeSmoke(0.5);
-    plume.position.set(g.fx0 + 0.5, g.ridgeY + 2.6, g.midZ + 0.5);
+    plume.position.set(g.fx0 + 0.5, g.ridgeY + 3.6, g.midZ + 0.5); // chimney column runs ridgeY+1..+3 (base sits ON the ridge slate)
     plume.material.uniforms.uGate.value = Math.min(1, gate());
     registerFxMat(plume.material);
     this._fxMats.push(plume.material);
