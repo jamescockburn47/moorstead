@@ -95,6 +95,80 @@ of relying on the 180s recency heuristic — tightens "online now" accuracy. Tou
 again (a new tiny handler or `/ping` with an `event:'leave'` payload). Build only if Phase 1
 ships and James wants tighter precision; not blocking.
 
+## Addendum 2026-07-03: Parish Warden panel redesign
+
+The original spec left `renderAdminPanel()` untouched ("already exists, not touched"). James
+subsequently asked for it to be rethought — the flat button-list (villages/stations/landmarks
+as individual buttons, 4 season-quarter buttons, per-festival buttons) replaced with something
+that lets him preview *any* combination of location + season/date + weather + time-of-day
+before dropping in, since verifying seasonal/weather/lighting changes live is now a routine
+need (this session shipped a real solar model, accelerated moon, weather-linked precipitation,
+etc. — the warden needs to review all of it quickly). Settled via visual-companion mockups
+(`.superpowers/brainstorm/221-1783078785/content/`, not committed — throwaway mockups, the
+decisions below are what's binding).
+
+### Layout: map-led split ("Option C")
+
+Two-column panel: a bigger live minimap on the left (clickable — see below), a stacked sidebar
+of scene controls on the right (year / weather / time-of-day), with travel-and-actions
+(trains, god mode, kit, Parish Ledger) as a separate strip underneath — NOT part of the
+scene-setting cluster, since boarding a train is a distinct action rather than a condition to
+set before dropping in.
+
+### The map becomes the "commit" action
+
+The existing minimap (`ui.js` ~1755–1873, canvas 2D, redrawn every frame from
+`world.surfaceColors()`, north-up, fully invertible screen↔world coordinate math per the
+research above) gains a click handler. Clicking computes world x/z from canvas pixel
+coordinates (inverse of the existing render mapping) and calls `adminTeleport(x, z, label)`
+— reusing the exact function the current village/station/landmark buttons already call, just
+with a click-derived x/z instead of a hardcoded one. Clicking the map is the "drop in now"
+action: whatever the three scene sliders currently say (year/weather/time) is what you land
+into. No separate confirm step (matches how `adminTeleport` already works today).
+
+### Scene sliders
+
+1. **Year** (`<input type=range>` calling `debug.setSeason(value)` on input — this already
+   works today for any 0..1 float, per the research; no engine change). All SIX festival
+   windows drawn as shaded bands, TRUE to their real width from `FESTIVALS` (easter/mayday/
+   midsummer/harvest/bonfire/yule — widths vary genuinely, Bonfire/May Day are the narrowest
+   at ~7 days, Harvest/Yule the widest). Each festival's name renders as a clickable chip
+   above its band; clicking a chip snaps the slider to that festival's exact centre phase —
+   this is the mechanism that lets James land inside a narrow window cleanly without fiddly
+   manual dragging. Manual dragging still works for any other date; the bands stay visible
+   throughout so a manual drag shows proximity to a window without needing the chip.
+2. **Weather**: a row of buttons, NOT a slider — `Live | Clear | Misty | Rain/Snow | Fog`.
+   Buttons, not a slider, because the four states aren't points on a continuum (no natural
+   ordering) — a slider would misleadingly imply one. "Live" (default) tracks the real
+   forecast exactly as today. Selecting a state requires a NEW `debug.setWeather(state)`
+   hook: sets `sky.weather` directly, parks `sky.weatherTimer = 1e9`, and sets an override
+   flag checked BEFORE the live-weather block in `sky.js update()` (today `currentWeather()`
+   unconditionally overwrites `this.weather` every frame when a live sample exists — a raw
+   one-shot assignment would be stomped next frame without this). **The button is labelled
+   "Rain/Snow", not just "Rain"**: confirmed live that `winterPrecip()` (`snow.js` ~54) already
+   routes 100% of precipitation to snow whenever `season.warmth < 0` and 100% to rain
+   otherwise — so selecting this button in a wintry year-slider position already produces
+   snow correctly, zero new precipitation logic needed. Only the label needs to say so, so it
+   doesn't read as a bug when "Rain" produces snow.
+3. **Time o' day**: a plain `<input type=range>` calling a NEW `debug.setTime(t)` (clamps
+   `sky.time` into [0, 0.999], mirrors `setSeason`'s existing clamp pattern exactly — trivial,
+   since no such setter currently exists at all, per the research). One-shot set, same
+   behaviour the title-flyover's hardcoded `sky.time = 0.40` already has — time keeps advancing
+   normally from wherever the slider left it, it doesn't freeze.
+
+### Festival buttons are retired, not ported
+
+Confirmed via research: `debug.festival(id)` does nothing but call `phase(festival.centre)` —
+no player warp, no extra logic. The year slider's snap-chips are a strict superset of what the
+old festival buttons did (same effect, plus visible window width, plus works for any other
+date too), so the separate per-festival buttons are dropped rather than kept alongside.
+
+### What's carried over unchanged
+
+God mode, full kit, "drop in on a player" (shared moor only), coordinate-entry drop, and the
+Parish Ledger card from the main spec above — all keep their existing behaviour, just
+relocated into the new "travel & actions" strip under the map+sliders row.
+
 ## Out of scope (explicit)
 
 - Restructuring what counts as "recent activity" beyond what `sessions.json`/`visits.json`
