@@ -76,5 +76,35 @@ console.log('Running Menagerie & Droving verification...');
   eq(droveValue(mixedMobs, 5), 132 + 374 + 594 + 121, 'mixed mob objects value at standing 5 = 1221d');
 }
 
+// --- Task 5: ambient land-animal density — HALVED (James's call, 2026-07-03) ---
+// "There are too many animals in the world — cut the land animals down by half."
+// These pin the halved wild-spawn caps so a refactor can't quietly re-crowd the moor.
+{
+  eq(MOB_TYPES.sheep?.cap, 18, 'sheep cap halved 36 -> 18');
+  eq(MOB_TYPES.cow?.cap, 6, 'cow cap halved 12 -> 6');
+  eq(MOB_TYPES.pony?.cap, 6, 'pony cap halved 12 -> 6');
+  eq(MOB_TYPES.llama?.cap, 3, 'llama cap halved 6 -> 3');
+  eq(MOB_TYPES.hare?.cap, 3, 'hare cap halved 6 -> 3');
+  eq(MOB_TYPES.grouse?.cap, 5, 'grouse cap halved 10 -> 5');
+  eq(MOB_TYPES.pheasant?.cap, 3, 'pheasant cap halved 5 -> 3');
+  eq(MOB_TYPES.curlew?.cap, 4, 'curlew cap halved 8 -> 4');
+  eq(MOB_TYPES.lizard?.cap, 3, 'lizard cap halved 5 -> 3');
+  eq(MOB_TYPES.frog?.cap, 3, 'frog cap halved 5 -> 3');
+  eq(MOB_TYPES.pig?.cap, 2, 'pig cap halved 3 -> 2');
+  eq(MOB_TYPES.rat?.cap, 2, 'rat cap halved 3 -> 2');
+  eq(MOB_TYPES.cat?.cap, 1, 'cat cap halved 2 -> 1');
+  // deliberately NOT halved — gameplay these species carry:
+  eq(MOB_TYPES.dog?.cap, 2, 'sheepdog cap NOT cut (herding needs a findable working dog)');
+  eq(MOB_TYPES.bull?.cap, 1, 'bull cap stays 1 (single set-piece, cannot halve)');
+  eq(MOB_TYPES.seagull?.cap, 6, 'seagull cap untouched (sea birds protected)');
+  eq(MOB_TYPES.crow?.cap, 12, 'crow cap untouched (a flier, not a land beast underfoot)');
+  eq(MOB_TYPES.owl?.cap, 2, 'owl cap untouched (night flier)');
+  eq(MOB_TYPES.barghest?.cap, 3, 'barghest cap untouched (night-threat balance, not crowding)');
+  eq(MOB_TYPES.boggart?.cap, 4, 'boggart cap untouched (night-threat balance, not crowding)');
+  // flocks still spawn AS flocks — a fold can still be gathered for the herding play:
+  eq(Array.isArray(MOB_TYPES.sheep?.group) && MOB_TYPES.sheep.group[0] >= 4, true,
+    'sheep still spawn in flocks of 4+ (herding: a fold stays gatherable)');
+}
+
 console.log('RESULT: ' + (failed ? 'FAIL' : 'PASS'));
 process.exit(failed ? 1 : 0);

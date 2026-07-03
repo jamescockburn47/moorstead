@@ -1209,21 +1209,28 @@ function makeWizardExtras(model, s, isFC = false) {
   ];
 }
 
+// Ambient land-beast caps HALVED (James's call, 2026-07-03 — "too many animals in the
+// world"): sheep 36→18, cow 12→6, pony 12→6, llama 6→3, hare 6→3, grouse 10→5,
+// pheasant 5→3, curlew 8→4, lizard 5→3, frog 5→3, pig 3→2, rat 3→2, cat 2→1.
+// Deliberately NOT halved: dog (cap 2 — t' herding working dog must stay findable),
+// bull (cap 1 — a single set-piece), fliers (crow/owl) an' seagulls (sea birds),
+// hostiles (barghest/boggart — night-threat balance, not grazing crowd), an' every
+// natural:false quest/farm/companion spawn. Pinned by verify-menagerie.mjs Task 5.
 export const MOB_TYPES = {
   sheep: {
     make: makeSheep, hw: 0.45, h: 1.1, hp: 8, speed: 1.6, fleeSpeed: 4.2,
-    hostile: false, drops: [[I.RAW_MUTTON, 1, 2], [B.WOOL, 1, 2]], cap: 36, name: 'Swaledale Yow',
+    hostile: false, drops: [[I.RAW_MUTTON, 1, 2], [B.WOOL, 1, 2]], cap: 18, name: 'Swaledale Yow',
     group: [4, 7], // Swaledales graze t' moor in flocks, not singly
     tameable: true, tameFood: [I.BILBERRIES], droveable: true,
   },
   grouse: {
     make: makeGrouse, hw: 0.2, h: 0.6, hp: 3, speed: 1.4, fleeSpeed: 3.8,
-    hostile: false, drops: [[I.RAW_GROUSE, 1, 1]], cap: 10, name: 'Red Grouse',
+    hostile: false, drops: [[I.RAW_GROUSE, 1, 1]], cap: 5, name: 'Red Grouse',
     habitat: 'moor', shy: true, shyRadius: 6, flush: true, fleeFor: 3,
   },
   hare: {
     make: makeHare, hw: 0.2, h: 0.7, hp: 4, speed: 2.6, fleeSpeed: 6.4,
-    hostile: false, drops: [], cap: 6, name: 'Brown Hare',
+    hostile: false, drops: [], cap: 3, name: 'Brown Hare',
     shy: true, shyRadius: 7, fleeFor: 4, // bolts t' moment tha gets near — unless tha holds her food
     tameable: true, tameFood: [I.BILBERRIES],
   },
@@ -1238,7 +1245,7 @@ export const MOB_TYPES = {
   // ---- t' living moor: cattle, game birds, fliers, basking lizards ----
   cow: {
     make: makeCow, hw: 0.55, h: 1.45, hp: 12, speed: 1.2, fleeSpeed: 2.8,
-    hostile: false, drops: [[I.RAW_BEEF, 1, 2]], cap: 12, name: 'Dale Cow',
+    hostile: false, drops: [[I.RAW_BEEF, 1, 2]], cap: 6, name: 'Dale Cow',
     habitat: 'pasture', group: [2, 4],
     tameable: true, tameFood: [I.BILBERRIES], droveable: true,
   },
@@ -1249,13 +1256,13 @@ export const MOB_TYPES = {
   },
   llama: {
     make: makeLlama, hw: 0.45, h: 2.2, hp: 14, speed: 1.4, fleeSpeed: 2.6,
-    hostile: false, drops: [[B.WOOL, 1, 2]], cap: 6, name: 'Pack Llama',
+    hostile: false, drops: [[B.WOOL, 1, 2]], cap: 3, name: 'Pack Llama',
     habitat: 'pasture', group: [2, 3],
     tameable: true, tameFood: [I.BILBERRIES], droveable: true,
   },
   pony: {
     make: makePony, hw: 0.42, h: 1.7, hp: 18, speed: 1.7, fleeSpeed: 3.2,
-    hostile: false, drops: [], cap: 12, name: 'Moorland Pony',
+    hostile: false, drops: [], cap: 6, name: 'Moorland Pony',
     habitat: 'moor', group: [2, 3], // half-wild, but they'll let thee up
     tameable: true, tameFood: [I.BILBERRIES], droveable: true, // feed her bilberries to win her over an' keep her
   },
@@ -1267,19 +1274,19 @@ export const MOB_TYPES = {
   },
   cat: {
     make: makeCat, hw: 0.22, h: 0.6, hp: 8, speed: 2.0, fleeSpeed: 4.2,
-    hostile: false, drops: [], cap: 2, name: 'Farm Cat', habitat: 'edge',
+    hostile: false, drops: [], cap: 1, name: 'Farm Cat', habitat: 'edge',
     shy: true, shyRadius: 4, fleeFor: 2,
     tameable: true, tameFood: [I.RAW_TROUT, I.SEA_FISH, I.COOKED_FISH, I.RAW_GROUSE],
   },
   pig: {
     make: makePig, hw: 0.36, h: 0.9, hp: 12, speed: 1.4, fleeSpeed: 2.6,
-    hostile: false, drops: [[I.RAW_PORK, 1, 2]], cap: 3, name: 'Saddleback Pig',
+    hostile: false, drops: [[I.RAW_PORK, 1, 2]], cap: 2, name: 'Saddleback Pig',
     habitat: 'pasture', group: [1, 3],
     tameable: true, tameFood: [I.BILBERRIES, I.RAW_BEEF, I.COOKED_BEEF, I.RAW_MUTTON],
   },
   rat: {
     make: makeRat, hw: 0.16, h: 0.3, hp: 4, speed: 2.4, fleeSpeed: 4.4,
-    hostile: false, drops: [], cap: 3, name: 'Moor Rat', habitat: 'edge', night: true,
+    hostile: false, drops: [], cap: 2, name: 'Moor Rat', habitat: 'edge', night: true,
     shy: true, shyRadius: 4, fleeFor: 2,
     tameable: true, tameFood: [I.BILBERRIES, I.RAW_GROUSE, I.RAW_MUTTON],
   },
@@ -1290,7 +1297,7 @@ export const MOB_TYPES = {
   },
   pheasant: {
     make: makePheasant, hw: 0.2, h: 0.85, hp: 3, speed: 1.6, fleeSpeed: 4.6,
-    hostile: false, drops: [[I.RAW_GROUSE, 1, 1]], cap: 5, name: 'Pheasant',
+    hostile: false, drops: [[I.RAW_GROUSE, 1, 1]], cap: 3, name: 'Pheasant',
     habitat: 'edge', shy: true, shyRadius: 7, flush: true, fleeFor: 4,
   },
   owl: {
@@ -1305,17 +1312,17 @@ export const MOB_TYPES = {
   },
   lizard: {
     make: makeLizard, hw: 0.12, h: 0.18, hp: 2, speed: 1.0, fleeSpeed: 5.5,
-    hostile: false, drops: [], cap: 5, name: 'Common Lizard',
+    hostile: false, drops: [], cap: 3, name: 'Common Lizard',
     bask: true, shy: true, shyRadius: 5, fleeFor: 2.5, day: true, habitat: 'rock',
   },
   curlew: {
     make: makeCurlew, hw: 0.2, h: 0.95, hp: 3, speed: 1.5, fleeSpeed: 4.4,
-    hostile: false, drops: [], cap: 8, name: 'Curlew',
+    hostile: false, drops: [], cap: 4, name: 'Curlew',
     shy: true, shyRadius: 8, flush: true, fleeFor: 4, habitat: 'moor',
   },
   frog: {
     make: makeFrog, hw: 0.14, h: 0.22, hp: 2, speed: 1.2, fleeSpeed: 3.2,
-    hostile: false, drops: [], cap: 5, name: 'Frog',
+    hostile: false, drops: [], cap: 3, name: 'Frog',
     shy: true, shyRadius: 4, fleeFor: 2, habitat: 'water',
   },
   seagull: {

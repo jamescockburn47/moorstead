@@ -394,6 +394,26 @@ export class RosterClient {
   }
   _teardown() { for (const [, e] of this.npcs) this._remove(e); this.npcs.clear(); }
 
+  // ---- seabed guard (client-side; James's call, 2026-07-03) --------------------------------
+  // The brain streams LOGICAL waypoints, and a walk leg's straight line (or a coast town's
+  // crowd-spread) can land a body over open sea — grounding then marched her along the SEA BED
+  // ("I saw an NPC walking on the bottom of the sea"). Until the brain keeps its waypoints on
+  // land (server-side fix, EVO roster_sim), a body stood on a sub-sea column is simply not
+  // drawn; she pops back the moment her cell is dry land again. A fordable RIVER column stays
+  // visible — road legs wade becks at the water surface (steerWalk's ford clamp), which reads
+  // right. Cheap for ~100 NPCs: one geo.height lookup only when she CHANGES CELL, cached on
+  // the entry (zero lookups while she stands still).
+  _subSea(e, m) {
+    const rx = Math.round(m.pos.x), rz = Math.round(m.pos.z);
+    const key = rx + ',' + rz;
+    if (e._seaKey === key) return e._seaSub;
+    e._seaKey = key;
+    const g = this.geo.height(rx, rz);          // sea: worldgen fills water where terrain < WATER_LEVEL
+    e._seaSub = g != null && g < WATER_LEVEL &&
+      !(typeof this.geo.riverColumn === 'function' && this.geo.riverColumn(rx, rz));
+    return e._seaSub;
+  }
+
   // ---- mounted NPCs (roads Slice 2) ----
   // Spawn a pony under a riding NPC for this leg. It's CONTROLLED, not wild: `ridden` makes the
   // entities AI skip it (no wander/gravity/distance-despawn — exactly as a player-ridden pony is
@@ -495,7 +515,6 @@ export class RosterClient {
         this._driveRail(e, m, dt, rankMap);
         continue;
       }
-      if (grp && !grp.visible) grp.visible = true;
       if (s && s.kind === 'walk') {
         const from = townAnchor(s.from, this.geo), to = townAnchor(s.to, this.geo);
         if (from && to) {
@@ -551,6 +570,13 @@ export class RosterClient {
         const p = npcVoxelPos(e.data, nowEff, this.geo);
         if (p) this._potterAt(m, p, nowEff, dt);
       }
+      // seabed guard: after this frame's drive, a body grounded on a sub-sea column is hidden
+      // (her leg pony an' all) rather than drawn strolling the sea bed; this also owns the
+      // visible=true restore for walkers/potterers — she shows again the moment she's on dry
+      // land (or back off a rail leg). See _subSea for the cost + the river-ford exemption.
+      const vis = !this._subSea(e, m);
+      if (grp) grp.visible = vis;
+      if (e._pony && e._pony.model) e._pony.model.group.visible = vis;
     }
     this._maybeBanter(dt);                                  // ambient NPC↔NPC natter when a player's nearby
   }
