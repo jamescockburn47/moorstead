@@ -427,11 +427,20 @@ Create `brain/tests/test_timetable.py`. **Correction (ground-truth #2):** use th
 house import style `from brain import timetable` (run pytest from the EVO repo root),
 NOT the flat `sys.path.insert` + `import timetable` shown in the original draft:
 
+**Two corrections found during A4 (both applied in the EVO repo commit 98e2179):**
+(a) the fixture path is `os.path.join(os.path.dirname(__file__), "..")` — tests live at
+`brain/tests/`, fixture at `brain/`, so one `..` reaches it (NOT `"..","brain"`, which
+resolves to the nonexistent `brain/brain`). (b) **`oneway` must be a plain left fold, not
+`sum()`** — CPython 3.12+ `sum()` uses Neumaier compensated summation, which is 1 ULP off
+JS's `legT.reduce((a,b)=>a+b,0)` on some lines (Coast Line), and `p*oneway` amplifies that
+to ~5e-7, breaking exact parity. Anywhere a future Python consumer needs client parity,
+sum `legT` with an explicit `for`-loop fold from `0.0`, never `sum()`/`math.fsum`.
+
 ```python
 import json, os
 from brain import timetable
 
-HERE = os.path.join(os.path.dirname(__file__), "..", "brain")
+HERE = os.path.join(os.path.dirname(__file__), "..")   # brain/tests/.. == brain/
 
 def _fixture():
     with open(os.path.join(HERE, "timetable-fixture.json"), encoding="utf-8") as f:
@@ -525,7 +534,11 @@ def next_departure(L, from_idx, to_idx, t_min):
     dwell-START times; a passenger boards during [dep, dep + dwell]."""
     leg_t, dwell = L["legT"], L["dwell"]
     n = len(L["stations"])
-    oneway = sum(leg_t) + n * dwell
+    # plain left fold to bit-match JS reduce — NOT sum() (Neumaier, 1 ULP off; see above)
+    oneway = 0.0
+    for _t in leg_t:
+        oneway += _t
+    oneway += n * dwell
     dirn = 0 if to_idx > from_idx else 1
     off_f = _call_offset(leg_t, n, dwell, dirn, _station_call_k(n, dirn, from_idx))
     off_t = _call_offset(leg_t, n, dwell, dirn, _station_call_k(n, dirn, to_idx))
