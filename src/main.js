@@ -2250,6 +2250,7 @@ class Game {
     this.mouseDown = [false, false, false];
     this.clearKeys();
     villager.chatting = true;
+    this.chatOpen = true;               // etiquette: no ambient approaches mid-conversation
     // a passenger's parcel becomes an errand: see it to their stop for coal
     if (villager.onTrain && villager.trainParcel && this.pendingGoods == null && !(this.drive && this.drive.goods)) {
       const stns = this.world.gen.geo.railway();
@@ -2264,6 +2265,7 @@ class Game {
 
   closeChat() {
     if (this.ui.chatVillager) this.ui.chatVillager.chatting = false;
+    this.chatOpen = false;
     this.state = 'playing';
     this.ui.show(null);
     this.lockPointer();
@@ -5390,6 +5392,7 @@ class Game {
       // death
       if (this.player.dead && this.state !== 'dead') {
         this.state = 'dead';
+        this.chatOpen = false;          // dying mid-chat must not permanently silence the parish
         this.mouseDown = [false, false, false];
         document.exitPointerLock?.();
         this.audio.hurt();

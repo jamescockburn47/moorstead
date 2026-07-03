@@ -108,3 +108,32 @@ export function villagerRemark(o, rng) {
   if (roleLines.length && rng() < 0.5) return pick(roleLines);
   return pick(pool);
 }
+
+// --- conversation etiquette (spec 2026-07-03): one ambient voice at a time -------------
+// A bark near the player claims a global quiet period; while it runs, would-be
+// speakers greet silently instead (turn + pause, no bubble). All pure — entities.js
+// supplies the state and owns the timers.
+export const AMBIENT_QUIET_MIN = 10;   // seconds of hush after a bubble fades
+export const AMBIENT_QUIET_MAX = 15;
+export const NOSY_RANDOM_BASE = 0.04;  // was an inline 0.16 — the moor stays quiet
+
+// May this villager START a nosy approach this frame?
+export function canNosy(o) {
+  if (o.hasToken || o.approaching || o.chatting || o.bubble || o.playerDead) return false;
+  if (o.chatOpen) return false;                 // never crowd an open conversation
+  if (o.quietLeft > 4) return false;            // let the last voice finish first (last few secs of quiet is fine to queue up in)
+  if (o.cd > 0) return false;
+  return o.dist < 9 && o.dist > 2.6;             // same approach band entities.js already uses for distP
+}
+
+// Does she WANT to come over? (same draws as before, lower random baseline)
+export function nosyWants(o, rand) {
+  return !!(o.nearBuild || o.roam || (o.sociable ?? 0.5) > 0.62 || rand < NOSY_RANDOM_BASE);
+}
+
+// How long the parish stays quiet after a bubble of `secs` seconds. Caller supplies
+// `rand` (e.g. Math.random() at the call site) — this module stays free of unseeded
+// randomness so it can be tested deterministically.
+export function ambientQuietAfter(secs, rand) {
+  return secs + AMBIENT_QUIET_MIN + rand * (AMBIENT_QUIET_MAX - AMBIENT_QUIET_MIN);
+}

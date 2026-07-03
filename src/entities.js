@@ -6,7 +6,7 @@ import { moveEntity } from './physics.js';
 import { getIconURL, tileColor } from './textures.js';
 import { hash2i } from './noise.js';
 import { TAME_GOAL, FOLLOW_RANGE, feedTrust, chooseName } from './pets.js';
-import { dayPhase, villagerRemark } from './villagerlife.js';
+import { dayPhase, villagerRemark, canNosy, nosyWants, ambientQuietAfter } from './villagerlife.js';
 import { HEIGHT, WATER_LEVEL } from './defs.js';
 import { flockCentroid, driveTarget, dogGoal, foldAt } from './herding.js';
 import { wintry } from './festive.js';
@@ -2714,6 +2714,17 @@ export class Entities {
     mob.bubbleT = secs;
   }
 
+  // Ambient (unprompted) speech: one voice at a time across the parish. Returns false
+  // when the parish is in its quiet period or the player is mid-conversation — the
+  // caller then greets silently instead of speaking.
+  speakAmbient(mob, text, secs = 8) {
+    if ((this.ambientQuiet || 0) > 0) return false;
+    if (this.game && this.game.chatOpen) return false;
+    this.speak(mob, text, secs);
+    this.ambientQuiet = ambientQuietAfter(secs, Math.random());
+    return true;
+  }
+
   updateVillager(mob, dt, player, distP) {
     // Merlin swaps between indigo wizard and Father Christmas when winter starts/ends.
     // We rebuild his model+nameplate in-place — same position, same mob object.
@@ -2889,11 +2900,14 @@ export class Entities {
     // a nosy neighbour breaks off to come have a look an' a word — but only ONE at a
     // time across t' whole parish (a single token), so folk don't crowd thee; the
     // rest get on wi' their lives an' trades.
-    if (!this.nosyToken && !mob.nosyApproach && !mob.chatting && !mob.bubble && !player.dead && mob.nosyCd <= 0 && distP < 9 && distP > 2.6) {
+    if (canNosy({ hasToken: !!this.nosyToken, approaching: !!mob.nosyApproach,
+        chatting: !!mob.chatting, bubble: !!mob.bubble, playerDead: !!player.dead,
+        chatOpen: !!(this.game && this.game.chatOpen),
+        quietLeft: this.ambientQuiet || 0, cd: mob.nosyCd, dist: distP })) {
       const lb = this.lastBuild;
       const nearBuild = !!(lb && (performance.now() - lb.t < 60000) &&
         Math.hypot(lb.x - mob.pos.x, lb.z - mob.pos.z) < 16 && Math.hypot(lb.x - player.pos.x, lb.z - player.pos.z) < 16);
-      if (nearBuild || mob.roam || (mob.sociable || 0.5) > 0.62 || Math.random() < 0.16) {
+      if (nosyWants({ nearBuild, roam: mob.roam, sociable: mob.sociable }, Math.random())) {
         mob.nosyCd = 30 + Math.random() * 40;
         mob.nosyApproach = { until: 6, build: nearBuild };
         this.nosyToken = mob;
@@ -2910,7 +2924,9 @@ export class Entities {
         mob.yaw = Math.atan2(player.pos.x - mob.pos.x, player.pos.z - mob.pos.z);
       }
       if (distP <= 3.2 || mob.nosyApproach.until <= 0) {
-        if (!mob.bubble) this.speak(mob, villagerRemark({ role: mob.role, mood: mob.mood, nearBuild: mob.nosyApproach.build, outside: !mob.village, evening: latening }, Math.random), 8);
+        // one voice at a time: if the parish is mid-natter she greets silently instead
+        // (turns, pauses, gets on) — a nod, not another bark on top.
+        if (!mob.bubble) this.speakAmbient(mob, villagerRemark({ role: mob.role, mood: mob.mood, nearBuild: mob.nosyApproach.build, outside: !mob.village, evening: latening }, Math.random), 8);
         mob.nosyApproach = null; mob.state = 'greet'; mob.stateTimer = 1.5;
         if (this.nosyToken === mob) this.nosyToken = null;
       }
@@ -3188,6 +3204,7 @@ export class Entities {
   }
 
   update(dt, player, isNight, audio, onPickup) {
+    this.ambientQuiet = Math.max(0, (this.ambientQuiet || 0) - dt);
     this.updateMobs(dt, player, isNight, audio);
     this.updateDrops(dt, player, audio, onPickup);
     this.updateParticles(dt);

@@ -12,6 +12,12 @@ const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
 // deep cast is always kept. 0.6 = render ~60% (a 40% cut). Live-tunable dial; 1 = render everyone.
 export const RENDER_FRACTION = 0.78;
 
+// "Within earshot of the player" — the one shared definition both the banter scheduler
+// (_maybeBanter, picks candidate pairs) and the banter runner (_runBanter, gates each line
+// through the ambient-speak etiquette) must agree on, so a pair can never be picked as
+// "near enough to matter" by one and treated as "far, speak freely" by the other.
+const NEAR_PL2 = 22 * 22;
+
 // The true voxel surface at (x,z): one block ABOVE the top non-air/non-water block, so a body
 // stands ON the platform deck / building floor rather than sunk into it. geo.height is DEM-only
 // and blind to built blocks (platforms, walls), which is why folk clip. Falls back to the DEM
@@ -594,7 +600,7 @@ export class RosterClient {
     if (this._banterScan > 0 || this._banterCool > 0) return;
     this._banterScan = 2.5;                                 // hunt for a pair every ~2.5s
     const pl = this.game.player; if (!pl || !pl.pos) return;
-    const NEAR_PL2 = 22 * 22, NEAR_EACH2 = 14;             // within earshot of the player; ~3.7 blocks apart
+    const NEAR_EACH2 = 14;                                  // ~3.7 blocks apart (NEAR_PL2 is module-level, shared with _runBanter)
     const cands = [];
     for (const [, e] of this.npcs) {
       const m = e.mob, s = e.data && e.data.state;
@@ -635,12 +641,21 @@ export class RosterClient {
       const ctxA = `You are ${pa.name}, a ${pa.role} in ${pa.village}. You meet your neighbour ${pb.name}, a ${pb.role}. Greet them or pass ONE brief neighbourly remark — a single short sentence, in character, North York Moors about 1900. No stage directions, no asterisks.`;
       const r1 = await talkGeneric(pa, `${pb.name} the ${pb.role} stops beside you.`, null, ctxA);
       if (this._stopped || A.dead || B.dead || !r1 || !r1.reply) return;
-      this.game.entities.speak(A, r1.reply, 6);
+      const _nearPlayer = (m) => {
+        const p = this.game.player && this.game.player.pos;
+        if (!p) return false;
+        const dx = m.pos.x - p.x, dz = m.pos.z - p.z;
+        return dx * dx + dz * dz <= NEAR_PL2;   // same "within earshot" band _maybeBanter already selected on
+      };
+      const _banterSpeak = (m, text) =>
+        _nearPlayer(m) ? this.game.entities.speakAmbient(m, text, 6)
+                       : (this.game.entities.speak(m, text, 6), true);
+      if (!_banterSpeak(A, r1.reply)) return;   // parish is mid-natter — let this one lapse
       await this._sleep(2800);
       if (this._stopped || A.dead || B.dead) return;
       const ctxB = `You are ${pb.name}, a ${pb.role} in ${pb.village}. Your neighbour ${pa.name} just said: "${r1.reply}". Reply briefly in character — a single short sentence, North York Moors about 1900. No stage directions, no asterisks.`;
       const r2 = await talkGeneric(pb, r1.reply, null, ctxB);
-      if (!this._stopped && !B.dead && r2 && r2.reply) { this._faceEachOther(B, A); this.game.entities.speak(B, r2.reply, 6); }
+      if (!this._stopped && !B.dead && r2 && r2.reply) { this._faceEachOther(B, A); _banterSpeak(B, r2.reply); }
     } catch (e) { reportQuiet('banter', e); /* brain didn't answer — let the natter lapse quietly, but count it on the ledger */ }
     finally {
       this._banterBusy = false;
