@@ -42,7 +42,12 @@ export const PARLOUR_CAP = 5;
 // every parish at once), then the whole set is capped at PARLOUR_CAP by taking
 // the lowest-hash ids first (a stable, order-independent tiebreak — NOT array
 // order, so callers can pass ids in any order and still agree on who's in).
-const CROWD_THRESHOLD = 0x40000000; // ~25% of ids draw "wants a pint tonight"
+// ~75% of ids fancy a pint of an evening. Deliberately generous (D3 proof pass
+// 2026-07-04: at 25%, Grosmont's 7-strong roster drew ~2 candidates and both
+// could be mid-journey — an empty pub most nights). PARLOUR_CAP and travel
+// state thin the room naturally: only 'at'-home folk actually sit, so trains
+// arriving through the evening deliver drinkers as they get home.
+const CROWD_THRESHOLD = 0xC0000000;
 export function parlourCrowd(ids, salt) {
   const candidates = [];
   for (const id of ids) {
