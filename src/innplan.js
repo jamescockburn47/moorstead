@@ -10,6 +10,13 @@ export const PARLOUR_H = 4;    // parlour interior clear height, blocks
 const PARLOUR_FLOOR_Y = 3;     // world y the parlour floor sits at (well clear of bedrock y=0)
 const WALL_THICK = 1;          // shell wall thickness, both exterior and pocket
 
+// LOAD-BEARING EQUALITY: the underground parlour shell spans
+// origin ± (floor(PARLOUR_W/2)+WALL_THICK, floor(PARLOUR_L/2)+WALL_THICK) = ±(6,5),
+// and the protectedBox spans origin ± (floor(EXT_W/2)+EXT_MARGIN, floor(EXT_L/2)+EXT_MARGIN) = ±(6,5).
+// They coincide EXACTLY, with zero slack — cave suppression and edit protection are both
+// keyed on protectedBox, so if any of these six constants is tuned independently the
+// parlour shell can silently poke outside the protected region. Re-derive both sides
+// (and re-run verify-inn-interior / verify-inn-protection) before changing any of them.
 const EXT_W = 9;               // exterior building footprint width (x), blocks
 const EXT_L = 7;               // exterior building footprint length (z), blocks
 const EXT_MARGIN = 2;          // no-edit buffer beyond the exterior footprint, blocks
