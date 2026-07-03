@@ -372,8 +372,18 @@ function addWater(mat) {
         // its flanks an' vanish perpendicular — brightness ridin' wCorr as well. wDist
         // fades t' glint in frae ~5 blocks out: glitter lives toward t' horizon under t'
         // sun, not under thi boots at t' water's edge.
+        // [sword-2] James 2026-07-03: t' blade PULSED as a whole. Cause, measured live:
+        // every cell shared ONE twinkle speed (2.4 rad/s) an' its phase came frae t' SAME
+        // hash t' density gate selects on — so t' visible population (t' high-wH slice)
+        // blinked near-in-phase, an' max(0,sin)'s 50% duty strobed 'em all dark together
+        // (whole-corridor lit area swung ~20% at 2π/2.4 ≈ 2.6 s). Fix: a SECOND independent
+        // hash (wH2, offset cell coords) gives every cell its OWN speed (1.5–4.0 rad/s) AND
+        // phase — no shared frequency survives t' population sum, nowt correlated wi' t'
+        // gate — an' t' twinkle is FLOORED (0.55 + 0.45·sin): a cell dims, never vanishes.
+        // T' speed spread also breaks t' owd exact lock wi' t' ripple beat (1.3 + 1.1 = 2.4).
         + '  float wH = wHash(floor(wGp * 3.5));\n'
-        + '  float wTw = max(0.0, sin(uWaterTime * 2.4 + wH * 6.2831));\n'
+        + '  float wH2 = wHash(floor(wGp * 3.5) + 19.19);\n'
+        + '  float wTw = 0.55 + 0.45 * sin(uWaterTime * (1.5 + wH2 * 2.5) + wH2 * 6.2831);\n'
         + '  float wG = step(1.0 - 0.42 * wCorr, wH) * wTw * (0.5 + 0.5 * wH);\n'
         + '  float wDist = smoothstep(5.0, 16.0, wVL);\n'
         + '  diffuseColor.rgb += wG * wCorr * wDist * uGlitter * (1.0 - ice);\n'

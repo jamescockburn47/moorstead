@@ -8,9 +8,10 @@
 import { readFileSync } from 'node:fs';
 import { strSeed } from '../src/noise.js';
 import { Geography } from '../src/geography.js';
-import { WATER_LEVEL } from '../src/defs.js';
+import { WATER_LEVEL, CHUNK, HEIGHT, B } from '../src/defs.js';
 import { MoorsGeography } from '../src/moorsgeo.js';
 import { Rails } from '../src/rails.js';
+import { Gen, MOORS_SEED } from '../src/worldgen.js';
 
 const SEEDS = ['t-shared-moor', 'owt', 'nowt', '42'];
 
@@ -240,6 +241,107 @@ console.log('\n== rails overlay: bridges an\' earthworks (real-Moors world) ==')
   }
   if (railsSrc.includes('Math.random')) bad('rails.js uses Math.random — build-time determinism broken');
   else ok('earthwork dressing literals present, no Math.random');
+
+  // 6. VOXEL water continuity under t' spans (worldgen, not t' overlay): t' bridge
+  //    stamp must never carve nor wall t' water out o' t' channel. Generates t' real
+  //    chunks an' inspects t' blocks — this is what t' player actually stands in.
+  console.log('\n== worldgen: water continuity under t\' bridges (real-Moors chunks) ==');
+  const IDXv = (x, y, z) => x + z * CHUNK + y * CHUNK * CHUNK;
+  const gen = new Gen(MOORS_SEED);
+  const vg = gen.geo; // t' SEEDED geography t' chunks are built frae (mg above is seedless — heights differ)
+  const chunkCache = new Map();
+  const blockAt = (x, y, z) => {
+    const ccx = Math.floor(x / CHUNK), ccz = Math.floor(z / CHUNK);
+    const key = ccx + ',' + ccz;
+    if (!chunkCache.has(key)) chunkCache.set(key, gen.generateChunk(ccx, ccz));
+    return chunkCache.get(key)[IDXv(x - ccx * CHUNK, y - 0, z - ccz * CHUNK)];
+  };
+
+  // 6a. t' Esk crossing by Grosmont: every channel column under t' span carries
+  //     WATER frae bed+1 up to wl — no dry hole, no stone dam, an' t' gravel bed kept
+  {
+    let cols = 0, holes = 0, bedOk = true;
+    const tx = Math.round(target.x), tz = Math.round(target.z);
+    for (let dz = -8; dz <= 8; dz++) for (let dx = -8; dx <= 8; dx++) {
+      const x = tx + dx, z = tz + dz;
+      const rc = vg.riverColumn(x, z);
+      if (!rc) continue;
+      cols++;
+      for (let y = rc.bed + 1; y <= rc.wl && y < HEIGHT; y++) {
+        if (blockAt(x, y, z) !== B.WATER) { holes++; if (holes <= 4) bad(`Esk crossing: (${x},${z}) y=${y} is not WATER (bed=${rc.bed} wl=${rc.wl}) — t' beck breaks under t' span`); }
+      }
+      if (rc.bed > 0 && blockAt(x, rc.bed, z) !== B.GRAVEL) bedOk = false;
+    }
+    if (!cols) bad('Esk crossing: no river columns found in t\' window');
+    else if (!holes) ok(`Esk crossing: water continuous bed+1..wl across ${cols} channel columns`);
+    if (!bedOk) bad('Esk crossing: gravel bed lost frae under t\' water');
+    else ok('Esk crossing: gravel bed intact');
+  }
+
+  // 6b. EVERY crossing on every line: no non-WATER block below wl in any channel
+  //     column near t' rail (catches low-deck culverts damming t' beck)
+  {
+    const seen = new Set();
+    let checked = 0, badCols = 0;
+    for (const line of vg.railPaths()) {
+      for (const p of line.path.pts) {
+        const px = Math.round(p.x), pz = Math.round(p.z);
+        if (!(vg.nearRiver && vg.nearRiver(px, pz, 4))) continue;
+        for (let dz = -6; dz <= 6; dz++) for (let dx = -6; dx <= 6; dx++) {
+          const x = px + dx, z = pz + dz;
+          const k = x + ',' + z;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          const rc = vg.riverColumn(x, z);
+          if (!rc) continue;
+          checked++;
+          for (let y = rc.bed + 1; y <= rc.wl && y < HEIGHT; y++) {
+            if (blockAt(x, y, z) !== B.WATER) {
+              badCols++;
+              if (badCols <= 4) bad(`${line.name}: channel column (${x},${z}) y=${y} not WATER (bed=${rc.bed} wl=${rc.wl}) — dammed or drained`);
+              break;
+            }
+          }
+        }
+      }
+    }
+    if (!badCols) ok(`all channel columns near t' rail carry water bed+1..wl (${checked} columns, every line)`);
+  }
+
+  // 6c. t' estuary flats by Whitby (tidal water wi' no riverColumn): bridge-zone
+  //     columns wi' t' seabed below WATER_LEVEL must keep their water h+1..WL —
+  //     t' arch carve must spring frae ABOVE t' tide, not frae t' seabed
+  {
+    const seen = new Set();
+    let checked = 0, badCols = 0;
+    for (const line of vg.railPaths()) {
+      for (const p of line.path.pts) {
+        const px = Math.round(p.x), pz = Math.round(p.z);
+        for (let dz = -5; dz <= 5; dz++) for (let dx = -5; dx <= 5; dx++) {
+          const x = px + dx, z = pz + dz;
+          const k = x + ',' + z;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          if (!(vg.nearRiver && vg.nearRiver(x, z, 3))) continue;     // bridge zone only
+          const ri = vg.railInfo(x, z);
+          if (!ri || ri.d >= 2.8) continue;                           // only columns t' stamp touches
+          if (vg.riverColumn(x, z)) continue;                         // channel columns done in 6b
+          const h = Math.floor(vg.height(x, z));
+          if (h >= WATER_LEVEL) continue;                             // dry bank
+          checked++;
+          for (let y = h + 1; y <= WATER_LEVEL; y++) {
+            if (blockAt(x, y, z) !== B.WATER) {
+              badCols++;
+              if (badCols <= 4) bad(`${line.name}: estuary column (${x},${z}) y=${y} not WATER (h=${h}, WL=${WATER_LEVEL}) — t' tide's carved dry under t' span`);
+              break;
+            }
+          }
+        }
+      }
+    }
+    if (!badCols) ok(`estuary flats under t' spans keep their water h+1..WL (${checked} columns)`);
+    else if (!checked) bad('estuary check found no columns — t\' line no longer crosses tidal flats?');
+  }
 }
 
 console.log(failed ? '\nRESULT: FAIL' : '\nRESULT: PASS');

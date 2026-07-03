@@ -294,6 +294,14 @@ ok(mesherSrc.includes('float wHash(vec2 p)'), 'water handler carries its own tin
 ok(mesherSrc.includes('wHash(floor(wGp * 3.5))'), 'glints are CELLULAR (hashed sub-block cells, per-cell phase + brightness), not a lattice');
 ok(!mesherSrc.includes('sin(wGp.x * 2.3'), 'the old doubly-periodic lattice glitter is GONE from the shader');
 ok(mesherSrc.includes('wG * wCorr * wDist * uGlitter * (1.0 - ice)'), 'final glint = cell sparkle × corridor × near-fade × uGlitter × (1−ice) — uGlitter keeps its dayness×clear drive');
+// [sword-2] the pulse fix (James 2026-07-03): the blade used to THROB as a whole — one shared
+// twinkle frequency (2.4 rad/s), phase drawn from the SAME hash the density gate selects on
+// (so the visible high-wH slice blinked near-in-phase), and max(0,sin)'s 50% duty cycle
+// strobing that synchronized population fully dark. Contract now: per-cell speed AND phase
+// both come from a SECOND independent hash, and the twinkle is floored — dims, never vanishes.
+ok(mesherSrc.includes('wHash(floor(wGp * 3.5) + 19.19)'), '[sword-2] second independent hash (wH2) — twinkle decorrelated from the density-gate hash');
+ok(mesherSrc.includes('0.55 + 0.45 * sin(uWaterTime * (1.5 + wH2 * 2.5) + wH2 * 6.2831)'), '[sword-2] per-cell speed (1.5–4.0 rad/s) AND phase hash-derived; twinkle floored — a cell dims, never strobes off');
+ok(!mesherSrc.includes('max(0.0, sin(uWaterTime'), '[sword-2] the shared-frequency 50%-duty strobe (max(0,sin(uWaterTime·2.4…))) is GONE — no whole-blade throb');
 for (const s of ['setCamPos', 'setSunAzim', 'setSunLow'])
   ok(mesherSrc.includes(`export function ${s}(`), `${s} setter exported from mesher.js`);
 ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,1200}?setSunAzim\(_ax \/ _al, _az \/ _al\);/.test(mainSrc),
