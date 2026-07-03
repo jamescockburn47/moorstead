@@ -434,10 +434,10 @@ export class Sky {
           // [4] t' Milky Way: a faint great-circle band, mottled by t' same fbm t'
           // clouds already compile, faded at t' horizon; uStarAmt kills it by day,
           // under overcast an' at full it stays a whisper. Clouds mix OVER it below.
-          float mw = exp(-pow(dot(dir, GPOLE), 2.0) * 16.0)
-                   * (0.45 + 0.55 * fbm(vec2(dot(dir, GA), dot(dir, GB)) * 5.0 + 3.7))
+          float mw = exp(-pow(dot(dir, GPOLE), 2.0) * 30.0)
+                   * (0.25 + 0.75 * fbm(vec2(dot(dir, GA), dot(dir, GB)) * 5.0 + 3.7))
                    * smoothstep(0.02, 0.18, dir.y);
-          col += vec3(0.52, 0.58, 0.70) * (mw * uStarAmt * 0.16);
+          col += vec3(0.52, 0.58, 0.70) * (mw * uStarAmt * 0.07);
           float up = clamp(dir.y, 0.0, 1.0);
           if (up > 0.02) {
             vec2 uv = dir.xz / max(dir.y, 0.06) * 0.55 + uTime * vec2(0.012, 0.007);
@@ -827,8 +827,12 @@ export class Sky {
     cu.uClouds.value += ((grey + (1 - grey) * churn) - cu.uClouds.value) * Math.min(1, dt * 0.5);
     cu.cloudCol.value.setRGB(0.16, 0.18, 0.22).lerp(CLOUD_LIT, dayness); // lit colour hoisted ([22])
     if (churn > 0.001) cu.cloudCol.value.lerp(STORM_CLOUD, churn * 0.9);
-    // [4] t' Milky Way rides t' same night term as t' stars, doused by overcast
-    cu.uStarAmt.value = starA * (1 - grey);
+    // [4] t' Milky Way rides t' same night term as t' stars, doused by overcast —
+    // an' WASHED OUT by a bright moon (as in life: a full moon drowns t' band).
+    // James's call 2026-07-03: t' band read as a bright central smear — narrowed
+    // (16→30), dimmed (0.16→0.07), mottle deepened, moon-wash added.
+    const mwIllum = 0.5 - 0.5 * Math.cos(moonPhase(this.day) * Math.PI * 2);
+    cu.uStarAmt.value = starA * (1 - grey) * (1 - 0.55 * moonVis * mwIllum);
     // t' cloud deck blinks white wi' each strike (squared, same easin' as flashLift)
     cu.uFlash.value = this.flash * this.flash;
     // horizon-band height follows fog thickness: open weather a low haze line (~0.19),

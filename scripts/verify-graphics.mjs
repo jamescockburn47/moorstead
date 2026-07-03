@@ -459,8 +459,8 @@ ok(skySrc.includes('const field = buildStarField()'), 'stars built frae the seed
 ok(skySrc.includes('gl_PointSize = size * aMag * twinkle;'), 'per-star magnitude + twinkle scale gl_PointSize in the injected vertex stage');
 ok(skySrc.includes("this._starU.uTwinkle.value = fine ? 1 : 0"), 'twinkle is Fine-gated (Plain leaves uTwinkle 0 — static field, same program)');
 ok(skySrc.includes('uStarAmt: { value: 0 }'), 'dome uStarAmt uniform exists, defaults 0 (fresh compile = today, no Milky Way)');
-ok(skySrc.includes('exp(-pow(dot(dir, GPOLE), 2.0) * 16.0)'), 'Milky Way: great-circle band about GPOLE in the dome shader');
-ok(skySrc.includes('cu.uStarAmt.value = starA * (1 - grey)'), 'Milky Way rides the same night term as the stars, doused by overcast');
+ok(skySrc.includes('exp(-pow(dot(dir, GPOLE), 2.0) * 30.0)'), 'Milky Way: great-circle band about GPOLE (narrowed 16->30, James 2026-07-03)');
+ok(skySrc.includes('cu.uStarAmt.value = starA * (1 - grey) * (1 - 0.55 * moonVis * mwIllum)'), 'Milky Way: night term, doused by overcast AND washed out by a bright moon (James 2026-07-03)');
 ok(skySrc.includes('if (this._moonDay !== this.day) this._drawMoonPhase()'), 'moon disc redrawn once per game DAY, never per frame');
 ok(skySrc.includes('this.moonSprite.add(this.moonHalo)'), 'halo parented to the moon sprite — rides it for free');
 ok(skySrc.includes('this.moonHalo.material.opacity = this._mistS * moonVis * (1 - grey)'),

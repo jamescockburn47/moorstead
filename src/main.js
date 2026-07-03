@@ -693,6 +693,32 @@ class Game {
         G.renderFrame(0);
         return G.renderer.domElement.toDataURL('image/png');
       },
+      // dev: pin t' camera at a FIXED POINT for visual checks — t' player never
+      // moves (so nowt falls, drowns or dies while framing a shot). yaw/pitch in
+      // radians. photo(null) releases back to t' player camera.
+      //   moorstead.debug.photo(1417, 40, 2578, Math.PI/2, -0.3)
+      photo(x, y, z, yaw = 0, pitch = 0) {
+        if (x == null) { G._photoCam = null; return 'photo cam released'; }
+        G._photoCam = { x, y, z, yaw, pitch };
+        return `photo cam pinned at ${x},${y},${z} (yaw ${yaw.toFixed(2)}, pitch ${pitch.toFixed(2)})`;
+      },
+      // dev: t' GL ground truth in one call — force-compile every scene program
+      // an' count link failures. T' headless gate can't see GLSL an' t' console
+      // buffer holds stale errors across reloads; THIS is t' reliable check.
+      glHealth() {
+        const gl = G.renderer.getContext();
+        G.renderer.compile(G.scene, G.camera);
+        const progs = G.renderer.info.programs || [];
+        let broken = 0; const fails = [];
+        for (const p of progs) {
+          try {
+            if (p.program && !gl.getProgramParameter(p.program, gl.LINK_STATUS)) {
+              broken++; fails.push(p.name || p.cacheKey || 'unnamed');
+            }
+          } catch (e) { /* skip un-queryable */ }
+        }
+        return { programs: progs.length, broken, fails, glError: gl.getError() };
+      },
       // dev: jump to a named festival (its .centre phase), or null to resume.
       // e.g. moorstead.debug.festival('yule')
       festival(id) {
@@ -5222,9 +5248,17 @@ class Game {
       }
     }
 
-    // camera follows player
-    this.camera.position.set(this.player.pos.x, this.player.pos.y + this.player.eye, this.player.pos.z);
-    this.camera.rotation.set(this.player.pitch, this.player.yaw, 0);
+    // camera follows player — unless a debug photo pose is pinned (visual checks
+    // frae a FIXED POINT: t' player stays put wherever they safely stand, nowt
+    // falls off owt or drowns while a screenshot's taken — James's call 2026-07-03)
+    if (this._photoCam) {
+      const p = this._photoCam;
+      this.camera.position.set(p.x, p.y, p.z);
+      this.camera.rotation.set(p.pitch, p.yaw, 0);
+    } else {
+      this.camera.position.set(this.player.pos.x, this.player.pos.y + this.player.eye, this.player.pos.z);
+      this.camera.rotation.set(this.player.pitch, this.player.yaw, 0);
+    }
     const targetFov = this.player.sprinting ? 82 : 75;
     if (Math.abs(this.camera.fov - targetFov) > 0.5) {
       this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 8);
