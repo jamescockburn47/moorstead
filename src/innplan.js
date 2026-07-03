@@ -29,7 +29,7 @@ const INN_NAMES = {
 const GAMES = ['merrils', 'draughts', 'dominoes', 'shoveha'];
 const DOOR_SIDES = ['n', 's', 'e', 'w'];
 
-function pick(rng, arr) { return arr[Math.floor(rng() * arr.length) % arr.length]; }
+function pick(rng, arr) { return arr[Math.floor(rng() * arr.length)]; } // rng() < 1 strictly, so the index never reaches arr.length
 
 // Deterministic clear-site scan near the village centre. Pure (x,z) queries only.
 function scanSite(geo, v, rng) {
@@ -44,8 +44,9 @@ function scanSite(geo, v, rng) {
       const h = geo.height(x, z);
       // flat enough: every corner of the exterior box within 1 block of centre height
       let flat = true;
-      for (const [dx, dz] of [[-EXT_W / 2, -EXT_L / 2], [EXT_W / 2, -EXT_L / 2], [-EXT_W / 2, EXT_L / 2], [EXT_W / 2, EXT_L / 2]]) {
-        if (Math.abs(geo.height(Math.round(x + dx), Math.round(z + dz)) - h) > 1) { flat = false; break; }
+      const hw = Math.floor(EXT_W / 2), hl = Math.floor(EXT_L / 2); // same half-width the real footprint uses below
+      for (const [dx, dz] of [[-hw, -hl], [hw, -hl], [-hw, hl], [hw, hl]]) {
+        if (Math.abs(geo.height(x + dx, z + dz) - h) > 1) { flat = false; break; }
       }
       if (!flat) continue;
       return { x, z, groundY: h };
