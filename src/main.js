@@ -36,6 +36,7 @@ import { Rails } from './rails.js';
 import { RoadLayer } from './roads.js';
 import { FloraLayer } from './floraLayer.js';
 import { HearthLayer } from './hearthLayer.js';
+import { InnDecorLayer } from './innDecor.js';
 import { DripLayer } from './dripLayer.js';
 import { SeasonalLayer } from './seasonalLayer.js';
 import { FireLayer } from './fireLayer.js';
@@ -841,6 +842,8 @@ class Game {
     this.fireLayer = new FireLayer(this.scene, this.world);
     if (this.hearthLayer) this.hearthLayer.clear();
     this.hearthLayer = new HearthLayer(this.scene, this.world);
+    if (this.innDecor) this.innDecor.clear();
+    this.innDecor = new InnDecorLayer(this.scene, this.world);
     if (this.dripLayer) this.dripLayer.dispose();
     this.dripLayer = new DripLayer(this.scene, this.world, { plain: this.gfxQuality !== 'fine' });
     if (this.footprints) this.footprints.clear();
@@ -907,6 +910,7 @@ class Game {
     if (this.seasonalLayer) { this.seasonalLayer.clear(); this.seasonalLayer = null; }
     if (this.fireLayer) { this.fireLayer.dispose(); this.fireLayer = null; }
     if (this.hearthLayer) { this.hearthLayer.clear(); this.hearthLayer = null; }
+    if (this.innDecor) { this.innDecor.clear(); this.innDecor = null; }
     if (this.dripLayer) { this.dripLayer.dispose(); this.dripLayer = null; }
     if (this.footprints) { this.footprints.clear(); this.footprints = null; }
     if (this.murmuration) { this.murmuration.dispose(); this.murmuration = null; }
@@ -5258,6 +5262,7 @@ class Game {
       if (this.murmuration) this.murmuration.update(dt, season);
       if (this.harbourLight) this.harbourLight.update(dt, this.camera, this.sky);
       if (this.hearthLayer) this.hearthLayer.update(dt, this.player.pos, this.sky);
+      if (this.innDecor) this.innDecor.update(dt, this.player.pos, this.sky, season);
       // ONE global flame tick: drives the shared flame material's uTime, every
       // hero fire's embers/smoke, an' the pulsing bonfire light — so torches
       // (FireLayer) AND the festival bonfire (SeasonalLayer) animate off one clock.
