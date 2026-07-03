@@ -39,14 +39,14 @@ Specs: grep `### [n]` / `### [Dn]` in 2026-07-02-graphics-wow-audit.md. Codebase
 
 ### S3 — terrain/flora shader family (sequential, same addSnow handler)
 - [x] S3a [0] cloud shadows (fold into addSnow handler)
-- [ ] S3b [9/17 merged] wet ground + [D6] puddles (aWet bake) + [D10] slow dry  <-- NEXT UP (agent killed by session limit before any edit; tree clean)
+- [x] S3b [9/17 merged] wet ground + [D6] puddles + [D10] slow dry + mud lanes — DONE
 - [ ] S3c [10]+[D14] wind sway + travelling gust fronts (shared-clock phase!) + [D8] dew
       (same GeoBuilder/crossGeom touch) + [14] snow polish (owns sparkle helper)
 
 ### S4 — sky/night/atmosphere (sky.js)
 - [x] S4a [4] 1900 night sky (seeded stars — fixes Math.random violation, Milky Way, moon
       phases, halo) + [22-mod] dawn fog tint + scratch-Color hoist
-- [ ] S4b [30] rainbow + [31] aurora (dome shader)  <-- agent killed by session limit before any edit; tree clean
+- [x] S4b [30] rainbow + [31] aurora — DONE (both drive helpers exported pure; aurora ~10-game-day shared clock)
 - [ ] S4c [1] valley mist (mesher fog injection + sky drive) + [D15] summer haze
 - [ ] S4d [D12] heat shimmer (grade + dome) → [D13] fire heat-haze
 
@@ -64,6 +64,9 @@ Specs: grep `### [n]` / `### [Dn]` in 2026-07-02-graphics-wow-audit.md. Codebase
 - [ ] [D9] eave drips (new dripLayer.js) · [D16] pollen/midges (festivalKit motes)
 - [x] [19] GPU wind-slanted precipitation — DONE (CPU loops deleted, ~40KB/frame uploads gone; wind+squall shared-clock; streak lean via map.rotation not object rotation; winterPrecip pooled)
 - [ ] [20] seasonal colour fronts (L) · [37] cinematic title plates
+
+## RESUME LOG (day 2)
+- S3b wet ground (darken + puddles in hollows + slow-dry + mud lanes) + S4b rainbow/aurora COMMITTED. Gate green 231 graphics + verify-wetground. Preview-confirmed: wet darkening reads, double bow renders (PALE — brighten literal for James), aurora curtains render but SUBTLE on moonlit night (raise 1.6 gain), night sky lovely, 0 console errors. Fixed stale aurora-cadence comment.
 
 ## MORNING REPORT (overnight run ended — session token limit, resets ~01:40)
 

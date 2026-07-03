@@ -25,6 +25,23 @@ export function setGlintTime(t) { glintUniform.uGlintTime.value = t; }
 const cloudUniforms = { uCloudTime: { value: 0 }, uCloudShadowAmt: { value: 0 } };
 export function setCloudTime(t) { cloudUniforms.uCloudTime.value = t; }
 export function setCloudShadow(v) { cloudUniforms.uCloudShadowAmt.value = v; }
+// [9/17 merged]+[D6]+[D10] wet ground: ONE coherent system, all in t' addSnow handler.
+// Module uniforms shared by BOTH addSnow materials (t' glintUniform/cloudUniforms
+// pattern). All default 0 so a fresh compile is today's terrain byte-identical, an'
+// applyQuality parks 'em on Plain. uWetness is t' raw soak (diffuse darkenin', tier-flat);
+// uGroundWet is t' SHAPED drive input ([D10] pow-shapin' + [D6] puddle threshold slide) —
+// kept distinct so t' shaping is explicit; uSheen gates t' Fine-only grazing sheen; uWetSky
+// carries t' live sky/fog colour under Fine (black on Plain, so puddles darken but don't tint).
+const wetUniforms = {
+  uWetness: { value: 0 },   // raw soak [0,1] — diffuse cool-damp darkening, both tiers
+  uGroundWet: { value: 0 }, // shaped drive: puddle threshold slide + [D10] dry shaping
+  uSheen: { value: 0 },     // Fine-only grazing-angle wet sheen strength
+  uWetSky: { value: new THREE.Color(0, 0, 0) }, // live sky colour (Fine); black on Plain
+};
+export function setWetness(v) { wetUniforms.uWetness.value = v; }
+export function setGroundWet(v) { wetUniforms.uGroundWet.value = v; }
+export function setSheen(v) { wetUniforms.uSheen.value = v; }
+export function setWetSky(r, g, b) { wetUniforms.uWetSky.value.setRGB(r, g, b); }
 export function setSnowLevel(snowiness) {
   const s = snowiness < 0 ? 0 : snowiness > 1 ? 1 : snowiness;
   snowUniforms.uSnowAmt.value = s;
@@ -36,13 +53,19 @@ function addSnow(mat, key = 'terrain-snow', glint = false) {
     shader.uniforms.uSnowAmt = snowUniforms.uSnowAmt;
     shader.uniforms.uCloudTime = cloudUniforms.uCloudTime;
     shader.uniforms.uCloudShadowAmt = cloudUniforms.uCloudShadowAmt;
-    shader.vertexShader = 'attribute float aSnowExp;\nvarying float vSnowExp;\nvarying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\n' + shader.vertexShader
+    shader.uniforms.uWetness = wetUniforms.uWetness;
+    shader.uniforms.uGroundWet = wetUniforms.uGroundWet;
+    shader.uniforms.uSheen = wetUniforms.uSheen;
+    shader.uniforms.uWetSky = wetUniforms.uWetSky;
+    // [D6] aWet packs hollowness (int part) + soak-bias (fraction) on solid tops; missing
+    // attribute defaults to 0 on cutout geometry an' un-rebuilt meshes (the aGlint idiom).
+    shader.vertexShader = 'attribute float aSnowExp;\nattribute float aWet;\nvarying float vSnowExp;\nvarying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\nvarying float vWet;\n' + shader.vertexShader
       .replace('#include <begin_vertex>',
-        '#include <begin_vertex>\n  vec4 wSnowPos = modelMatrix * vec4(transformed, 1.0);\n  vSnowY = wSnowPos.y;\n  vSnowWX = wSnowPos.x;\n  vSnowWZ = wSnowPos.z;\n  vSnowUp = normalize(mat3(modelMatrix) * objectNormal).y;\n  vSnowExp = aSnowExp;');
+        '#include <begin_vertex>\n  vec4 wSnowPos = modelMatrix * vec4(transformed, 1.0);\n  vSnowY = wSnowPos.y;\n  vSnowWX = wSnowPos.x;\n  vSnowWZ = wSnowPos.z;\n  vSnowUp = normalize(mat3(modelMatrix) * objectNormal).y;\n  vSnowExp = aSnowExp;\n  vWet = aWet;');
     // [0] t' dome's hash/noise idiom (sky.js dome fragment), fbm capped at TWO
     // octaves on terrain — t' perf rulin's hard cap. cs- prefix keeps t' names
     // clear o' owt three.js chunks define.
-    shader.fragmentShader = 'uniform float uSnowLine;\nuniform float uSnowAmt;\nuniform float uCloudTime;\nuniform float uCloudShadowAmt;\nvarying float vSnowExp;\nvarying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\n'
+    shader.fragmentShader = 'uniform float uSnowLine;\nuniform float uSnowAmt;\nuniform float uCloudTime;\nuniform float uCloudShadowAmt;\nuniform float uWetness;\nuniform float uGroundWet;\nuniform float uSheen;\nuniform vec3 uWetSky;\nvarying float vSnowExp;\nvarying float vSnowY;\nvarying float vSnowUp;\nvarying float vSnowWX;\nvarying float vSnowWZ;\nvarying float vWet;\n'
       + 'float csHash(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }\n'
       + 'float csNoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);\n'
       + '  float a = csHash(i), b = csHash(i + vec2(1.0, 0.0)), c = csHash(i + vec2(0.0, 1.0)), d = csHash(i + vec2(1.0, 1.0));\n'
@@ -50,7 +73,27 @@ function addSnow(mat, key = 'terrain-snow', glint = false) {
       + 'float csFbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 2; i++){ v += a * csNoise(p); p *= 2.0; a *= 0.5; } return v; }\n'
       + shader.fragmentShader
       .replace('#include <color_fragment>',
-        '#include <color_fragment>\n  float drift = 0.6 + 0.4 * sin(vSnowWX * 0.15) * cos(vSnowWZ * 0.15);\n  float snow = uSnowAmt * drift * vSnowExp * smoothstep(uSnowLine, uSnowLine + 10.0, vSnowY) * smoothstep(0.05, 0.55, vSnowUp);\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.96, 0.98, 1.0), clamp(snow * 1.25, 0.0, 1.0));')
+        '#include <color_fragment>\n  float drift = 0.6 + 0.4 * sin(vSnowWX * 0.15) * cos(vSnowWZ * 0.15);\n  float snow = uSnowAmt * drift * vSnowExp * smoothstep(uSnowLine, uSnowLine + 10.0, vSnowY) * smoothstep(0.05, 0.55, vSnowUp);\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.96, 0.98, 1.0), clamp(snow * 1.25, 0.0, 1.0));\n'
+        // [D10] shelter signal frae data already in t' vertex stream: vSnowExp says
+        // 'rain an' sun reach here', vColor luminance (baked 4-level AO) says 'this is
+        // a sheltered crevice'. wetEff shapes ONE scalar (uGroundWet) into spatially-
+        // varying dry times — exposed tops (exponent 1.7) cross t' visibility floor
+        // early, AO-dark corners (0.45) hold damp longest. No new attributes/state.
+        + '  float shel = clamp((1.0 - vSnowExp * 0.6) + (1.0 - dot(vColor.rgb, vec3(0.33))) * 0.9, 0.0, 1.0);\n'
+        + '  float wetEff = pow(uGroundWet, mix(1.7, 0.45, shel));\n'
+        // [9/17 merged] wet darkening: exposed up-facin' ground soaks through, cool-damp
+        // shift (vec3(0.92,0.96,1.04) blue-lean). uWetness gates t' magnitude (tier-flat),
+        // wetEff shapes WHERE it lingers. drift-sine idiom breaks up t' patch edges.
+        + '  float wet = uWetness * wetEff * vSnowExp * smoothstep(0.4, 0.9, vSnowUp) * (0.7 + 0.3 * sin(vSnowWX * 0.11) * cos(vSnowWZ * 0.13));\n'
+        + '  diffuseColor.rgb *= mix(vec3(1.0), vec3(0.62) * vec3(0.92, 0.96, 1.04), wet);\n'
+        // [D6] puddles: hollowness (int part o' aWet) + soak-bias (fraction) + a hash
+        // to break t' block-square edges; threshold slides wi' uGroundWet so puddles
+        // grow/shrink; mirror-dark mix toward diffuse*0.35 + uWetSky*0.25. uWetSky is
+        // BLACK on Plain (darkening only, no sky tint — tier-flat darkenin' by design);
+        // t' whole term rides wetEff so AO-dark hollows fill first an' dry last.
+        + '  float hol = floor(vWet), bias = fract(vWet);\n'
+        + '  float pud = smoothstep(1.0 - uGroundWet * 1.4, 1.08 - uGroundWet * 1.4, bias * 0.5 + hol * 0.25 + csHash(vec2(floor(vSnowWX), floor(vSnowWZ))) * 0.3) * vSnowExp * step(0.9, vSnowUp) * wetEff;\n'
+        + '  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.35 + uWetSky * 0.25, pud);')
       // [0] cloud shadows: dim DIRECT sun only (ambient untouched, so shade stays
       // readable), sampled at world XZ ~0.012/block an' drifted by t' dome's wind
       // vector on t' shared cloud clock. Zero uniform skips t' whole term (Plain).
@@ -60,7 +103,16 @@ function addSnow(mat, key = 'terrain-snow', glint = false) {
         + '    vec2 csP = vec2(vSnowWX, vSnowWZ) * 0.012 + uCloudTime * vec2(0.012, 0.007);\n'
         + '    float csCloud = smoothstep(0.38, 0.62, csFbm(csP));\n'
         + '    reflectedLight.directDiffuse *= 1.0 - csCloud * uCloudShadowAmt;\n'
-        + '  }');
+        + '  }')
+      // [9] Fine-only wet sheen: t' RED-TEAM-VERIFIED-CORRECT fresnel (normal·view, NOT
+      // [17]'s wrong view-space-y term). Grazing angles pick up t' sky colour off wet
+      // tops an' paths — t' village street glistens after rain. `wet` shares main()'s
+      // scope frae t' color_fragment injection (r166 Lambert), vViewPosition is real
+      // here. uSheen=0 on Plain kills t' whole term (multiplies to nowt) — byte-parity.
+      .replace('#include <opaque_fragment>',
+        '  float fres = pow(1.0 - max(dot(normalize(normal), normalize(vViewPosition)), 0.0), 3.0);\n'
+        + '  outgoingLight += uSheen * wet * fres * uWetSky;\n'
+        + '#include <opaque_fragment>');
     if (glint) {
       shader.uniforms.uGlintTime = glintUniform.uGlintTime;
       shader.vertexShader = 'attribute float aGlint;\nvarying float vGlint;\nvarying float vGlintH;\n' + shader.vertexShader
@@ -71,9 +123,10 @@ function addSnow(mat, key = 'terrain-snow', glint = false) {
           '#include <color_fragment>\n  float gl = vGlint * 0.12 * (0.5 + 0.5 * sin(uGlintTime * 2.0 + vGlintH));\n  diffuseColor.rgb += gl;');
     }
   };
-  // [0] '-cloud' extends BOTH snow keys ('snow-opaque', 'snow-cutout-glint') so
-  // t' new uniform/GLSL forks fresh programs — still t' same program COUNT (3).
-  mat.customProgramCacheKey = () => key + '-cloud';
+  // [0]/[D6] '-cloud-wet' extends BOTH snow keys ('snow-opaque', 'snow-cutout-glint')
+  // so t' new cloud + wet-ground uniforms/GLSL fork fresh programs — still t' same
+  // program COUNT (3), just t' one identity per material carrying every addSnow term.
+  mat.customProgramCacheKey = () => key + '-cloud-wet';
   return mat;
 }
 
@@ -231,6 +284,21 @@ export const TOP_VARY_AMP = 1;
 const VARIED_TOP_TILES = new Set([
   TILE.GRASS_TOP, TILE.LEAVES, TILE.MONKEY_LEAVES, TILE.ORCHARD_LEAVES, TILE.PEAT,
 ]);
+
+// [D6] puddle soak-bias by top-tile family: how readily a flat patch of that ground
+// holds standing water. Loose/absorbent-but-poorly-drained ground (gravel yards,
+// packed dirt lanes, peat hags) pools soonest; dressed stone/cobble a touch less;
+// grass drinks it in; free-draining beach sand barely at all. Keyed on def.tex.t
+// (t' top tile faceTile returns for f===3). Unlisted tiles take t' default 0.5.
+// SOAK_DEFAULT + this table are t' only tuning dials for how eagerly ground puddles.
+export const SOAK_DEFAULT = 0.5;
+const SOAK_BIAS = new Map([
+  [TILE.GRAVEL, 0.85], [TILE.DIRT, 0.85], [TILE.PEAT, 0.85], [TILE.BOG, 0.85],
+  [TILE.STONE, 0.7], [TILE.COBBLE, 0.7], [TILE.STONEBRICK, 0.7], [TILE.SLATE, 0.7],
+  [TILE.GRASS_TOP, 0.45],
+  [TILE.SAND, 0.1],
+]);
+export function soakBias(tile) { const b = SOAK_BIAS.get(tile); return b === undefined ? SOAK_DEFAULT : b; }
 // t' four rotations o' t' corner UV frame (u,v within t' tile rect)
 const UV_ROT = [
   (u, v) => [u, v],
@@ -249,7 +317,7 @@ export function topFaceVariation(wx, wz, amp = TOP_VARY_AMP) {
 }
 
 class GeoBuilder {
-  constructor() { this.pos = []; this.norm = []; this.uv = []; this.col = []; this.exp = []; this.frz = []; this.top = []; this.flow = []; this.gli = []; this.hasGlint = false; this.idx = []; this.n = 0; }
+  constructor() { this.pos = []; this.norm = []; this.uv = []; this.col = []; this.exp = []; this.frz = []; this.top = []; this.flow = []; this.gli = []; this.hasGlint = false; this.wet = []; this.hasWet = false; this.idx = []; this.n = 0; }
   // tops: per-corner aTop floats (liquid only); flow: per-quad [fx, fz, s] aFlow vec3
   // (liquid only). Solid/cutout passes never push 'em, so build() skips t' attributes
   // an' t' big opaque geometry carries nowt extra.
@@ -257,7 +325,10 @@ class GeoBuilder {
   // — chunk cutout geometry leant on t' disabled-attribute default (0), only
   // floraLayer set it — so t' attribute is baked ONLY when a quad carries a non-zero
   // value; every other geometry stays byte-identical wi' t' default-0 behaviour.
-  quad(corners, normal, uvRect, aos, light, exp = 1, frz = 0, tint = null, tops = null, flow = null, glint = 0) {
+  // wet: per-quad aWet float ([D6] packed hollowCount + soakBias, solid tops only). Same
+  // bake-only-when-nonzero idiom as glint — non-top faces an' cutout geometry keep t'
+  // disabled-attribute default (0), so t' puddle branch collapses there.
+  quad(corners, normal, uvRect, aos, light, exp = 1, frz = 0, tint = null, tops = null, flow = null, glint = 0, wet = 0) {
     const [u0, v0, u1, v1] = uvRect;
     for (const c of corners) {
       this.pos.push(c[0], c[1], c[2]);
@@ -268,6 +339,8 @@ class GeoBuilder {
     this.frz.push(frz, frz, frz, frz);
     this.gli.push(glint, glint, glint, glint);
     if (glint) this.hasGlint = true;
+    this.wet.push(wet, wet, wet, wet);
+    if (wet) this.hasWet = true;
     if (tops) this.top.push(tops[0], tops[1], tops[2], tops[3]);
     if (flow) for (let i = 0; i < 4; i++) this.flow.push(flow[0], flow[1], flow[2]);
     for (let i = 0; i < 4; i++) {
@@ -295,6 +368,7 @@ class GeoBuilder {
     if (this.top.length) g.setAttribute('aTop', new THREE.Float32BufferAttribute(this.top, 1));
     if (this.flow.length) g.setAttribute('aFlow', new THREE.Float32BufferAttribute(this.flow, 3));
     if (this.hasGlint) g.setAttribute('aGlint', new THREE.Float32BufferAttribute(this.gli, 1));
+    if (this.hasWet) g.setAttribute('aWet', new THREE.Float32BufferAttribute(this.wet, 1));
     g.setIndex(this.idx);
     g.computeBoundingSphere();
     return new THREE.Mesh(g, material);
@@ -471,15 +545,28 @@ export function buildChunkMeshes(world, chunk) {
             aos.push(s1 && s2 ? 0 : 3 - (s1 + s2 + co));
           }
           // per-block variation on growing tops only (S1c) — identity when amp is 0
-          let tint = null, uvRot = UV_ROT[0];
-          if (f === 3 && VARIED_TOP_TILES.has(def.tex.t)) {
-            tint = topFaceVariation(swx, swz);
-            uvRot = UV_ROT[tint.rot];
+          let tint = null, uvRot = UV_ROT[0], aWet = 0;
+          if (f === 3) {
+            if (VARIED_TOP_TILES.has(def.tex.t)) {
+              tint = topFaceVariation(swx, swz);
+              uvRot = UV_ROT[tint.rot];
+            }
+            // [D6] puddle bake: hollowCount = how many o' t' 4 horizontal neighbours
+            // carry an opaque block one course UP (walls/lips round this patch — a
+            // genuine dip). Four extra occludes() beside t' AO scan already here (cheap).
+            // Pack aWet = hollowCount (int, 0-4) + soakBias (fraction, tile family). A pit
+            // t' player digs bakes hol>0 next remesh, so it collects a puddle next rain.
+            let hol = 0;
+            if (occludes(lx + 1, y + 1, lz)) hol++;
+            if (occludes(lx - 1, y + 1, lz)) hol++;
+            if (occludes(lx, y + 1, lz + 1)) hol++;
+            if (occludes(lx, y + 1, lz - 1)) hol++;
+            aWet = hol + soakBias(faceTile(def, 3, swx, swz));
           }
           solid.quad(corners.map(c => {
             const [ru, rv] = uvRot(c[3], c[4]);
             return [lx + c[0], y + c[1], lz + c[2], ru, rv];
-          }), dir, uvr, aos, FACE_LIGHT[f], f === 3 ? exposedAt(lx, y, lz) : 0, 0, tint);
+          }), dir, uvr, aos, FACE_LIGHT[f], f === 3 ? exposedAt(lx, y, lz) : 0, 0, tint, null, null, 0, aWet);
         }
       }
     }

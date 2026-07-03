@@ -6,7 +6,7 @@
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { B, I, CHUNK, RECIPES, CREATIVE_ITEMS, itemName, maxStack } from '../src/defs.js';
-import { resolveQuality, lanternFlicker, buildStarField, moonPhase } from '../src/sky.js';
+import { resolveQuality, lanternFlicker, buildStarField, moonPhase, auroraWindow, rainbowRising } from '../src/sky.js';
 import { tileUV, ATLAS_TILES } from '../src/textures.js';
 
 let n = 0;
@@ -251,8 +251,8 @@ ok(mesherSrc.includes('vec2(vSnowWX, vSnowWZ) * 0.012'),
 ok(mesherSrc.includes('uCloudTime * vec2(0.012, 0.007)') && skySrc.includes('uTime * vec2(0.012, 0.007)'),
   'ground drift rides the dome\'s wind vector — sky clouds and moor shadows move together');
 // cache keys forked, program count unchanged
-ok(mesherSrc.includes("customProgramCacheKey = () => key + '-cloud'"),
-  "BOTH snow cache keys extended ('-cloud') so the new uniform/GLSL forks fresh programs");
+ok(mesherSrc.includes("customProgramCacheKey = () => key + '-cloud-wet'"),
+  "BOTH snow cache keys extended ('-cloud-wet') so the cloud + wet-ground uniforms/GLSL fork fresh programs");
 ok(/'snow-opaque'\)/.test(mesherSrc) && /'snow-cutout-glint', true\)/.test(mesherSrc),
   'still exactly the two addSnow materials (opaque + cutout-glint) — same program COUNT');
 // drive: Plain stamped 0 in applyQuality; Fine per-frame off the live sky (no sky.js edit)
@@ -264,6 +264,74 @@ ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,1600}?setCloudShadow\(Math\.mi
   'Fine drive: cover × dayness × clear-sky, clamped at 0.35 — self-zeroes at night and in full overcast');
 ok(mainSrc.includes('this.sky.domeMat.uniforms.uClouds.value'),
   'cover read off the live dome uniform (uClouds) — no sky.js edit needed');
+
+// ---- S3b [9/17 merged]+[D6]+[D10]: wet ground — one coherent system in the addSnow handler ----
+const roadsSrc = src('../src/roads.js');
+// module uniforms exist, default 0 — a fresh compile is today's terrain byte-identical
+ok(mesherSrc.includes('uWetness: { value: 0 }'), 'uWetness module uniform exists, defaults 0 (Plain = today\'s dry ground)');
+ok(mesherSrc.includes('uGroundWet: { value: 0 }'), 'uGroundWet module uniform exists, defaults 0 (the shaped drive input)');
+ok(mesherSrc.includes('uSheen: { value: 0 }'), 'uSheen module uniform exists, defaults 0 (Fine-only sheen gate)');
+ok(mesherSrc.includes('uWetSky: { value: new THREE.Color(0, 0, 0) }'), 'uWetSky module uniform is a Color defaulting BLACK (no tint on a fresh/Plain compile)');
+// registered inside the EXISTING addSnow handler — no sibling onBeforeCompile
+ok(mesherSrc.includes('shader.uniforms.uWetness = wetUniforms.uWetness')
+  && mesherSrc.includes('shader.uniforms.uGroundWet = wetUniforms.uGroundWet')
+  && mesherSrc.includes('shader.uniforms.uSheen = wetUniforms.uSheen')
+  && mesherSrc.includes('shader.uniforms.uWetSky = wetUniforms.uWetSky'),
+  'wet uniforms registered inside the EXISTING addSnow handler (one handler slot — no sibling)');
+ok((mesherSrc.match(/customProgramCacheKey/g) || []).length === 2,
+  'still exactly addSnow + addWater set cache keys — no sibling handler snuck in for the wet term');
+// [D6] the aWet attribute: baked in the vertex stream, defaults 0 (the aGlint idiom)
+ok(mesherSrc.includes('attribute float aWet') && mesherSrc.includes('varying float vWet'),
+  'aWet attribute + vWet varying declared in the addSnow vertex stage');
+ok(mesherSrc.includes('vWet = aWet;'), 'aWet passed through to the fragment (vWet)');
+ok(mesherSrc.includes("g.setAttribute('aWet'") && mesherSrc.includes('if (this.hasWet)'),
+  'aWet baked ONLY when a quad carries a non-zero value (missing-attr-defaults-0 idiom, like aGlint)');
+ok(mesherSrc.includes('export function soakBias(tile)') && mesherSrc.includes('[TILE.SAND, 0.1]') && mesherSrc.includes('[TILE.GRAVEL, 0.85]'),
+  'soakBias table keyed by top-tile family (gravel/dirt/peat high, sand low)');
+ok(mesherSrc.includes('if (occludes(lx + 1, y + 1, lz)) hol++;'),
+  '[D6] hollowness counts the 4 horizontal neighbours with an opaque block one course UP');
+ok(mesherSrc.includes('aWet = hol + soakBias(faceTile(def, 3, swx, swz));'),
+  'aWet packs hollowCount (int) + soakBias (fraction) — only on solid top faces (f===3)');
+// [9/17] wet darkening: cool-damp shift after the snow mix, gated by uWetness × shaped wetEff
+ok(mesherSrc.includes('float wet = uWetness * wetEff * vSnowExp * smoothstep(0.4, 0.9, vSnowUp) * (0.7 + 0.3 * sin(vSnowWX * 0.11) * cos(vSnowWZ * 0.13));'),
+  'wet term: uWetness × [D10] wetEff × sky-exposure × up-gate × drift-sine (the merged 9/17 formula)');
+ok(mesherSrc.includes('diffuseColor.rgb *= mix(vec3(1.0), vec3(0.62) * vec3(0.92, 0.96, 1.04), wet);'),
+  'wet darkening is a cool-damp shift (blue-lean 0.92,0.96,1.04) — tier-flat, no sky tint');
+// [D10] shelter shaping — spatially-varying dry times from ONE scalar, no new attributes
+ok(mesherSrc.includes('float shel = clamp((1.0 - vSnowExp * 0.6) + (1.0 - dot(vColor.rgb, vec3(0.33))) * 0.9, 0.0, 1.0);'),
+  '[D10] shelter signal from vSnowExp + vColor AO luminance (no new attributes)');
+ok(mesherSrc.includes('float wetEff = pow(uGroundWet, mix(1.7, 0.45, shel));'),
+  '[D10] wetEff shapes uGroundWet: exposed (exp 1.7) dries first, AO corners (0.45) last');
+// [D6] puddle mask: threshold slides with uGroundWet, mirror-dark mix, rides wetEff
+ok(mesherSrc.includes('float pud = smoothstep(1.0 - uGroundWet * 1.4, 1.08 - uGroundWet * 1.4, bias * 0.5 + hol * 0.25 + csHash(vec2(floor(vSnowWX), floor(vSnowWZ))) * 0.3) * vSnowExp * step(0.9, vSnowUp) * wetEff;'),
+  '[D6] puddle formula: threshold slides with uGroundWet, hash-irregular edges, rides wetEff (hollows dry last)');
+ok(mesherSrc.includes('diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.35 + uWetSky * 0.25, pud);'),
+  '[D6] mirror-dark puddle mix — uWetSky BLACK on Plain gives darkening only, tint is Fine-only');
+// [9] Fine sheen: the RED-TEAM-VERIFIED-CORRECT fresnel (normal·view), injected before opaque_fragment
+ok(mesherSrc.includes('float fres = pow(1.0 - max(dot(normalize(normal), normalize(vViewPosition)), 0.0), 3.0);'),
+  '[9] correct fresnel literal (normal·view, NOT [17]\'s wrong view-space-y term)');
+ok(mesherSrc.includes('outgoingLight += uSheen * wet * fres * uWetSky;')
+  && mesherSrc.includes(".replace('#include <opaque_fragment>'"),
+  'sheen added to outgoingLight, injected BEFORE opaque_fragment (shared main() scope in r166 Lambert)');
+// DRIVE: pure module (DOM-free), tier-flat darkening + Fine sky tint
+ok(src('../src/wetness.js').includes('export function stepGroundWet(w, rainAmount, warmth, dayness, dt)'),
+  'stepGroundWet is a pure DOM-free drive in src/wetness.js (snow.js idiom)');
+ok(mainSrc.includes('this.groundWet = stepGroundWet(this.groundWet, this.sky.rainAmount, season.warmth, dayness, dt);'),
+  'groundWet integrated each frame frae the shared weather sample (deterministic)');
+ok(mainSrc.includes('setWetness(this.groundWet)') && mainSrc.includes('setGroundWet(this.groundWet)'),
+  'uWetness + uGroundWet driven every frame (TIER-FLAT — weather reads on the ground both tiers)');
+// Plain byte-parity: uSheen stamped 0, uWetSky stamped BLACK in applyQuality
+ok(/setSheen\(fine \? 0\.5 : 0\);[\s\S]{0,120}?setWetSky\(0, 0, 0\);/.test(mainSrc),
+  'applyQuality stamps uSheen 0 + uWetSky BLACK — Plain gets darkening only, no sky tint (byte-parity via zero)');
+ok(mainSrc.includes('const fc = this.sky.scene.fog.color;') && mainSrc.includes('setWetSky(fc.r, fc.g, fc.b);'),
+  'Fine feeds uWetSky the LIVE sky/fog colour (dawn-glow tint an\' all) — no per-frame alloc');
+// [D6] mud lanes: earthMat colour lerps toward mud by groundWet
+ok(roadsSrc.includes('const LANE_DRY = new THREE.Color(0x6e5a3e)') && roadsSrc.includes('const LANE_WET = new THREE.Color(0x4a3a26)'),
+  '[D6] mud-lane endpoints: dry 0x6e5a3e -> wet mud 0x4a3a26 (module scratch Colors, no alloc)');
+ok(roadsSrc.includes('this.earthMat.color.copy(LANE_DRY).lerp(LANE_WET,'),
+  '[D6] lane material darkens toward mud by groundWet — one CPU lerp per frame, no shader work');
+ok(mainSrc.includes('this.roads.update(dt, this.player.pos, this.groundWet)'),
+  'RoadLayer.update fed the live groundWet so the lanes muddy in the rain');
 
 // ---- S4a [4]: t' 1900 night sky — seeded stars, moon calendar, Milky Way, dawn-glow fog ----
 // functional determinism: the star field is pure, seeded, byte-identical on every client
@@ -330,5 +398,46 @@ ok(skySrc.includes("this._stormS += ((this.stormChurn ? 1 : 0) - this._stormS)")
 ok(skySrc.includes('dt * (1 + churn * 2)'), 'storm deck scrolls ~3x under full churn');
 ok(skySrc.includes('(grey + (1 - grey) * churn)'), 'churn drives cloud coverage toward full');
 ok(skySrc.includes('STORM_CLOUD = new THREE.Color(0.06, 0.06, 0.08)'), 'near-black storm deck colour hoisted (no per-frame alloc)');
+
+// ---- S4b [30] rainbow + [31] aurora — antisolar bow + shared-clock northern lights ----
+// dome shader: uSunDir/uRainbow/uAurora uniforms + the two GLSL arcs, all gated so a
+// zero uniform is byte-identical to today's sky. Drive lives in update(); the two
+// scheduling helpers are pure (no `this`, no DOM) so the gate proves the cadence.
+ok(skySrc.includes('uRainbow: { value: 0 }'), 'dome uRainbow uniform exists, defaults 0 (no bow — today\'s sky)');
+ok(skySrc.includes('uSunDir: { value: new THREE.Vector3'), 'dome uSunDir uniform is a Vector3 (sun direction in dome dir space)');
+ok(skySrc.includes('float ca = dot(dir, -uSunDir);'), 'rainbow ca = cos angle to the ANTISOLAR point (−uSunDir)');
+ok(skySrc.includes('cu.uSunDir.value.set(sunX, sunY, 0).normalize()'), 'uSunDir fed frae the sun ANGLE (sunX/sunY, z=0), normalised — not the player-relative sprite');
+ok(skySrc.includes('0.743') && skySrc.includes('0.629'), 'both bow radii present: primary cos(42°)=0.743, secondary cos(51°)=0.629');
+ok(skySrc.includes('cu.uRainbow.value = this._rainbowS * dayness * (1 - grey)'), 'uRainbow folds eased strength × dayness × clear-sky (a bow needs sun on rain)');
+ok(skySrc.includes('uAurora: { value: 0 }'), 'dome uAurora uniform exists, defaults 0 (no curtains — today\'s night)');
+ok(skySrc.includes('float northDot = dir.z;'), 'aurora masked to the NORTHERN sky (+Z is north in dome dir space)');
+ok(skySrc.includes('fbm(vec2(az * 6.0, uTime * 0.15))'), 'aurora curtains = the dome\'s OWN fbm sampled at (azimuth·6, uTime·0.15) — driftin\' vertical streaks');
+ok(skySrc.includes('const AURORA_CYCLE = DAY_LENGTH * 10'), 'aurora cadence ~ten game days (AURORA_CYCLE = DAY_LENGTH × 10)');
+// [31] auroraWindow — pure shared-clock envelope: one lit window per ~ten game days,
+// centred on midnight, easin' in/out ower ~25s (the Great Fog idiom, longer cadence).
+{
+  const DAY_LENGTH = 1800;               // sky.js:8 — asserted below to stay honest
+  const CYCLE = DAY_LENGTH * 10;         // AURORA_CYCLE — matches sky.js literal
+  const DUR = DAY_LENGTH / 3;            // AURORA_DUR — a third of a game day lit
+  // sample the whole envelope across three cycles: the lit fraction must be DUR/CYCLE
+  // (one window per ten game days) — proves the cadence, not just a single sample
+  let litSteps = 0, total = 0;
+  const STEP = 5; // seconds
+  for (let s = 0; s < 3 * CYCLE; s += STEP) { total++; if (auroraWindow(s * 1000) > 0) litSteps++; }
+  ok(Math.abs(litSteps / total - DUR / CYCLE) < 1e-3,
+    `aurora lit fraction ≈ DUR/CYCLE (one window per ten game days) — got ${(litSteps / total).toFixed(4)}, want ${(DUR / CYCLE).toFixed(4)}`);
+  ok(auroraWindow(((CYCLE - DUR) + DUR / 2) * 1000) === 1, 'aurora peaks (envelope 1) at the window\'s midpoint');
+  ok(auroraWindow(0) === 0, 'aurora dark outside its window (t=0 is between displays)');
+}
+// [30] rainbowRising — pure rise/decay rule: 1 when rain's DECAYIN' frae a real shower
+// toward clear/misty wi' the sun up, else 0. NOTE the weather gate (sky.js:118) treats
+// 'clear' AND 'misty' as clearing; 'fog' (and owt else, e.g. 'rain') is NOT clearing → 0.
+ok(rainbowRising(0.4, 0.6, 0.3, 'clear') === 1, 'bow rises on a clearin\' shower wi\' the sun up');
+ok(rainbowRising(0.6, 0.4, 0.3, 'clear') === 0, 'rising rain (not decayin\') → no bow');
+ok(rainbowRising(0.4, 0.6, -0.1, 'clear') === 0, 'sun down (sunY ≤ 0.05) → no bow');
+ok(rainbowRising(0.4, 0.6, 0.3, 'fog') === 0, "'fog' is not a clearin' state (only clear/misty are) → no bow");
+ok(rainbowRising(0.1, 0.2, 0.3, 'clear') === 0, 'weak prior shower (prevRain ≤ 0.3) → no bow — a drizzle raises nowt');
+// DAY_LENGTH honesty: the cadence test hardcodes 1800 — assert the real source agrees
+ok(skySrc.includes('const DAY_LENGTH = 1800;'), 'DAY_LENGTH is 1800s in sky.js — the aurora cadence test\'s hardcoded 1800 stays honest');
 
 console.log(`verify-graphics: ${n} assertions OK`);

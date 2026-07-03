@@ -11,7 +11,8 @@ import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_HASHES } from './defs.js';
 import { strSeed } from './noise.js';
 import { protectedAt } from './landmarks.js';
-import { initMaterials, setSnowLevel, setFrozen, setGlintTime, setWaterTime, setRippleAmp, setFlowAmp, setGlitter, setFresnel, setCloudTime, setCloudShadow, getMaterials } from './mesher.js';
+import { initMaterials, setSnowLevel, setFrozen, setGlintTime, setWaterTime, setRippleAmp, setFlowAmp, setGlitter, setFresnel, setCloudTime, setCloudShadow, setWetness, setGroundWet, setSheen, setWetSky, getMaterials } from './mesher.js';
+import { stepGroundWet } from './wetness.js';
 import { stepAccumulation, accumulationTarget, isFrozen, overcastGrey } from './snow.js';
 import { getIconURL, retintAtlasForSeason, getCutoutAtlas } from './textures.js';
 import { World } from './world.js';
@@ -211,6 +212,7 @@ class Game {
     this.seasonOverride = null; // dev: set 0..1 to force a year phase (moorstead.debug.setSeason)
     this.season = null;         // cached per-frame season, read by sky/audio/foraging
     this.snowAccum = 0;         // lagged snow accumulation [0,1]; eases in/out with season
+    this.groundWet = 0;         // [D6]/[D10] lagged ground wetness [0,1]; soaks fast in rain, dries slow
     this._seasonBucket = -1;    // throttles the atlas re-tint to ~40 steps a year
     this.trainFolk = [];        // local folk ridin' t' carriage right now
     this.lastDwellStation = -1; // which platform she's stood at (for boarding)
@@ -330,6 +332,13 @@ class Game {
     // [0] cloud shadows parked at 0: on Plain t' shader branch never executes an'
     // terrain stays byte-identical; Fine re-drives it every frame (frame loop).
     setCloudShadow(0);
+    // [9/17]+[D6]+[D10] wet ground: t' diffuse darkening + puddle mask are TIER-FLAT
+    // (uWetness/uGroundWet re-driven every frame both tiers — weather readin' on t'
+    // ground helps tablets most). Only t' Fine-only sheen + t' sky-colour puddle tint
+    // are parked here: uSheen=0 kills t' grazing term, uWetSky=BLACK so a puddle on
+    // Plain darkens but takes no sky colour (darkenin' stays, tint is Fine-only).
+    setSheen(fine ? 0.5 : 0);
+    setWetSky(0, 0, 0);
     const r = this.renderer;
     if (fine) {
       r.toneMapping = THREE.ACESFilmicToneMapping;
@@ -4752,7 +4761,7 @@ class Game {
         if (this._seasonBucket !== 90 + this._titleSceneIdx) { this._seasonBucket = 90 + this._titleSceneIdx; retintAtlasForSeason(lightSeason); }
         this.sky.update(dt, this.player.pos, lightSeason, false);
         if (this.rails) this.rails.update(dt, { x: ax, z: az });
-        if (this.roads) this.roads.update(dt, { x: ax, z: az });
+        if (this.roads) this.roads.update(dt, { x: ax, z: az }, this.groundWet);
         if (this.rosterClient) { this.rosterClient.update(dt); this._titlePopulateTrain(br); } // drive the roster + keep the watched train busy with boarders
         this.entities.update(dt, this.player, false, this.audio, () => {});
         const orbitCam = () => {
@@ -4821,7 +4830,7 @@ class Game {
       this.updateTrainWorld(dt);
       this.updateBranchTrains(dt); // …an' a train on every other line — the whole network's alive
       if (this.rails) this.rails.update(dt, this.player.pos);
-      if (this.roads) this.roads.update(dt, this.player.pos);
+      if (this.roads) this.roads.update(dt, this.player.pos, this.groundWet);
       if (this.state === 'riding' && this.ride) {
         this.updateRide(dt);
       } else if (this.state === 'driving') {
@@ -4958,15 +4967,33 @@ class Game {
       setFrozen(isFrozen(season));
       this._glintT = (this._glintT || 0) + dt; setGlintTime(this._glintT); // drive forage glint animation
       setWaterTime(this._glintT); // [15]/[D0] water ripples + becks ride t' same clock — no new tick
+      // dayness mirrors t' sky.js sun curve — hoisted out o' t' Fine block so t' TIER-FLAT
+      // wetness dry-rate can read it too (overnight rain lingers to morning).
+      const _sunY = Math.sin((this.sky.time - 0.25) * Math.PI * 2);
+      const dayness = Math.max(0, Math.min(1, (_sunY + 0.12) * 3));
+      // [9/17]+[D6]+[D10] wet ground: soaks fast while it's rainin', dries slow after,
+      // t' dry rate scaled by warmth × daylight (pure stepGroundWet, snow.js idiom).
+      // rainAmount is t' shared live-feed sample, warmth t' shared season clock, dayness
+      // t' shared sun curve — deterministic. uWetness/uGroundWet are TIER-FLAT (both tiers
+      // read t' weather on t' ground); uWetness == groundWet raw, uGroundWet is t' shaped
+      // drive (t' shader pow-shapes it for [D10] an' slides t' [D6] puddle threshold).
+      this.groundWet = stepGroundWet(this.groundWet, this.sky.rainAmount, season.warmth, dayness, dt);
+      setWetness(this.groundWet);
+      setGroundWet(this.groundWet);
       // [15] sun-sparkle on t' water: full glitter at clear noon, nowt at neet or under
-      // cloud. dayness mirrors t' sky.js sun curve; overcast mirrors sky.js's overcastGrey
-      // call (eased snowAmount stands in for t' instantaneous snowfall). Fine only —
-      // applyQuality parks uGlitter at 0 an' Plain never touches it again.
+      // cloud. overcast mirrors sky.js's overcastGrey call (eased snowAmount stands in for
+      // t' instantaneous snowfall). Fine only — applyQuality parks uGlitter at 0 an' Plain
+      // never touches it again.
       if (this.gfxQuality === 'fine') {
-        const sunY = Math.sin((this.sky.time - 0.25) * Math.PI * 2);
-        const dayness = Math.max(0, Math.min(1, (sunY + 0.12) * 3));
         const overcast = overcastGrey(this.sky.weather, this.sky.snowAmount || 0, this.sky.rainAmount);
         setGlitter(dayness * (1 - overcast));
+        // [9] wet sheen tint: puddles/wet tops pick up t' LIVE sky colour at grazing
+        // angles (Fine only — uSheen stamped 0.5 in applyQuality). scene.fog.color IS t'
+        // live horizon/sky colour sky.js writes every frame (dawn-glow tint an' all), so
+        // t' street glistens amber at dusk. Scratch-free: setWetSky copies into t' module
+        // Color's channels, no per-frame alloc ([22] hoist lesson).
+        const fc = this.sky.scene.fog.color;
+        setWetSky(fc.r, fc.g, fc.b);
         // [0] cloud shadows sweep t' moor: t' clock is sky.cloudT — t' SAME
         // accumulator t' dome scrolls its clouds by (churn speed-up an' all) —
         // so ground patches track t' dome exactly. Strength = cover × dayness ×

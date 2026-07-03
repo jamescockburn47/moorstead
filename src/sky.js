@@ -88,6 +88,37 @@ export function windHeading(now = 0) {
   return 0.79 + noise2(now / 900000, 0, 0x1902) * 0.9;
 }
 
+// ---- [31] aurora shared-clock window (the Great Fog idiom, longer cadence) ----
+// Roughly once every ten game days a clear-night display shimmers ower t' northern
+// sky, centred on midnight, easin' in an' out ower ~25s — same shared Date.now clock
+// as t' Great Fog, so every client sees t' SAME aurora at t' SAME moment (no
+// per-client accumulator, no Math.random). Pure in `now` (ms) so t' verify gate can
+// assert t' ~10-day cadence headlessly. Returns 0..1 (the raw window envelope; the
+// clear-night gate an' Plain clamp are applied by t' caller).
+const AURORA_CYCLE = DAY_LENGTH * 10;   // ~ten game days between displays (18 000 s)
+const AURORA_DUR = DAY_LENGTH / 3;      // ~a third of a game day lit (600 s ≈ a few game hours)
+const AURORA_EASE = 25;                 // seconds of ease in/out (matches t' Great Fog)
+export function auroraWindow(nowMs = 0) {
+  const CYCLE = AURORA_CYCLE, DUR = AURORA_DUR, EASE = AURORA_EASE;
+  // window centred on midnight: t' day rolls at (Date.now/1000) % DAY_LENGTH === 0,
+  // so centre t' DUR-wide window on t' cycle's midpoint (same offset maths as the fog)
+  const into = (nowMs / 1000) % CYCLE - (CYCLE - DUR);
+  if (into < 0) return 0;
+  return into < EASE ? into / EASE : Math.min(1, Math.max(0, (DUR - into) / EASE));
+}
+
+// [30] rainbow drive envelope — pure so t' gate can prove t' rise/decay rule. Given
+// this frame's rain amount, the PREVIOUS frame's rain amount, the sun height an' the
+// weather state, returns 1 when a bow SHOULD be risin' (rain decayin' frae a real
+// shower toward clear/misty while t' sun's up), else 0. The caller eases the actual
+// uRainbow scalar toward this over ~90s. Kept pure (no `this`) for headless assertion.
+export function rainbowRising(rainAmount, prevRain, sunY, weather) {
+  const decaying = rainAmount < prevRain - 1e-4;   // rain is easing off this frame
+  const wasWet = prevRain > 0.3;                    // …frae a real shower, not a drizzle
+  const clearing = weather === 'clear' || weather === 'misty';
+  return (decaying && wasWet && clearing && sunY > 0.05) ? 1 : 0;
+}
+
 // [19] Seeded precipitation base field — pure typed arrays (t' buildStarField idiom;
 // headless-verifiable, an' Math.random is gone frae t' rigs entirely). y is uniform
 // ower t' column; x/z stay 0 because t' shader re-rolls them frae hash(aSeed, cycle)
@@ -248,6 +279,9 @@ export class Sky {
                                   // Set ONLY by the storm controller (the title flyover borrows
                                   // stormPrecip for its winter plates, so precip alone can't key this)
     this._stormS = 0;             // eased 0..1 churn state, so the deck rolls in and out — no snap
+    this._rainbowS = 0;   // [30] eased rainbow strength (rises on a clearin' shower, ~90s decay)
+    this._auroraS = 0;    // [31] eased aurora strength (shared-clock window × clear-night gate)
+    this._prevRain = 0;   // [30] last frame's rainAmount — the bow rises when rain's DECAYIN'
     this.moorFog = 0;    // T' Great Fog intensity at t' player, 0..1
     this.moorGate = 0;   // set by t' game: 1 on t' high moor, 0 in villages/coast
     this._gateS = 0;
@@ -360,6 +394,9 @@ export class Sky {
         uFogBand: { value: 0.19 }, // horizon band height (dir.y) where t' dome holds t' fog colour
         uFlash: { value: 0 },      // lightning blink: whitens t' cloud term (defaults 0 — Plain untouched)
         uStarAmt: { value: 0 },    // [4] Milky Way strength: starA × (1 − grey), t' same night term as t' stars
+        uSunDir: { value: new THREE.Vector3(0, 1, 0) }, // [30] sun direction in dome 'dir' space (frae t' sun ANGLE, not t' sprite)
+        uRainbow: { value: 0 },    // [30] rainbow strength (defaults 0 — no bow, today's sky)
+        uAurora: { value: 0 },     // [31] aurora strength (defaults 0 — no curtains, today's night)
       },
       vertexShader: `
         varying vec3 vDir;
@@ -370,6 +407,8 @@ export class Sky {
       fragmentShader: `
         uniform vec3 topColor, bottomColor, cloudCol;
         uniform float exponent, uTime, uClouds, uFogBand, uFlash, uStarAmt;
+        uniform vec3 uSunDir;                 // [30] sun direction (dome dir space)
+        uniform float uRainbow, uAurora;      // [30] rainbow / [31] aurora strengths
         varying vec3 vDir;
         // [4] Milky Way frame: GPOLE is t' band's pole (unit vector, 12.7° off
         // level), so t' great circle {dir·GPOLE = 0} tops out ~77° above t'
@@ -405,6 +444,59 @@ export class Sky {
             col = mix(col, cloudCol, cloud * 0.85);
             // lightning blink: t' deck itself flashes white where there's cloud to catch it
             col = mix(col, vec3(1.0), uFlash * 0.6 * cloud);
+          }
+          // [30] rainbow after t' rain: a physically-placed double bow opposite t' sun.
+          // ca = cos o' t' angle between t' view ray an' t' ANTISOLAR point (−uSunDir):
+          // primary at 42° (ca 0.743), secondary at 51° (ca 0.629). A narrow smoothstep
+          // band lights each arc; hue runs a 6-stop spectral ramp across t' band width
+          // (red on t' OUTER edge → violet on t' inner, as in a real bow). Alexander's
+          // dark band (t' sky is dimmer BETWEEN t' bows) falls out for free. T' whole
+          // term is gated by uRainbow (t' CPU folds in dayness × clear-sky × sun-up), so
+          // uRainbow=0 is byte-identical to today. Faded in near t' horizon by dir.y.
+          if (uRainbow > 0.001) {
+            float ca = dot(dir, -uSunDir);
+            // 6-stop spectral ramp (red→orange→yellow→green→blue→violet), h in [0,1]
+            // across t' band; sampled by t' fractional position through each arc.
+            // primary bow: band centred on cos(42°)=0.743, ~0.008 wide either side
+            float bw = 0.008;
+            float hP = clamp((ca - (0.743 - bw)) / (2.0 * bw), 0.0, 1.0);      // 0 outer(red) → 1 inner(violet)
+            float mP = smoothstep(0.0, bw, bw - abs(ca - 0.743));               // narrow arc mask
+            // secondary bow: cos(51°)=0.629, REVERSED ramp, dimmer
+            float hS = clamp(1.0 - (ca - (0.629 - bw)) / (2.0 * bw), 0.0, 1.0);
+            float mS = smoothstep(0.0, bw, bw - abs(ca - 0.629)) * 0.4;
+            // spectral colour frae a hue position: red(0)→violet(1)
+            vec3 spec = clamp(vec3(
+              1.5 - abs(4.0 * hP - 3.0),
+              1.5 - abs(4.0 * hP - 2.0),
+              1.5 - abs(4.0 * hP - 1.0)), 0.0, 1.0);
+            vec3 specS = clamp(vec3(
+              1.5 - abs(4.0 * hS - 3.0),
+              1.5 - abs(4.0 * hS - 2.0),
+              1.5 - abs(4.0 * hS - 1.0)), 0.0, 1.0);
+            // Alexander's band: ~5% darker sky between t' bows (0.629 < ca < 0.743)
+            float alex = smoothstep(0.629, 0.66, ca) * (1.0 - smoothstep(0.71, 0.743, ca));
+            float horiz = smoothstep(0.0, 0.15, dir.y);
+            col *= 1.0 - 0.05 * alex * uRainbow * horiz;
+            col += (spec * mP + specS * mS) * uRainbow * horiz * 0.9;
+          }
+          // [31] t' Northern Lights: shimmerin' green curtains ower t' NORTHERN sky on a
+          // rare clear night (schedule + gate on t' CPU). North axis = +Z in t' dome's
+          // 'dir' space (northDot = dir.z); mask fades t' curtains out t' southern sky an'
+          // down to t' horizon. Curtains: t' dome's OWN compiled fbm sampled at
+          // (azimuth·6, uTime·0.15) gives driftin' vertical ray streaks; pow(1−altFrac,2)
+          // falls t' curtain off wi' height; colour mixes green at t' base → dim magenta
+          // at t' top. Gated by uAurora (t' CPU folds in nightness × clear via uStarAmt's
+          // own term), so uAurora=0 is byte-identical to today. Plain clamp: force uAurora
+          // 0 under sky.gfx==='plain' in update() (one line, noted there).
+          if (uAurora > 0.001) {
+            float northDot = dir.z;                                            // +Z is north (dome dir space)
+            float m = smoothstep(0.0, 0.5, northDot) * smoothstep(0.02, 0.30, dir.y);
+            float az = atan(dir.x, dir.z);                                     // azimuth about t' zenith
+            float streak = fbm(vec2(az * 6.0, uTime * 0.15));
+            float altFrac = clamp(dir.y / 0.6, 0.0, 1.0);                      // 0 base → 1 up t' curtain
+            float curtain = m * streak * pow(1.0 - altFrac, 2.0);
+            vec3 auroraCol = mix(vec3(0.345, 0.816, 0.553), vec3(0.55, 0.10, 0.28), altFrac); // 0x58d68d → dim magenta
+            col += auroraCol * curtain * uAurora * 1.6;
           }
           // horizon fog band: near t' horizon (an' all t' way below it) t' dome holds
           // t' fog colour EXACTLY — bottomColor IS scene.fog.color, both copy t' live
@@ -740,6 +832,32 @@ export class Sky {
     // thick fog / dread / t' Great Fog swallow most o' t' sky. Derived frae t' EASED
     // fogFar so t' dome glides through weather transitions in step wi' t' fog itself.
     cu.uFogBand.value = Math.min(0.55, Math.max(0.08, 16 / Math.max(1, this.fogFar)));
+
+    // [30] rainbow after t' rain — driven, gated, eased (all allocation-free scalars).
+    // uSunDir frae t' sun ANGLE (sunX/sunY), not t' sprite position (which is
+    // player-relative an' wrong away frae t' origin): the antisolar bow then sits
+    // opposite t' true sun everywhere. z=0 — the sprite's constant −60 z offset is a
+    // placement nicety, not part o' t' sun's celestial direction.
+    cu.uSunDir.value.set(sunX, sunY, 0).normalize();
+    // rise when rain's DECAYIN' frae a real shower toward clear/misty wi' t' sun up;
+    // rise briskly (~a few s), decay ower ~90s once t' condition lifts.
+    const wantBow = rainbowRising(this.rainAmount, this._prevRain, sunY, this.weather);
+    const bowRate = wantBow ? Math.min(1, dt * 0.5) : Math.min(1, dt / 90);
+    this._rainbowS += (wantBow - this._rainbowS) * bowRate;
+    this._prevRain = this.rainAmount; // this frame's rain becomes next frame's baseline — the ease below moves it, so next frame sees the decay
+    // fold day/clear into t' uniform so t' shader stays lean (no redundant dome uniforms):
+    // dayness raises it by day, (1−grey) douses it under overcast — a bow needs sun on rain.
+    cu.uRainbow.value = this._rainbowS * dayness * (1 - grey);
+
+    // [31] aurora — shared-clock window × clear-night gate, eased in/out. auroraWindow
+    // is pure in Date.now (asserted headlessly); clearness gates it (no aurora through
+    // cloud), an' the Plain clamp forces it fully off on the tablet tier.
+    // ONE-LINE PLAIN CLAMP: change `1` below to `(fine ? 1 : 0)` to keep Plain nights
+    // byte-identical (cost is trivial, so it ships on both tiers by default).
+    const auroraClear = (1 - grey) * Math.max(0, Math.min(1, -sunY * 3)); // clear × night depth
+    const wantAurora = auroraWindow(Date.now()) * auroraClear * 1;        // ← Plain clamp site
+    this._auroraS += (wantAurora - this._auroraS) * Math.min(1, dt * 0.4); // ~2.5s ease toward target
+    cu.uAurora.value = this._auroraS;
 
     // ---- [19] precipitation: t' fall itself lives on t' GPU now ----
     // T' owd CPU loops here wrote ~3.3k positions an' uploaded two whole attribute
