@@ -229,8 +229,8 @@ ok(skySrc.includes('_snapShadowCamera() {') && skySrc.includes('if (fine) this._
 // fog line could move out — James found clear-weather 84 too close in. The budget maths
 // below is the SAME contract at the new radius: full occlusion inside the meshed edge.
 ok(skySrc.includes('STREAM_RADIUS = 7 * CHUNK'), 'fog budget mirrors world.renderDist (7 since the 2026-07-03 re-tune)');
-ok(skySrc.includes('const fogBand = 10 + this.fogFar * 0.18;'), 'fog is a BAND at the edge, not a wash (James 2026-07-03) — near hugs far in open weather');
-ok(skySrc.includes('Math.max(this.fogFar * 0.3, this.fogFar - fogBand)'), 'thick-fog weathers keep the close near floor (Great Fog stays hand-afore-face)');
+ok(skySrc.includes('const fogBand = (10 + this.fogFar * 0.18) * (1 - gf) + Math.max(2.5, this.fogFar * 0.15) * gf;'), 'fog is a BAND at the edge — and the Great Fog is that band CLOSING IN (gf blend, James 2026-07-03)');
+ok(skySrc.includes('Math.max(this.fogFar * (0.3 + 0.5 * gf), this.fogFar - fogBand)'), 'mist/rain/dread keep the near floor; Great Fog floor rises with gf — crisp bubble, no ghost zone');
 ok(src('../src/world.js').includes('this.renderDist = 7'), 'world.js renderDist is actually 7 — the sky.js mirror cannot drift');
 ok(skySrc.includes('uFogBand'), 'dome holds the fog colour at the horizon band');
 {

@@ -801,10 +801,16 @@ export class Sky {
     // Fog is a BAND at t' edge, not a wash ower t' whole view (James 2026-07-03:
     // "it just needs to smooth over the horizon band"). Open weather: air stays
     // CRISP to ~70 blocks, then dissolves steeply ower t' last ~28 — t' mesh edge
-    // vanishes wi'out t' mid-field swimmin' in milk. Thick weathers keep their
-    // close near (t' fogFar*0.3 floor): t' Great Fog stays hand-afore-face.
-    const fogBand = 10 + this.fogFar * 0.18;
-    this.scene.fog.near = Math.max(this.fogFar * 0.3, this.fogFar - fogBand);
+    // vanishes wi'out t' mid-field swimmin' in milk. Mist/rain/dread keep t'
+    // fogFar*0.3 near floor (their atmospheric mid-field haze is t' point).
+    // T' GREAT FOG is t' same band CLOSING IN (James again, same day): as its
+    // wall advances, t' band tightens (gf blend) an' t' floor rises, so t' moor
+    // stays crisp right up to t' whiteout — trees are either sharp or swallowed,
+    // never half-fogged white ghosts on t' horizon. At full: a crisp ~6-block
+    // bubble an' a wall at 7 — still hand-afore-face, wi'out t' ghost zone.
+    const gf = this.moorFog;
+    const fogBand = (10 + this.fogFar * 0.18) * (1 - gf) + Math.max(2.5, this.fogFar * 0.15) * gf;
+    this.scene.fog.near = Math.max(this.fogFar * (0.3 + 0.5 * gf), this.fogFar - fogBand);
 
     const starA = Math.max(0, -sunY * 2) * (1 - grey * 0.8);
     this.stars.material.opacity = fine ? Math.min(1, starA * 1.6) : starA; // brighter stars ower a moonlit moor
