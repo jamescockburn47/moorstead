@@ -1,6 +1,6 @@
 // Snow maths — run wi': node scripts/verify-snow.mjs
 import { TrampleBuffer } from '../src/footprints.js';
-import { stepAccumulation, accumulationTarget, snowfallIntensity, showerOscillation, snowLineFor, driftDepth } from '../src/snow.js';
+import { stepAccumulation, accumulationTarget, snowfallIntensity, showerOscillation, snowLineFor, driftDepth, printOnSnow } from '../src/snow.js';
 import { seasonStateAtPhase, YEAR, ANCHOR_SEC, ANCHOR_PHASE } from '../src/season.js';
 
 let failed = false;
@@ -65,6 +65,17 @@ const nowAtPhase = p => (ANCHOR_SEC + (p - ANCHOR_PHASE) * YEAR) * 1000 + 1;
   let inRange = true;
   for (let x = 0; x < 40; x++) { const d = driftDepth(x, x * 2, 60, 1); if (d < 0 || d > 1) inRange = false; }
   (inRange ? ok : bad)('drift depth stays in [0,1]');
+}
+
+// footprints only press into ground the snow wash covers — regression for the
+// "white/grey shadows under animals throughout the year" bug (James 2026-07-03):
+// prints below the snow-line sat as pale ghosts on bare green grass.
+{
+  (printOnSnow(36, 0.3) === false ? ok : bad)('no print on a bare valley floor under part cover (line is up the tops)');
+  (printOnSnow(60, 0.3) === true ? ok : bad)('a print reads on the washed tops under the same part cover');
+  (printOnSnow(60, 0.05) === false ? ok : bad)('no prints anywhere when snow cover is trace-thin');
+  (printOnSnow(36, 1) === true ? ok : bad)('full winter blanket: the valley floor takes prints');
+  (printOnSnow(snowLineFor(0.5), 0.5) === false ? ok : bad)('exactly AT the line is still bare fringe — prints start a couple of blocks in');
 }
 
 {

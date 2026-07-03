@@ -36,6 +36,7 @@ import { B }              from '../src/defs.js';
 import { seasonStateAtPhase } from '../src/season.js';
 import { FESTIVALS }          from '../src/festivals.js';
 
+import { greenPlacement } from '../src/festivalKit.js';
 import { buildChristmas } from '../src/festivals/christmas.js';
 import { buildBonfire }   from '../src/festivals/bonfire.js';
 import { buildHarvest }   from '../src/festivals/harvest.js';
@@ -191,6 +192,45 @@ for (const { id } of FESTIVALS) {
       ok(`${id}: pushed ${objects.length} object(s) into ctx.objects`);
     } else {
       bad(`${id}: ctx.objects is empty after build (expected >= 1)`);
+    }
+  }
+}
+
+// --- bonfire safety + one-element pyre (James 2026-07-03) --------------------
+// Contract: a bonfire never lands on/near the rail line or against a building,
+// and its flame is rooted INSIDE a properly-sized woodpile — burning wood, not
+// a big flame hovering over a footstool.
+console.log('\n-- Bonfire safety + one-element pyre --\n');
+{
+  // clearance: a north-south rail line runs right through the village at x=CX+2
+  const geoWithRail = { ...mockGen.geo, railInfo: (x, _z) => ({ d: Math.abs(x - (CX + 2)) }) };
+  const worldWithRail = { ...mockWorld, gen: { ...mockGen, geo: geoWithRail } };
+  const fp = greenPlacement(worldWithRail, VILLAGE, 0, { margin: 4, railClear: 8, maxR: 20 });
+  (fp ? ok : bad)('clearance-gated placement still finds a cell in a village with a rail through it');
+  if (fp) {
+    (Math.abs(fp.x - (CX + 2)) >= 8 ? ok : bad)(`the cell stands >= 8 blocks off the rail line (got ${Math.abs(fp.x - (CX + 2))})`);
+    const nearBuilding = VILLAGE.buildings.some(b =>
+      fp.x >= b.x0 - 4 && fp.x <= b.x1 + 4 && fp.z >= b.z0 - 4 && fp.z <= b.z1 + 4);
+    (!nearBuilding ? ok : bad)('the cell keeps a 4-block berth from every building footprint');
+  }
+  // backwards compatibility: no opts = the old scan, so maypole/harvest are untouched
+  (greenPlacement(mockWorld, VILLAGE) ? ok : bad)('opt-less greenPlacement still places (maypole/stooks unaffected)');
+
+  // the pyre itself: flame rooted in the wood, pile big enough to be enveloped
+  const scene = new THREE.Scene(); const objects = [];
+  buildBonfire({ scene, world: mockWorld, gen: mockGen, cx: CX, cz: CZ,
+                 season: seasonStateAtPhase(0.6), snowAccum: 0, objects, lit: [], robins: [] });
+  const pile = objects.find(o => typeof o.dispose === 'function'); // the stack group owns the Fire teardown
+  (pile ? ok : bad)('the bonfire stack built');
+  if (pile) {
+    const logYs = pile.children.filter(c => c.isMesh).map(c => c.position.y);
+    const pileTop = Math.max(...logYs);
+    (pileTop >= 1.6 ? ok : bad)(`the pyre stands proper tall — top billet at y=${pileTop}`);
+    const fire = pile.children.find(c => c.userData && c.userData.fireScale);
+    (fire ? ok : bad)('the pile owns its Fire group');
+    if (fire) {
+      (fire.position.y < pileTop * 0.5 ? ok : bad)(`flame is rooted IN the pile (base y=${fire.position.y}, pile top ${pileTop}) — wood burns, no hovering flame`);
+      (fire.userData.fireScale >= pileTop ? ok : bad)('flame body outsizes the pile, so it envelops the wood');
     }
   }
 }

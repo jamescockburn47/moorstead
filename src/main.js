@@ -5197,8 +5197,12 @@ class Game {
         const fpNow = performance.now() / 1000;
         const walkers = [{ x: this.player.pos.x, z: this.player.pos.z }];
         if (this.net) for (const r of this.net.remotes.values()) { const t = r.target; if (t) walkers.push({ x: t.x, z: t.z }); }
-        if (this.entities && this.entities.mobs) for (const mob of this.entities.mobs) walkers.push({ x: mob.pos.x, z: mob.pos.z });
-        this.footprints.update(dt, fpNow, walkers);
+        if (this.entities && this.entities.mobs) for (const mob of this.entities.mobs) {
+          // fliers (crows, gulls, owls, bats) and boats tread no snow — no prints
+          if (mob.dead || (mob.t && (mob.t.fly || mob.t.vehicle))) continue;
+          walkers.push({ x: mob.pos.x, z: mob.pos.z });
+        }
+        this.footprints.update(dt, fpNow, walkers, this.snowAccum);
       } else if (this.footprints) this.footprints.clear();
       this.snowAccum = stepAccumulation(this.snowAccum, season, dt);
       this.player.snowAccum = this.snowAccum; // drift slowdown reads this (player.js driftDepth)

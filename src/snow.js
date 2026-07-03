@@ -44,6 +44,16 @@ export function snowLineFor(amount) {
   return 64 - a * 44;                                     // 64 (tops) down to 20 (deep-winter valley floor)
 }
 
+// A pressed footprint only reads where the ground actually carries the snow wash.
+// The shader gates its white at smoothstep(snowLine, snowLine+10, y) — so below the
+// line the grass is bare, and a print there sat as a pale ghost on green (James
+// 2026-07-03: "white/grey shadows under animals... throughout the year"). Same
+// maths here: on-snow = above the line, a couple of blocks into the wash band so
+// the barely-dusted fringe stays clean too.
+export function printOnSnow(y, accum) {
+  return accum > 0.1 && y >= snowLineFor(accum) + 2;
+}
+
 // Banked-drift depth [0,1] at a world column. MUST mirror the shader's drift
 // pattern (mesher.js: 0.6 + amp*sin(x*0.15)*cos(z*0.15)) so the banks tha SEES
 // are the banks that slow thee — visuals and legs agree on where the drifts lie.

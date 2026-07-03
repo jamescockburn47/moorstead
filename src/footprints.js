@@ -4,6 +4,7 @@
 // keeps the walker's heading so trails read as tracks, and fades per-instance
 // (instanceColor toward snow-white) over its life rather than blinking out.
 import * as THREE from 'three';
+import { printOnSnow } from './snow.js';
 
 const STEP = 1.2;   // min blocks between prints
 const LIFE = 420;   // seconds a print lasts — a well-trod path holds through t' morning
@@ -31,14 +32,19 @@ const FADED = new THREE.Color(0xf4f7ff);  // drifted back to snow-white (≈ inv
 
 export class Footprints {
   constructor(scene, world) { this.scene = scene; this.world = world; this.buf = new TrampleBuffer(); this.mesh = null; this.timer = 0; }
-  update(dt, now, walkers) {
+  update(dt, now, walkers, snowAccum = 1) {
+    this.snowAccum = snowAccum;
     for (const w of walkers) this.buf.mark(w.x, w.z, now);
     this.timer -= dt; if (this.timer > 0) return; this.timer = 0.3;
     this.rebuild(now);
   }
   rebuild(now) {
     if (this.mesh) { this.scene.remove(this.mesh); this.mesh.dispose(); this.mesh = null; }
-    const live = this.buf.alive(now);
+    // only press prints into ground the snow wash actually covers — below the
+    // snow-line the grass is bare and a print reads as a pale ghost on green
+    const accum = this.snowAccum ?? 1;
+    const live = this.buf.alive(now).filter(p =>
+      printOnSnow(this.world.gen.height(Math.floor(p.x), Math.floor(p.z)) + 1, accum));
     if (!live.length) return;
     const mesh = new THREE.InstancedMesh(FOOT_GEOM, FOOT_MAT, live.length);
     const m = new THREE.Matrix4();

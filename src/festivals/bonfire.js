@@ -27,10 +27,13 @@ export function buildBonfire(ctx) {
 
   for (const v of (gen.geo.villages || [])) {
     if (Math.abs(v.x - cx) > RADIUS || Math.abs(v.z - cz) > RADIUS) continue;
-    // Place on an open green cell near the cross — the same scan the fir used
-    // before it moved to the chapel forecourt (green/closes/path first, then any
-    // open non-building cell). The bonfire belongs on the communal green.
-    const fp = greenPlacement(world, v);
+    // Place on open green near the cross — but a BONFIRE is a hazard, not a maypole
+    // (James 2026-07-03: fires were landing on t' rail line an' against walls). It
+    // demands standing room: well clear of every building footprint an' the rails.
+    // Try a generous berth first, then a tighter-but-still-safe one; if a village is
+    // too hemmed in for even that, it goes without a fire — never one on the tracks.
+    const fp = greenPlacement(world, v, 0, { margin: 4, railClear: 8, maxR: 20 })
+            || greenPlacement(world, v, 0, { margin: 2, railClear: 6, maxR: 20 });
     if (!fp) continue;
     const groundY = gen.height(fp.x, fp.z) + 1; // block-top the pile stands on
     const g = buildBonfireStack(fp.x + 0.5, groundY, fp.z + 0.5, fine);
@@ -64,32 +67,45 @@ function buildBonfireStack(x, groundY, z, fine = false) {
   const matLog  = new THREE.MeshLambertMaterial({ color: 0x6b4a2a }); // brown cordwood
   const matLog2 = new THREE.MeshLambertMaterial({ color: 0x55381f }); // darker log, for variety
 
-  // -- the woodpile: a few brown cubes piled into a rough cone. Bottom ring of
-  // crossed logs, a smaller mid ring, a capping billet — reads as a stacked pyre.
-  const logGeo = new THREE.BoxGeometry(1, 0.55, 0.34); // a cordwood billet
-  // bottom ring: 5 billets crossed round the base (y≈0.3)
-  const baseN = 5;
+  // -- the woodpile: a PROPER village pyre (James 2026-07-03: the owd knee-high
+  // stack under a 3-block flame read as two separate elements). Three rings of
+  // crossed billets stepping in an' up to ~2 blocks — sized so the hero flame's
+  // body actually envelops the wood rather than towering off a footstool.
+  // bottom ring: 8 long billets crossed round the base (y≈0.35)
+  const baseGeo = new THREE.BoxGeometry(1.6, 0.6, 0.38);
+  const baseN = 8;
   for (let i = 0; i < baseN; i++) {
     const a = (i / baseN) * Math.PI * 2;
-    const m = new THREE.Mesh(logGeo, i % 2 ? matLog2 : matLog);
-    m.position.set(Math.cos(a) * 0.45, 0.3, Math.sin(a) * 0.45);
+    const m = new THREE.Mesh(baseGeo, i % 2 ? matLog2 : matLog);
+    m.position.set(Math.cos(a) * 1.0, 0.35, Math.sin(a) * 1.0);
     m.rotation.y = a + Math.PI / 2; // lie tangent, spokes of a wheel
     group.add(m);
   }
-  // mid ring: 4 shorter billets, raised an' drawn in (y≈0.75)
-  const midGeo = new THREE.BoxGeometry(0.8, 0.5, 0.30);
-  const midN = 4;
+  // mid ring: 6 billets, raised an' drawn in (y≈0.95)
+  const midGeo = new THREE.BoxGeometry(1.2, 0.55, 0.34);
+  const midN = 6;
   for (let i = 0; i < midN; i++) {
-    const a = (i / midN) * Math.PI * 2 + 0.6; // offset frae the base ring
+    const a = (i / midN) * Math.PI * 2 + 0.5; // offset frae the base ring
     const m = new THREE.Mesh(midGeo, i % 2 ? matLog : matLog2);
-    m.position.set(Math.cos(a) * 0.30, 0.78, Math.sin(a) * 0.30);
+    m.position.set(Math.cos(a) * 0.68, 0.95, Math.sin(a) * 0.68);
     m.rotation.y = a + Math.PI / 2;
-    m.rotation.z = 0.18; // tipped inward toward the apex
+    m.rotation.z = 0.2; // tipped inward toward the apex
     group.add(m);
   }
-  // capping billet across the top (y≈1.1)
-  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.28), matLog2);
-  cap.position.set(0, 1.12, 0);
+  // upper ring: 4 shorter billets, drawn in tight (y≈1.5)
+  const topGeo = new THREE.BoxGeometry(0.9, 0.5, 0.3);
+  const topN = 4;
+  for (let i = 0; i < topN; i++) {
+    const a = (i / topN) * Math.PI * 2 + 1.1;
+    const m = new THREE.Mesh(topGeo, i % 2 ? matLog2 : matLog);
+    m.position.set(Math.cos(a) * 0.38, 1.5, Math.sin(a) * 0.38);
+    m.rotation.y = a + Math.PI / 2;
+    m.rotation.z = 0.3;
+    group.add(m);
+  }
+  // capping billet across the top (y≈1.9)
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.45, 0.3), matLog2);
+  cap.position.set(0, 1.9, 0);
   cap.rotation.y = 0.4;
   group.add(cap);
 
@@ -98,18 +114,20 @@ function buildBonfireStack(x, groundY, z, fine = false) {
   // browns — the straw-stuffed dummy that tops the bonfire. Leaned back into the
   // woodpile, so it reads as propped on the pyre awaiting the flame.
   const guy = buildGuy();
-  guy.position.set(0, 0.55, 0.55);  // sat on the bottom ring, toward the front
+  guy.position.set(0, 0.95, 1.05);  // sat up on the bottom ring, toward the front
   guy.rotation.x = -0.5;            // tipped back against the pile
   group.add(guy);
 
   // -- the hero flame: broad/chaotic bonfire preset, embers + smoke + one warm
   // pulsing light. scale ~3 → big auto-on, but we set big:true explicit for clarity.
-  // Sits at the woodpile apex.
+  // ANCHORED LOW, INSIDE the pile (flameQuad's base edge is y=0 of this group):
+  // the flame body rises THROUGH the billets so the wood visibly burns — one
+  // element, not a flame hovering off the apex (James 2026-07-03).
   // Under 'Fine' the fire also gets the tall EMBER COLUMN — a second pooled spark
   // stream (70 motes, ~2.6× rise, tight lanes) that glows under the bloom.
-  const fire = Fire({ scale: 3, big: true, layers: 3, embers: true, smoke: true, light: true,
+  const fire = Fire({ scale: 3.2, big: true, layers: 3, embers: true, smoke: true, light: true,
                       column: fine, seed: (x * 13.1 + z * 7.7) % 1 });
-  fire.position.set(0, 1.2, 0); // apex of the pile, frae which the flame licks up
+  fire.position.set(0, 0.35, 0); // rooted in the pile's heart — wood pokes through the flame bed
   group.add(fire);
 
   // The group owns a Fire subgroup wi' its own teardown (ember/smoke geometry +

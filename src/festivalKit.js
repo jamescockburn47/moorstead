@@ -30,17 +30,35 @@ export function isOpenGround(world, v, x, z, col = null) {
 // Deterministic open cell near a village centre for a centrepiece. Pass 1 prefers a classified
 // green/closes/path (stylised world); pass 2 takes ANY open ground (the real-Moors fallback).
 // `salt` rotates the scan so two centrepieces in one village don't pick the exact same cell.
-export function greenPlacement(world, v, salt = 0) {
+// `opts` adds safety clearances for hazardous centrepieces (the bonfire — James 2026-07-03:
+// fires were landing on/next to the rail line and against building walls):
+//   margin    — blocks of extra Chebyshev clearance beyond every building footprint (default 0)
+//   railClear — min distance frae any rail line, via geo.railInfo where it exists (default 0)
+//   maxR      — scan radius (default 12; raise it when clearance shrinks the candidate set)
+export function greenPlacement(world, v, salt = 0, opts = {}) {
   const geo = world.gen.geo;
+  const margin = opts.margin || 0, railClear = opts.railClear || 0, maxR = opts.maxR || 12;
   const isPreferred = k => k === 'green' || k === 'closes' || k === 'path';
+  const clearOf = (x, z) => {
+    if (margin > 0) {
+      for (const b of (v.buildings || []))
+        if (x >= b.x0 - margin && x <= b.x1 + margin && z >= b.z0 - margin && z <= b.z1 + margin) return false;
+    }
+    if (railClear > 0 && typeof geo.railInfo === 'function') {
+      const ri = geo.railInfo(x, z);
+      if (ri && ri.d < railClear) return false;
+    }
+    return true;
+  };
   for (let pass = 0; pass < 2; pass++) {
-    for (let r = 2; r <= 12; r++) {
+    for (let r = 2; r <= maxR; r++) {
       for (let ai = 0; ai < 16; ai++) {
         const angle = (ai / 16) * Math.PI * 2 + salt;
         const x = v.x + Math.round(r * Math.cos(angle));
         const z = v.z + Math.round(r * Math.sin(angle));
         const col = typeof geo.villageColumn === 'function' ? geo.villageColumn(x, z) : null;
         if (pass === 0 && !(col && isPreferred(col.kind))) continue;  // pass 1: classified greens only
+        if (!clearOf(x, z)) continue;
         if (!isOpenGround(world, v, x, z, col)) continue;
         return { x, z };
       }
