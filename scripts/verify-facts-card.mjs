@@ -26,6 +26,17 @@ check(buildFactsCard({}) === '', 'empty inputs -> empty card (no noise for the m
 check(buildFactsCard({ playerName: 'X'.repeat(2000) }).length <= FACTS_CARD_MAX,
       'card never exceeds its budget');
 
+// --- necessity-spine ledger rows: taught / commissions / promise record ---
+const card2 = buildFactsCard({
+  taught: ['smithing'],
+  commissions: [{ item: 'iron pick', giver: 'Amos Burnett', readyAtDay: 4, ready: true }],
+  promises: { kept: 3, broken: 1 },
+});
+check(card2.includes('They have been taught: smithing.'), 'taught row present');
+check(card2.includes('Open commission: iron pick with Amos Burnett, ready day 4 — READY to collect.'), 'commission row with READY flag');
+check(card2.includes('Their word: 3 promises kept, 1 broken.'), 'promise record row');
+check(!buildFactsCard({ promises: { kept: 0, broken: 0 } }).includes('Their word'), 'clean slate -> no word row');
+
 // --- trainLines: true, compact, tellable ---
 const tl = trainLines('Grosmont', [{ dest: 'Whitby', eta: 245, dist: 800 }, { dest: 'Pickering', eta: 731, dist: 1400 }]);
 check(tl.length === 1 && tl[0].includes('Grosmont'), 'one line per station');

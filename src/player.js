@@ -54,6 +54,11 @@ export class Player {
     this.stationSellHinted = false; // station sell hint already shown
     this.farmStatus = { registered: false }; // registered-farm status (Slice 2 gate to droving)
     this.knownTimes = {};   // station name -> true, once a local's told her the times
+    // necessity-spine ledgers (spec 2026-07-03): all conversation-earned, all game-true
+    this.taught = {};                              // skill key -> true (smithing, ironwork)
+    this.commissions = [];                         // {id, item, price, giver, readyAtDay, state:'open'|'done'}
+    this.vouches = [];                             // {by, day} — who's given their word for thee
+    this.promiseLog = { kept: 0, broken: 0 };      // contract record; feeds the facts card
     this.look = { ...DEFAULT_PLAYER_LOOK }; // "Dress thissen": chosen appearance (bounded indices) — shown to other players
   }
 
@@ -441,6 +446,10 @@ export class Player {
       farmStatus: this.farmStatus,
       miningSkill: this.miningSkill || 0,
       knownTimes: this.knownTimes || {},
+      taught: this.taught || {},
+      commissions: this.commissions || [],
+      vouches: this.vouches || [],
+      promiseLog: this.promiseLog || { kept: 0, broken: 0 },
       look: this.look, // "Dress thissen" — additive; old saves lack it an' default to a rambler
     };
   }
@@ -479,6 +488,10 @@ export class Player {
     this.farmStatus = d.farmStatus || { registered: false };
     this.miningSkill = d.miningSkill || 0;
     this.knownTimes = d.knownTimes || {};
+    this.taught = d.taught || {};
+    this.commissions = d.commissions || [];
+    this.vouches = d.vouches || [];
+    this.promiseLog = d.promiseLog || { kept: 0, broken: 0 };
     // additive + untrusted-input safe: an absent/old/junk look coerces to a rambler
     this.look = validatePlayerLook(d.look);
   }

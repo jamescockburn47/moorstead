@@ -10,6 +10,13 @@ export function buildFactsCard(f) {
   if (f.playerName) rows.push(`The visitor's name is ${String(f.playerName).slice(0, 40)}.`);
   if (f.standing) rows.push(`Their standing hereabouts: ${f.standing}.`);
   if (f.titles && f.titles.length) rows.push(`Honours they carry: ${f.titles.slice(0, 3).join(', ')}.`);
+  if (f.taught && f.taught.length) rows.push(`They have been taught: ${f.taught.join(', ')}.`);
+  for (const c of f.commissions || []) {
+    rows.push(`Open commission: ${c.item} with ${c.giver}, ready day ${c.readyAtDay}${c.ready ? ' — READY to collect' : ''}.`);
+  }
+  if (f.promises && (f.promises.kept || f.promises.broken)) {
+    rows.push(`Their word: ${f.promises.kept} promise${f.promises.kept === 1 ? '' : 's'} kept${f.promises.broken ? `, ${f.promises.broken} broken` : ''}.`);
+  }
   for (const t of f.trainRows || []) rows.push(t);
   for (const m of f.marketRows || []) rows.push(m);
   if (!rows.length) return '';

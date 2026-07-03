@@ -10,6 +10,7 @@ import { buildActivityDigest } from './activity.js';
 import { isChildrensWorld } from './rooms.js';
 import { buildFactsCard, trainLines } from './factscard.js';
 import { marketIntel } from './economy.js';
+import { SKILLS } from './ledgers.js';
 
 const STANDINGS = ['Newcomer', 'Known', 'Welcomed', 'Respected', 'Treasured'];
 const STANDING_THRESHOLDS = [0, 5, 20, 50, 100];
@@ -1588,6 +1589,12 @@ export class Quests {
       playerName: g.player && g.player.name,
       standing: this.standingLabel(),
       titles: this.earnedTitleList(),
+      taught: Object.keys(g.player.taught || {}).map(k => (SKILLS[k] ? SKILLS[k].label : k)),
+      commissions: (g.player.commissions || []).filter(c => c.state === 'open').map(c => ({
+        item: itemName(c.item), giver: this.dispName(c.giver),
+        readyAtDay: c.readyAtDay, ready: g.sky && g.sky.day >= c.readyAtDay,
+      })),
+      promises: g.player.promiseLog,
       trainRows: deps ? trainLines(stationName, deps) : [],
       marketRows: marketIntel(stationName || ''),
     });
