@@ -50,3 +50,50 @@ export function canVouch(villager, standingIdx) {
 export function promiseState(promise, day) {
   return day > promise.deadlineDay ? 'broken' : 'open';
 }
+
+// --- Pub games (D4): result ledger + wager rules ---------------------------
+// Small stakes only — a shilling is the ceiling. This is NEVER gated on
+// freeWorld: bairns wager too (James's explicit call, 2026-07-04). The
+// friendly-game path (wager 0) is always available regardless.
+export const WAGER_MAX = 12; // pence — a shilling
+
+// Mutates-and-returns gameRecord: ensures games[gameId] exists, bumps the
+// w/l/d counter for `result`, and tracks the biggest single wager ever won.
+export function recordGameResult(gameRecord, gameId, result, wagerWonPence = 0) {
+  if (!gameRecord.games) gameRecord.games = {};
+  if (!gameRecord.games[gameId]) gameRecord.games[gameId] = { w: 0, l: 0, d: 0 };
+  const rec = gameRecord.games[gameId];
+  if (result === 'w') rec.w++;
+  else if (result === 'l') rec.l++;
+  else if (result === 'd') rec.d++;
+  const won = Number.isFinite(wagerWonPence) ? Math.max(0, wagerWonPence) : 0;
+  gameRecord.biggestWin = Math.max(gameRecord.biggestWin || 0, won);
+  return gameRecord;
+}
+
+// Facts-card sentence rows, one per game with any play, plus a biggest-win
+// row when there is one. Pure: callers supply the brass formatter (economy's
+// formatBrass) so this module never needs to know £sd formatting.
+export function gameStatsRows(gameRecord, fmt = p => p + 'd') {
+  const rows = [];
+  const games = (gameRecord && gameRecord.games) || {};
+  for (const [gameId, rec] of Object.entries(games)) {
+    if (!rec || (rec.w + rec.l + rec.d) === 0) continue;
+    let row = `At t' tables they've won ${rec.w} an' lost ${rec.l} at ${gameId}`;
+    row += rec.d ? `, wi' ${rec.d} drawn.` : '.';
+    rows.push(row);
+  }
+  const biggest = (gameRecord && gameRecord.biggestWin) || 0;
+  if (biggest > 0) rows.push(`Biggest wager won at t' tables: ${fmt(biggest)}.`);
+  return rows;
+}
+
+// Wager rules: integer pence, 0 (friendly) or up to WAGER_MAX, never more
+// than the player is carrying. NEVER references freeWorld — bairns wager too.
+export function wagerAllowed(brass, wager) {
+  if (!Number.isInteger(wager)) return false;
+  if (wager < 0) return false;
+  if (wager > WAGER_MAX) return false;
+  if (wager > brass) return false;
+  return true;
+}
