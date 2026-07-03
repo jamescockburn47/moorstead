@@ -238,6 +238,7 @@ export class Net {
     const g = this.game;
     if (m.type === 'edit') {
       if (!this.saneCoord(m.x, m.y, m.z) || !Number.isInteger(m.id) || m.id < 0 || m.id > 4095) return;
+      if (g.world.isProtected(m.x, m.z)) return; // an inn's shell — never mutable, ours or another player's
       g.world.netEdits = g.world.netEdits || new Map();
       g.world.netEdits.set(`${m.x},${m.y},${m.z}`, m.id);
       g.world.setBlock(m.x, m.y, m.z, m.id);
