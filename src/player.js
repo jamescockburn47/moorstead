@@ -2,7 +2,7 @@
 import { B, BLOCKS, FOODS, TOOLS, maxStack, isLiquid } from './defs.js';
 import { HOT_FOODS } from './temperature.js';
 import { STARTING_BRASS } from './economy.js';
-import { moveEntity, boxCollides, unstick } from './physics.js';
+import { moveEntity, boxCollides, unstick, SWIM, submersion, swimWish, swimVerticalWish, swimVerticalStep, currentAt } from './physics.js';
 import { freezableWater, isFrozen } from './snow.js';
 import { validatePlayerLook, DEFAULT_PLAYER_LOOK } from './entities.js';
 
@@ -82,18 +82,36 @@ export class Player {
     if (!this.world.isLoaded(this.pos.x, this.pos.z)) return;
     // And if we've somehow ended up inside a block, get free of it.
     unstick(this.world, this);
-    const inWater = this.feetBlock() === B.WATER || this.headBlock() === B.WATER;
+    const sub = submersion(this.world, this.pos.x, this.pos.y, this.pos.z, this.eye);
+    const inWater = sub.feet || sub.head;
     const inBog = this.feetBlock() === B.BOG || this.headBlock() === B.BOG;
     const inLiquid = inWater || inBog;
     const onFrozen = this.onFrozenSurface(season);
+    // chest-deep in open watter = SWIMMING (James 2026-07-03): look-direction strokes,
+    // tread at t' surface, Space to kick up, Shift to dive. Nobbut feet wet = wading
+    // on normal legs; bogs an' a mounted pony fording keep t' owd float.
+    const swimming = sub.chest && !inBog && !onFrozen && !this.flying && !this.mounted;
+    // t' river current: watter on a river column carries thee downstream, swimming OR
+    // wading (client-local movement physics, same class as knockback — deterministic
+    // per column via geo.riverFlow). Sea an' tarns have no flow (riverFlow null there);
+    // t' stylised world has no riverFlow at all (typeof guard inside currentAt).
+    const cur = (inWater && !this.flying && !onFrozen)
+      ? currentAt(this.world.gen && this.world.gen.geo, this.pos.x, this.pos.z)
+      : null;
+    // once t' flow's had thee, tha's "in t' beck" till tha leaves t' watter — slack
+    // pockets at t' bank edge are still t' beck (live-observed at Grosmont 2026-07-03:
+    // wi'out this, a rider nudged into a flow-null pocket tired an' drowned). Entering
+    // still water COLD — t' sea, a tarn — never sets it, so t' tire clock stays real.
+    this._beck = cur ? true : (inWater ? !!this._beck : false);
     // ice keeps thee sliding a moment after tha steps off, so even a narrow beck feels slape
     if (onFrozen) this.iceSlip = 0.25; else this.iceSlip = Math.max(0, (this.iceSlip || 0) - dt);
     const slippery = onFrozen || this.iceSlip > 0;
     // treading deep water tires thee — tha can't keep thi head up forever, so the open
-    // sea is a real danger to swim (make for shore, the shallows, or a coble). Standing
-    // on a shallow bottom (onGround) is wading, not treading, so it doesn't tire thee.
-    const treading = inWater && !this.onGround && !this.flying;
-    if (treading) this.swimTime = (this.swimTime || 0) + dt;
+    // sea is a real danger to swim (make for shore, the shallows, or a coble). But a
+    // FLOWING beck bears thee up (James 2026-07-03): riding t' Esk down to Whitby is
+    // meant to be a lark, not a drowning — still water (sea, tarns) is where tha tires.
+    const treading = swimming && !this.onGround;
+    if (treading && !this._beck) this.swimTime = (this.swimTime || 0) + dt;
     else this.swimTime = Math.max(0, (this.swimTime || 0) - dt * 1.5);
     const tiring = this.swimTime > SWIM_TIRE;
 
@@ -107,18 +125,31 @@ export class Player {
     const mag = Math.hypot(fwd, strafe) || 1;
     fwd /= mag; strafe /= mag;
 
-    const sneaking = input.keys['ShiftLeft'] && !this.flying;
+    const sneaking = input.keys['ShiftLeft'] && !this.flying && !swimming; // Shift in deep watter dives, not sneaks
     let sprinting = input.keys['KeyZ'] && fwd > 0 && this.hunger > 6 && !sneaking;
-    let speed = this.flying ? (sprinting ? FLY_FAST : FLY) : this.mounted ? MOUNT_WALK : sprinting ? SPRINT : sneaking ? SNEAK : WALK;
-    if (inBog && !onFrozen) speed *= 0.3;
-    else if (inWater && !onFrozen) speed *= 0.55;
+    let speed = this.flying ? (sprinting ? FLY_FAST : FLY)
+      : swimming ? (sprinting ? SPRINT : WALK) * SWIM.SPEED_MUL // sprint = a stronger stroke
+      : this.mounted ? MOUNT_WALK : sprinting ? SPRINT : sneaking ? SNEAK : WALK;
+    if (!swimming) {
+      if (inBog && !onFrozen) speed *= 0.3;
+      else if (inWater && !onFrozen) speed *= 0.55;
+    }
     if (!this.creative && !this.god && this.temperature < 6) speed *= 0.75; // cold stiffens t' limbs
     this.sprinting = sprinting;
 
-    const wishX = (-sin * fwd + cos * strafe) * speed;
-    const wishZ = (-cos * fwd - sin * strafe) * speed;
+    let wishX, wishZ, lookY = 0;
+    if (swimming) {
+      const w = swimWish(this.yaw, this.pitch, fwd, strafe, speed);
+      wishX = w.x; wishZ = w.z; lookY = w.y;
+    } else {
+      wishX = (-sin * fwd + cos * strafe) * speed;
+      wishZ = (-cos * fwd - sin * strafe) * speed;
+    }
+    // t' beck's carry rides on top o' thi own intent: stand still an' tha drifts
+    // downstream at t' full current; swim an' it adds to (or fights) thi stroke.
+    if (cur) { wishX += cur.x; wishZ += cur.z; }
 
-    const accel = slippery ? 1.5 : (this.onGround || this.flying ? 18 : 5);
+    const accel = swimming ? SWIM.ACCEL : slippery ? 1.5 : (this.onGround || this.flying ? 18 : 5);
     this.vel.x += (wishX - this.vel.x) * Math.min(1, accel * dt);
     this.vel.z += (wishZ - this.vel.z) * Math.min(1, accel * dt);
 
@@ -129,7 +160,26 @@ export class Player {
       if (input.keys['ShiftLeft']) vy -= FLY;
       this.vel.y += (vy - this.vel.y) * Math.min(1, 12 * dt);
       this.fallStart = null;
-    } else if (inLiquid) {
+    } else if (swimming) {
+      // swim vertical: tread at t' surface by default, Space kicks up, Shift dives,
+      // a forward stroke follows t' look. Let go an' tha sinks slow under heavy drag.
+      this._bobT = (this._bobT || 0) + dt;
+      const wishY = swimVerticalWish({
+        lookY,
+        space: !!input.keys['Space'],
+        shift: !!input.keys['ShiftLeft'],
+        stroking: fwd !== 0 || strafe !== 0,
+        diving: lookY < -0.5,
+        eyeY: this.pos.y + this.eye,
+        surfaceY: sub.surfaceY,
+        tiring,
+        bobT: this._bobT,
+      });
+      this.vel.y = swimVerticalStep(this.vel.y, wishY, dt);
+      this.fallStart = null;
+    } else if (inLiquid && (inBog || this.mounted || (sub.head && !sub.chest))) {
+      // t' owd float: bogs (a trap by design), a mounted pony fording, an' freak
+      // water-overhead columns. Sink, wi' Space to kick up agen it.
       const sink = inBog ? 3 : 5;
       this.vel.y -= sink * dt * 2;
       this.vel.y = Math.max(this.vel.y, inBog ? -0.8 : -2.2);
@@ -198,6 +248,12 @@ export class Player {
         if (boxCollides(this.world, this.pos.x, this.pos.y - 0.1, this.pos.z, this.hw, 0.1)) this.onGround = true;
       }
     }
+
+    // landing in watter: t' beck breaks thi fall ENTIRELY — jumping off t' rail bridge
+    // into t' Esk is meant to be fun, not fatal (James 2026-07-03: water absorbs fall
+    // damage; afore this, a same-frame touchdown on t' bed o' shallow watter still
+    // hurt because only t' PRE-move inLiquid check cleared fallStart).
+    if (this.feetBlock() === B.WATER || this.feetBlock() === B.BOG) this.fallStart = null;
 
     // landing: fall damage
     if (this.onGround && this.fallStart !== null) {
