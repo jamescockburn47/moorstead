@@ -665,6 +665,11 @@ export class Sky {
     // the scene lighting — spiked by the storm controller (sky.flash = 1).
     this.flash = Math.max(0, this.flash - dt / 0.22);
     const flashLift = this.flash * this.flash * 2.4; // eased, a sharp blue-white burst
+    // [4] moon illumination fraction (0 new … 1 full) — hoisted afore t' light rig so
+    // t' Fine moonlight scales wi' t' phase (James 2026-07-03: "moon needs to be
+    // brighter and actually illuminate"). T' Milky-Way wash further down reads t'
+    // SAME const — one computation site, no drift.
+    const mwIllum = 0.5 - 0.5 * Math.cos(moonPhase(this.day) * Math.PI * 2);
     const fine = this.gfx === 'fine';
     if (fine) {
       // 'Fine' rig: ACES filmic tone mapping darkens t' mids, so t' curves run hotter —
@@ -673,9 +678,17 @@ export class Sky {
       // so a low sun stays a LOW sun (long dawn/dusk shadows reet across t' moor).
       const moonUp = sunY < -0.02;
       const moonHigh = Math.max(0, Math.min(1, (-sunY - 0.02) * 3));
+      // clear-night gate for t' moonlit lift below: instantaneous overcast estimate —
+      // eased snowAmount stands in for snowFall (computed further down), t' same
+      // stand-in main.js's glitter drive uses. Overcast nights stay properly dark.
+      const greyNow = overcastGrey(this.weather, this.snowAmount, this.rainAmount);
       if (moonUp) {
         this.sun.position.set(playerPos.x - sunX * 70, playerPos.y + Math.max(8, -sunY * 85), playerPos.z - 24);
-        this.sun.intensity = (0.07 + 0.38 * moonHigh) * (1 - this.dread * 0.35) + flashLift;
+        // phase-scaled moonlight (James 2026-07-03): a full moon genuinely lights t'
+        // moor (~2.9x t' owd flat curve, soft shadows read), a thin crescent stays
+        // near t' owd faint glow. Same shadow rig follows — position/target swap an'
+        // texel snap are shared wi' t' sun path below.
+        this.sun.intensity = (0.07 + 0.38 * moonHigh) * (1 + 1.9 * mwIllum) * (1 - this.dread * 0.35) + flashLift;
         this.sun.color.set(0x9cbcf0); // cool blue moonlight
       } else {
         this.sun.position.set(playerPos.x + sunX * 70, playerPos.y + Math.max(5, sunY * 85), playerPos.z + 20);
@@ -683,8 +696,10 @@ export class Sky {
         this.sun.color.setHSL(0.07 + 0.045 * (1 - golden), 0.45 + golden * 0.45, 0.74 + (1 - golden) * 0.12);
       }
       // raised ambient floor: tha can navigate by moonlight, but tha'll still want a
-      // lamp for warmth, colour an' detail
-      this.ambient.intensity = (0.34 + dayness * 0.62 + moonHigh * 0.10) * (1 - this.dread * 0.25) + flashLift * 0.7;
+      // lamp for warmth, colour an' detail. On a CLEAR moonlit night t' floor lifts
+      // wi' t' phase (× (1 − greyNow) so overcast stays dark) — high ambient-to-
+      // directional ratio keeps t' full-moon shadows FAINT an' soft, never black-hard.
+      this.ambient.intensity = (0.34 + dayness * 0.62 + moonHigh * (0.10 + 0.20 * mwIllum * (1 - greyNow))) * (1 - this.dread * 0.25) + flashLift * 0.7;
     } else {
       // 'Plain': today's pipeline, untouched
       this.sun.position.set(playerPos.x + sunX * 60, sunY * 80, playerPos.z + 20);
@@ -841,7 +856,7 @@ export class Sky {
     // an' WASHED OUT by a bright moon (as in life: a full moon drowns t' band).
     // James's call 2026-07-03: t' band read as a bright central smear — narrowed
     // (16→30), dimmed (0.16→0.07), mottle deepened, moon-wash added.
-    const mwIllum = 0.5 - 0.5 * Math.cos(moonPhase(this.day) * Math.PI * 2);
+    // (mwIllum hoisted above t' light rig — t' phase-scaled moonlight reads it too.)
     cu.uStarAmt.value = starA * (1 - grey) * (1 - 0.55 * moonVis * mwIllum);
     // t' cloud deck blinks white wi' each strike (squared, same easin' as flashLift)
     cu.uFlash.value = this.flash * this.flash;

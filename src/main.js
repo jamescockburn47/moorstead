@@ -101,7 +101,7 @@ import { Entities, MOB_TYPES, buildPlayerLookMesh, validatePlayerLook } from './
 import { auditMobs } from './invariants.js';
 import { PET_BENEFIT, PET_KINDS, TAME_GOAL } from './pets.js';
 import { EXTRA_FOLK, moodWord } from './villagerlife.js';
-import { Sky, resolveQuality, lanternFlicker } from './sky.js';
+import { Sky, resolveQuality, lanternFlicker, moonPhase } from './sky.js';
 import { Storm } from './storm.js';
 import { AudioEngine } from './audio.js';
 import { UI, bearingLabel, shelterToast, stationChipHTML, composeSketch, sketchFilename, offerShapeOk, hasStacks, countsFromSlots, describeStacks } from './ui.js';
@@ -5106,19 +5106,33 @@ class Game {
       // never touches it again.
       if (this.gfxQuality === 'fine') {
         const overcast = overcastGrey(this.sky.weather, this.sky.snowAmount || 0, this.sky.rainAmount);
-        setGlitter(dayness * (1 - overcast));
-        // [sword] sun-glint corridor drive: camera world pos + t' TRUE on-screen sun azimuth.
-        // sky.js parks t' sunSprite at player + (sunX·160, ·, −60) — INCLUDING t' constant
-        // −60 z placement offset — so t' blade points at t' sun tha actually SEES, not t'
-        // idealised z=0 celestial sun (t' dome's uSunDir convention, which t' sprite shifts
-        // off). uSunLow: 0 at noon (broad pool, k 6) → 1 at t' horizon (narrow blazin'
-        // blade, k 24). Scalar setters only — nowt allocated per frame.
+        // [moonglint] t' shimmer dies wi' t' sun (dayness, as ever) — an' a MOON drive
+        // fades in ower t' same −0.02 threshold t' sky.js light rig swaps at (moonVis
+        // easing), scaled by t' phase illumination fraction: a full-moon blade reads
+        // clear but calmer than day (×0.45), a crescent's barely there. Both terms are
+        // near-zero through t' dusk handover, so max() picks t' dominant lamp wi'out
+        // a visible switch (no double-drive — one azimuth, one strength).
+        const moonVis = Math.max(0, Math.min(1, (-_sunY - 0.02) * 6));
+        const illum = 0.5 - 0.5 * Math.cos(moonPhase(this.sky.day) * Math.PI * 2);
+        const sunGlit = dayness * (1 - overcast);
+        const moonGlit = moonVis * illum * (1 - overcast) * 0.45;
+        setGlitter(Math.max(sunGlit, moonGlit));
+        // [sword] glint corridor drive: camera world pos + t' TRUE on-screen azimuth o'
+        // whichever lamp owns t' blade. sky.js parks t' sunSprite at player +
+        // (sunX·160, ·, −60) an' t' moonSprite at player + (−sunX·160, ·, +60) — t'
+        // EXACT mirror, includin' t' constant z placement offset — so t' blade points
+        // at t' disc tha actually SEES, not an idealised z=0 celestial body. uSunLow:
+        // 0 at zenith (broad pool, k 6) → 1 at t' horizon (narrow blazin' blade, k 24),
+        // read frae t' drivin' lamp's elevation (moon elevation = −sunY: sprite y rides
+        // −sunY·150). Scalar setters only — nowt allocated per frame.
         const _cp = this.camera.position;
         setCamPos(_cp.x, _cp.y, _cp.z);
         const _sunX = Math.cos((this.sky.time - 0.25) * Math.PI * 2);
-        const _ax = _sunX * 160, _az = -60, _al = Math.hypot(_ax, _az);
+        const moonDrive = moonGlit > sunGlit;
+        const _ax = moonDrive ? -_sunX * 160 : _sunX * 160, _az = moonDrive ? 60 : -60, _al = Math.hypot(_ax, _az);
         setSunAzim(_ax / _al, _az / _al);
-        setSunLow(Math.max(0, Math.min(1, 1 - Math.max(0, _sunY) * 1.1)));
+        const _elev = moonDrive ? -_sunY : _sunY;
+        setSunLow(Math.max(0, Math.min(1, 1 - Math.max(0, _elev) * 1.1)));
         // [9] wet sheen tint: puddles/wet tops pick up t' LIVE sky colour at grazing
         // angles (Fine only — uSheen stamped 0.5 in applyQuality). scene.fog.color IS t'
         // live horizon/sky colour sky.js writes every frame (dawn-glow tint an' all), so

@@ -100,6 +100,16 @@ ok(mainSrc.includes('customDepthMaterial'), 'cutout foliage gets an alpha-tested
 ok(skySrc.includes("this.gfx === 'fine'"), 'sky: Fine-gated light curves');
 ok(skySrc.includes('0x9cbcf0'), 'sky: cool blue moonlight when the moon is up');
 ok(skySrc.includes('moonHigh'), 'sky: moonlit night floor raised under Fine');
+// [moonglint] 2026-07-03: phase-scaled moonlight (Fine only — Plain's curves pinned below,
+// untouched). Full moon ≈ 2.9× the old flat curve (0.45 → ~1.31 at high moon), new moon = 1×.
+ok(skySrc.includes('this.sun.intensity = (0.07 + 0.38 * moonHigh) * (1 + 1.9 * mwIllum) * (1 - this.dread * 0.35) + flashLift;'),
+  '[moonglint] Fine moon intensity scaled by (1 + 1.9·mwIllum) — full moon genuinely lights the moor, crescent stays faint');
+ok(skySrc.includes('moonHigh * (0.10 + 0.20 * mwIllum * (1 - greyNow))'),
+  '[moonglint] Fine night ambient lifts wi\' the phase, gated by (1 − greyNow) — clear full moon soft-shadowed, overcast nights stay dark');
+ok(skySrc.includes('const greyNow = overcastGrey(this.weather, this.snowAmount, this.rainAmount);'),
+  '[moonglint] clear-night gate mirrors main.js\'s overcast stand-in (eased snowAmount for the instantaneous snowfall)');
+ok((skySrc.match(/0\.5 - 0\.5 \* Math\.cos\(moonPhase\(this\.day\) \* Math\.PI \* 2\)/g) || []).length === 1,
+  '[moonglint] mwIllum computed ONCE (hoisted above the light rig) — the Milky-Way wash and the moonlight read the same value');
 
 // ---- S5a [25]+[27]+[26]: living exposure / bloom / grade drives (Fine-only, deterministic) ----
 // [25] deterministic eye adaptation: the exposure constant is now a BASE + a per-frame eased
@@ -275,7 +285,15 @@ ok(mainSrc.includes('setRippleAmp(fine ? 0.05 : 0)'), 'applyQuality: ripple amp 
 ok(mainSrc.includes('setFlowAmp(fine ? 0.05 : 0)'), 'applyQuality: flow amp 0.05 Fine / 0 Plain');
 ok(mainSrc.includes('setFresnel(fine ? 0.35 : 0)'), 'applyQuality: fresnel 0.35 Fine / 0 Plain');
 ok(/setRippleAmp\(fine \? 0\.05 : 0\);\s*\n\s*setFlowAmp\(fine \? 0\.05 : 0\);\s*\n\s*setGlitter\(0\);/.test(mainSrc), 'applyQuality parks uGlitter at 0 (Plain never sparkles)');
-ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,500}?setGlitter\(dayness \* \(1 - overcast\)\);/.test(mainSrc), 'glitter driven per frame frae dayness × clear-sky, Fine only');
+// [moonglint] 2026-07-03 (DELIBERATE re-pin, not a weakening): the sun term keeps its
+// dayness × clear-sky drive EXACTLY (sunGlit), and a moon term joins it — max() picks
+// the dominant lamp, both near-zero through the dusk handover. Window 500→1400: the
+// moon-drive block now sits between the gate and setGlitter.
+ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,1400}?setGlitter\(Math\.max\(sunGlit, moonGlit\)\);/.test(mainSrc), 'glitter driven per frame frae max(sun, moon) drive, Fine only');
+ok(mainSrc.includes('const sunGlit = dayness * (1 - overcast);'), '[moonglint] sun shimmer term unchanged: dayness × clear-sky — dies wi\' the sun through dusk');
+ok(mainSrc.includes('const moonGlit = moonVis * illum * (1 - overcast) * 0.45;'), '[moonglint] moon shimmer: moonVis × phase illumination × clear-sky × 0.45 — full-moon blade calmer than day, crescent barely there');
+ok(mainSrc.includes('const moonVis = Math.max(0, Math.min(1, (-_sunY - 0.02) * 6));'), '[moonglint] moonVis eases over the SAME −0.02 threshold the sky.js light rig swaps at');
+ok(mainSrc.includes('const illum = 0.5 - 0.5 * Math.cos(moonPhase(this.sky.day) * Math.PI * 2);'), '[moonglint] illumination fraction is the mwIllum formula off the shared game-day calendar');
 ok(mainSrc.includes('setWaterTime(this._glintT)'), 'water clock rides the existing glint tick — no new per-client accumulator');
 ok(mainSrc.includes('overcastGrey(this.sky.weather'), 'overcast term mirrors sky.js’s own overcastGrey call');
 
@@ -304,10 +322,19 @@ ok(mesherSrc.includes('0.55 + 0.45 * sin(uWaterTime * (1.5 + wH2 * 2.5) + wH2 * 
 ok(!mesherSrc.includes('max(0.0, sin(uWaterTime'), '[sword-2] the shared-frequency 50%-duty strobe (max(0,sin(uWaterTime·2.4…))) is GONE — no whole-blade throb');
 for (const s of ['setCamPos', 'setSunAzim', 'setSunLow'])
   ok(mesherSrc.includes(`export function ${s}(`), `${s} setter exported from mesher.js`);
-ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,1200}?setSunAzim\(_ax \/ _al, _az \/ _al\);/.test(mainSrc),
-  'sun azimuth driven per frame in the Fine block (Plain: uGlitter stays 0, sword inert)');
+// window 1200→2600 (2026-07-03, deliberate): the [moonglint] drive + its comment now sit
+// between the Fine gate and setSunAzim — same contract (azimuth driven inside the gate).
+ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,2600}?setSunAzim\(_ax \/ _al, _az \/ _al\);/.test(mainSrc),
+  'lamp azimuth driven per frame in the Fine block (Plain: uGlitter stays 0, sword inert)');
 ok(mainSrc.includes('setCamPos(_cp.x, _cp.y, _cp.z)'), 'camera world pos driven scalar-wise (no per-frame alloc)');
-ok(mainSrc.includes('const _ax = _sunX * 160, _az = -60'), 'azimuth derived from the TRUE sunSprite offset (sunX·160, −60) — not the idealised z=0 sun');
+// [moonglint] the sword tracks whichever lamp is dominant: sun sprite offset (sunX·160, −60)
+// or its EXACT moon mirror (−sunX·160, +60) — both TRUE on-screen sprite offsets, z nicety included
+ok(mainSrc.includes('const _ax = moonDrive ? -_sunX * 160 : _sunX * 160, _az = moonDrive ? 60 : -60'),
+  'azimuth derived from the driving lamp\'s TRUE sprite offset: sun (sunX·160, −60) or the moon mirror (−sunX·160, +60)');
+ok(mainSrc.includes('const moonDrive = moonGlit > sunGlit;'), '[moonglint] dominant-lamp switch — no double-drive in the dusk overlap');
+ok(mainSrc.includes('const _elev = moonDrive ? -_sunY : _sunY;')
+  && mainSrc.includes('setSunLow(Math.max(0, Math.min(1, 1 - Math.max(0, _elev) * 1.1)));'),
+  '[moonglint] uSunLow reads the DRIVING lamp\'s elevation (moon elevation = −sunY) — low moon, narrow blade');
 
 // ---- S2b [16]: the shoreline — depth tint + foam (behaviour in verify-shoreline.mjs) + horizon sea ring ----
 ok(mesherSrc.includes('export const DEPTH_TINT_AMP = 1'), 'depth-tint kill switch exists, ships on');
@@ -368,10 +395,10 @@ ok(/setFresnel\(fine \? 0\.35 : 0\);[\s\S]{0,250}?setCloudShadow\(0\);/.test(mai
   'applyQuality parks uCloudShadowAmt at 0 — Plain\'s branch never executes, terrain byte-identical');
 ok(mainSrc.includes('setCloudTime(this.sky.cloudT || 0)'),
   'cloud clock fed frae sky.cloudT — the SAME accumulator the dome scrolls by (churn speed-up an\' all)');
-// window 1600→2800 (2026-07-03, deliberate): the [sword] glint drive now sits between the
-// Fine gate and this call (beside setGlitter, its natural home) — same semantic contract
-// (cloud shadow driven INSIDE the Fine gate), just more code in between.
-ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,2800}?setCloudShadow\(Math\.min\(0\.35, 1\.4 \* cover \* dayness \* \(1 - overcast\)\)\);/.test(mainSrc),
+// window 1600→2800→4200 (2026-07-03, deliberate): the [sword] then [moonglint] drives now
+// sit between the Fine gate and this call (beside setGlitter, their natural home) — same
+// semantic contract (cloud shadow driven INSIDE the Fine gate), just more code in between.
+ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,4200}?setCloudShadow\(Math\.min\(0\.35, 1\.4 \* cover \* dayness \* \(1 - overcast\)\)\);/.test(mainSrc),
   'Fine drive: cover × dayness × clear-sky, clamped at 0.35 — self-zeroes at night and in full overcast');
 ok(mainSrc.includes('this.sky.domeMat.uniforms.uClouds.value'),
   'cover read off the live dome uniform (uClouds) — no sky.js edit needed');
