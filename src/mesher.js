@@ -259,12 +259,20 @@ const waterUniforms = {
   uFlowAmp: { value: 0 },    // downstream wavelet amplitude (becks), Fine ~0.05
   uGlitter: { value: 0 },    // sun-sparkle strength, driven per frame under Fine
   uFresnel: { value: 0 },    // grazing-angle alpha lift (glassy water), Fine ~0.35
+  // [sword] sun-glint corridor drives (Fine frame loop). Defaults are t' OFF state:
+  // uSunAzim (0,0) → dot() = 0 → corridor 0 → no glint owt — Plain an' headless safe.
+  uCamPos: { value: new THREE.Vector3() },   // camera WORLD pos — t' corridor's origin
+  uSunAzim: { value: new THREE.Vector2() },  // normalized world-XZ azimuth TOWARD t' visible sun
+  uSunLow: { value: 0 },                     // 0 = noon (broad soft pool) … 1 = horizon (narrow blade)
 };
 export function setWaterTime(t) { waterUniforms.uWaterTime.value = t; }
 export function setRippleAmp(v) { waterUniforms.uRippleAmp.value = v; }
 export function setFlowAmp(v) { waterUniforms.uFlowAmp.value = v; }
 export function setGlitter(v) { waterUniforms.uGlitter.value = v; }
 export function setFresnel(v) { waterUniforms.uFresnel.value = v; }
+export function setCamPos(x, y, z) { waterUniforms.uCamPos.value.set(x, y, z); }
+export function setSunAzim(x, z) { waterUniforms.uSunAzim.value.set(x, z); }
+export function setSunLow(v) { waterUniforms.uSunLow.value = v; }
 
 // [D0] chainage wrap for aFlow.z: baked as s % FLOW_WRAP (K = 1 block⁻¹). 50π is
 // chosen so EVERY sinusoid the shader hangs off vFlowS completes whole cycles across
@@ -313,6 +321,9 @@ function addWater(mat) {
     shader.uniforms.uFlowAmp = waterUniforms.uFlowAmp;
     shader.uniforms.uGlitter = waterUniforms.uGlitter;
     shader.uniforms.uFresnel = waterUniforms.uFresnel;
+    shader.uniforms.uCamPos = waterUniforms.uCamPos;   // [sword] re-bound every pass (guard below
+    shader.uniforms.uSunAzim = waterUniforms.uSunAzim; // only skips t' STRING prepends — a recompile
+    shader.uniforms.uSunLow = waterUniforms.uSunLow;   // must allus get live uniform objects)
     // Same idempotency guard as addSnow (see there): re-wire uniforms every pass, apply t'
     // GLSL prepends ONCE. Without it, a second onBeforeCompile pass over an already-injected
     // liquid shader redefines every uniform in t' prefix (uFrozen first). WATER_INJECT_MARK
@@ -333,17 +344,39 @@ function addWater(mat) {
         + '  float wDir = 0.8 * sin(wPh) + 0.2 * sin(wPh * 2.7);\n'
         + '  float wFm = smoothstep(0.01, 0.06, length(aFlow.xy));\n'
         + '  transformed.y += aTop * (1.0 - aFreeze * uFrozen) * mix(uRippleAmp * wIso, uFlowAmp * wDir, wFm);');
-    shader.fragmentShader = WATER_INJECT_MARK + '\nuniform float uFrozen;\nuniform float uWaterTime;\nuniform float uFlowAmp;\nuniform float uGlitter;\nuniform float uFresnel;\nvarying float vFreeze;\nvarying float vWX;\nvarying float vWZ;\nvarying float vFlowS;\nvarying vec2 vFlowDir;\n' + shader.fragmentShader
+    shader.fragmentShader = WATER_INJECT_MARK + '\nuniform float uFrozen;\nuniform float uWaterTime;\nuniform float uFlowAmp;\nuniform float uGlitter;\nuniform float uFresnel;\nuniform vec3 uCamPos;\nuniform vec2 uSunAzim;\nuniform float uSunLow;\nvarying float vFreeze;\nvarying float vWX;\nvarying float vWZ;\nvarying float vFlowS;\nvarying vec2 vFlowDir;\n'
+      // [sword] t' water handler's own tiny hash (mirror o' addSnow's csHash — separate
+      // injection, separate program, so it can't borrow t' snow copy)
+      + 'float wHash(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }\n'
+      + shader.fragmentShader
       .replace('#include <color_fragment>',
         '#include <color_fragment>\n'
         + '  float ice = uFrozen * vFreeze;\n'
         + '  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.88, 0.95), ice);\n'
-        // [15] world-space sun glitter (NOT a UV scroll), phase sheared downstream by
-        // dot(wpos.xz, flow) so sparkle streaks elongate along t' current ([D0])
+        // [sword] THE SWORD OF THE SUN (replaces t' owd doubly-periodic sin×sin lattice —
+        // t' uniform blob grid James binned). Glitter lives ONLY in a corridor frae t'
+        // camera toward t' sun's azimuth: face t' sun ower t' sea an' a blade o' light
+        // runs out to it; turn thi back an' max(0,dot) zeroes t' whole term — quiet water.
+        // k blends 24 (narrow blazin' blade at a low sun) → 6 (broad soft pool at noon).
         + '  vec2 wGp = vec2(vWX, vWZ);\n'
-        + '  wGp -= vFlowDir * dot(wGp, vFlowDir) * 0.5;\n'
-        + '  float wG = pow(max(0.0, sin(wGp.x * 2.3 + uWaterTime * 0.8) * sin(wGp.y * 1.9 - uWaterTime * 0.6)), 8.0);\n'
-        + '  diffuseColor.rgb += wG * uGlitter * (1.0 - ice);\n'
+        + '  wGp -= vFlowDir * dot(wGp, vFlowDir) * 0.5;\n'   // [D0] flow shear kept — beck glints stretch downstream
+        + '  vec2 wView = vec2(vWX, vWZ) - uCamPos.xz;\n'
+        + '  float wVL = max(length(wView), 1e-3);\n'          // guarded normalize (fragment under t' camera)
+        + '  float wAlign = max(0.0, dot(wView / wVL, uSunAzim));\n'
+        + '  float wCorr = pow(wAlign, mix(6.0, 24.0, uSunLow)) * (1.0 + uSunLow);\n'
+        // cellular, APERIODIC sparkle inside t' corridor (t' addSnow sparkleCell idiom):
+        // hashed cells at 3.5 cells/block (sub-block points, not slabs), per-cell phase
+        // into t' sin an' per-cell brightness — livin' glints, never a lattice. T' BLADE
+        // is a DENSITY gradient (t' real sun-glitter look): wCorr slides t' hash gate, so
+        // cells light thick on t' sun line (up to ~84% at a settin' sun), thin out along
+        // its flanks an' vanish perpendicular — brightness ridin' wCorr as well. wDist
+        // fades t' glint in frae ~5 blocks out: glitter lives toward t' horizon under t'
+        // sun, not under thi boots at t' water's edge.
+        + '  float wH = wHash(floor(wGp * 3.5));\n'
+        + '  float wTw = max(0.0, sin(uWaterTime * 2.4 + wH * 6.2831));\n'
+        + '  float wG = step(1.0 - 0.42 * wCorr, wH) * wTw * (0.5 + 0.5 * wH);\n'
+        + '  float wDist = smoothstep(5.0, 16.0, wVL);\n'
+        + '  diffuseColor.rgb += wG * wCorr * wDist * uGlitter * (1.0 - ice);\n'
         // [D0] travelling lace bands running downstream, strongest mid-channel;
         // 3×uFlowAmp keeps 'em subtle (max +0.15) an' Plain-safe (amp 0 → nowt)
         + '  float wBank = length(vFlowDir);\n'
@@ -359,7 +392,9 @@ function addWater(mat) {
         + '  diffuseColor.a = min(1.0, diffuseColor.a + wFres * uFresnel);\n'
         + '#include <opaque_fragment>');
   };
-  mat.customProgramCacheKey = () => 'liquid-ice-water';
+  // [sword] '-sword' extends t' key so t' corridor uniforms/GLSL fork a fresh program
+  // (t' S3 '-cloud-wet' precedent) — still exactly ONE liquid program, one handler.
+  mat.customProgramCacheKey = () => 'liquid-ice-water-sword';
   return mat;
 }
 

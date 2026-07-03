@@ -192,14 +192,17 @@ const addPrecipMotion = (mat, own, shared) => {
 };
 
 // ---- world-edge fog budget ----
-// world.js streams an' meshes chunks to renderDist = 6 round t' player (src/world.js:32,
-// an instance field, not exported — keep this mirror in step wi' it). 6 × CHUNK = 96
+// world.js streams an' meshes chunks to renderDist = 7 round t' player (src/world.js,
+// an instance field, not exported — keep this mirror in step wi' it). 7 × CHUNK = 112
 // blocks is t' GUARANTEED meshed distance in every direction (worst case, player stood
 // on a chunk seam). Past that edge there's no terrain at all — only t' bare dome — so
 // fog must finish its WHOLE job (full occlusion) inside it, else half-fogged terrain
 // ends in a hard silhouette against flat dome colour: t' off-puttin' horizon band.
-const STREAM_RADIUS = 6 * CHUNK;                       // blocks — mirrors world.renderDist × CHUNK
-const FOG_FAR_MAX = Math.floor(STREAM_RADIUS * 0.88);  // 84: full occlusion afore t' meshed edge
+// Re-tuned 2026-07-03 (deliberate): renderDist 6→7 bought 16 more meshed blocks, so
+// clear weather now breathes to ~98 (frae 84 — James found t' owd line too close in);
+// misty lands ~82, rain ~72. T' knee structure below is UNTOUCHED.
+const STREAM_RADIUS = 7 * CHUNK;                       // blocks — mirrors world.renderDist × CHUNK
+const FOG_FAR_MAX = Math.floor(STREAM_RADIUS * 0.88);  // 98: full occlusion afore t' meshed edge
 const FOG_KNEE = 60;  // open-weather targets (rain 90 / misty 120 / clear 160) compress into KNEE..MAX
 
 // ---- Fine shadow rig: whole-texel snap ----
@@ -783,7 +786,7 @@ export class Sky {
     else if (this.weather === 'fog') baseFog = Math.min(baseFog, 28);
     if (this.dread > 0.05) baseFog = Math.min(baseFog, 55 - this.dread * 22);
     if (this.moorFog > 0.01) baseFog = Math.min(baseFog, 150 - this.moorFog * 143); // ~7 at full: hand-afore-face stuff
-    // T' meshed world ends STREAM_RADIUS (96) blocks out — three o' t' four open-weather
+    // T' meshed world ends STREAM_RADIUS (112) blocks out — three o' t' four open-weather
     // targets above (rain 90 / misty 120 / clear 160) put full occlusion AT or PAST that
     // edge, so t' last chunks showed half-fogged against bare dome: t' horizon band.
     // A bare min() would flatten all three into one look, so a soft knee compresses

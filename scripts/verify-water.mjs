@@ -24,7 +24,7 @@ global.document = {
 };
 
 import { B, CHUNK, HEIGHT, WATER_LEVEL } from '../src/defs.js';
-import { initMaterials, getMaterials, buildChunkMeshes, setWaterTime, FLOW_WRAP } from '../src/mesher.js';
+import { initMaterials, getMaterials, buildChunkMeshes, setWaterTime, setCamPos, setSunAzim, setSunLow, FLOW_WRAP } from '../src/mesher.js';
 import { MoorsGeography } from '../src/moorsgeo.js';
 import { World } from '../src/world.js';
 import { Gen, MOORS_SEED } from '../src/worldgen.js';
@@ -51,10 +51,17 @@ console.log('\n-- living water: ripple/flow bake + shader wiring --\n');
   // reads `normal` (three's computed fragment normal), NOT the flat-strippable vNormal varying.
   const shader = { uniforms: {}, vertexShader: '#include <begin_vertex>', fragmentShader: '#include <color_fragment>\n#include <opaque_fragment>' };
   mats.liquid.onBeforeCompile(shader);
-  for (const u of ['uWaterTime', 'uRippleAmp', 'uFlowAmp', 'uGlitter', 'uFresnel', 'uFrozen']) {
+  for (const u of ['uWaterTime', 'uRippleAmp', 'uFlowAmp', 'uGlitter', 'uFresnel', 'uFrozen', 'uSunLow']) {
     (shader.uniforms[u] && shader.uniforms[u].value === 0
       ? ok : bad)(`uniform ${u} registered on the liquid shader, defaults 0`);
   }
+  // [sword] corridor uniforms: registered, defaults are the OFF state (zero azimuth →
+  // dot() = 0 → corridor 0 → no glint anywhere until main.js drives them under Fine)
+  const cp = shader.uniforms.uCamPos, sa = shader.uniforms.uSunAzim;
+  (cp && cp.value.x === 0 && cp.value.y === 0 && cp.value.z === 0
+    ? ok : bad)('uniform uCamPos registered, defaults origin');
+  (sa && sa.value.x === 0 && sa.value.y === 0
+    ? ok : bad)('uniform uSunAzim registered, defaults (0,0) — sword fully off until driven');
   (shader.vertexShader.includes('attribute float aTop') && shader.vertexShader.includes('attribute vec3 aFlow')
     ? ok : bad)('vertex shader declares aTop + aFlow');
   (shader.vertexShader.includes('transformed.y += aTop')
@@ -63,6 +70,18 @@ console.log('\n-- living water: ripple/flow bake + shader wiring --\n');
     ? ok : bad)('ripple phase taken frae WORLD pos (modelMatrix — the addSnow idiom)');
   (shader.fragmentShader.includes('uGlitter') && shader.fragmentShader.includes('vViewPosition')
     ? ok : bad)('fragment carries world-space glitter + fresnel terms');
+  // [sword] the sun-glint corridor contract (2026-07-03 — the old sin×sin lattice glitter
+  // was DELIBERATELY replaced: it tiled the whole sea with a uniform blob grid):
+  (shader.fragmentShader.includes('max(0.0, dot(wView / wVL, uSunAzim))')
+    ? ok : bad)('corridor alignment clamps at 0 — the sea lies quiet with the sun behind you');
+  (shader.fragmentShader.includes('pow(wAlign, mix(6.0, 24.0, uSunLow))')
+    ? ok : bad)('corridor narrows with a low sun (k 6 noon pool → 24 horizon blade)');
+  (shader.fragmentShader.includes('wHash(floor(wGp * 3.5))') && shader.fragmentShader.includes('float wHash(vec2 p)')
+    ? ok : bad)('sparkle is CELLULAR + aperiodic (hashed sub-block cells, per-cell phase), not a lattice');
+  (!shader.fragmentShader.includes('sin(wGp.x * 2.3')
+    ? ok : bad)('the old doubly-periodic lattice literal is absent from the compiled fragment');
+  (shader.fragmentShader.includes('wG * wCorr * wDist * uGlitter * (1.0 - ice)')
+    ? ok : bad)('glint still rides uGlitter × (1−ice) wi\' a near-field fade — Plain (uGlitter 0) stays byte-flat');
   // regression guard: the fresnel MUST read `normal` (robust flat-or-smooth), never the raw
   // `vNormal` varying which three strips under some program variants (a live compile fail).
   (shader.fragmentShader.includes('normalize(normal)') && !shader.fragmentShader.includes('vNormal')
@@ -71,6 +90,19 @@ console.log('\n-- living water: ripple/flow bake + shader wiring --\n');
   setWaterTime(4.2);
   (shader.uniforms.uWaterTime.value === 4.2 ? ok : bad)('setWaterTime drives the live module uniform');
   setWaterTime(0);
+  // [sword] setters drive the LIVE uniform objects the shader holds (idempotency-guard
+  // contract: uniforms re-bound every pass, so a recompiled program still sees these)
+  setCamPos(1.5, 2.5, 3.5);
+  (shader.uniforms.uCamPos.value.x === 1.5 && shader.uniforms.uCamPos.value.y === 2.5 && shader.uniforms.uCamPos.value.z === 3.5
+    ? ok : bad)('setCamPos drives the live uCamPos uniform');
+  setCamPos(0, 0, 0);
+  setSunAzim(0.6, -0.8);
+  (shader.uniforms.uSunAzim.value.x === 0.6 && shader.uniforms.uSunAzim.value.y === -0.8
+    ? ok : bad)('setSunAzim drives the live uSunAzim uniform');
+  setSunAzim(0, 0);
+  setSunLow(0.7);
+  (shader.uniforms.uSunLow.value === 0.7 ? ok : bad)('setSunLow drives the live uSunLow uniform');
+  setSunLow(0);
 }
 
 // --- (a): synthetic chunk — aTop set on dropped verts ONLY -------------------

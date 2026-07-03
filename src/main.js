@@ -11,7 +11,7 @@ import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_HASHES } from './defs.js';
 import { strSeed } from './noise.js';
 import { protectedAt } from './landmarks.js';
-import { initMaterials, setSnowLevel, setFrozen, setGlintTime, setWaterTime, setRippleAmp, setFlowAmp, setGlitter, setFresnel, setCloudTime, setCloudShadow, setWetness, setGroundWet, setSheen, setWetSky, setSwayAmp, setWindAmt, setGustPhase, setDew, setSparkle, getMaterials } from './mesher.js';
+import { initMaterials, setSnowLevel, setFrozen, setGlintTime, setWaterTime, setRippleAmp, setFlowAmp, setGlitter, setFresnel, setCamPos, setSunAzim, setSunLow, setCloudTime, setCloudShadow, setWetness, setGroundWet, setSheen, setWetSky, setSwayAmp, setWindAmt, setGustPhase, setDew, setSparkle, getMaterials } from './mesher.js';
 import { stepGroundWet } from './wetness.js';
 import { stepAccumulation, accumulationTarget, isFrozen, overcastGrey } from './snow.js';
 import { getIconURL, retintAtlasForSeason, getCutoutAtlas } from './textures.js';
@@ -3683,8 +3683,8 @@ class Game {
   }
 
   // [16] The horizon sea ring — see the SEA_RING constant up top for the why.
-  // Ring inner 90 sits just outside the meshed radius (96 worst-case, fog fully
-  // occluded by 84), outer 500 reaches the dome; near-field sea is real chunk
+  // Ring inner 90 sits inside the meshed radius (112 worst-case, fog fully
+  // occluded by 98), outer 500 reaches the dome; near-field sea is real chunk
   // water drawn over it (the ring writes no depth). Shown when the camera's high
   // OR the player's over coastal ground (coastT > 0); hidden inland at ground
   // level, so no streak from T' High Moor. Built ONCE, disposed in teardownWorld.
@@ -5081,6 +5081,18 @@ class Game {
       if (this.gfxQuality === 'fine') {
         const overcast = overcastGrey(this.sky.weather, this.sky.snowAmount || 0, this.sky.rainAmount);
         setGlitter(dayness * (1 - overcast));
+        // [sword] sun-glint corridor drive: camera world pos + t' TRUE on-screen sun azimuth.
+        // sky.js parks t' sunSprite at player + (sunX·160, ·, −60) — INCLUDING t' constant
+        // −60 z placement offset — so t' blade points at t' sun tha actually SEES, not t'
+        // idealised z=0 celestial sun (t' dome's uSunDir convention, which t' sprite shifts
+        // off). uSunLow: 0 at noon (broad pool, k 6) → 1 at t' horizon (narrow blazin'
+        // blade, k 24). Scalar setters only — nowt allocated per frame.
+        const _cp = this.camera.position;
+        setCamPos(_cp.x, _cp.y, _cp.z);
+        const _sunX = Math.cos((this.sky.time - 0.25) * Math.PI * 2);
+        const _ax = _sunX * 160, _az = -60, _al = Math.hypot(_ax, _az);
+        setSunAzim(_ax / _al, _az / _al);
+        setSunLow(Math.max(0, Math.min(1, 1 - Math.max(0, _sunY) * 1.1)));
         // [9] wet sheen tint: puddles/wet tops pick up t' LIVE sky colour at grazing
         // angles (Fine only — uSheen stamped 0.5 in applyQuality). scene.fog.color IS t'
         // live horizon/sky colour sky.js writes every frame (dawn-glow tint an' all), so

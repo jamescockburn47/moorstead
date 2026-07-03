@@ -29,7 +29,13 @@ export class World {
       { id: 'quarry_pickering', kind: 'quarry', by: 'parish', cx: 480, cz: 820, radius: 12, paidUntilDay: Infinity, lapsedDay: null }
     ]; // { id, kind, by, cx, cz, radius, depth, paidUntilDay, lapsedDay } — land claims + mine licences
     this.lanterns = new Set(); // "x,y,z"
-    this.renderDist = 6;
+    // Meshed Chebyshev radius (chunks). Generation allus runs one ring further (update()
+    // loops to renderDist + 1) because border meshing needs REAL neighbour data — getBlock
+    // on ungenerated ground answers STONE (below), which would cull seam faces wrongly.
+    // 6 → 7 (2026-07-03, deliberate): pushes t' guaranteed meshed edge 96 → 112 blocks so
+    // t' horizon fog can sit further out (James: "t' fog's too close"). sky.js
+    // STREAM_RADIUS mirrors this — keep t' pair in step.
+    this.renderDist = 7;
     this.genQueue = [];
     this.remeshQueue = new Set(); // "cx,cz" — chunks owed a rebuild after an edit burst; update() drains a couple per frame
     this.frame = 0; // ticks in update(); lets setBlock remesh a chunk at most once a frame
