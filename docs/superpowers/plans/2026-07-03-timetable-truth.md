@@ -4,12 +4,61 @@
 
 **Goal:** The brain books NPCs onto specific train calls from the same deterministic timetable the client runs, capped at 16 seats per call — killing station loitering; the client rides them in just-in-time and shows 16 passengers across two coaches.
 
-**Architecture:** Extract the schedule maths from `src/main.js` into a pure `src/railtime.js`; an export script freezes each line's leg times into `brain-sync/timetable.json` + a call fixture; a Python `brain/timetable.py` (in the EVO mirror repo `C:\Users\James\moorstead-evo-work`) reproduces the maths bit-for-bit (verified against the fixture) and adds a 16-seat booking ledger; `roster_sim.start_rail` books `dep`/`arr` into NPC state; `act.py` gains night/errand day-phase gating (`DAY_LENGTH=1800`, same clock as `src/sky.js:9`); the client ride machine uses `dep` when present (legacy ranked path retained for a dep-less brain).
+**Architecture:** Extract the schedule maths from `src/main.js` into a pure `src/railtime.js`; an export script freezes each line's leg times into `brain-sync/timetable.json` + a call fixture; a Python `brain/timetable.py` (in the EVO mirror repo `C:\Users\James\moorstead-evo-work`) reproduces the maths bit-for-bit (verified against the fixture) and adds a thread-safe 16-seat booking ledger; `roster_sim.start_rail` books `dep`/`arr` into NPC state (ledger threaded through `decide`/`apply_action`/`advance_plan`); the client ride machine uses `dep` when present (legacy ranked path retained for a dep-less brain). Day-phase/night gating is **deferred** (see the corrections block and Task 6) — it depends on the relay's day clock, not wall-clock.
 
 **Tech Stack:** ES modules + Node verify scripts (client repo); Python 3 + pytest (EVO mirror repo); scp + systemctl for EVO deploy.
 
 **Spec:** `docs/superpowers/specs/2026-07-03-npc-movement-chat-night-inn-design.md` (Workstream A).
 **Protocol note:** `state.dep`/`state.arr` are additive fields; old clients ignore them (INVARIANTS rule 3). No `minClientVersion` bump.
+
+---
+
+## Ground-truth corrections (verified 2026-07-03 before execution)
+
+Probes of the client repo and the EVO mirror (`C:\Users\James\moorstead-evo-work`)
+turned up five facts that revise the plan as written below. These override any
+conflicting detail in the tasks; each affected task also carries the fix inline.
+
+1. **Trains are pure wall-clock, the day/night clock is NOT.** `trainSchedule`/
+   `trainScheduleFor` compute from `Date.now()/1000` directly (verified main.js:2780,
+   2827) — so timetable parity holds. But `src/sky.js:936` *integrates* `this.time +=
+   dt/DAY_LENGTH` (seeded 0.3 at sky.js:572) and in multiplayer is overwritten by the
+   **relay's** broadcast (`multiplayer.js:218,274` `g.sky.time = m.time`), NOT by
+   `Date.now()%1800`. So a brain computing night from `time.time()%1800` would not
+   match the visible day. **Task 6 (day-phase/night gating) is DEFERRED** to a
+   follow-up that first SSH-verifies worldsvc's day clock. Tasks 1–5, 7, 8 have no
+   day-clock dependency and proceed.
+
+2. **Brain test import style is `from brain import X`.** The whole suite
+   (`brain/test_roster_sim.py`, `brain/tests/*`) imports `from brain import world` /
+   `from brain import roster_sim as rs`, run with pytest from the EVO repo root. The
+   flat `sys.path.insert(...)` + `import timetable` style in Tasks 4–5 below is WRONG —
+   use `from brain import timetable`, `from brain import roster_sim`, etc. New test
+   files live in `brain/tests/` (matching `conftest.py`'s location).
+
+3. **The ledger must be threaded — the pump never sees the sim.** `ActPump._decide_one`
+   calls `act.decide(npc, time.time())` (roster_api.py:82) with no sim reference. So
+   the plan's `ledger=sim.ledger` in `apply_action` is unreachable as written. Thread
+   it: `decide(npc, now, chat_fn=None, ledger=None)` → `apply_action(npc, act, now,
+   ledger=None)` → `start_rail(..., ledger=ledger)`; and `advance_plan(npc, now,
+   ledger=None)` → `start_rail(..., ledger=ledger)`. Pass `self.sim.ledger` at both
+   pump call sites (`act.decide(...)` and the `advance_plan` fallback) and `self.ledger`
+   from `RosterSim.tick`. Detailed in Task 5.
+
+4. **`SeatLedger` needs a lock.** Bookings happen from up to `ACT_MAX_CONCURRENT` (3)
+   ActPump worker threads (`asyncio.to_thread`, roster_api.py:82) AND the main tick
+   thread. `book`/`prune` do read-modify-write on `self.seats` — guard with a
+   `threading.Lock` or trains occasionally over-book past 16. Detailed in Task 4.
+
+5. **Export station-name source + ride var name.** `railPaths()` entries have `.name`
+   and `.path.stationS` (chainages) but NO `.stations` array — the plan's `l.stations`
+   for branches is wrong. Derive each line's ordered station names the SAME way
+   `brain/world.py` does (from `data/moors-data.json` `lines[].stations` filtered to
+   real `stations`), and pair index-for-index with `path.stationS`, asserting equal
+   length. The two `moors-data.json` files are byte-identical (verified). The ride
+   object is created at `roster.js:520` (`e.ride = { line: s.line, from: s.fromStn,
+   to: s.toStn, phase: 'wait', t: 0 }`) — local state var is `s`, not `st`. Both
+   detailed in Tasks 3 and 7.
 
 ---
 
@@ -193,7 +242,18 @@ Run:
 node -e "import('./src/moorsgeo.js').then(m => { const g = new m.MoorsGeography(); const ps = g.railPaths(); console.log(ps.map(l => ({ name: l.name, keys: Object.keys(l), nStationS: l.path && l.path.stationS && l.path.stationS.length }))); console.log('railway:', g.railway().map(s => s.name)); })"
 ```
 
-Note, per line: its `name`, whether it carries a `stations` array of names, and `path.stationS` length. The main line's stations come from `geo.railway()`; branches carry their own list (this is what `RosterClient._visibleTrain` reads as `bt.stations` — if the property name differs from `stations`, use what the probe shows and keep Task 3 consistent with it).
+Note, per line: its `name` and `path.stationS` length. **Correction (ground-truth #5):**
+`railPaths()` entries have NO `.stations` array. Derive each line's ordered station
+names the SAME way `brain/world.py` does — from `data/moors-data.json`: for the line
+whose `name` matches, take `lines[].stations` filtered to names present in the top-level
+`stations` array, dropping any line left with < 2 (world.py's filter). This guarantees
+the export's `stations[i]` aligns index-for-index with `world.LINES[name][i]` and with
+`path.stationS[i]`; the length assert catches any drift. Run the probe to confirm
+`path.stationS.length` equals that filtered count per line:
+
+```bash
+node -e "import('./src/moorsgeo.js').then(m => { const g = new m.MoorsGeography(); console.log(g.railPaths().map(l => ({ name: l.name, nStationS: l.path && l.path.stationS && l.path.stationS.length }))); console.log('railway:', g.railway().map(s => s.name)); })"
+```
 
 - [ ] **Step 2: Write the export script**
 
@@ -203,24 +263,35 @@ Create `scripts/export-timetable.mjs`:
 // Freeze the deterministic timetable into brain-sync/ so the EVO brain books NPCs
 // onto the SAME train calls every client renders. Rerun after any rail-layout or
 // railtime.js change; verify-timetable-parity fails if the committed copy is stale.
-import { writeFileSync, mkdirSync } from 'node:fs';
+// Station names are derived EXACTLY as brain/world.py derives world.LINES, so the
+// export and the brain agree on each line's station order by construction.
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { MoorsGeography } from '../src/moorsgeo.js';
 import { DWELL_T, legTime, nextDeparture } from '../src/railtime.js';
+
+const data = JSON.parse(readFileSync(new URL('../data/moors-data.json', import.meta.url), 'utf8'));
+const STATION_SET = new Set(data.stations.map(s => s.name));
+// name -> ordered real-station list, mirroring world.py's LINES construction
+const stationsByLine = {};
+for (const dl of data.lines || []) {
+  const stops = (dl.stations || []).filter(n => STATION_SET.has(n));
+  if (stops.length >= 2) stationsByLine[dl.name] = stops;   // world.py drops < 2
+}
 
 const geo = new MoorsGeography();
 const lines = [];
 for (const l of geo.railPaths()) {
-  const stations = (l.path === geo.railPath())
-    ? geo.railway().map(s => s.name)
-    : (l.stations || []).map(s => (typeof s === 'string' ? s : s.name));
+  const stations = stationsByLine[l.name];
   const S = l.path.stationS;
-  if (!stations.length || !S || S.length !== stations.length) {
-    throw new Error(`line ${l.name}: ${stations.length} station names vs ${S && S.length} chainages`);
+  if (!stations) continue;                                  // line world.py wouldn't carry — skip in lockstep
+  if (!S || S.length !== stations.length) {
+    throw new Error(`line ${l.name}: ${stations.length} station names vs ${S && S.length} chainages — alignment broken`);
   }
   const legT = [];
   for (let i = 0; i < S.length - 1; i++) legT.push(legTime(S[i + 1] - S[i]));
   lines.push({ name: l.name, stations, legT, dwell: DWELL_T });
 }
+if (!lines.length) throw new Error('no lines exported — moors-data.json / railPaths() mismatch');
 
 mkdirSync(new URL('../brain-sync/', import.meta.url), { recursive: true });
 writeFileSync(new URL('../brain-sync/timetable.json', import.meta.url),
@@ -315,14 +386,15 @@ cp "C:\Users\James\Desktop\Moorcraft\brain-sync\timetable-fixture.json" "C:\User
 
 - [ ] **Step 2: Write the failing test**
 
-Create `brain/tests/test_timetable.py`:
+Create `brain/tests/test_timetable.py`. **Correction (ground-truth #2):** use the
+house import style `from brain import timetable` (run pytest from the EVO repo root),
+NOT the flat `sys.path.insert` + `import timetable` shown in the original draft:
 
 ```python
-import json, os, sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-import timetable
+import json, os
+from brain import timetable
 
-HERE = os.path.join(os.path.dirname(__file__), "..")
+HERE = os.path.join(os.path.dirname(__file__), "..", "brain")
 
 def _fixture():
     with open(os.path.join(HERE, "timetable-fixture.json"), encoding="utf-8") as f:
@@ -353,6 +425,25 @@ def test_ledger_prunes_past_calls():
     ledger.seats[("x", 0, 100.0)] = 16
     ledger.prune(now=100.0 + 3601)
     assert not ledger.seats
+
+def test_ledger_thread_safe_never_oversells():
+    """Bookings run from ActPump worker threads + the tick thread. book() must be
+    atomic (read-modify-write under a lock) or a call over-books past 16."""
+    import threading
+    line = timetable.line_names()[0]
+    L = timetable.line(line)
+    ledger = timetable.SeatLedger()
+    t0 = 1751500800.0
+    barrier = threading.Barrier(20)
+    def worker():
+        barrier.wait()                       # maximise contention on the same call
+        for _ in range(5):
+            ledger.book(line, L, 0, len(L["stations"]) - 1, t0)
+    threads = [threading.Thread(target=worker) for _ in range(20)]
+    for t in threads: t.start()
+    for t in threads: t.join()
+    assert all(v <= timetable.SEATS_PER_CALL for v in ledger.seats.values()), ledger.seats
+    assert sum(ledger.seats.values()) == 100, "every booking landed somewhere exactly once"
 ```
 
 - [ ] **Step 3: Run it to make sure it fails**
@@ -410,26 +501,36 @@ def next_departure(L, from_idx, to_idx, t_min):
                 return dep, p * oneway + off_t, dirn
         p += 1
 
+import threading
+
 class SeatLedger:
     """16 seats per (line, dir, dep). book() rolls an overfull call forward to the
-    next service, so nobody is ever dispatched to a train they cannot board."""
+    next service, so nobody is ever dispatched to a train they cannot board.
+
+    Thread-safe (ground-truth #4): bookings arrive from ActPump worker threads
+    (asyncio.to_thread, up to ACT_MAX_CONCURRENT of them) AND the main tick thread,
+    so the read-modify-write in book() and the mutation in prune() are guarded by a
+    lock — without it, two racing bookings both pass the < 16 check and over-fill."""
     def __init__(self):
         self.seats = {}
+        self._lock = threading.Lock()
 
     def book(self, line_name, L, from_idx, to_idx, t_min):
-        t = t_min
-        while True:
-            dep, arr, dirn = next_departure(L, from_idx, to_idx, t)
-            key = (line_name, dirn, dep)
-            if self.seats.get(key, 0) < SEATS_PER_CALL:
-                self.seats[key] = self.seats.get(key, 0) + 1
-                return dep, arr, dirn
-            t = dep + 1
+        with self._lock:
+            t = t_min
+            while True:
+                dep, arr, dirn = next_departure(L, from_idx, to_idx, t)
+                key = (line_name, dirn, dep)
+                if self.seats.get(key, 0) < SEATS_PER_CALL:
+                    self.seats[key] = self.seats.get(key, 0) + 1
+                    return dep, arr, dirn
+                t = dep + 1
 
     def prune(self, now):
-        stale = [k for k in self.seats if k[2] < now - 3600]
-        for k in stale:
-            del self.seats[k]
+        with self._lock:
+            stale = [k for k in self.seats if k[2] < now - 3600]
+            for k in stale:
+                del self.seats[k]
 ```
 
 - [ ] **Step 5: Run the tests**
@@ -454,12 +555,10 @@ git commit -m "feat(brain): deterministic timetable port + 16-seat booking ledge
 
 - [ ] **Step 1: Write the failing test**
 
-Create `brain/tests/test_booking.py`:
+Create `brain/tests/test_booking.py` (house import style, ground-truth #2):
 
 ```python
-import os, sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-import roster_sim, timetable, world
+from brain import roster_sim, timetable, world
 
 def _line_and_stops():
     name = next(n for n in timetable.line_names() if n in world.LINES and len(world.LINES[n]) >= 2)
@@ -543,7 +642,36 @@ and at the top of `tick()` (line 129):
         self.ledger.prune(now)
 ```
 
-Then update the two `start_rail(...)` call sites to pass the ledger: in `advance_plan` the call becomes `start_rail(npc, line, to, now, ledger=ledger)` — thread it through by giving `advance_plan` a `ledger=None` keyword and passing `self.ledger` from `tick()`; in `brain/act.py` `apply_action()`, find the `start_rail(` call and pass `ledger=sim.ledger` (the pump holds the sim — follow the existing reference it uses to reach the NPC list).
+**Ledger threading (ground-truth #3) — the pump never sees the sim, so thread the
+ledger explicitly through every path that reaches `start_rail`:**
+
+1. `advance_plan(npc, now)` gains a `ledger=None` keyword; its internal
+   `start_rail(npc, line, to, now)` call becomes `start_rail(npc, line, to, now,
+   ledger=ledger)`. (The existing test `test_advance_plan_rails_validly` calls it with
+   no ledger — the `ledger=None` default keeps that green via the legacy eta path.)
+
+2. In `RosterSim.tick()`, the scripted-path call `advance_plan(npc, now)` becomes
+   `advance_plan(npc, now, ledger=self.ledger)`.
+
+3. In `brain/act.py`: `decide(npc, now, chat_fn=None)` gains a trailing `ledger=None`
+   keyword; its final `apply_action(npc, act, now)` becomes `apply_action(npc, act,
+   now, ledger=ledger)`. `apply_action(npc, act, now)` gains a trailing `ledger=None`
+   keyword; its `roster_sim.start_rail(npc, line, dest, now)` becomes
+   `start_rail(npc, line, dest, now, ledger=ledger)`. (These are additive keyword
+   defaults — the existing `test_act.py` calls, which pass no ledger, stay green on
+   the legacy path.)
+
+4. In `brain/roster_api.py` `ActPump._decide_one`: the decision call
+   `await asyncio.to_thread(act.decide, npc, time.time())` becomes
+   `await asyncio.to_thread(act.decide, npc, time.time(), None, self.sim.ledger)`
+   (positional: `chat_fn=None`, `ledger=self.sim.ledger`), and the scripted fallback
+   `roster_sim.advance_plan(npc, time.time())` (both the normal and the except-branch
+   call) becomes `roster_sim.advance_plan(npc, time.time(), ledger=self.sim.ledger)`.
+
+This means Task 5 touches four files: `roster_sim.py` (start_rail, advance_plan,
+__init__, tick), `act.py` (decide, apply_action), `roster_api.py` (two _decide_one
+call sites), plus the new `brain/tests/test_booking.py`. Update the commit `git add`
+line accordingly.
 
 - [ ] **Step 4: Run all brain tests**
 
@@ -553,83 +681,30 @@ Expected: all pass (including the pre-existing suite).
 - [ ] **Step 5: Commit (EVO mirror repo)**
 
 ```bash
-git add brain/roster_sim.py brain/act.py brain/tests/test_booking.py
+git add brain/roster_sim.py brain/act.py brain/roster_api.py brain/tests/test_booking.py
 git commit -m "feat(brain): rail journeys book real timetable calls, 16 seats per train"
 ```
 
 ---
 
-### Task 6: Day-phase gating in the brain (no night departures, morning errands)
+### Task 6: Day-phase gating in the brain — DEFERRED (do not implement in this slice)
 
-**Files (EVO mirror repo):**
-- Modify: `brain/act.py` (add helpers near `_errand_due`, act.py:23-31; wire into `decide()`, act.py:274-318)
-- Create: `brain/tests/test_dayphase.py`
+**Deferred (ground-truth #1).** This task would gate NPC departures on the brain's
+`time.time() % 1800` day-phase. But the client's *visible* day is NOT a pure function
+of `Date.now()`: `src/sky.js:936` integrates `this.time += dt/DAY_LENGTH` (seeded 0.3),
+and in the shared world it is overwritten by the **relay's** broadcast
+(`src/multiplayer.js:218,274` `g.sky.time = m.time`). So night-in-brain-time would not
+reliably match night-on-screen, and "no departures at night" could fire in daylight.
 
-- [ ] **Step 1: Write the failing test**
+**Prerequisite for the follow-up:** SSH to the EVO and read how `worldsvc/server.py`
+computes and broadcasts the day clock (`DAY_LENGTH`, whether it sends
+`(time.time() % 1800)/1800` or an integrated value, and any seasonal offset). Only once
+the brain can compute the SAME value the relay broadcasts should day-phase gating land —
+as its own small plan, mirroring the Task 5 structure. Trains are unaffected (pure
+wall-clock), so this deferral does not touch the loitering fix.
 
-Create `brain/tests/test_dayphase.py`:
-
-```python
-import os, sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-import act
-
-DAY = 1800.0  # same clock as the client's src/sky.js DAY_LENGTH
-
-def test_sky_t_and_night_match_client_dayphase():
-    # client villagerlife.dayPhase: 'home' when skyT > 0.78 or < 0.15
-    assert act.is_night(0.10 * DAY) and act.is_night(0.90 * DAY)
-    assert not act.is_night(0.40 * DAY)
-    assert abs(act.sky_t(DAY * 5 + 0.25 * DAY) - 0.25) < 1e-9
-
-def test_errand_window_is_morning():
-    assert act.in_errand_window(0.30 * DAY)          # mid-morning: off you go
-    assert not act.in_errand_window(0.60 * DAY)      # afternoon: stop starting trips
-    assert not act.in_errand_window(0.05 * DAY)      # small hours: certainly not
-```
-
-- [ ] **Step 2: Run it to make sure it fails**
-
-Run: `python -m pytest brain/tests/test_dayphase.py -q`
-Expected: FAIL — `module 'act' has no attribute 'is_night'`.
-
-- [ ] **Step 3: Implement**
-
-Add to `brain/act.py` near the errand helpers (below act.py:31):
-
-```python
-# ---- day phase, from the SAME deterministic clock as the client (sky.js) -----------
-DAY_LENGTH = 1800.0          # seconds per game day — must match src/sky.js DAY_LENGTH
-
-def sky_t(now):
-    return (now % DAY_LENGTH) / DAY_LENGTH
-
-def is_night(now):
-    """Mirrors the client's villagerlife.dayPhase 'home' band."""
-    t = sky_t(now)
-    return t > 0.78 or t < 0.15
-
-def in_errand_window(now):
-    """Trips START in the morning band, so folk go out early and are home by dark."""
-    return 0.18 <= sky_t(now) <= 0.50
-```
-
-Wire into `decide()` (act.py:274-318):
-
-- Where the at-home branch checks the errand due (the `_errand_due(...)` call): require `_errand_due(npc, now) and in_errand_window(now)` before offering or forcing travel.
-- At the top of `decide()`, before any option-building: if `is_night(now)` and the NPC is at home, force `workTrade`/`wait` (no goTo/boardTrain in the options, no forced errand); if away from home at night, keep the existing forced-home behaviour (she heads back — the one journey night allows).
-
-- [ ] **Step 4: Run all brain tests**
-
-Run: `python -m pytest brain/tests -q`
-Expected: all pass.
-
-- [ ] **Step 5: Commit (EVO mirror repo)**
-
-```bash
-git add brain/act.py brain/tests/test_dayphase.py
-git commit -m "feat(brain): night gating + morning errand window on the shared 1800s day"
-```
+The morning-errand-weighting and no-night-departures behaviour from the spec
+(Workstream A) moves to that follow-up. Nothing else in this plan depends on Task 6.
 
 ---
 
@@ -705,13 +780,14 @@ export function rideSlot(id) { return 1 + (idHash(id) % 16); }
 export function slotBack(slot) { return 11 + slot * 0.42; }
 ```
 
-At the ride creation site in `RosterClient.update()` (search for `e.ride = {` in the `state.kind === 'rail'` branch), copy the booking onto the ride:
+At the ride creation site — **verified `roster.js:520`** (ground-truth #5): the line is
+`e.ride = { line: s.line, from: s.fromStn, to: s.toStn, phase: 'wait', t: 0 };` and the
+NPC's state object there is the local **`s`** (not `st`). Add the booking fields:
 
 ```js
-        dep: st.dep != null ? st.dep : null, arr: st.arr != null ? st.arr : null,
+      e.ride = { line: s.line, from: s.fromStn, to: s.toStn, phase: 'wait', t: 0,
+                 dep: s.dep != null ? s.dep : null, arr: s.arr != null ? s.arr : null };
 ```
-
-(where `st` is the NPC's `state` object in that branch — match the local name in place.)
 
 In `_driveRail` (roster.js:716-731), insert the booked path before the legacy block, and change the slot maths:
 
@@ -775,10 +851,15 @@ git commit -m "feat(roster): booked-departure waits (just-in-time boarding) + 16
 - [ ] **Step 1: Back up and ship the brain files to the EVO**
 
 ```bash
-ssh evo-tailscale 'for f in roster_sim.py act.py; do cp ~/moorstead/yorkshire_bot/brain/$f ~/moorstead/yorkshire_bot/brain/$f.bak-20260703-timetable; done'
-scp "C:\Users\James\moorstead-evo-work\brain\timetable.py" "C:\Users\James\moorstead-evo-work\brain\timetable.json" "C:\Users\James\moorstead-evo-work\brain\timetable-fixture.json" "C:\Users\James\moorstead-evo-work\brain\roster_sim.py" "C:\Users\James\moorstead-evo-work\brain\act.py" evo-tailscale:~/moorstead/yorkshire_bot/brain/
+ssh evo-tailscale 'for f in roster_sim.py act.py roster_api.py; do cp ~/moorstead/yorkshire_bot/brain/$f ~/moorstead/yorkshire_bot/brain/$f.bak-20260703-timetable; done'
+scp "C:\Users\James\moorstead-evo-work\brain\timetable.py" "C:\Users\James\moorstead-evo-work\brain\timetable.json" "C:\Users\James\moorstead-evo-work\brain\timetable-fixture.json" "C:\Users\James\moorstead-evo-work\brain\roster_sim.py" "C:\Users\James\moorstead-evo-work\brain\act.py" "C:\Users\James\moorstead-evo-work\brain\roster_api.py" evo-tailscale:~/moorstead/yorkshire_bot/brain/
 scp -r "C:\Users\James\moorstead-evo-work\brain\tests" evo-tailscale:~/moorstead/yorkshire_bot/brain/
 ```
+
+**Note:** the live EVO brain dir is `~/moorstead/yorkshire_bot/brain/` per the paths
+above, but the mirror is `~/moorstead-evo-work/brain/` locally — confirm the live path
+with `ssh evo-tailscale 'ls ~/moorstead/yorkshire_bot/brain/roster_sim.py'` before scp,
+and adjust if the live layout differs. The systemd unit to restart is `moorstead-brain`.
 
 - [ ] **Step 2: Test on the box, then restart the brain**
 
