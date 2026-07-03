@@ -20,6 +20,17 @@ export const FESTIVALS = [
   { id: 'yule',      name: 'Christmastide', centre: 0.882, days: 14 },
 ];
 
+// Pure: each festival's clickable-chip position AND shaded-band [left, width] as fractions
+// of the year (0..1), straight from FESTIVALS' own centre/days — used by the Parish Warden
+// year slider (the click-to-snap mechanism) and tested headlessly (no DOM needed to prove
+// the geometry is sane). `days` is calendar days, same DAY convention windowIntensity uses.
+export function festivalBands() {
+  return FESTIVALS.map(f => {
+    const halfWidth = (f.days / 2) * DAY;
+    return { id: f.id, name: f.name, centre: f.centre, left: f.centre - halfWidth, width: halfWidth * 2 };
+  });
+}
+
 const frac = x => x - Math.floor(x);
 // shortest distance between two phases on the unit circle [0,1)
 function circDist(a, b) { const d = Math.abs(frac(a) - frac(b)); return d > 0.5 ? 1 - d : d; }
