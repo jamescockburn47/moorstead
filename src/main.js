@@ -84,7 +84,7 @@ import { EXTRA_FOLK, moodWord } from './villagerlife.js';
 import { Sky, resolveQuality, lanternFlicker, moonPhase } from './sky.js';
 import { Storm } from './storm.js';
 import { AudioEngine } from './audio.js';
-import { UI, bearingLabel, shelterToast, stationChipHTML, composeSketch, sketchFilename, offerShapeOk, hasStacks, countsFromSlots, describeStacks, bigMapScreenToWorld } from './ui.js';
+import { UI, bearingLabel, shelterToast, stationChipHTML, stationChipUnknownHTML, composeSketch, sketchFilename, offerShapeOk, hasStacks, countsFromSlots, describeStacks, bigMapScreenToWorld } from './ui.js';
 import { raycast, boxCollides } from './physics.js';
 
 const REACH = 5.5;
@@ -2339,6 +2339,11 @@ class Game {
         this.brainUp = true;
         v.chatLog.push({ who: 'them', text: res.reply });
         if (v.memory) { v.memory.push(text.slice(0, 60)); if (v.memory.length > 4) v.memory.shift(); }
+        // She's told thee t' times — the chip carries them now (learned by asking).
+        if (v.village && this.player && !this.player.knownTimes[v.village] && this.depsForStation(v.village, 1)) {
+          this.player.knownTimes[v.village] = true;
+          this.ui.toast(`Tha knows t' ${v.village} train times now — t' station chip'll show 'em.`, 5000);
+        }
       } catch {
         this.brainUp = false;
         v.chatLog.push({ who: 'sys', text: `${v.displayName} says nowt \u2014 t\u2019 village brain didn\u2019t answer. Try again in a moment.` });
@@ -2356,6 +2361,11 @@ class Game {
       v.tier = res.tier;
       this.ui.setChatTier(res.tier);
       this.maybeReward(v, res.tier);
+      // She's told thee t' times — the chip carries them now (learned by asking).
+      if (v.village && this.player && !this.player.knownTimes[v.village] && this.depsForStation(v.village, 1)) {
+        this.player.knownTimes[v.village] = true;
+        this.ui.toast(`Tha knows t' ${v.village} train times now — t' station chip'll show 'em.`, 5000);
+      }
     } catch {
       this.brainUp = false;
       v.chatLog.push({ who: 'sys', text: 'T\u2019 village brain didn\u2019t answer \u2014 try again in a moment.' });
@@ -2864,6 +2874,27 @@ class Game {
     return out;
   }
 
+  // Next departures for a station by NAME, on whichever line carries it (main or
+  // branch) — the one lookup chat intel and the chip both use. Null = no line calls
+  // there (harmless: the caller shows nowt rather than inventing a time).
+  depsForStation(name, want = 2) {
+    const geo = this.world && this.world.gen && this.world.gen.geo;
+    if (!geo) return null;
+    const main = geo.railway();
+    const idx = main.findIndex(s => s.name === name);
+    if (idx >= 0) return this.nextDeparturesAt(t => this.trainSchedule(t), main, geo.railPath().stationS, idx, want);
+    if (geo.realWorld) {
+      this._ensureBranchTrains();
+      for (const bt of (this.branchTrains || [])) {
+        const bi = bt.stations.findIndex(s => s.name === name);
+        if (bi >= 0 && bt.stations.length >= 2 && bt.path.stationS.length === bt.stations.length) {
+          return this.nextDeparturesAt(t => this.trainScheduleFor(bt.path, bt.stations, t), bt.stations, bt.path.stationS, bi, want);
+        }
+      }
+    }
+    return null;
+  }
+
   // ---- the station departure chip (HUD) ----
   // Stood on/near a platform, the player sees WHAT's due, WHERE she's bound an' the fare —
   // not just a countdown once she's close. ~1Hz, main line AND branch lines; rendered by
@@ -2877,24 +2908,13 @@ class Game {
     const geo = this.world.gen.geo;
     const st = geo.nearStation(Math.floor(this.player.pos.x), Math.floor(this.player.pos.z), 16);
     if (!st) { ui.stationChipHTML = ''; return; }
-    // whose timetable calls here: the main line, else the branch this station serves
-    const main = geo.railway();
-    let schedFn = null, stops = null, stS = null, idx = main.indexOf(st);
-    if (idx >= 0) {
-      schedFn = t => this.trainSchedule(t); stops = main; stS = geo.railPath().stationS;
-    } else if (geo.realWorld) {
-      this._ensureBranchTrains();
-      for (const bt of (this.branchTrains || [])) {
-        const i = bt.stations.findIndex(x => x.name === st.name);
-        if (i >= 0 && bt.stations.length >= 2 && bt.path.stationS.length === bt.stations.length) {
-          schedFn = t => this.trainScheduleFor(bt.path, bt.stations, t);
-          stops = bt.stations; stS = bt.path.stationS; idx = i;
-          break;
-        }
-      }
+    // Info economy: times are learned from a local, not read off thin air.
+    if (!this.player.creative && !this.freeWorld() && !this.player.knownTimes[st.name]) {
+      this.ui.stationChipHTML = stationChipUnknownHTML(st.name); return;
     }
-    if (!schedFn) { ui.stationChipHTML = ''; return; }
-    const deps = this.nextDeparturesAt(schedFn, stops, stS, idx, 2);
+    // whose timetable calls here: the main line, else the branch this station serves
+    const deps = this.depsForStation(st.name, 2);
+    if (!deps) { ui.stationChipHTML = ''; return; }
     // the fare to the first departure's destination — the SAME sum openStation charges
     const fare = deps.length
       ? (this.player.creative ? 0 : Math.max(1, Math.min(4, Math.ceil(deps[0].dist / 400))))

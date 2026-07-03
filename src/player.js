@@ -53,6 +53,7 @@ export class Player {
     this.home = null; // {x,y,z} of thi planted base flag — where tha respawns if tha falls
     this.stationSellHinted = false; // station sell hint already shown
     this.farmStatus = { registered: false }; // registered-farm status (Slice 2 gate to droving)
+    this.knownTimes = {};   // station name -> true, once a local's told her the times
     this.look = { ...DEFAULT_PLAYER_LOOK }; // "Dress thissen": chosen appearance (bounded indices) — shown to other players
   }
 
@@ -439,6 +440,7 @@ export class Player {
       home: this.home,
       farmStatus: this.farmStatus,
       miningSkill: this.miningSkill || 0,
+      knownTimes: this.knownTimes || {},
       look: this.look, // "Dress thissen" — additive; old saves lack it an' default to a rambler
     };
   }
@@ -476,6 +478,7 @@ export class Player {
     this.home = (d.home && Number.isFinite(d.home.x) && Number.isFinite(d.home.y) && Number.isFinite(d.home.z)) ? d.home : null;
     this.farmStatus = d.farmStatus || { registered: false };
     this.miningSkill = d.miningSkill || 0;
+    this.knownTimes = d.knownTimes || {};
     // additive + untrusted-input safe: an absent/old/junk look coerces to a rambler
     this.look = validatePlayerLook(d.look);
   }

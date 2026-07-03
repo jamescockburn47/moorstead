@@ -8,6 +8,8 @@ import { loreFor } from './lore.js';
 import * as npc from './npc.js';
 import { buildActivityDigest } from './activity.js';
 import { isChildrensWorld } from './rooms.js';
+import { buildFactsCard, trainLines } from './factscard.js';
+import { marketIntel } from './economy.js';
 
 const STANDINGS = ['Newcomer', 'Known', 'Welcomed', 'Respected', 'Treasured'];
 const STANDING_THRESHOLDS = [0, 5, 20, 50, 100];
@@ -1577,6 +1579,19 @@ export class Quests {
   chatContext(villager) {
     const name = (villager.t.name || '').toLowerCase();
     const parts = [];
+    // The FACTS card leads: compact, game-true, and the model is told to trust it
+    // over its own recollections (LLM narrates, ledgers decide).
+    const g = this.game;
+    const stationName = villager.village || null;
+    const deps = (stationName && g.depsForStation) ? g.depsForStation(stationName, 2) : null;
+    const card = buildFactsCard({
+      playerName: g.player && g.player.name,
+      standing: this.standingLabel(),
+      titles: this.earnedTitleList(),
+      trainRows: deps ? trainLines(stationName, deps) : [],
+      marketRows: marketIntel(stationName || ''),
+    });
+    if (card) parts.push(card);
     const sIdx = this.standingIndex();
 
     parts.push(`Village reputation note: the visitor is currently "${STANDINGS[sIdx]}" in the village.` +

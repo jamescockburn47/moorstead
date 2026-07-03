@@ -61,6 +61,12 @@ export function stationChipHTML(name, deps, fare = null) {
   return `<div class="tq station">⏱ <b>${name}</b> — ${body}.${fareBit}</div>`;
 }
 
+// Before the times are learned the chip nudges the player to ASK — the information
+// economy's first tooth: a local tells you the times, then the chip carries them.
+export function stationChipUnknownHTML(name) {
+  return `<div class="tq station">⏱ <b>${name}</b> — tha'll want to ask a body for t' train times.</div>`;
+}
+
 // compass bearing + distance from (px,pz) to (x,z), e.g. "NW · 120m".
 // Convention matches the minimap an' quests.compassDir: north is +x, east is +z.
 export function bearingLabel(px, pz, x, z) {
