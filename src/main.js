@@ -1085,6 +1085,12 @@ class Game {
     ui.loginCode.addEventListener('keydown', e => e.stopPropagation());
     ui.loginGuest.addEventListener('click', () => this.loginGuest());
     ui.btnWarden.addEventListener('click', () => this.loginWarden());
+    ui.btnAdminLink.addEventListener('click', () => {
+      ui.adminLoginBox.classList.toggle('hidden');
+      if (!ui.adminLoginBox.classList.contains('hidden')) ui.adminLoginKey.focus();
+    });
+    ui.btnAdminGo.addEventListener('click', () => this.loginWardenAndPlay());
+    ui.adminLoginKey.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.loginWardenAndPlay(); });
     ui.requestToggle.addEventListener('click', () => {
       ui.requestBox.classList.toggle('hidden');
       ui.requestOk.classList.add('hidden');
@@ -2028,6 +2034,26 @@ class Game {
     this.adminOk = true;
     this.ui.loginErr.textContent = '';
     this.ui.setLoggedIn(this.auth);
+  }
+
+  // Front-page Admin shortcut: same hash-check as loginWarden(), but on success skips the
+  // invite-code flow entirely and drops straight into a fresh solo creative world — the
+  // fastest route in for the one person who's ever going to type this key.
+  async loginWardenAndPlay() {
+    const key = (this.ui.adminLoginKey.value || '').trim();
+    if (!key) { this.ui.adminLoginErr.textContent = 'Key needed.'; return; }
+    let hex = '';
+    try {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
+      hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch { this.ui.adminLoginErr.textContent = "Couldn't check that key."; return; }
+    if (!ADMIN_HASHES.includes(hex)) { this.ui.adminLoginErr.textContent = "That's not a warden key."; return; }
+    this.auth = { warden: true, name: 'Warden' };
+    localStorage.setItem('moorcraft-auth', JSON.stringify(this.auth));
+    this.adminOk = true;
+    this.ui.adminLoginErr.textContent = '';
+    this.audio.init();
+    this.newWorld('');
   }
 
   logout() {

@@ -409,6 +409,14 @@ export class UI {
     this.aboutBtn = this.el('a', 'about-btn', titleLinks, 'About');
     this.aboutBtn.href = '/about.html'; this.aboutBtn.rel = 'noopener';
     this.feedbackBtn = this.el('button', 'about-btn feedback-btn', titleLinks, 'Feedback &amp; bugs');
+    // Warden's fast route in — a plain, visually secondary link (not a player-facing CTA).
+    this.btnAdminLink = this.el('button', 'about-btn', titleLinks, 'Admin');
+    this.adminLoginBox = this.el('div', 'admin-login-box hidden', this.titleScreen);
+    this.adminLoginKey = this.el('input', 'seed', this.adminLoginBox);
+    this.adminLoginKey.placeholder = 'Warden key';
+    this.adminLoginKey.type = 'password';
+    this.btnAdminGo = this.el('button', 'mc', this.adminLoginBox, 'Enter as Warden');
+    this.adminLoginErr = this.el('div', 'login-err', this.adminLoginBox, '');
     // a LIVE moor fly-over behind it all — procedural, no asset files (see titlescene.js).
     // A dark scrim over it keeps the text readable; falls back to the CSS gradient if WebGL won't start.
     const scene = this.el('div', 'title-scene', this.titleScreen);
