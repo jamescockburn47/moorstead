@@ -46,7 +46,7 @@ import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase } from './season.js';
 import { activeForageables, hostForageFor, fruitSpeciesAt, fruitTreeRipe } from './forage.js';
 import { deepSnow, wintry, yuletide } from './festive.js';
-import { FESTIVALS, festivalState } from './festivals.js';
+import { FESTIVALS, festivalState, festivalBands } from './festivals.js';
 import { DEFAULT_SNOWMAN, cycleSnowman } from './snowman.js';
 import { cellInstances } from './flora-placement.js';
 import { startLiveWeather } from './weather-live.js';
@@ -104,7 +104,7 @@ import { EXTRA_FOLK, moodWord } from './villagerlife.js';
 import { Sky, resolveQuality, lanternFlicker, moonPhase } from './sky.js';
 import { Storm } from './storm.js';
 import { AudioEngine } from './audio.js';
-import { UI, bearingLabel, shelterToast, stationChipHTML, composeSketch, sketchFilename, offerShapeOk, hasStacks, countsFromSlots, describeStacks } from './ui.js';
+import { UI, bearingLabel, shelterToast, stationChipHTML, composeSketch, sketchFilename, offerShapeOk, hasStacks, countsFromSlots, describeStacks, bigMapScreenToWorld } from './ui.js';
 import { raycast, boxCollides } from './physics.js';
 
 const REACH = 5.5;
@@ -1430,7 +1430,105 @@ class Game {
     panel.classList.remove('hidden');
     panel.innerHTML = '';
     const ui = this.ui;
+    const geo = this.world.gen.geo;
     ui.el('div', 'inv-title', panel, 'Parish Warden');
+
+    // ---- map + scene sliders (map-led split) ----
+    const scene = ui.el('div', 'admin-scene', panel);
+    scene.style.cssText = 'display:flex;gap:14px;flex-wrap:wrap;';
+
+    // the map: reuses buildBigMap()'s cached world-overview image (villages/stations/
+    // landmarks/rails), redrawn into a dedicated canvas so it can sit inside this panel
+    // permanently (not just the "hold Tab" peek). Click anywhere to drop in AT WHATEVER
+    // THE SLIDERS BELOW CURRENTLY SAY — no confirm step, matches adminTeleport()'s existing
+    // instant-arrival feel.
+    const mapCol = ui.el('div', '', scene); mapCol.style.cssText = 'flex:1.3;min-width:220px;';
+    if (ui.mapBaseKey !== this.world.gen.seed) ui.buildBigMap(this.player, this.world);
+    const mapCanvas = ui.el('canvas', 'admin-map', mapCol);
+    mapCanvas.width = ui.mapBase.width; mapCanvas.height = ui.mapBase.height;
+    mapCanvas.style.cssText = 'width:100%;max-width:320px;border-radius:4px;cursor:crosshair;';
+    mapCanvas.getContext('2d').drawImage(ui.mapBase, 0, 0);
+    ui.el('div', 'r-needs', mapCol, 'Click the map to drop in — uses the settings below.');
+    mapCanvas.addEventListener('click', (e) => {
+      const rect = mapCanvas.getBoundingClientRect();
+      const sx = (e.clientX - rect.left) * (mapCanvas.width / rect.width);
+      const sy = (e.clientY - rect.top) * (mapCanvas.height / rect.height);
+      const { x, z } = bigMapScreenToWorld(ui._mapXf, sx, sy);
+      this.adminTeleport(x, z, `${x}, ${z}`);
+    });
+
+    const sliderCol = ui.el('div', '', scene); sliderCol.style.cssText = 'flex:1;min-width:220px;display:flex;flex-direction:column;gap:12px;';
+
+    // -- year slider, with all six festival windows shown true-to-width + click-to-snap --
+    {
+      const wrap = ui.el('div', '', sliderCol);
+      ui.el('div', 'r-needs', wrap, 'Year (click a festival to land in it clean):');
+      const chipRow = ui.el('div', '', wrap);
+      chipRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px;';
+      const bands = festivalBands();
+      const slider = ui.el('input', '', wrap);
+      for (const b of bands) {
+        const chip = ui.el('button', 'mc', chipRow, b.name);
+        chip.style.cssText = 'display:inline-block;width:auto;min-height:0;font-size:10px;padding:2px 6px;margin:0;';
+        chip.addEventListener('click', () => { slider.value = String(b.centre); slider.dispatchEvent(new Event('input')); });
+      }
+      slider.type = 'range'; slider.min = '0'; slider.max = '0.999'; slider.step = '0.001';
+      slider.style.width = '100%';
+      const cur = this.seasonOverride != null ? this.seasonOverride : (this.season?.yearPhase ?? 0.5);
+      slider.value = String(cur);
+      const label = ui.el('div', 'label', wrap, '');
+      const paintLabel = (phase) => {
+        const s = seasonStateAtPhase(phase);
+        label.textContent = `Day ${Math.round(phase * 365)} — ${s.season}`;
+      };
+      paintLabel(cur);
+      slider.addEventListener('input', () => {
+        const phase = parseFloat(slider.value);
+        this.debug.setSeason(phase);
+        paintLabel(phase);
+      });
+      const real = ui.el('button', 'mc', wrap, 'Real time');
+      real.style.cssText = 'display:inline-block;width:auto;min-height:0;font-size:10px;padding:2px 8px;margin-top:4px;';
+      real.addEventListener('click', () => { this.debug.setSeason(null); this.renderAdminPanel(); });
+    }
+
+    // -- weather: buttons, not a slider (the states aren't a continuum) --
+    {
+      const wrap = ui.el('div', '', sliderCol);
+      ui.el('div', 'r-needs', wrap, 'Weather:');
+      const row2 = ui.el('div', '', wrap);
+      row2.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;';
+      const current = this.sky.weatherOverride ?? null;
+      for (const [val, label] of [[null, 'Live'], ['clear', 'Clear'], ['misty', 'Misty'], ['rain', 'Rain/Snow'], ['fog', 'Fog']]) {
+        const b = ui.el('button', 'mc', row2, label);
+        b.style.cssText = `display:inline-block;width:auto;min-height:0;font-size:11px;padding:4px 8px;margin:0;${current === val ? 'outline:2px solid #e8b04a;' : ''}`;
+        b.addEventListener('click', () => { this.debug.setWeather(val); this.renderAdminPanel(); });
+      }
+    }
+
+    // -- time o' day --
+    {
+      const wrap = ui.el('div', '', sliderCol);
+      ui.el('div', 'r-needs', wrap, "Time o' day:");
+      const slider = ui.el('input', '', wrap);
+      slider.type = 'range'; slider.min = '0'; slider.max = '0.999'; slider.step = '0.001';
+      slider.style.width = '100%';
+      slider.value = String(this.sky.time);
+      const label = ui.el('div', 'label', wrap, '');
+      const fmtTime = (t) => { const h = Math.floor(t * 24), m = Math.floor((t * 24 - h) * 60); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; };
+      label.textContent = fmtTime(this.sky.time);
+      slider.addEventListener('input', () => {
+        const t = parseFloat(slider.value);
+        this.debug.setTime(t);
+        label.textContent = fmtTime(t);
+      });
+    }
+
+    // ---- Parish Ledger (players online, recent activity, system status) ----
+    this.renderParishLedger(panel);
+
+    // ---- travel & actions (separate from the scene-setting cluster above) ----
+    ui.el('div', 'r-needs', panel, 'Travel & actions:');
     const row = ui.el('div', 'admin-btns', panel);
     const god = ui.el('button', 'mc', row, this.player.god ? 'Mortal Again' : 'Hard As T’ Wainstones (God)');
     god.addEventListener('click', () => {
@@ -1447,42 +1545,16 @@ class Game {
       ui.invDirty = true;
       ui.toast('Kitted out proper.');
     });
-    const tRow = ui.el('div', 'admin-btns', panel);
-    const tLines = (this.world.gen.geo.realWorld && this.world.gen.geo.railPaths) ? this.world.gen.geo.railPaths() : [];
+    const tLines = (geo.realWorld && geo.railPaths) ? geo.railPaths() : [];
     if (tLines.length > 1) {
-      ui.el('div', 'r-needs', panel, 'Board any line’s train (Esc to step off):');
-      for (const l of tLines) { const b = ui.el('button', 'mc', tRow, `🚂 ${l.name}`); b.addEventListener('click', () => this.wardenBoardTrain(l.name)); }
+      for (const l of tLines) { const b = ui.el('button', 'mc', row, `🚂 ${l.name}`); b.addEventListener('click', () => this.wardenBoardTrain(l.name)); }
     } else {
-      const train = ui.el('button', 'mc', tRow, 'Board t’ Train (ride owt, Esc to step off)');
+      const train = ui.el('button', 'mc', row, 'Board t’ Train (ride owt, Esc to step off)');
       train.addEventListener('click', () => this.wardenBoardTrain());
     }
-    const pony = ui.el('button', 'mc', tRow, 'Find a Pony (drop by t’ nearest)');
+    const pony = ui.el('button', 'mc', row, 'Find a Pony (drop by t’ nearest)');
     pony.addEventListener('click', () => this.wardenToPony());
-    ui.el('div', 'r-needs', panel, 'Whisk thissen anywhere:');
-    const tp = ui.el('div', 'admin-tp', panel);
-    const geo = this.world.gen.geo;
-    for (const v of geo.villages) {
-      const b = ui.el('button', 'mc chat-btn', tp, v.name);
-      b.addEventListener('click', () => this.adminTeleport(v.x, v.z, v.name));
-    }
-    for (const s of geo.railway()) {
-      const b = ui.el('button', 'mc chat-btn', tp, s.name + ' Stn');
-      b.addEventListener('click', () => this.adminTeleport(s.x, s.z, s.name + ' Station'));
-    }
-    for (const [label, x, z] of [['Roseberry Topping', -700, -880], ['T’ Hole of Horcum', 540, 680],
-                                 ['T’ Abbey', geo.abbeySite().x, geo.abbeySite().z],
-                                 ['T’ Wainstones', -380, -620], ['Rosedale Kilns', -260, 380]]) {
-      const b = ui.el('button', 'mc chat-btn', tp, label);
-      b.addEventListener('click', () => this.adminTeleport(x, z, label));
-    }
-    // newer spots worth a warden's eye: the Whitby museum
-    if (geo.museumSite) {
-      const ms = geo.museumSite();
-      if (ms) {
-        const mb = ui.el('button', 'mc chat-btn', tp, 'Whitby Museum');
-        mb.addEventListener('click', () => this.adminTeleport(ms.x, ms.z, 'Whitby Museum'));
-      }
-    }
+
     // drop in on a player (shared moor only — t' relay answers wardens wi' t' map)
     if (this.netActive && this.net && this.net.connected) {
       ui.el('div', 'r-needs', panel, 'Drop in on a player:');
@@ -1501,6 +1573,7 @@ class Game {
         }
       });
     }
+
     // or owt else: straight to coordinates
     ui.el('div', 'r-needs', panel, 'Or drop at coordinates:');
     const coordRow = ui.el('div', 'admin-btns', panel);
@@ -1511,31 +1584,6 @@ class Game {
       const x = parseInt(ix.value, 10), z = parseInt(iz.value, 10);
       if (Number.isFinite(x) && Number.isFinite(z)) this.adminTeleport(x, z, `${x}, ${z}`);
     });
-
-    // ---- season + festival switch (a WARDEN PREVIEW lever) ----
-    // seasonOverride is purely client-side render state (season/snow/festival dressing); it writes
-    // NOTHING to the relay and syncs nothing, so it's safe on the shared moor too — it only changes
-    // THIS warden's own view, and 'Real time' resumes the shared clock. (Was solo-only, which is why
-    // the warden couldn't switch festivals on the live shared world they actually play.)
-    {
-      if (this.netActive) ui.el('div', 'r-needs', panel, 'Season / Festival — preview (just thi own view; “Real time” resumes t’ shared clock):');
-      ui.el('div', 'r-needs', panel, 'Season:');
-      const srow = ui.el('div', 'admin-btns', panel);
-      for (const [label, phase] of [['Spring', 0.125], ['Summer', 0.375], ['Autumn', 0.625], ['Winter', 0.875]]) {
-        const b = ui.el('button', 'mc', srow, label);
-        b.addEventListener('click', () => { this.debug.setSeason(phase); });
-      }
-      const real = ui.el('button', 'mc', srow, 'Real time');
-      real.addEventListener('click', () => { this.debug.setSeason(null); });
-
-      // jumps the year to a festival's window so its dressing shows near villages — 'Real time' resumes
-      ui.el('div', 'r-needs', panel, 'Festival:');
-      const frow = ui.el('div', 'admin-btns', panel);
-      for (const f of FESTIVALS) {
-        const b = ui.el('button', 'mc', frow, f.name);
-        b.addEventListener('click', () => { this.debug.festival(f.id); });
-      }
-    }
 
     // ---- shared-moor connection health (so the dropped-thread gremlin is visible) ----
     if (this.netActive && this.net) {
@@ -1560,6 +1608,30 @@ class Game {
       this._diagPaint = setInterval(paint, 1000);
       ui.el('div', 'r-needs', panel, 'Full log: type netDiag() in the browser console.');
     }
+  }
+
+  // Parish Ledger: live players (incl. solo worlds), recent activity, brain/relay status —
+  // fetched from the EVO's new /dash/api/admin-summary. Fail-soft: a dead/unreachable EVO
+  // must never block the rest of the panel from rendering (map/sliders/travel still work).
+  renderParishLedger(panel) {
+    const ui = this.ui;
+    ui.el('div', 'r-needs', panel, 'Parish Ledger:');
+    const box = ui.el('pre', '', panel);
+    box.style.cssText = 'font:11px/1.5 monospace;white-space:pre-wrap;color:#d2d8cc;background:rgba(0,0,0,0.28);padding:6px 8px;margin:4px 0;max-height:160px;overflow:auto;border-radius:4px;';
+    box.textContent = 'loading...';
+    const key = (this.ui.adminLoginKey && this.ui.adminLoginKey.value) || 'warden1981';
+    fetch(`/dash/api/admin-summary?key=${encodeURIComponent(key)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (this.ui.adminPanel.classList.contains('hidden')) return; // panel closed meanwhile
+        if (d.error) { box.textContent = `Ledger: ${d.error}`; return; }
+        const recent = (d.recent || []).slice(-6).map(e => `  ${e.name || '?'} — ${e.loc || '?'}`).join('\n');
+        box.textContent =
+          `online   ${d.online ?? '—'}   (live ${d.live ?? '—'})\n` +
+          `brain    ${d.brain ?? '—'}    relay ${d.relay ?? '—'}\n` +
+          (recent ? `recent activity:\n${recent}` : 'recent activity: none');
+      })
+      .catch(() => { box.textContent = 'Ledger unreachable.'; });
   }
 
   // Warden travel: tha doesn't walk, tha ARRIVES — dropped frae t' sky,
