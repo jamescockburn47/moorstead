@@ -288,7 +288,12 @@ for (const l of geo.railPaths()) {
     throw new Error(`line ${l.name}: ${stations.length} station names vs ${S && S.length} chainages — alignment broken`);
   }
   const legT = [];
-  for (let i = 0; i < S.length - 1; i++) legT.push(legTime(S[i + 1] - S[i]));
+  for (let i = 0; i < S.length - 1; i++) {
+    const len = S[i + 1] - S[i];
+    if (!(len > 0)) throw new Error(`line ${l.name}: stationS not strictly increasing at ${i} (${S[i]}->${S[i + 1]}) — station order scrambled`);
+    legT.push(legTime(len));
+  }
+  if (legT.some(t => !Number.isFinite(t) || t <= 0)) throw new Error(`line ${l.name}: non-finite/zero leg time — bad chainage`);
   lines.push({ name: l.name, stations, legT, dwell: DWELL_T });
 }
 if (!lines.length) throw new Error('no lines exported — moors-data.json / railPaths() mismatch');
@@ -342,8 +347,8 @@ const after = readFileSync(new URL('../brain-sync/timetable.json', import.meta.u
             + readFileSync(new URL('../brain-sync/timetable-fixture.json', import.meta.url), 'utf8');
 ok(before === after, 'committed brain-sync files match a fresh export (not stale)');
 
-// every fixture departure really is a dwell at `from` (and arrival a dwell at `to`)
-// according to the exported legT — the same numbers Game.trainScheduleFor runs on.
+// every fixture departure re-derives to the same doubles (self-consistency of the
+// exported legT vs the algebra) — the same numbers Game.trainScheduleFor runs on.
 for (const s of fx.slice(0, 40)) {
   const L = tt.lines.find(l => l.name === s.line);
   const n = L.stations.length;
@@ -351,10 +356,42 @@ for (const s of fx.slice(0, 40)) {
   ok(check.dep === s.dep && check.arr === s.arr && check.dir === s.dir,
      `fixture sample stable (${s.line} ${s.from}->${s.to})`);
 }
+
+// ---- LIVE-ENGINE PARITY: nextDeparture lands on real dwells of a faithful copy of
+// Game.trainScheduleFor's dwell logic (transcribed below, verbatim from main.js). This
+// is the parity that MATTERS — NPCs must board the train the PLAYER sees. Sample
+// MID-DWELL (dep + DWELL_T/2) so the check is robust to exact-boundary FP (see Task 2).
+// `dwellStationAt` returns the station index the train is dwelling at, or -1 if running.
+function dwellStationAt(legT, n, now) {
+  const oneway = legT.reduce((a, b) => a + b, 0) + n * DWELL_T;
+  const dir = Math.floor(now / oneway) % 2;
+  const idx = k => (dir === 0 ? k : n - 1 - k);          // call k -> station (main.js:2826/2780)
+  const leg = k => legT[dir === 0 ? k : n - 2 - k];      // leg after call k (main.js:2827/2781)
+  let tt = ((now % oneway) + oneway) % oneway;           // guard negatives
+  for (let k = 0; k < n; k++) {
+    if (tt < DWELL_T) return idx(k);
+    tt -= DWELL_T;
+    if (k < n - 1) { const L = leg(k); if (tt < L) return -1; tt -= L; }
+  }
+  return idx(n - 1);
+}
+for (const s of fx) {
+  const L = tt.lines.find(l => l.name === s.line);
+  const n = L.stations.length;
+  ok(dwellStationAt(L.legT, n, s.dep + DWELL_T / 2) === s.from,
+     `engine dwells at 'from' mid-departure (${s.line} ${s.from}->${s.to})`);
+  ok(dwellStationAt(L.legT, n, s.arr + DWELL_T / 2) === s.to,
+     `engine dwells at 'to' mid-arrival (${s.line} ${s.from}->${s.to})`);
+}
 console.log(`verify-timetable-parity: ${n} assertions OK`);
 ```
 
-(Adjust the final `console.log` from Task 2 so only this one prints the total.)
+(Adjust the final `console.log` from Task 2 so only this one prints the total. Note the
+transcribed `dwellStationAt` is a line-faithful copy of `trainScheduleFor`'s dwell/run
+walk — if that engine's structure ever changes, this reference copy and the in-browser
+check at Task 7/8 are the two guards that catch a real divergence. The mid-dwell
+sampling makes the mathematical parity robust; the in-browser check proves the *visible*
+train agrees.)
 
 - [ ] **Step 5: Run the verify script, then the full gate**
 
