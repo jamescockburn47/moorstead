@@ -5634,6 +5634,7 @@ class Game {
             croft: this.quests.croftStage,
             quests: this.quests.completed.length,
             loc: this.world.gen.geo.locationName(p, z),
+            room: this.netActive ? (this.netRoom || 'shared') : '', // '' = solo world
           }),
         }).catch(() => { /* ledger's closed — no matter */ });
       }
