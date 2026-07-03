@@ -11,7 +11,7 @@ import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_HASHES } from './defs.js';
 import { strSeed } from './noise.js';
 import { protectedAt } from './landmarks.js';
-import { initMaterials, setSnowLevel, setFrozen, setGlintTime, setWaterTime, setRippleAmp, setFlowAmp, setGlitter, setFresnel, setCloudTime, setCloudShadow, setWetness, setGroundWet, setSheen, setWetSky, setSwayAmp, setWindAmt, setGustPhase, setDew, setSparkle, getMaterials } from './mesher.js';
+import { initMaterials, setSnowLevel, setFrozen, setGlintTime, setWaterTime, setRippleAmp, setFlowAmp, setGlitter, setFresnel, setCamPos, setSunAzim, setSunLow, setCloudTime, setCloudShadow, setWetness, setGroundWet, setSheen, setWetSky, setSwayAmp, setWindAmt, setGustPhase, setDew, setSparkle, getMaterials } from './mesher.js';
 import { stepGroundWet } from './wetness.js';
 import { stepAccumulation, accumulationTarget, isFrozen, overcastGrey } from './snow.js';
 import { getIconURL, retintAtlasForSeason, getCutoutAtlas } from './textures.js';
@@ -692,6 +692,32 @@ class Game {
       snap() {
         G.renderFrame(0);
         return G.renderer.domElement.toDataURL('image/png');
+      },
+      // dev: pin t' camera at a FIXED POINT for visual checks — t' player never
+      // moves (so nowt falls, drowns or dies while framing a shot). yaw/pitch in
+      // radians. photo(null) releases back to t' player camera.
+      //   moorstead.debug.photo(1417, 40, 2578, Math.PI/2, -0.3)
+      photo(x, y, z, yaw = 0, pitch = 0) {
+        if (x == null) { G._photoCam = null; return 'photo cam released'; }
+        G._photoCam = { x, y, z, yaw, pitch };
+        return `photo cam pinned at ${x},${y},${z} (yaw ${yaw.toFixed(2)}, pitch ${pitch.toFixed(2)})`;
+      },
+      // dev: t' GL ground truth in one call — force-compile every scene program
+      // an' count link failures. T' headless gate can't see GLSL an' t' console
+      // buffer holds stale errors across reloads; THIS is t' reliable check.
+      glHealth() {
+        const gl = G.renderer.getContext();
+        G.renderer.compile(G.scene, G.camera);
+        const progs = G.renderer.info.programs || [];
+        let broken = 0; const fails = [];
+        for (const p of progs) {
+          try {
+            if (p.program && !gl.getProgramParameter(p.program, gl.LINK_STATUS)) {
+              broken++; fails.push(p.name || p.cacheKey || 'unnamed');
+            }
+          } catch (e) { /* skip un-queryable */ }
+        }
+        return { programs: progs.length, broken, fails, glError: gl.getError() };
       },
       // dev: jump to a named festival (its .centre phase), or null to resume.
       // e.g. moorstead.debug.festival('yule')
@@ -3683,8 +3709,8 @@ class Game {
   }
 
   // [16] The horizon sea ring — see the SEA_RING constant up top for the why.
-  // Ring inner 90 sits just outside the meshed radius (96 worst-case, fog fully
-  // occluded by 84), outer 500 reaches the dome; near-field sea is real chunk
+  // Ring inner 90 sits inside the meshed radius (112 worst-case, fog fully
+  // occluded by 98), outer 500 reaches the dome; near-field sea is real chunk
   // water drawn over it (the ring writes no depth). Shown when the camera's high
   // OR the player's over coastal ground (coastT > 0); hidden inland at ground
   // level, so no streak from T' High Moor. Built ONCE, disposed in teardownWorld.
@@ -5081,6 +5107,18 @@ class Game {
       if (this.gfxQuality === 'fine') {
         const overcast = overcastGrey(this.sky.weather, this.sky.snowAmount || 0, this.sky.rainAmount);
         setGlitter(dayness * (1 - overcast));
+        // [sword] sun-glint corridor drive: camera world pos + t' TRUE on-screen sun azimuth.
+        // sky.js parks t' sunSprite at player + (sunX·160, ·, −60) — INCLUDING t' constant
+        // −60 z placement offset — so t' blade points at t' sun tha actually SEES, not t'
+        // idealised z=0 celestial sun (t' dome's uSunDir convention, which t' sprite shifts
+        // off). uSunLow: 0 at noon (broad pool, k 6) → 1 at t' horizon (narrow blazin'
+        // blade, k 24). Scalar setters only — nowt allocated per frame.
+        const _cp = this.camera.position;
+        setCamPos(_cp.x, _cp.y, _cp.z);
+        const _sunX = Math.cos((this.sky.time - 0.25) * Math.PI * 2);
+        const _ax = _sunX * 160, _az = -60, _al = Math.hypot(_ax, _az);
+        setSunAzim(_ax / _al, _az / _al);
+        setSunLow(Math.max(0, Math.min(1, 1 - Math.max(0, _sunY) * 1.1)));
         // [9] wet sheen tint: puddles/wet tops pick up t' LIVE sky colour at grazing
         // angles (Fine only — uSheen stamped 0.5 in applyQuality). scene.fog.color IS t'
         // live horizon/sky colour sky.js writes every frame (dawn-glow tint an' all), so
@@ -5210,9 +5248,17 @@ class Game {
       }
     }
 
-    // camera follows player
-    this.camera.position.set(this.player.pos.x, this.player.pos.y + this.player.eye, this.player.pos.z);
-    this.camera.rotation.set(this.player.pitch, this.player.yaw, 0);
+    // camera follows player — unless a debug photo pose is pinned (visual checks
+    // frae a FIXED POINT: t' player stays put wherever they safely stand, nowt
+    // falls off owt or drowns while a screenshot's taken — James's call 2026-07-03)
+    if (this._photoCam) {
+      const p = this._photoCam;
+      this.camera.position.set(p.x, p.y, p.z);
+      this.camera.rotation.set(p.pitch, p.yaw, 0);
+    } else {
+      this.camera.position.set(this.player.pos.x, this.player.pos.y + this.player.eye, this.player.pos.z);
+      this.camera.rotation.set(this.player.pitch, this.player.yaw, 0);
+    }
     const targetFov = this.player.sprinting ? 82 : 75;
     if (Math.abs(this.camera.fov - targetFov) > 0.5) {
       this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 8);

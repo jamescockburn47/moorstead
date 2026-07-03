@@ -192,14 +192,17 @@ const addPrecipMotion = (mat, own, shared) => {
 };
 
 // ---- world-edge fog budget ----
-// world.js streams an' meshes chunks to renderDist = 6 round t' player (src/world.js:32,
-// an instance field, not exported — keep this mirror in step wi' it). 6 × CHUNK = 96
+// world.js streams an' meshes chunks to renderDist = 7 round t' player (src/world.js,
+// an instance field, not exported — keep this mirror in step wi' it). 7 × CHUNK = 112
 // blocks is t' GUARANTEED meshed distance in every direction (worst case, player stood
 // on a chunk seam). Past that edge there's no terrain at all — only t' bare dome — so
 // fog must finish its WHOLE job (full occlusion) inside it, else half-fogged terrain
 // ends in a hard silhouette against flat dome colour: t' off-puttin' horizon band.
-const STREAM_RADIUS = 6 * CHUNK;                       // blocks — mirrors world.renderDist × CHUNK
-const FOG_FAR_MAX = Math.floor(STREAM_RADIUS * 0.88);  // 84: full occlusion afore t' meshed edge
+// Re-tuned 2026-07-03 (deliberate): renderDist 6→7 bought 16 more meshed blocks, so
+// clear weather now breathes to ~98 (frae 84 — James found t' owd line too close in);
+// misty lands ~82, rain ~72. T' knee structure below is UNTOUCHED.
+const STREAM_RADIUS = 7 * CHUNK;                       // blocks — mirrors world.renderDist × CHUNK
+const FOG_FAR_MAX = Math.floor(STREAM_RADIUS * 0.88);  // 98: full occlusion afore t' meshed edge
 const FOG_KNEE = 60;  // open-weather targets (rain 90 / misty 120 / clear 160) compress into KNEE..MAX
 
 // ---- Fine shadow rig: whole-texel snap ----
@@ -431,10 +434,10 @@ export class Sky {
           // [4] t' Milky Way: a faint great-circle band, mottled by t' same fbm t'
           // clouds already compile, faded at t' horizon; uStarAmt kills it by day,
           // under overcast an' at full it stays a whisper. Clouds mix OVER it below.
-          float mw = exp(-pow(dot(dir, GPOLE), 2.0) * 16.0)
-                   * (0.45 + 0.55 * fbm(vec2(dot(dir, GA), dot(dir, GB)) * 5.0 + 3.7))
+          float mw = exp(-pow(dot(dir, GPOLE), 2.0) * 30.0)
+                   * (0.25 + 0.75 * fbm(vec2(dot(dir, GA), dot(dir, GB)) * 5.0 + 3.7))
                    * smoothstep(0.02, 0.18, dir.y);
-          col += vec3(0.52, 0.58, 0.70) * (mw * uStarAmt * 0.16);
+          col += vec3(0.52, 0.58, 0.70) * (mw * uStarAmt * 0.07);
           float up = clamp(dir.y, 0.0, 1.0);
           if (up > 0.02) {
             vec2 uv = dir.xz / max(dir.y, 0.06) * 0.55 + uTime * vec2(0.012, 0.007);
@@ -783,7 +786,7 @@ export class Sky {
     else if (this.weather === 'fog') baseFog = Math.min(baseFog, 28);
     if (this.dread > 0.05) baseFog = Math.min(baseFog, 55 - this.dread * 22);
     if (this.moorFog > 0.01) baseFog = Math.min(baseFog, 150 - this.moorFog * 143); // ~7 at full: hand-afore-face stuff
-    // T' meshed world ends STREAM_RADIUS (96) blocks out — three o' t' four open-weather
+    // T' meshed world ends STREAM_RADIUS (112) blocks out — three o' t' four open-weather
     // targets above (rain 90 / misty 120 / clear 160) put full occlusion AT or PAST that
     // edge, so t' last chunks showed half-fogged against bare dome: t' horizon band.
     // A bare min() would flatten all three into one look, so a soft knee compresses
@@ -824,8 +827,12 @@ export class Sky {
     cu.uClouds.value += ((grey + (1 - grey) * churn) - cu.uClouds.value) * Math.min(1, dt * 0.5);
     cu.cloudCol.value.setRGB(0.16, 0.18, 0.22).lerp(CLOUD_LIT, dayness); // lit colour hoisted ([22])
     if (churn > 0.001) cu.cloudCol.value.lerp(STORM_CLOUD, churn * 0.9);
-    // [4] t' Milky Way rides t' same night term as t' stars, doused by overcast
-    cu.uStarAmt.value = starA * (1 - grey);
+    // [4] t' Milky Way rides t' same night term as t' stars, doused by overcast —
+    // an' WASHED OUT by a bright moon (as in life: a full moon drowns t' band).
+    // James's call 2026-07-03: t' band read as a bright central smear — narrowed
+    // (16→30), dimmed (0.16→0.07), mottle deepened, moon-wash added.
+    const mwIllum = 0.5 - 0.5 * Math.cos(moonPhase(this.day) * Math.PI * 2);
+    cu.uStarAmt.value = starA * (1 - grey) * (1 - 0.55 * moonVis * mwIllum);
     // t' cloud deck blinks white wi' each strike (squared, same easin' as flashLift)
     cu.uFlash.value = this.flash * this.flash;
     // horizon-band height follows fog thickness: open weather a low haze line (~0.19),

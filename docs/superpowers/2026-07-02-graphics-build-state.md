@@ -66,6 +66,7 @@ Specs: grep `### [n]` / `### [Dn]` in 2026-07-02-graphics-wow-audit.md. Codebase
 - [ ] [20] seasonal colour fronts (L) · [37] cinematic title plates
 
 ## RESUME LOG (day 2)
+- EVO FOLLOW-UP (server-side, pending): roster_sim can emit walk legs crossing open sea — client now hides streamed NPCs grounded on sub-sea columns (roster.js _subSea, James 2026-07-03); proper fix is keeping waypoints on land in roster_sim (clamp legs to coastline or route via road graph), then relax the client guard.
 - STOPPED + DEPLOYED on James's instruction: merged a899faf to main, deployed **v1.1.19**
   (verify:live 18/18 green; pre-deploy GL probe: 72 programs, 0 broken). S2c (rain-rings/
   spate/freeze-float), D16 (midges), D17 (swallows) were killed MID-EDIT and their partial

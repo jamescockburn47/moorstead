@@ -225,7 +225,11 @@ ok(mesherSrc.includes('map: getCutoutAtlas()'), 'cutout material samples the no-
 ok(skySrc.includes('SHADOW_TEXEL = 140 / 2048'), 'shadow frustum snapped to whole texels');
 ok(skySrc.includes('_snapShadowCamera() {') && skySrc.includes('if (fine) this._snapShadowCamera()'),
   'texel snap exists and is Fine-gated (Plain has no shadow map)');
-ok(skySrc.includes('STREAM_RADIUS = 6 * CHUNK'), 'fog budget mirrors world.renderDist');
+// Re-tuned 2026-07-03 (DELIBERATE, not a weakening): world.renderDist raised 6→7 so the
+// fog line could move out — James found clear-weather 84 too close in. The budget maths
+// below is the SAME contract at the new radius: full occlusion inside the meshed edge.
+ok(skySrc.includes('STREAM_RADIUS = 7 * CHUNK'), 'fog budget mirrors world.renderDist (7 since the 2026-07-03 re-tune)');
+ok(src('../src/world.js').includes('this.renderDist = 7'), 'world.js renderDist is actually 7 — the sky.js mirror cannot drift');
 ok(skySrc.includes('uFogBand'), 'dome holds the fog colour at the horizon band');
 {
   // numeric mirror of the sky.js fogTargetFar knee — constants parsed from the REAL
@@ -236,19 +240,23 @@ ok(skySrc.includes('uFogBand'), 'dome holds the fog colour at the horizon band')
   ok(mR && mM && mK, 'fog-budget constants parseable from sky.js');
   ok(skySrc.includes('FOG_KNEE + (baseFog - FOG_KNEE) * ((FOG_FAR_MAX - FOG_KNEE) / (160 - FOG_KNEE))'),
     'soft knee compresses open weather into the budget, not a flat min()');
-  const R = Number(mR[1]) * CHUNK;                 // guaranteed meshed radius (96)
+  const R = Number(mR[1]) * CHUNK;                 // guaranteed meshed radius (112 since the re-tune)
   const MAX = Math.floor(R * Number(mM[1]));
   const KNEE = Number(mK[1]);
   const baseFog = 160;                             // clearest open-weather target
   const far = baseFog <= KNEE ? baseFog : KNEE + (baseFog - KNEE) * ((MAX - KNEE) / (160 - KNEE));
   ok(far <= 0.9 * R, `clear-weather fog (far ${far}) fully occludes inside the ${R}-block meshed radius`);
+  // pin the re-tune itself: clear weather must actually REACH ~98 (the point of the change) —
+  // a silent renderDist revert would fail here, not just quietly shrink the view again
+  ok(far >= 96, `clear-weather fog (far ${far}) reaches ~98 (the 2026-07-03 push-out, from 84)`);
 }
 
 // ---- S2a: living water ([15]) + flowing becks ([D0]) — behavioural checks in verify-water.mjs ----
 const moorsgeoSrc = src('../src/moorsgeo.js');
-for (const u of ['uWaterTime', 'uRippleAmp', 'uFlowAmp', 'uGlitter', 'uFresnel'])
+for (const u of ['uWaterTime', 'uRippleAmp', 'uFlowAmp', 'uGlitter', 'uFresnel', 'uSunLow'])
   ok(mesherSrc.includes(`${u}: { value: 0 }`), `${u} module uniform exists, defaults 0 (Plain = today's flat water)`);
-ok(mesherSrc.includes("customProgramCacheKey = () => 'liquid-ice-water'"), 'liquid stays ONE compiled program — ice + water share the addWater handler/key');
+// key extended '-sword' 2026-07-03 (deliberate): corridor uniforms/GLSL fork a fresh program
+ok(mesherSrc.includes("customProgramCacheKey = () => 'liquid-ice-water-sword'"), 'liquid stays ONE compiled program — ice + water + sword share the addWater handler/key');
 ok((mesherSrc.match(/customProgramCacheKey/g) || []).length === 2, 'no sibling onBeforeCompile handlers snuck in (exactly addSnow + addWater set keys)');
 ok(mesherSrc.includes('transformed.y += aTop'), 'water displacement gated by aTop — bed walls never move');
 ok(mesherSrc.includes('(1.0 - aFreeze * uFrozen)'), 'ripples freeze solid wi’ the winter ice (uFrozen semantics untouched — binary until S2c)');
@@ -268,6 +276,28 @@ ok(/setRippleAmp\(fine \? 0\.05 : 0\);\s*\n\s*setFlowAmp\(fine \? 0\.05 : 0\);\s
 ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,500}?setGlitter\(dayness \* \(1 - overcast\)\);/.test(mainSrc), 'glitter driven per frame frae dayness × clear-sky, Fine only');
 ok(mainSrc.includes('setWaterTime(this._glintT)'), 'water clock rides the existing glint tick — no new per-client accumulator');
 ok(mainSrc.includes('overcastGrey(this.sky.weather'), 'overcast term mirrors sky.js’s own overcastGrey call');
+
+// ---- [sword] the sword of the sun (2026-07-03) — corridor glint replaces the lattice ----
+// James binned the old doubly-periodic sin×sin glitter (a uniform blob grid tiling the
+// whole sea). The lattice-literal assertions that used to live in the shader are gone
+// DELIBERATELY — replaced by the corridor contract below.
+ok(mesherSrc.includes('uCamPos: { value: new THREE.Vector3() }'), 'uCamPos module uniform exists, defaults origin');
+ok(mesherSrc.includes('uSunAzim: { value: new THREE.Vector2() }'), 'uSunAzim module uniform exists, defaults (0,0) → corridor 0 (off-state sane)');
+ok(mesherSrc.includes('shader.uniforms.uCamPos = waterUniforms.uCamPos'), 'uCamPos re-bound in the ALWAYS-RUN block (idempotency guard preserved)');
+ok(mesherSrc.includes('shader.uniforms.uSunAzim = waterUniforms.uSunAzim'), 'uSunAzim re-bound in the always-run block');
+ok(mesherSrc.includes('shader.uniforms.uSunLow = waterUniforms.uSunLow'), 'uSunLow re-bound in the always-run block');
+ok(mesherSrc.includes('max(0.0, dot(wView / wVL, uSunAzim))'), 'behind-the-sun zeroing: max(0,dot) kills the corridor when facing away');
+ok(mesherSrc.includes('pow(wAlign, mix(6.0, 24.0, uSunLow))'), 'corridor term present — k blends 6 (noon pool) → 24 (horizon blade) via uSunLow');
+ok(mesherSrc.includes('float wHash(vec2 p)'), 'water handler carries its own tiny hash (separate injection from addSnow — no borrowed csHash)');
+ok(mesherSrc.includes('wHash(floor(wGp * 3.5))'), 'glints are CELLULAR (hashed sub-block cells, per-cell phase + brightness), not a lattice');
+ok(!mesherSrc.includes('sin(wGp.x * 2.3'), 'the old doubly-periodic lattice glitter is GONE from the shader');
+ok(mesherSrc.includes('wG * wCorr * wDist * uGlitter * (1.0 - ice)'), 'final glint = cell sparkle × corridor × near-fade × uGlitter × (1−ice) — uGlitter keeps its dayness×clear drive');
+for (const s of ['setCamPos', 'setSunAzim', 'setSunLow'])
+  ok(mesherSrc.includes(`export function ${s}(`), `${s} setter exported from mesher.js`);
+ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,1200}?setSunAzim\(_ax \/ _al, _az \/ _al\);/.test(mainSrc),
+  'sun azimuth driven per frame in the Fine block (Plain: uGlitter stays 0, sword inert)');
+ok(mainSrc.includes('setCamPos(_cp.x, _cp.y, _cp.z)'), 'camera world pos driven scalar-wise (no per-frame alloc)');
+ok(mainSrc.includes('const _ax = _sunX * 160, _az = -60'), 'azimuth derived from the TRUE sunSprite offset (sunX·160, −60) — not the idealised z=0 sun');
 
 // ---- S2b [16]: the shoreline — depth tint + foam (behaviour in verify-shoreline.mjs) + horizon sea ring ----
 ok(mesherSrc.includes('export const DEPTH_TINT_AMP = 1'), 'depth-tint kill switch exists, ships on');
@@ -328,7 +358,10 @@ ok(/setFresnel\(fine \? 0\.35 : 0\);[\s\S]{0,250}?setCloudShadow\(0\);/.test(mai
   'applyQuality parks uCloudShadowAmt at 0 — Plain\'s branch never executes, terrain byte-identical');
 ok(mainSrc.includes('setCloudTime(this.sky.cloudT || 0)'),
   'cloud clock fed frae sky.cloudT — the SAME accumulator the dome scrolls by (churn speed-up an\' all)');
-ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,1600}?setCloudShadow\(Math\.min\(0\.35, 1\.4 \* cover \* dayness \* \(1 - overcast\)\)\);/.test(mainSrc),
+// window 1600→2800 (2026-07-03, deliberate): the [sword] glint drive now sits between the
+// Fine gate and this call (beside setGlitter, its natural home) — same semantic contract
+// (cloud shadow driven INSIDE the Fine gate), just more code in between.
+ok(/if \(this\.gfxQuality === 'fine'\) \{[\s\S]{0,2800}?setCloudShadow\(Math\.min\(0\.35, 1\.4 \* cover \* dayness \* \(1 - overcast\)\)\);/.test(mainSrc),
   'Fine drive: cover × dayness × clear-sky, clamped at 0.35 — self-zeroes at night and in full overcast');
 ok(mainSrc.includes('this.sky.domeMat.uniforms.uClouds.value'),
   'cover read off the live dome uniform (uClouds) — no sky.js edit needed');
@@ -426,8 +459,8 @@ ok(skySrc.includes('const field = buildStarField()'), 'stars built frae the seed
 ok(skySrc.includes('gl_PointSize = size * aMag * twinkle;'), 'per-star magnitude + twinkle scale gl_PointSize in the injected vertex stage');
 ok(skySrc.includes("this._starU.uTwinkle.value = fine ? 1 : 0"), 'twinkle is Fine-gated (Plain leaves uTwinkle 0 — static field, same program)');
 ok(skySrc.includes('uStarAmt: { value: 0 }'), 'dome uStarAmt uniform exists, defaults 0 (fresh compile = today, no Milky Way)');
-ok(skySrc.includes('exp(-pow(dot(dir, GPOLE), 2.0) * 16.0)'), 'Milky Way: great-circle band about GPOLE in the dome shader');
-ok(skySrc.includes('cu.uStarAmt.value = starA * (1 - grey)'), 'Milky Way rides the same night term as the stars, doused by overcast');
+ok(skySrc.includes('exp(-pow(dot(dir, GPOLE), 2.0) * 30.0)'), 'Milky Way: great-circle band about GPOLE (narrowed 16->30, James 2026-07-03)');
+ok(skySrc.includes('cu.uStarAmt.value = starA * (1 - grey) * (1 - 0.55 * moonVis * mwIllum)'), 'Milky Way: night term, doused by overcast AND washed out by a bright moon (James 2026-07-03)');
 ok(skySrc.includes('if (this._moonDay !== this.day) this._drawMoonPhase()'), 'moon disc redrawn once per game DAY, never per frame');
 ok(skySrc.includes('this.moonSprite.add(this.moonHalo)'), 'halo parented to the moon sprite — rides it for free');
 ok(skySrc.includes('this.moonHalo.material.opacity = this._mistS * moonVis * (1 - grey)'),

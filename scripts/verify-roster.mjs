@@ -2,7 +2,7 @@
 // state can carry resolves in moorsgeo. Mirrors the verify-*.mjs pattern.
 import assert from 'node:assert';
 import { Gen, MOORS_SEED } from '../src/worldgen.js';
-import { B } from '../src/defs.js';
+import { B, WATER_LEVEL } from '../src/defs.js';
 import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity, surfaceHeight, __resetSurfCache, idHash, waiterRank, waitMode, PLATFORM_CAP, WAIT_LEAD, platformPoint, roadWaypoints, ridesThisLeg, RIDE_PACE, RosterClient } from '../src/roster.js';
 
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
@@ -290,6 +290,52 @@ __resetSurfCache();
   const before = removed.length;
   rc._remove(e2);
   ok(removed.length === before + 2 && e2._pony === null, '_remove despawns the rider AND her pony (leak guard) — no orphan');
+}
+
+// --- seabed guard: an NPC over a sub-sea column is NOT rendered (James's call, 2026-07-03) ----
+// The brain can stream a waypoint over open sea; the client must not draw the body strolling
+// the sea bed. Guard: sub-sea column -> group hidden; dry land -> shown again. And it must be
+// CHEAP: the height lookup runs only when the mob changes CELL (cached on the entry).
+{
+  // find a real sub-sea column: walk outward from the Whitby anchor in the 8 compass
+  // directions until the terrain drops >= 2 below the sea fill (deterministic for the seed).
+  const wh2 = townAnchor('Whitby', geo);
+  let sea = null;
+  outer: for (let d = 4; d <= 600 && !sea; d += 2) {
+    for (const [ux, uz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const x = Math.round(wh2.x + ux * d), z = Math.round(wh2.z + uz * d);
+      const h = geo.height(x, z);
+      if (h != null && h <= WATER_LEVEL - 2 && !(geo.riverColumn && geo.riverColumn(x, z))) { sea = { x, z }; break outer; }
+    }
+  }
+  ok(sea, `a sub-sea column exists off Whitby (got ${JSON.stringify(sea)})`);
+  // a dry-land cell to walk back onto: a village anchor comfortably above the fill
+  const land = geo.villages.map(v => ({ x: v.x, z: v.z, h: geo.height(v.x, v.z) })).find(v => v.h >= WATER_LEVEL + 5);
+  ok(land, 'a village anchor sits well above the sea fill');
+
+  // a stub game exactly like the mount-lifecycle test's, but with geo.height CALLS COUNTED
+  let heightCalls = 0;
+  const countingGeo = Object.create(geo);
+  countingGeo.height = (x, z) => { heightCalls++; return geo.height(x, z); };
+  const fakeGroup = () => ({ visible: true, position: { set() {} }, rotation: {} });
+  const game = { world: { gen: { geo: countingGeo }, chunkAt: () => ({}), getBlock: () => B.AIR, isLoaded: () => true },
+                 entities: { scene: { remove() {} } } };
+  const rc = new RosterClient(game);
+  rc.active = true; rc.serverNow = 0; rc.recvAt = performance.now() / 1000;
+  // an at-state NPC whose place doesn't resolve (so nothing re-drives her pos) stood over the sea
+  const mob = { pos: { x: sea.x, y: 10, z: sea.z }, yaw: 0, model: { group: fakeGroup() } };
+  rc.npcs.set('sea-1', { data: { id: 'sea-1', state: { kind: 'at', place: 'Nowhere-on-Sea' } }, mob });
+
+  rc.update(0.016);
+  ok(mob.model.group.visible === false, 'an NPC grounded over a sub-sea column is HIDDEN (no seabed strolling)');
+  const callsAfterFirst = heightCalls;
+  rc.update(0.016); rc.update(0.016);
+  ok(mob.model.group.visible === false, 'she stays hidden while she stays over the sea');
+  ok(heightCalls === callsAfterFirst, `the guard is cheap: no height lookups while the cell is unchanged (got ${heightCalls - callsAfterFirst} extra)`);
+  // she steps back onto dry land -> shown again (and the lookup runs exactly on the cell change)
+  mob.pos.x = land.x; mob.pos.z = land.z;
+  rc.update(0.016);
+  ok(mob.model.group.visible === true, 'back over dry land she is SHOWN again');
 }
 
 console.log(`verify-roster: ${n} assertions OK`);

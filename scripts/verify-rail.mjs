@@ -5,9 +5,12 @@
 //   3. t' line corridor (±1.7 blocks) never slices through a village building
 //   4. Pickering is t' southern terminus, Whitby t' seaward one (real NYMR shape)
 // Also prints leg lengths an' implied speeds so pacing stays honest.
+import { readFileSync } from 'node:fs';
 import { strSeed } from '../src/noise.js';
 import { Geography } from '../src/geography.js';
 import { WATER_LEVEL } from '../src/defs.js';
+import { MoorsGeography } from '../src/moorsgeo.js';
+import { Rails } from '../src/rails.js';
 
 const SEEDS = ['t-shared-moor', 'owt', 'nowt', '42'];
 
@@ -131,6 +134,112 @@ for (const seedStr of SEEDS) {
     if (seamost !== w) bad(`seaward-most station is ${seamost.name}, expected Whitby`);
     else ok('Whitby is t\' seaward terminus');
   }
+}
+
+// 5. t' rails OVERLAY earthworks (real-Moors world): where t' line crosses a beck
+//    t' embankment skirt must be STRUCK (no grey wall damming t' channel) an'
+//    masonry piers must carry t' span down to t' bed; everywhere else t' skirt
+//    is atlas-textured an' hue-varied, not flat grey. Built headlessly at t'
+//    Murk Esk crossing by Grosmont an' inspected buffer by buffer.
+console.log('\n== rails overlay: bridges an\' earthworks (real-Moors world) ==');
+{
+  const mg = new MoorsGeography();
+  const line = mg.railPaths().find(l => l.name === 'Whitby & Pickering') || mg.railPaths()[0];
+  const main = line.path;
+
+  // find every water-channel crossing along t' line, then pick t' one nearest Grosmont
+  const gros = mg.data.stations.find(s => /grosmont/i.test(s.name)) || { x: 1415, z: 2606 };
+  const crossings = [];
+  for (const p of main.pts) {
+    const rc = mg.riverColumn(Math.round(p.x), Math.round(p.z));
+    if (rc) crossings.push({ s: p.s, x: p.x, z: p.z, deck: p.deck, wl: rc.wl, bed: rc.bed });
+  }
+  if (!crossings.length) bad('main line never crosses a river channel — no bridge to verify');
+  else ok(`main line crosses water at ${crossings.length} spline samples`);
+  const target = crossings.reduce((m, c) =>
+    Math.hypot(c.x - gros.x, c.z - gros.z) < Math.hypot(m.x - gros.x, m.z - gros.z) ? c : m, crossings[0]);
+  console.log(`  Esk crossing by Grosmont: (${Math.round(target.x)},${Math.round(target.z)}) s=${Math.round(target.s)} deck=${target.deck.toFixed(1)} wl=${target.wl} bed=${target.bed}`);
+  if (target.deck < target.wl + 3.5) bad(`deck barely clears t' water (deck ${target.deck.toFixed(1)} vs wl ${target.wl}) — bridge clearance regressed`);
+  else ok('deck rides clear o\' t\' water (riverFn lift held)');
+
+  // build t' overlay window centred on t' crossing, headless (stub scene)
+  const scene = { add() {}, remove() {} };
+  const rails = new Rails(scene, mg);
+  rails.build(main, target.s);
+  const kinds = {};
+  for (const msh of rails.meshes) kinds[msh.userData.kind] = msh;
+
+  // 5a. NO skirt geometry over t' water channel — t' beck runs open under t' span
+  const skirt = kinds.skirt;
+  if (!skirt) bad('no skirt mesh built in t\' window (embankments missing entirely)');
+  else {
+    const pa = skirt.geometry.attributes.position;
+    let wet = 0, sample = '';
+    for (let i = 0; i < pa.count; i++) {
+      const rx = Math.round(pa.getX(i)), rz = Math.round(pa.getZ(i));
+      if (mg.riverColumn(rx, rz)) { wet++; if (!sample) sample = `(${rx},${rz})`; }
+    }
+    if (wet) bad(`${wet} skirt vertices stand IN t' river channel ${sample} — t' skirt dams t' beck`);
+    else ok(`skirt clear o' t' channel (${pa.count} verts inspected)`);
+    // 5b. t' skirt is textured + hue-varied, not flat grey
+    if (!skirt.geometry.attributes.uv) bad('skirt has no UV attribute — atlas dressing missing');
+    else ok('skirt carries atlas UVs');
+    const ca = skirt.geometry.attributes.color;
+    let mn = Infinity, mx = -Infinity;
+    for (let i = 0; i < ca.count; i++) { const r = ca.getX(i); if (r < mn) mn = r; if (r > mx) mx = r; }
+    if (mx - mn < 0.05) bad(`skirt vertex colours near-uniform (${mn.toFixed(3)}..${mx.toFixed(3)}) — still reads flat`);
+    else ok(`skirt hue-varied (r ${mn.toFixed(2)}..${mx.toFixed(2)})`);
+    if (skirt.material.vertexColors !== true) bad('skirt material lost vertexColors');
+    else ok('skirt material modulates by vertex colour');
+  }
+
+  // 5c. crown (ballast) textured too
+  const crown = kinds.crown;
+  if (!crown) bad('no ballast crown mesh built');
+  else if (!crown.geometry.attributes.uv) bad('crown has no UV attribute — ballast is paint again');
+  else ok('ballast crown carries atlas UVs');
+
+  // 5d. masonry piers stand in t' crossing, under t' deck, down to t' bed
+  const piers = kinds.piers;
+  if (!piers || !piers.count) bad('no bridge piers built at t\' Esk crossing');
+  else {
+    const arr = piers.instanceMatrix.array;
+    let inChannel = 0, minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i < piers.count; i++) {
+      const x = arr[i * 16 + 12], y = arr[i * 16 + 13], z = arr[i * 16 + 14];
+      if (Math.hypot(x - target.x, z - target.z) > 12) continue;   // only t' target crossing
+      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+      if (mg.riverColumn(Math.round(x), Math.round(z))) inChannel++;
+    }
+    if (!inChannel) bad('no pier course stands in t\' water channel — span carried on nowt');
+    else ok(`${inChannel} pier courses in t' channel (${piers.count} total in window)`);
+    if (maxY > target.deck) bad(`pier course above t' deck (y=${maxY.toFixed(1)} vs deck ${target.deck.toFixed(1)})`);
+    else ok('piers stop flush under t\' deck slab');
+    if (minY > target.wl) bad(`piers stop above t' water (lowest course y=${minY.toFixed(1)} vs wl ${target.wl}) — they don't reach t' bed`);
+    else ok('piers reach down through t\' water to t\' bed');
+  }
+
+  // 5e. determinism: a second build at t' same chainage is byte-identical
+  const rails2 = new Rails(scene, mg);
+  rails2.build(main, target.s);
+  const skirt2 = rails2.meshes.find(msh => msh.userData.kind === 'skirt');
+  if (skirt && skirt2) {
+    const p1 = skirt.geometry.attributes.position.array, p2 = skirt2.geometry.attributes.position.array;
+    let same = p1.length === p2.length;
+    if (same) for (let i = 0; i < p1.length; i++) if (p1[i] !== p2[i]) { same = false; break; }
+    if (!same) bad('skirt geometry differs between two builds at t\' same chainage — non-deterministic');
+    else ok('skirt build deterministic (rebuild byte-identical)');
+  }
+  rails.clear(); rails2.clear();
+
+  // 5f. source literals: t' dressing comes frae t' shared atlas + terrain variation,
+  //     an' nowt in t' overlay rolls Math.random
+  const railsSrc = readFileSync(new URL('../src/rails.js', import.meta.url), 'utf8');
+  for (const lit of ['TILE.GRASS_TOP', 'TILE.GRAVEL', 'TILE.STONEBRICK', 'topFaceVariation', 'crossingAt']) {
+    if (!railsSrc.includes(lit)) bad(`rails.js lost '${lit}' — t' earthwork dressing regressed`);
+  }
+  if (railsSrc.includes('Math.random')) bad('rails.js uses Math.random — build-time determinism broken');
+  else ok('earthwork dressing literals present, no Math.random');
 }
 
 console.log(failed ? '\nRESULT: FAIL' : '\nRESULT: PASS');
