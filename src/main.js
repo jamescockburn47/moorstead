@@ -54,6 +54,8 @@ import { startLiveWeather } from './weather-live.js';
 import { temperatureTarget, stepTemperature } from './temperature.js';
 import { boardingFolk } from './trainfolk.js';
 import { innOpen, playerInParlour, MURMUR_LINES } from './parlour.js';
+import { tableAt, newSession, sessionMove, sessionNpcReply, sessionForfeit, settleWager, opponentSeed, gameLabel } from './gameTable.js';
+import { recordGameResult, wagerAllowed, WAGER_MAX } from './ledgers.js';
 import { CarolBox } from './carolBox.js';
 import { RosterClient, invalidateSurfCache } from './roster.js';
 import { TouchControls, isTouchPrimary } from './touch.js';
@@ -1237,7 +1239,7 @@ class Game {
         if (num >= 1 && num <= 9) { this.player.hotbar = num - 1; this.ui.invDirty = true; }
       } else if (this.state === 'inv' || this.state === 'range' || this.state === 'box') {
         if (e.code === 'KeyE' || e.code === 'Escape') this.closeScreens();
-      } else if (this.state === 'board' || this.state === 'museum') {
+      } else if (this.state === 'board' || this.state === 'museum' || this.state === 'challenge') {
         if (e.code === 'KeyQ' || e.code === 'Escape') this.closeScreens();
       } else if (this.state === 'chat') {
         if (e.code === 'Escape') this.closeChat();
@@ -1252,6 +1254,8 @@ class Game {
         if (e.code === 'KeyE' || e.code === 'Escape') this.leaveDrive();
         else if (e.code === 'KeyR' && this.drive) { this.drive.reverser *= -1; this.ui.toast(this.drive.reverser > 0 ? 'Reverser set forrard.' : 'Reverser set back.', 1500); }
         else if (e.code === 'KeyF') this.shovelCoal();
+      } else if (this.state === 'gaming') {
+        if (e.code === 'Escape') this.endGameSession('esc');
       }
     });
     document.addEventListener('keyup', e => { this.keys[e.code] = false; });
@@ -1768,12 +1772,167 @@ class Game {
   }
 
   closeScreens() {
+    // D4: standing up from a pub-game table mid-play forfeits the wager — route
+    // through endGameSession first so the toast/ledger/camera-restore all happen
+    // before the generic teardown below runs.
+    if (this.state === 'gaming') { this.endGameSession('forfeit'); return; }
     const wasBox = this.state === 'box';
     this.ui.closeInventory(this.player);
     this.state = 'playing';
     this.ui.show(null);
     this.lockPointer();
     if (wasBox) this.saveNow(false); // a stash is only worth owt if it keeps — persist on close
+  }
+
+  // ---------------- pub games (D4) ----------------
+  // Villager role -> minimax difficulty is in gameTable.js's ROLE_LEVEL table.
+  // Camera during 'gaming': the player never moves (no teleport, no physics
+  // fight) — each frame in the main loop overrides pos/yaw/pitch to hold an
+  // over-the-board pose, the same per-frame-override idiom updateRide uses for
+  // 'riding' (see frame()'s `this.state === 'gaming'` branch).
+
+  // Pick an opponent for the table at `tableInfo` (plan, index, game): prefer
+  // the parloured mob whose _parlourIdx matches this table's index (she's
+  // physically seated there), else any parloured mob in this inn, else a
+  // nameless fallback opponent — always playable, even in an empty pub.
+  _opponentForTable(tableInfo) {
+    const rc = this.rosterClient;
+    if (rc) {
+      let anyInInn = null;
+      for (const [, e] of rc.npcs) {
+        const m = e.mob;
+        if (!m || !m.parloured || m.parloured !== tableInfo.plan) continue;
+        if (!anyInInn) anyInInn = e;
+        if (m._parlourIdx === tableInfo.index) {
+          return { name: e.data.name, role: e.data.role, mobId: e.data.id };
+        }
+      }
+      if (anyInInn) return { name: anyInInn.data.name, role: anyInInn.data.role, mobId: anyInInn.data.id };
+    }
+    return { name: 'a passing local', role: 'rambler', mobId: null };
+  }
+
+  // Right-click a parlour table: open the pre-game challenge (opponent name,
+  // wager stepper, Play/Never mind) — main.js:interact calls this directly.
+  // A distinct 'challenge' state (not 'gaming' — no session/camera-hold yet)
+  // so ESC/Q closes it through the ordinary closeScreens path, same as
+  // board/museum.
+  openGameChallenge(tableInfo) {
+    if (this.state !== 'playing') return;
+    const opponent = this._opponentForTable(tableInfo);
+    this.state = 'challenge';
+    this.mouseDown = [false, false, false];
+    this.clearKeys();
+    document.exitPointerLock?.();
+    this.ui.openGameChallenge(tableInfo, opponent);
+  }
+
+  // Confirmed on the challenge panel: spend the wager, build the session, snap
+  // the camera into the seated pose, open the board panel.
+  startGameSession(tableInfo, opponent, wager) {
+    if (this.state !== 'challenge') return;
+    if (!wagerAllowed(this.player.brass || 0, wager)) {
+      this.ui.toast("Tha can't cover that stake.", 3000);
+      return;
+    }
+    if (wager > 0 && !this.economy.spend(wager)) {
+      this.ui.toast("Tha can't cover that stake.", 3000);
+      return;
+    }
+    this.player._gameSessionCounter = (this.player._gameSessionCounter || 0) + 1;
+    const seed = (opponentSeed(opponent.name) ^ (this.world.gen.seed >>> 0) ^ this.player._gameSessionCounter) >>> 0;
+    const session = newSession({ gameId: tableInfo.game, opponent, wager, seed });
+
+    this._gameCamSnapshot = { pos: { ...this.player.pos }, yaw: this.player.yaw, pitch: this.player.pitch };
+    this._gameTable = tableInfo;
+    this._gameSession = session;
+    this.state = 'gaming';
+    this.mouseDown = [false, false, false];
+    this.clearKeys();
+    document.exitPointerLock?.();
+    this.ui.openGameTable(session);
+  }
+
+  // The player's move from the board panel: sessionMove, re-render, and (if
+  // the game's still live) schedule the NPC's reply after a short pause.
+  applyPlayerMove(move) {
+    if (this.state !== 'gaming' || !this._gameSession) return;
+    const before = this._gameSession;
+    const after = sessionMove(before, move);
+    this._gameSession = after;
+    if (after.over) { this._finishGameSession(); return; }
+    this.ui.openGameTable(after);
+    const forSession = after;
+    setTimeout(() => {
+      // guard: still gaming, and still the SAME session (not superseded by a
+      // rematch/forfeit/stand-up in the meantime)
+      if (this.state !== 'gaming' || this._gameSession !== forSession) return;
+      const replied = sessionNpcReply(forSession);
+      this._gameSession = replied;
+      if (replied.over) { this._finishGameSession(); return; }
+      this.ui.openGameTable(replied);
+    }, 500);
+  }
+
+  // A game reached a winner/draw: settle brass, record the ledger, toast, and
+  // let the panel show the result + Sit back / Stand up (handled by ui.js;
+  // the session stays in this._gameSession so "Sit back" can read tableInfo).
+  _finishGameSession() {
+    const session = this._gameSession;
+    const { earnPence, toast } = settleWager(session);
+    if (earnPence > 0) this.economy.earn(earnPence);
+    const wagerWon = session.result === 'w' ? earnPence : 0;
+    recordGameResult(this.player.gameRecord, session.gameId, session.result, wagerWon);
+    this.player._gameRecRev = (this.player._gameRecRev || 0) + 1;
+    if (toast) this.ui.toast(toast, 4000);
+    this.ui.openGameTable(session); // panel now shows the result + Sit back/Stand up
+  }
+
+  // Sit back down at the same table for a fresh wager prompt (rematch).
+  rematchGame() {
+    if (!this._gameTable) return;
+    const opponent = this._gameSession ? this._gameSession.opponent : this._opponentForTable(this._gameTable);
+    this._gameSession = null;
+    this.state = 'playing'; // openGameChallenge requires 'playing'
+    this._restoreGameCamera();
+    this.openGameChallenge(this._gameTable);
+    void opponent; // kept for symmetry/debuggability; the challenge panel re-derives the live opponent
+  }
+
+  // ESC / Stand up: end the session (forfeiting a LIVE game costs the wager;
+  // ending an already-finished one just tidies up), restore the camera snapshot,
+  // and close the panel.
+  endGameSession(reason) {
+    if (this.state !== 'gaming') return;
+    let session = this._gameSession;
+    if (session && !session.over) {
+      session = sessionForfeit(session);
+      this._gameSession = session;
+      const { earnPence } = settleWager(session); // always 0 on a forfeit-loss, kept for symmetry
+      if (earnPence > 0) this.economy.earn(earnPence);
+      recordGameResult(this.player.gameRecord, session.gameId, session.result, 0);
+      this.player._gameRecRev = (this.player._gameRecRev || 0) + 1;
+      const wagerNote = session.wager > 0 ? ` — thi ${session.wager}d stake is gone.` : '.';
+      this.ui.toast(`Tha stood up mid-game${wagerNote}`, 3500);
+    }
+    void reason;
+    this._gameSession = null;
+    this._gameTable = null;
+    this.state = 'playing';
+    this.ui.show(null);
+    this._restoreGameCamera();
+    this.lockPointer();
+  }
+
+  _restoreGameCamera() {
+    const snap = this._gameCamSnapshot;
+    if (snap) {
+      this.player.pos = { ...snap.pos };
+      this.player.yaw = snap.yaw;
+      this.player.pitch = snap.pitch;
+      this.player.vel = { x: 0, y: 0, z: 0 };
+    }
+    this._gameCamSnapshot = null;
   }
 
   // ---------------- oak strongbox ----------------
@@ -4507,6 +4666,14 @@ class Game {
         }
         return;
       }
+      // Parlour game tables (D4): plain B.PLANKS cells, no unique block id — matched
+      // by coordinate via gameTable.tableAt against every inn's 4 table cells. Only
+      // live while the player is actually IN that parlour (playerInParlour), same
+      // gate the D3 evening-crowd/murmur ambience uses.
+      if (this.world.gen.inns) {
+        const t = tableAt(hit.x, hit.y, hit.z, this.world.gen.inns);
+        if (t && playerInParlour(this.player.pos, t.plan)) { this.openGameChallenge(t); return; }
+      }
       if (hit.id === B.SIGNPOST) { this.readSignpost(); return; }
       if (hit.id === B.RANGE) {
         this.state = 'range';
@@ -5164,6 +5331,24 @@ class Game {
       } else if (!playing && this.state !== 'riding') {
         // UI open: physics still ticks but wi' no input
         this.player.update(dt, { keys: {}, jumpTapped: false }, this.audio, _season);
+      }
+      // D4: seated at a pub-game table — hold the player at the snapshot taken
+      // when they sat down (like updateRide, a per-frame override AFTER physics
+      // so gravity/etc never drags them off their seat) and aim the camera down
+      // at the table: face from the seated spot toward the table cell, pitched
+      // down as if looking at the board.
+      if (this.state === 'gaming' && this._gameCamSnapshot && this._gameTable) {
+        const snap = this._gameCamSnapshot;
+        this.player.pos = { ...snap.pos };
+        this.player.vel = { x: 0, y: 0, z: 0 };
+        const plan = this._gameTable.plan;
+        const { w: pw, l: pl } = plan.parlour;
+        const ix0 = plan.origin.x - Math.floor(pw / 2), iz0 = plan.origin.z - Math.floor(pl / 2);
+        const t = plan.parlour.tables[this._gameTable.index];
+        const tx = ix0 + t.x + 0.5, tz = iz0 + t.z + 0.5;
+        const dx = tx - snap.pos.x, dz = tz - snap.pos.z;
+        this.player.yaw = Math.atan2(dx, dz);
+        this.player.pitch = -0.9;
       }
       if (this.mount) this.updateMount(); // carry the pony along under the rider
 

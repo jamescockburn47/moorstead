@@ -9,7 +9,8 @@ import { TitleFlyover } from './titlescene.js';
 import { escHtml } from './escape.js';
 import { parishQuarries, drawMinimapMarker } from './mining-guide.js';
 import { gazette } from './npc.js';
-import { canCraft, skillFor, teacherFor, SKILLS } from './ledgers.js';
+import { canCraft, skillFor, teacherFor, SKILLS, WAGER_MAX } from './ledgers.js';
+import { ENGINES, gameLabel, renderBoard } from './gameTable.js';
 import {
   PLAYER_OUTFITS, PLAYER_JACKETS, PLAYER_HATS, PLAYER_SKINS, PLAYER_HAIRS,
   validatePlayerLook,
@@ -597,6 +598,10 @@ export class UI {
     this.museumScreen = this.el('div', 'overlay hidden', body);
     this.museumPanel = this.el('div', 'panel museum-panel', this.museumScreen);
 
+    // ---------- pub games (D4): challenge prompt + the board panel ----------
+    this.gameScreen = this.el('div', 'overlay hidden', body);
+    this.gamePanel = this.el('div', 'panel game-panel', this.gameScreen);
+
     // ---------- HUD quest tracker ----------
     this.tracker = this.el('div', '', this.hud);
     this.tracker.id = 'quest-tracker';
@@ -1038,7 +1043,7 @@ export class UI {
 
   // ============ screens ============
   show(name) {
-    for (const s of [this.titleScreen, this.pauseScreen, this.howScreen, this.feedbackScreen, this.deathScreen, this.invScreen, this.rangeScreen, this.loadingScreen, this.chatScreen, this.boardScreen, this.museumScreen, this.wardrobeScreen]) {
+    for (const s of [this.titleScreen, this.pauseScreen, this.howScreen, this.feedbackScreen, this.deathScreen, this.invScreen, this.rangeScreen, this.loadingScreen, this.chatScreen, this.boardScreen, this.museumScreen, this.wardrobeScreen, this.gameScreen]) {
       s.classList.add('hidden');
     }
     if (name) this[name].classList.remove('hidden');
@@ -1512,6 +1517,155 @@ export class UI {
     const close = this.el('button', 'mc', this.boardPanel, 'Reet, Ta');
     close.addEventListener('click', () => this.game.closeScreens());
     this.show('boardScreen');
+  }
+
+  // ============ pub games (D4) ============
+  // Two panels share gameScreen/gamePanel: the pre-game challenge (opponent +
+  // wager stepper) and the live board. Both wipe and rebuild gamePanel, same
+  // idiom as openBoard/openGazette above.
+
+  openGameChallenge(tableInfo, opponent) {
+    const g = this.game;
+    this.gamePanel.innerHTML = '';
+    const label = gameLabel(tableInfo.game);
+    this.el('div', 'inv-title', this.gamePanel, label);
+    this.el('div', 'r-needs', this.gamePanel,
+      `Tha's sat down across from <b>${escHtml(opponent.name)}</b>.`);
+
+    const wagerRow = this.el('div', 'recipe quest-row', this.gamePanel);
+    let wager = Math.min(2, WAGER_MAX, g.player.brass || 0);
+    const wagerLabel = this.el('div', 'r-name', wagerRow, '');
+    const renderWagerLabel = () => {
+      wagerLabel.innerHTML = wager > 0
+        ? `Wager: <b>${g.economy.format(wager)}</b>`
+        : 'Wager: <b>friendly (nowt staked)</b>';
+    };
+    renderWagerLabel();
+    const minus = this.el('button', 'mc chat-btn', wagerRow, '−');
+    minus.addEventListener('click', () => { wager = Math.max(0, wager - 1); renderWagerLabel(); });
+    const plus = this.el('button', 'mc chat-btn', wagerRow, '+');
+    plus.addEventListener('click', () => {
+      wager = Math.min(WAGER_MAX, g.player.brass || 0, wager + 1);
+      renderWagerLabel();
+    });
+
+    const actionRow = this.el('div', 'recipe quest-row', this.gamePanel);
+    const play = this.el('button', 'mc', actionRow, 'Play');
+    play.addEventListener('click', () => g.startGameSession(tableInfo, opponent, wager));
+    const nevermind = this.el('button', 'mc', actionRow, 'Never mind');
+    nevermind.addEventListener('click', () => g.closeScreens());
+
+    this.show('gameScreen');
+  }
+
+  // The live board: title, a monospace board (renderBoard), legal-move buttons
+  // (two-step from/to for merrils+draughts, flat lists for dominoes+shoveha),
+  // and — once the session is over — the result + Sit back / Stand up.
+  openGameTable(session) {
+    const g = this.game;
+    this.gamePanel.innerHTML = '';
+    const label = gameLabel(session.gameId);
+    this.el('div', 'inv-title', this.gamePanel,
+      `${label} &mdash; versus ${escHtml(session.opponent.name)} &mdash; wager ${session.wager > 0 ? g.economy.format(session.wager) : 'friendly'}`);
+
+    this.el('pre', 'game-board', this.gamePanel, escHtml(renderBoard(session)));
+
+    if (session.over) {
+      const resultText = session.result === 'w' ? "Tha's won!" : session.result === 'd' ? "A draw." : "Tha's lost.";
+      this.el('div', 'r-needs', this.gamePanel, `<b>${resultText}</b>`);
+      const actionRow = this.el('div', 'recipe quest-row', this.gamePanel);
+      const sitBack = this.el('button', 'mc', actionRow, 'Sit back');
+      sitBack.addEventListener('click', () => g.rematchGame());
+      const standUp = this.el('button', 'mc', actionRow, 'Stand up');
+      standUp.addEventListener('click', () => g.endGameSession('stand-up'));
+      this.show('gameScreen');
+      return;
+    }
+
+    // player 0 is always the challenger (ENGINE-CONTRACT.md) — only show move
+    // buttons on their go; the NPC's go is a 500ms wait (main.js:applyPlayerMove
+    // schedules sessionNpcReply) with nothing to click.
+    const playersGo = ENGINES[session.gameId].currentPlayer(session.state) === 0;
+    this.el('div', 'r-needs', this.gamePanel, playersGo ? "Thi go." : "Their go &mdash; wait a moment.");
+
+    if (playersGo) {
+      const moves = ENGINES[session.gameId].legalMoves(session.state);
+      const movesRow = this.el('div', 'recipes board-list', this.gamePanel);
+      this._renderGameMoves(session, moves, movesRow);
+    }
+
+    const standUpRow = this.el('div', 'recipe quest-row', this.gamePanel);
+    const standUp = this.el('button', 'mc', standUpRow, 'Stand up (forfeit)');
+    standUp.addEventListener('click', () => g.endGameSession('stand-up'));
+
+    this.show('gameScreen');
+  }
+
+  // Move buttons: merrils/draughts moves carry a `from`/`to` (or `to` only for
+  // merrils placement) — group by origin first, so a long move list stays a
+  // manageable two-click pick rather than one huge flat row. Dominoes/shoveha
+  // moves are already a short flat list (a hand of ≤7 tiles / 27 shove
+  // choices) — one click plays them directly.
+  _renderGameMoves(session, moves, container) {
+    if (!moves.length) return;
+    const g = this.game;
+    const play = (move) => g.applyPlayerMove(move);
+
+    if (session.gameId === 'merrils' || session.gameId === 'draughts') {
+      // Reset the panel-local from-pick the instant the underlying position
+      // changes (keyed on plies, not just gameId) — a stale pick from the
+      // PREVIOUS move must never survive into this one, but the picker's own
+      // "choose a destination" re-render (same plies) must keep it.
+      const posKey = session.gameId + ':' + session.plies;
+      if (this._gameFromPickKey !== posKey) { this._gameFromPickKey = posKey; this._gameFromPick = null; }
+
+      // group by "from" (merrils placement moves have no `from` — group those
+      // under a single 'place' pseudo-key instead)
+      const groups = new Map();
+      for (const m of moves) {
+        const key = m.type === 'place' ? 'place' : String(m.from);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(m);
+      }
+      if (groups.size === 1 && !this._gameFromPick) {
+        // only one origin (or all placements) — skip the redundant first click
+        this._gameFromPick = [...groups.keys()][0];
+      }
+      if (this._gameFromPick && groups.has(this._gameFromPick)) {
+        if (groups.size > 1) {
+          const back = this.el('button', 'mc chat-btn', container, '← back');
+          back.addEventListener('click', () => { this._gameFromPick = null; this.openGameTable(session); });
+        }
+        for (const m of groups.get(this._gameFromPick)) {
+          const lbl = m.type === 'place' ? `place ${m.to}` : `${m.from} → ${m.to}`;
+          const removeNote = m.remove != null ? ` (take ${m.remove})` : '';
+          const b = this.el('button', 'mc chat-btn', container, lbl + removeNote);
+          b.addEventListener('click', () => { this._gameFromPick = null; play(m); });
+        }
+      } else {
+        for (const key of groups.keys()) {
+          const lbl = key === 'place' ? 'place a new man' : `piece at ${key}`;
+          const b = this.el('button', 'mc chat-btn', container, lbl);
+          b.addEventListener('click', () => { this._gameFromPick = key; this.openGameTable(session); });
+        }
+      }
+      return;
+    }
+
+    if (session.gameId === 'dominoes') {
+      for (const m of moves) {
+        const lbl = m.type === 'knock' ? 'Knock' : `[${m.tile[0]}|${m.tile[1]}] → ${m.end}`;
+        const b = this.el('button', 'mc chat-btn', container, lbl);
+        b.addEventListener('click', () => play(m));
+      }
+      return;
+    }
+
+    // shoveha: bed x strength grid, flat
+    for (const m of moves) {
+      const b = this.el('button', 'mc chat-btn', container, `bed ${m.bed}, ${m.strength}`);
+      b.addEventListener('click', () => play(m));
+    }
   }
 
   // ============ T' Tradin' Post (market stalls v1) ============
