@@ -20,9 +20,9 @@ Date: 2026-07-03. Status: approved direction (James), spec for implementation pl
    *approach*, not the *speech*: it releases the instant an NPC speaks, the next claims
    it the same frame, 8s bubbles overlap, nothing suppresses approaches while a chat
    window is open, and the random trigger baseline is 16%.
-4. **No night loop.** Nights empty the world with nothing to do; sleep can't anchor a
-   night mechanic in the shared world because the relay `sleepers` mechanic needs every
-   player simultaneously.
+4. **No night loop.** Nights empty the world with nothing to do; the existing shared-world
+   sleep mechanic (relay `sleepers`) needs every player simultaneously, which never
+   happens organically. The inn redesign below gives sleep a quorum instead.
 
 ## Load-bearing invariant: LLM narrates, ledgers decide
 
@@ -134,8 +134,18 @@ village unlocks that village's basics.
   coordinates, so the roster visibly files in at dusk.
 - Every other building stays plain and cramped, deliberately: the contrast is what
   makes the inn door read as a game threshold.
-- Rollout: flagship first (Moorstead), then a per-village template with seeded
-  variation (layout, hearth position, which game tables).
+- Rollout: flagship first — **The Station Tavern, Grosmont** (the village's genuine
+  pub, apt for the junction village; there is no Moorstead village in the 1900s world).
+  Then a per-village template with seeded variation (layout, hearth position, which
+  game tables), each inn named (real pub names where they exist, period-plausible
+  otherwise).
+- **Opening hours:** the inn opens after lunch (~13:00 game time) and stays open
+  through the night; mornings it is shut (door interaction says so, in voice).
+- **Player notes.** Players can leave short written notes for each other at the inn
+  (a board by the door or notes on tables): per-inn, persisted via the relay
+  (additive message type alongside `game`, or the stalls-style persistence — the
+  implementation plan decides), readable by any player in that world. Period framing:
+  pinned paper notes, pencil.
 
 ### Indestructible
 
@@ -159,11 +169,15 @@ The inn must be impossible to destroy or mine into, in both shells:
   murmur handled under workstream E rules (quieter cadence indoors, one audible bark at
   a time near the player, background hum otherwise), NPC-to-NPC talk rendered as
   gesture + occasional short bubbles, table talk from seated NPCs.
-- **Folk music.** Procedural, varied, period folk tunes — built strictly on the proven
-  struck/plucked voice recipe (music box / bells / FM pluck, NOT brass/choir — the
-  prior synth-music failure is documented). Small tune bank with seeded variation so it
-  doesn't loop obviously. **Hard gate: James listens and approves before integration**
-  (same listen-gate as carols).
+- **Folk music — faint, and genuine.** Melodies are real, public-domain period
+  Yorkshire folk tunes researched online and transcribed to note data (candidates: On
+  Ilkla Moor Baht 'at, Scarborough Fair, the Lyke Wake Dirge — a North York Moors
+  piece — Elsie Marley, The Dalesman's Litany; final tune list confirmed against
+  sources during implementation). Rendered through the proven struck/plucked
+  procedural voices (music box / bells / FM pluck, NOT brass/choir — the prior
+  synth-music failure is documented), exactly as the carols pipeline renders real
+  MIDI. Mixed **faint** — under the crackle and murmur, felt more than heard. **Hard
+  gate: James listens and approves before integration** (same listen-gate as carols).
 
 ### Games
 
@@ -180,8 +194,9 @@ The inn must be impossible to destroy or mine into, in both shells:
   preserved for old clients.
 - **Vs NPC**: deterministic minimax opponents (difficulty per NPC persona); the brain
   supplies table talk between moves — banter can't be wrong, ideal 3B duty.
-- **Stakes**: small brass wagers vs NPCs and players; wagers capped or disabled in
-  bairns/free worlds. Winning/playing builds trust with that NPC (feeds C).
+- **Stakes**: small brass wagers vs NPCs and players — bairns included (wagering is
+  part of the fun; stakes are inherently small). Winning/playing builds trust with
+  that NPC (feeds C).
 
 ### Cold: the honest push indoors
 
@@ -191,6 +206,21 @@ The inn must be impossible to destroy or mine into, in both shells:
 - The parlour fire clears chill fast and grants a "warmed through" buff into the
   morning. Any interior + fire helps; the inn is best.
 - Bairns/free worlds get a much gentler chill curve.
+
+### Quorum sleep
+
+The shared-world sleep mechanic returns, anchored on the inns:
+
+- **After midnight**, if **more than 50% of online players** in the world are inside
+  an inn, a sleep suggestion fires world-wide (uses the existing relay
+  `sleepers`/`wake` plumbing plus a quorum check — relay-side count, additive).
+- The remaining players go on a visible **shelter timer** (a few minutes, tuned in
+  implementation): reach an inn — or their own home — before it runs out.
+- When the timer expires (or everyone is sheltered), **all players sleep** and the
+  night skips to morning.
+- Players caught outside are **not killed**: they wake where they were, hungry and
+  cold (chill high, hunger drained) — a rough night on the moor, nothing worse.
+- Single-player keeps the classic sleep (quorum of one).
 
 ## Workstream E — conversation etiquette
 
@@ -203,8 +233,10 @@ The inn must be impossible to destroy or mine into, in both shells:
 
 ## Protocol, save, and invariants impact
 
-- Relay: one new message type (`game`); all other changes ride existing types or the
-  brain HTTP API. Additive; unknown types fall through (INVARIANTS rule 3).
+- Relay: new message types `game` (table moves) and inn notes (or stalls-style
+  persistence), plus a quorum-sleep extension to the existing `sleepers` flow; all
+  other changes ride existing types or the brain HTTP API. Additive; unknown types
+  fall through (INVARIANTS rule 3).
 - Roster state: `rail` gains `dep`/`arr`; old clients ignore them.
 - Save: new per-player fields (taught list, commissions, promises, vouches, chill).
   Additive save-version bump with forward-refuse per INVARIANTS.
@@ -217,6 +249,8 @@ The inn must be impossible to destroy or mine into, in both shells:
 (taught/commission/vouch/promise ledger gates), `verify-inn-protection`,
 `verify-inn-interior` (pocket geometry, threshold round-trip, Plain fallback),
 `verify-merrils` / `verify-draughts` / `verify-dominoes`, `verify-chill`,
+`verify-quorum-sleep` (50% trigger, shelter timer, caught-out wake state),
+`verify-inn-notes` (persistence round-trip shape),
 `verify-etiquette` (speech token exclusivity, suppression while chatting).
 
 ## Sequencing
@@ -225,8 +259,9 @@ The inn must be impossible to destroy or mine into, in both shells:
 2. **A — timetable truth** (brain + client + parity verify). Kills the loitering.
 3. **B + C — facts card, information economy, necessity ledgers** (client context work
    + brain hygiene; ledger gates client-side).
-4. **D — the inn** (biggest: pocket builder, protection, decor, games, chill, PvP
-   relay type). Flagship Moorstead first; music last, behind the listen-gate.
+4. **D — the inn** (biggest: pocket builder, protection, decor, games, chill, notes,
+   quorum sleep, PvP relay type). Flagship: The Station Tavern, Grosmont; music last,
+   behind the listen-gate.
 
 ## Risks
 
@@ -236,5 +271,8 @@ The inn must be impossible to destroy or mine into, in both shells:
   protection guard refuses edits; verify script covers derivation determinism.
 - **Music** — history of failure; gated on James's ear before integration, and the inn
   ships silent-but-crackling if the tunes aren't right yet.
-- **Kids' worlds** — every gate (necessity thresholds, wagers, chill) has an explicit
-  bairns relaxation named in its ledger/config.
+- **Kids' worlds** — necessity thresholds and the chill curve have explicit bairns
+  relaxations named in their ledger/config; wagers stay enabled everywhere.
+- **Quorum sleep griefing** — a majority parking in the inn could force-sleep the
+  minority repeatedly; mitigated by once-per-night firing and the harmless caught-out
+  outcome.
