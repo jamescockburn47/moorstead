@@ -90,6 +90,24 @@ export function innPlan(geo, villageName, seed) {
   const games = [...GAMES];
   const tables = slots.map(s => ({ ...s, game: games.splice(Math.floor(rng() * games.length), 1)[0] }));
 
+  // furnish: parlour furniture + seasonal dressing mount points — pure data
+  // derived from fields already fixed above. No RNG draws here (order-sensitive:
+  // any new draw MUST go after the tables shuffle above, or every existing plan's
+  // geometry changes — verify-inn-interior's determinism/pinned-snapshot assertions
+  // guard this).
+  const furnish = {
+    // parlour-interior coords (same space as parlour.hearth/tables)
+    servery: { x: PARLOUR_W - 2, z: Math.floor(PARLOUR_L / 2) },   // hatch/servery counter cell against the east wall
+    strongbox: { x: PARLOUR_W - 2, z: PARLOUR_L - 2 },             // the tavern strongbox (addendum §1)
+    benches: tables.map(t => ({ x: t.x, z: t.z + 1 })),            // one settle/bench beside each game table
+    // seasonal dressing mount points (world-space resolved by the decor layer):
+    mounts: {
+      mantel: { x: Math.floor(PARLOUR_W / 2), z: 2 },              // above the hearth
+      doorOut: true,                                                // exterior door lintel (wreath)
+      windows: true,                                                // exterior sills
+    },
+  };
+
   return {
     village: villageName,
     name,
@@ -105,5 +123,6 @@ export function innPlan(geo, villageName, seed) {
       hearth: { x: Math.floor(PARLOUR_W / 2), z: 1 },
       tables,
     },
+    furnish,
   };
 }

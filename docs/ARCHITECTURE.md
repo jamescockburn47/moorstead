@@ -30,6 +30,7 @@ the EVO (see [CLAUDE.md](../CLAUDE.md)). Everything is procedural — no asset f
 | Inn worldgen carve | `src/worldgen.js` `stampInns()` | exterior shell + underground parlour voxels, cave/ore suppression in reserved columns | `generateChunk()` | `verify-inn-interior` |
 | Inn edit protection | `src/world.js` `isProtected()`, `src/multiplayer.js` `handle()` | refuses place/break inside any inn's protected box, local + relay (incl. netEdits bookkeeping skip) | `World.setBlock`, `Net.handle` | `verify-inn-protection` |
 | Inn threshold | `src/main.js` `crossThreshold()` | door interact → fade → teleport → fade in, both directions | interact dispatch | in-browser proof (D1) |
+| Inn decor layer | `src/innDecor.js` (`InnDecorLayer`) | painted sign (canvas texture) + bracket sign, hearth `Fire()` + chimney smoke plume, night window glow, interior lamp glow, festival mount props (mantel/door lintel) | main.js:846 | `verify-inn-decor` |
 | Entities / mobs | `src/entities.js` | mob + villager meshes, AI state machine, drops, particles, **NPC wardrobe** | main.js:552 | `verify-villagers`, `verify-eveninglife`, `verify-npclooks`, `verify-menagerie`, `verify-herding`, `verify-animalrest` |
 | Animal rest/sleep | `src/animalrest.js` | pure day duty-cycle + night huddle-sleep maths for grazing livestock (`REST_SPECIES`) | (by entities) | `verify-animalrest` |
 | Living NPC roster | `src/roster.js` | server-driven streamed NPCs (`game.rosterClient`), surface/platform geometry, render thinning | main.js:554 | `verify-roster` |
