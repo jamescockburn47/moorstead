@@ -638,21 +638,51 @@ export class Gen {
     for (const p of this.inns.values()) {
       if (p.protectedBox.x1 < x0 || p.protectedBox.x0 >= x0 + CHUNK || p.protectedBox.z1 < z0 || p.protectedBox.z0 >= z0 + CHUNK) continue;
 
-      // --- exterior shell: a modest stone building, slate roof, one door ---
+      // --- exterior shell: a modest stone building, gabled slate roof, one door ---
+      // Footprint is 9(x) x 7(z) — x is the LONG axis. The ridge runs along x
+      // (constant height for every wx), with height falling off toward fz0/fz1
+      // (the LONG walls become eaves); the SHORT end walls (wx=fx0/fx1) are
+      // closed gable triangles that climb from the eave line up to the ridge
+      // peak, matching stampStations' buildOne (worldgen.js buildOne, roofY
+      // formula: peak = g+wallH+1+half, roofY = g+wallH+1+(half-|off-centre|)).
       const { x0: fx0, z0: fz0, x1: fx1, z1: fz1 } = p.footprint;
       const wallH = 3, g = p.groundY;
+      const midX = Math.round((fx0 + fx1) / 2), midZ = Math.round((fz0 + fz1) / 2);
+      const gableHalf = Math.floor((fz1 - fz0) / 2); // 3 for a 7-deep footprint
+      const ridgeY = g + wallH + 1 + gableHalf;       // peak height, constant along x
       for (let wx = fx0; wx <= fx1; wx++) for (let wz = fz0; wz <= fz1; wz++) {
         const perim = (wx === fx0 || wx === fx1 || wz === fz0 || wz === fz1);
+        const roofY = g + wallH + 1 + (gableHalf - Math.abs(wz - midZ));
         put(wx, g, wz, B.PLANKS); // floor
         for (let y = g + 1; y <= g + wallH; y++) put(wx, y, wz, perim ? B.STONEBRICK : B.AIR);
-        put(wx, g + wallH + 1, wz, B.SLATE); // flat slate roof — a gable is D2 decor
+        // interior clear + a flat STONEBRICK ceiling at g+wallH+1, unchanged from
+        // D1 — the gable loft above it is a closed shell, empty air inside
+        put(wx, g + wallH + 1, wz, B.STONEBRICK);
+        for (let y = g + wallH + 2; y < roofY; y++) put(wx, y, wz, B.AIR);
+        // gable-end triangles (short walls, wx=fx0/fx1): solid stone climbing to the ridge
+        if (wx === fx0 || wx === fx1) for (let y = g + wallH + 2; y <= roofY; y++) put(wx, y, wz, B.STONEBRICK);
+        put(wx, roofY, wz, B.SLATE); // slate skin along the gable slope
       }
       // door: centred on doorSide, door block at ground+1, clear air at ground+2
-      const midX = Math.round((fx0 + fx1) / 2), midZ = Math.round((fz0 + fz1) / 2);
       const doorPos = p.doorSide === 'n' ? [midX, fz0] : p.doorSide === 's' ? [midX, fz1]
         : p.doorSide === 'e' ? [fx1, midZ] : [fx0, midZ];
       put(doorPos[0], g + 1, doorPos[1], B.INN_DOOR);
       put(doorPos[0], g + 2, doorPos[1], B.AIR);
+
+      // windows: 2 per long wall (z=fz0, z=fz1) at g+2, skipping the door column
+      for (const wz of [fz0, fz1]) {
+        for (const wx of [fx0 + 2, fx1 - 2]) {
+          if (wx === doorPos[0] && wz === doorPos[1]) continue;
+          put(wx, g + 2, wz, B.WINDOW);
+        }
+      }
+
+      // chimney: a 1-block RBRICK column at one gable end (fx0), rising from the
+      // roof surface there to peak+2 — matches stampStations' chimney idiom.
+      {
+        const chx = fx0;
+        for (let y = ridgeY; y <= ridgeY + 2; y++) put(chx, y, midZ, B.RBRICK);
+      }
 
       // --- underground parlour: hollow room + solid stone shell, directly below the site ---
       const { floorY, w: pw, l: pl, h: ph, wallThick: wt } = p.parlour;
@@ -675,6 +705,41 @@ export class Gen {
       const hx = ix0 + p.parlour.hearth.x, hz = iz0 + p.parlour.hearth.z;
       put(hx, floorY, hz, B.STONEBRICK);
       put(hx, floorY + 1, hz, B.TORCH);
+
+      // --- D2: furnish the parlour from p.furnish (servery/strongbox/benches) +
+      // the existing game tables. All coords are parlour-interior-local, same
+      // space as parlour.hearth/tables — resolve to world coords the same way
+      // the hearth does above (ix0/iz0 + local). Bounds-check against the
+      // interior box (walls sit AT the shell perimeter, one ring outside the
+      // interior 0..pw-1 / 0..pl-1 range) and skip the hearth cell so furniture
+      // never lands in a wall or on top of the fire.
+      if (p.furnish) {
+        const toWorld = (local) => ({ x: ix0 + local.x, z: iz0 + local.z });
+        const inInterior = (local) => local.x >= 0 && local.x < pw && local.z >= 0 && local.z < pl;
+        const isHearth = (local) => local.x === p.parlour.hearth.x && local.z === p.parlour.hearth.z;
+        const isDoor = (wx, wz) => wx === exitPos[0] && wz === exitPos[1];
+
+        for (const t of p.parlour.tables) {
+          if (!inInterior(t) || isHearth(t)) continue;
+          const w = toWorld(t);
+          if (isDoor(w.x, w.z)) continue;
+          put(w.x, floorY + 1, w.z, B.PLANKS); // game table
+        }
+        for (const b of p.furnish.benches) {
+          if (!inInterior(b) || isHearth(b)) continue;
+          const w = toWorld(b);
+          if (isDoor(w.x, w.z)) continue;
+          put(w.x, floorY + 1, w.z, B.BENCH);
+        }
+        if (inInterior(p.furnish.servery) && !isHearth(p.furnish.servery)) {
+          const w = toWorld(p.furnish.servery);
+          if (!isDoor(w.x, w.z)) put(w.x, floorY + 1, w.z, B.PLANKS); // hatch/servery counter
+        }
+        if (inInterior(p.furnish.strongbox) && !isHearth(p.furnish.strongbox)) {
+          const w = toWorld(p.furnish.strongbox);
+          if (!isDoor(w.x, w.z)) put(w.x, floorY + 1, w.z, B.STRONGBOX);
+        }
+      }
     }
   }
 
