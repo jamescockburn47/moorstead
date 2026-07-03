@@ -3,6 +3,13 @@
 import { rosterState, talkGeneric } from './npc.js';
 import { B, CHUNK, WATER_LEVEL } from './defs.js';
 import { reportQuiet } from './feedback.js';
+import { idHash, innOpen, eveningAtInn, parlourCrowd, parlourSeatFor } from './parlour.js';
+
+// re-exported so existing callers of roster.js's idHash keep working — the
+// hash itself now lives in parlour.js (D3 2026-07-03) so parlour.js can stay
+// free of roster.js's THREE-adjacent imports (world.js, defs.js) while both
+// modules share the exact same stable FNV-1a hash.
+export { idHash };
 
 const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
 
@@ -116,13 +123,6 @@ export function roadWaypoints(from, to, geo) {
   }
   if (!best) return null;
   return best.reversed ? best.pts.slice().reverse() : best.pts;
-}
-
-// stable FNV-1a over the id — deterministic run-to-run (Math.imul keeps it 32-bit).
-export function idHash(id) {
-  let h = 2166136261;
-  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return h >>> 0;
 }
 
 function _spread(id) {
@@ -589,8 +589,22 @@ export class RosterClient {
         }
       } else {                                              // 'at': potter about her patch — afoot, drop any leg pony
         if (e._pony) this._despawnMount(e);
-        const p = npcVoxelPos(e.data, nowEff, this.geo);
-        if (p) this._potterAt(m, p, nowEff, dt);
+        const parlourPlan = this._parlourPlanFor(m, e);
+        if (parlourPlan) {
+          // Evening at the pub (D3, client-side cosmetic — see parlour.js header):
+          // teleport-to-seat on entering the window, legs stilled, activity relabelled
+          // to match where she's actually drawn. Truthful because both the position
+          // AND the label change together (same idiom as _spread's fan-out).
+          const seat = parlourSeatFor(m._parlourIdx, parlourPlan);
+          m.pos.x = seat.x; m.pos.y = seat.y; m.pos.z = seat.z;
+          m.walkPhase = 0;
+          m.activityShort = seat.table ? ('playing ' + seat.game) : 'having a quiet pint';
+          m.parloured = parlourPlan;
+        } else {
+          m.parloured = null;
+          const p = npcVoxelPos(e.data, nowEff, this.geo);
+          if (p) this._potterAt(m, p, nowEff, dt);
+        }
       }
       // seabed guard: after this frame's drive, a body grounded on a sub-sea column is hidden
       // (her leg pony an' all) rather than drawn strolling the sea bed; this also owns the
@@ -800,6 +814,34 @@ export class RosterClient {
     if (!p) return;
     m.pos.x = p.x; m.pos.z = p.z; m.pos.y = surfaceHeight(this.world, this.geo, p.x, p.z);
     const grp = m.model && m.model.group; if (grp) grp.visible = true;
+  }
+
+  // D3: is this 'at'-kind NPC in the pub tonight? Her village needs a plan (an
+  // inn), it needs to be the evening crowd window, and her id needs to be one
+  // of tonight's PARLOUR_CAP drawn from parlourCrowd (salted per-village, so a
+  // different pub's crowd is independent). Returns the plan (truthy) with
+  // m._parlourIdx set to her stable seat index, or null when she's not in.
+  // Cached per mob per poll interval (m._parlourCheckAt) — parlourCrowd/hash
+  // work is cheap but there's no need to redo it every frame for ~100 NPCs.
+  _parlourPlanFor(m, e) {
+    const village = m.village;
+    if (!village) return null;
+    const inns = this.game.world && this.game.world.gen && this.game.world.gen.inns;
+    const plan = inns && inns.get(village);
+    if (!plan) return null;
+    const sky = this.game.sky;
+    if (!sky || !eveningAtInn(sky.time)) return null;
+    if (m._parlourCheckAt == null || performance.now() - m._parlourCheckAt > 5000) {
+      m._parlourCheckAt = performance.now();
+      const townIds = [];
+      for (const [, o] of this.npcs) {
+        if (o.data && (o.data.home === village || (o.data.state && o.data.state.place === village))) townIds.push(o.data.id);
+      }
+      const crowd = parlourCrowd(townIds, village);
+      const idx = crowd.indexOf(e.data.id);
+      m._parlourIdx = idx >= 0 ? idx : -1;
+    }
+    return m._parlourIdx >= 0 ? plan : null;
   }
 
   // Potter gently about a patch so a town looks alive, not frozen: a slow wander around `anchor`
