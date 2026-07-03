@@ -9,6 +9,7 @@ import { TitleFlyover } from './titlescene.js';
 import { escHtml } from './escape.js';
 import { parishQuarries, drawMinimapMarker } from './mining-guide.js';
 import { gazette } from './npc.js';
+import { canCraft, skillFor, teacherFor, SKILLS } from './ledgers.js';
 import {
   PLAYER_OUTFITS, PLAYER_JACKETS, PLAYER_HATS, PLAYER_SKINS, PLAYER_HAIRS,
   validatePlayerLook,
@@ -2168,17 +2169,26 @@ export class UI {
       this.el('div', 'inv-title', right, nearBench ? 'Craftin&rsquo; (at t&rsquo; bench)' : 'Craftin&rsquo;');
       const list = this.el('div', 'recipes', right);
       for (const r of RECIPES) {
+        const g = this.game;
+        // The necessity gate: skill-gated iron-work stays LOCKED until the right
+        // tradesman has taught thee. Same canCraft() for display AND execution;
+        // only free/bairns worlds bypass (creative is a build tool, not a knowledge cheat).
+        const taughtOk = canCraft(r.out, g.player.taught, g.freeWorld());
         const can = r.needs.every(([id, n]) => player.countItem(id) >= n);
         const benchOk = !r.bench || nearBench;
-        const row = this.el('div', 'recipe' + (can && benchOk ? '' : ' unavail'), list);
+        const row = this.el('div', 'recipe' + (can && benchOk && taughtOk ? '' : ' unavail'), list);
         const img = document.createElement('img');
         img.src = getIconURL(r.out); img.draggable = false;
         row.appendChild(img);
         const needsTxt = r.needs.map(([id, n]) => `${n}&times; ${itemName(id)}`).join(', ');
         this.el('div', 'r-name', row, `${itemName(r.out)}${r.n > 1 ? ' &times;' + r.n : ''}`);
-        this.el('div', 'r-needs', row, benchOk ? needsTxt : 'Needs a joiner&rsquo;s bench');
-        if (can && benchOk) {
+        const needsLine = !taughtOk
+          ? `Ask a ${teacherFor(skillFor(r.out))} to teach thee ${SKILLS[skillFor(r.out)].label}.`
+          : (benchOk ? needsTxt : 'Needs a joiner&rsquo;s bench');
+        this.el('div', 'r-needs', row, needsLine);
+        if (can && benchOk && taughtOk) {
           row.addEventListener('mousedown', () => {
+            if (!canCraft(r.out, g.player.taught, g.freeWorld())) return; // defence in depth: same gate as display
             for (const [id, n] of r.needs) player.removeItem(id, n);
             const left2 = player.addItem(r.out, r.n);
             if (left2 > 0) this.game.dropAtPlayer(r.out, left2);
