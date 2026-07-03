@@ -438,9 +438,14 @@ export class Gen {
           const bridgeZone = geo.realWorld && geo.nearRiver && geo.nearRiver(x, z, 3);
           const overSea = geo.realWorld && geo.coastT && geo.coastT(x, z) > 0.5;
           const spanLevel = riverRC ? riverRC.wl : h;
+          // t' water table under t' span: t' beck's own level in t' channel, sea level ower
+          // t' tidal flats (t' estuary by Whitby is water wi' no riverColumn). T' stamp must
+          // never carve nor wall below it — t' culvert promise above: t' water runs through.
+          const waterTop = riverRC ? Math.max(riverRC.wl, h < WATER_LEVEL ? WATER_LEVEL : 0)
+                                   : (h < WATER_LEVEL ? WATER_LEVEL : -1);
           if (bridgeZone && deck - spanLevel > 2) {
-            for (let y = spanLevel + 1; y <= deck - 2 && y < HEIGHT; y++) data[IDX(lx, y, lz)] = B.AIR; // open arch
-            if (deck - 1 > 0) data[IDX(lx, deck - 1, lz)] = B.STONEBRICK; // deck slab carries the track
+            for (let y = Math.max(spanLevel, waterTop) + 1; y <= deck - 2 && y < HEIGHT; y++) data[IDX(lx, y, lz)] = B.AIR; // open arch, sprung clear o' t' water
+            if (deck - 1 > waterTop && deck - 1 > 0) data[IDX(lx, deck - 1, lz)] = B.STONEBRICK; // deck slab carries the track
           } else if (overSea && deck > WATER_LEVEL + 2) {
             // SEA VIADUCT (Larpool, over the Esk estuary): open span over the water on a stone
             // deck slab, with a masonry pier every few blocks down to the seabed — sea flows under.
@@ -448,7 +453,9 @@ export class Gen {
             if (deck - 1 > 0) data[IDX(lx, deck - 1, lz)] = B.STONEBRICK; // deck slab
             if ((x + z) % 6 === 0) for (let y = WATER_LEVEL - 8; y < deck - 1 && y > 0; y++) data[IDX(lx, y, lz)] = B.STONEBRICK; // pier
           } else if (bridgeZone) {
-            for (let y = Math.min(h, deck); y < deck && y > 0; y++) data[IDX(lx, y, lz)] = B.STONEBRICK; // dressed-stone abutment
+            // low deck ower water: a CULVERT, not a dam — stone springs frae just ABOVE t'
+            // water line (t' lintel), t' beck keeps its full depth underneath.
+            for (let y = Math.max(Math.min(h, deck), waterTop + 1); y < deck && y > 0; y++) data[IDX(lx, y, lz)] = B.STONEBRICK; // dressed-stone abutment
           } else {
             for (let y = Math.min(h, deck); y < deck && y > 0; y++) data[IDX(lx, y, lz)] = B.STONE; // earth embankment
           }

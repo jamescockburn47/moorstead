@@ -78,6 +78,16 @@ console.log('\n-- living water: ripple/flow bake + shader wiring --\n');
     ? ok : bad)('corridor narrows with a low sun (k 6 noon pool → 24 horizon blade)');
   (shader.fragmentShader.includes('wHash(floor(wGp * 3.5))') && shader.fragmentShader.includes('float wHash(vec2 p)')
     ? ok : bad)('sparkle is CELLULAR + aperiodic (hashed sub-block cells, per-cell phase), not a lattice');
+  // [sword-2] pulse fix (James 2026-07-03): the compiled program must carry the ASYNCHRONOUS
+  // twinkle — per-cell speed AND phase from a second hash (wH2, decorrelated from the density
+  // gate), floored so a cell dims but never vanishes — and must NOT carry the old shared-
+  // frequency strobe (max(0,sin(uWaterTime·2.4…)) blinked the whole blade at 2π/2.4 ≈ 2.6 s).
+  (shader.fragmentShader.includes('wHash(floor(wGp * 3.5) + 19.19)')
+    ? ok : bad)('[sword-2] twinkle hash decorrelated from the density-gate hash (second hash wH2)');
+  (shader.fragmentShader.includes('0.55 + 0.45 * sin(uWaterTime * (1.5 + wH2 * 2.5)')
+    ? ok : bad)('[sword-2] per-cell twinkle speed + phase, floored at 0.55±0.45 — cells shimmer, never strobe off');
+  (!shader.fragmentShader.includes('max(0.0, sin(uWaterTime')
+    ? ok : bad)('[sword-2] the shared-frequency 50%-duty strobe is gone from the compiled fragment');
   (!shader.fragmentShader.includes('sin(wGp.x * 2.3')
     ? ok : bad)('the old doubly-periodic lattice literal is absent from the compiled fragment');
   (shader.fragmentShader.includes('wG * wCorr * wDist * uGlitter * (1.0 - ice)')
