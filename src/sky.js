@@ -798,10 +798,13 @@ export class Sky {
       : FOG_KNEE + (baseFog - FOG_KNEE) * ((FOG_FAR_MAX - FOG_KNEE) / (160 - FOG_KNEE));
     this.fogFar += (this.fogTargetFar - this.fogFar) * Math.min(1, dt * 0.5);
     this.scene.fog.far = this.fogFar;
-    // thick fog fades in over a SHORT band so it genuinely hides what's beyond (not a
-    // pale silhouette); open weather keeps the gentle, distant haze.
-    const nearRatio = 0.25 + 0.35 * Math.max(0, Math.min(1, (55 - this.fogFar) / 35));
-    this.scene.fog.near = Math.max(5, this.fogFar * nearRatio);
+    // Fog is a BAND at t' edge, not a wash ower t' whole view (James 2026-07-03:
+    // "it just needs to smooth over the horizon band"). Open weather: air stays
+    // CRISP to ~70 blocks, then dissolves steeply ower t' last ~28 — t' mesh edge
+    // vanishes wi'out t' mid-field swimmin' in milk. Thick weathers keep their
+    // close near (t' fogFar*0.3 floor): t' Great Fog stays hand-afore-face.
+    const fogBand = 10 + this.fogFar * 0.18;
+    this.scene.fog.near = Math.max(this.fogFar * 0.3, this.fogFar - fogBand);
 
     const starA = Math.max(0, -sunY * 2) * (1 - grey * 0.8);
     this.stars.material.opacity = fine ? Math.min(1, starA * 1.6) : starA; // brighter stars ower a moonlit moor
