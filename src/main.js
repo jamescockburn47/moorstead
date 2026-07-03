@@ -53,6 +53,7 @@ import { cellInstances } from './flora-placement.js';
 import { startLiveWeather } from './weather-live.js';
 import { temperatureTarget, stepTemperature } from './temperature.js';
 import { boardingFolk } from './trainfolk.js';
+import { innOpen, playerInParlour, MURMUR_LINES } from './parlour.js';
 import { CarolBox } from './carolBox.js';
 import { RosterClient, invalidateSurfCache } from './roster.js';
 import { TouchControls, isTouchPrimary } from './touch.js';
@@ -4493,7 +4494,14 @@ class Game {
           const { x0, z0, x1, z1 } = p.protectedBox;
           if (hit.x >= x0 && hit.x <= x1 && hit.z >= z0 && hit.z <= z1) {
             // below-ground door = the parlour's exit; surface door = the way in.
-            this.crossThreshold(p, hit.y >= p.groundY);
+            const entering = hit.y >= p.groundY;
+            // opening hours: shut of a morning — but exiting from inside is ALWAYS
+            // allowed, never trap a player who slept over (handoff §3/§4).
+            if (entering && this.sky && !innOpen(this.sky.time)) {
+              this.ui.toast('T’ tavern’s shut of a morning, love — back after t’ dinner bell.', 4000);
+              return;
+            }
+            this.crossThreshold(p, entering);
             break;
           }
         }
@@ -5535,7 +5543,21 @@ class Game {
           if (geo.isMuseumBoard(hit.x, hit.z)) hint = 'Right-click: Dracula Museum';
           else hint = geo.nearStation(hit.x, hit.z, 8)
             ? 'Right-click: departures board' : 'Right-click: parish notices an\u2019 jobs';
-        } else if (hit.id === B.INN_DOOR) hint = 'Right-click: cross t\u2019 threshold';
+        } else if (hit.id === B.INN_DOOR) {
+          // sky.time is in scope here (this.sky), so showing the shut hint on the surface
+          // door costs nothing extra \u2014 same doorSurface test the interact branch uses
+          // (hit.y >= plan.groundY), read off the matching inn's protectedBox.
+          hint = 'Right-click: cross t\u2019 threshold';
+          if (this.sky && !innOpen(this.sky.time)) {
+            for (const p of this.world.gen.inns.values()) {
+              const { x0, z0, x1, z1 } = p.protectedBox;
+              if (hit.x >= x0 && hit.x <= x1 && hit.z >= z0 && hit.z <= z1) {
+                if (hit.y >= p.groundY) hint = 'Shut of a morning \u2014 back after t\u2019 dinner bell';
+                break;
+              }
+            }
+          }
+        }
         else if (hit.id === B.SIGNPOST) hint = 'Right-click: read t\u2019 waymark';
         else if (hit.id === B.BENCH) hint = 'Right-click: joiner\u2019s bench (craftin\u2019)';
         else if (hit.id === B.RANGE) hint = 'Right-click: t\u2019 range (cookin\u2019 an\u2019 smeltin\u2019)';
@@ -5744,7 +5766,10 @@ class Game {
         let vd = 1e9;
         for (const v of geo.villages) { const d = Math.hypot(v.x - p.x, v.z - p.z); if (d < vd) vd = d; }
         const evening = this.sky.time > this.sky.sol.sunsetT - 0.15 || this.sky.time < 0.05; // [SOLAR] dusk through t' small hours (equinox = t' owd 0.6)
-        this._nearInn = (evening && vd < 16) ? 1 : 0;
+        // suppress the exterior pub-ambience bed while the player is INSIDE a
+        // parlour — the D3 interior murmur/SFX tick below owns the room's sound
+        // (one-frame-stale flag is fine for an ambience toggle; review 2026-07-03)
+        this._nearInn = (evening && vd < 16 && !this._playerInParlour) ? 1 : 0;
         let water = 0;
         for (const [dx, dz] of [[0, 0], [3, 0], [-3, 0], [0, 3], [0, -3], [4, 4], [-4, 4], [4, -4], [-4, -4]]) {
           if (this.world.getBlock(px + dx, py - 1, pz + dz) === B.WATER || this.world.getBlock(px + dx, py, pz + dz) === B.WATER) { water = 1; break; }
@@ -5752,6 +5777,41 @@ class Game {
         this._nearWater = water || this._onCoast;
       }
     }
+    // D3 parlour murmur + SFX: distinct from the exterior `_nearInn` proximity bed
+    // above (which fires whether you're outside or in) — this only fires while the
+    // player is actually INSIDE a parlour, on its own randomised timers, and stops
+    // dead the instant they step out (both timers only ever advance inside the gate).
+    if (this.world && this.world.gen && this.world.gen.inns) {
+      let inPlan = null;
+      for (const p of this.world.gen.inns.values()) {
+        if (playerInParlour(this.player.pos, p)) { inPlan = p; break; }
+      }
+      this._playerInParlour = !!inPlan; // read by the exterior _nearInn ambience gate above
+      if (inPlan) {
+        this._murmurTimer = (this._murmurTimer == null) ? 10 + Math.random() * 10 : this._murmurTimer - dt;
+        if (this._murmurTimer <= 0) {
+          this._murmurTimer = 10 + Math.random() * 10;
+          const folk = this.entities.mobs.filter(m => m && !m.dead && m.parloured === inPlan);
+          if (folk.length) {
+            const mob = folk[Math.floor(Math.random() * folk.length)];
+            const line = MURMUR_LINES[Math.floor(Math.random() * MURMUR_LINES.length)];
+            this.entities.speakAmbient(mob, line, 6); // tolerate false — parish mid-natter
+          }
+        }
+        this._pubSfxTimer = (this._pubSfxTimer == null) ? 20 + Math.random() * 20 : this._pubSfxTimer - dt;
+        if (this._pubSfxTimer <= 0) {
+          this._pubSfxTimer = 20 + Math.random() * 20;
+          if (this.audio) {
+            if (Math.random() < 1 / 3) this.audio.pubLaugh(0.18);
+            else this.audio.potClink(0.2);
+          }
+        }
+      } else {
+        this._murmurTimer = null;
+        this._pubSfxTimer = null;
+      }
+    }
+
     const trainDist = this.trainState ? Math.hypot(this.trainState.x - this.player.pos.x, this.trainState.z - this.player.pos.z) : null;
 
     this.audio.update(dt, {
