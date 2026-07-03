@@ -2,7 +2,7 @@
 // spot-trade primitive. The pure data + helpers are module-level so this file can be
 // imported and unit-tested headless (no THREE, no DOM), like villagerlife.js. The
 // Economy class binds them to the live game (the player's wallet, toasts, audio).
-import { B, I } from './defs.js';
+import { B, I, itemName } from './defs.js';
 
 export const STARTING_BRASS = 60; // five shillings, enough to prime the pump
 
@@ -100,6 +100,30 @@ export function spreadHint(itemId, village) {
   if (local <= 1 - SPREAD_HINT_MIN) return best ? { kind: 'cheap', best } : null;
   if (local >= 1 + SPREAD_HINT_MIN) return { kind: 'dear', best };
   return null;
+}
+
+// True market talk for a village: which SPREAD goods are dear/cheap HERE, and (for
+// cheap goods) where they sell dear — sourced from the same tables the tills use,
+// so a villager repeating it is always right. `best` from spreadHint is the best
+// OTHER market by highest multiplier, so only the CHEAP case may name it (as the
+// place to sell); the dear case names no source rather than invent one.
+export function marketIntel(village, max = 2) {
+  const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+  const out = [];
+  for (const idStr of Object.keys(SPREAD)) {
+    const id = +idStr;
+    const hint = spreadHint(id, village);
+    if (!hint) continue;
+    // itemName resolves BOTH id spaces in SPREAD (block ids <64 live in BLOCKS,
+    // item ids in ITEM_NAMES) — the same names the tills and inventory show.
+    const nm = itemName(id);
+    const name = (nm && nm !== '?') ? nm.toLowerCase() : 'goods';
+    out.push(hint.kind === 'dear'
+      ? `${cap(name)} fetches a dear price here.`
+      : `${cap(name)} is cheap here${hint.best ? `; it sells dear at ${hint.best}` : ''}.`);
+    if (out.length >= max) break;
+  }
+  return out;
 }
 
 // The vendor's cut. side 'buy' = the vendor sells TO you (dearer); 'sell' = the vendor buys
