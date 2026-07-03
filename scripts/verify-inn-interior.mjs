@@ -49,5 +49,26 @@ const geo = new MoorsGeography();
   (r === null ? ok : bad)('unconfigured village returns null');
 }
 
+// --- worldgen actually carves the plan into chunk data ---
+{
+  const { Gen } = await import('../src/worldgen.js');
+  const { B, CHUNK } = await import('../src/defs.js');
+  const IDX = (x, y, z) => x + z * CHUNK + y * CHUNK * CHUNK;
+  const gen = new Gen(12345);
+  const plan = gen.inns.get('Grosmont');
+  (plan ? ok : bad)('Gen builds a Grosmont inn plan at construction time');
+  if (plan) {
+    const cx = Math.floor(plan.origin.x / CHUNK), cz = Math.floor(plan.origin.z / CHUNK);
+    const data = gen.generateChunk(cx, cz);
+    const lx = ((plan.origin.x % CHUNK) + CHUNK) % CHUNK;
+    const lz = ((plan.origin.z % CHUNK) + CHUNK) % CHUNK;
+    // the parlour interior directly under the origin should be hollow at floor+1
+    (data[IDX(lx, plan.parlour.floorY + 1, lz)] === B.AIR ? ok : bad)('parlour interior is hollowed out (AIR) at floor+1 under the origin');
+    (data[IDX(lx, plan.parlour.floorY, lz)] !== B.AIR ? ok : bad)('parlour floor is solid, not AIR');
+    // the ceiling one above the interior clear height should be solid too (a sealed room, not a shaft to the void)
+    (data[IDX(lx, plan.parlour.floorY + plan.parlour.h + 1, lz)] !== B.AIR ? ok : bad)('parlour ceiling is solid, not AIR');
+  }
+}
+
 console.log(failed ? '\nRESULT: FAIL' : '\nRESULT: PASS');
 process.exit(failed ? 1 : 0);
