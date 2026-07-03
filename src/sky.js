@@ -398,6 +398,21 @@ export function rainbowRising(rainAmount, prevRain, sunY, weather) {
   return (decaying && wasWet && clearing && sunY > 0.05) ? 1 : 0;
 }
 
+// [warden] Pure: what a warden's chosen weather-preview state should force this frame.
+// Extracted so verify-admin-panel.mjs can prove it without constructing a Sky/THREE instance
+// at all. Rain/Snow needs a REAL rainAmount (not just the 'rain' label): winterPrecip
+// (snow.js) only falls back to a deterministic snowfall value when season.warmth is ALREADY
+// < 0, so without this a summer preview of "Rain/Snow" would silently produce zero
+// precipitation.
+export function overrideWeatherState(state) {
+  return {
+    weather: state,
+    liveRain: state === 'rain' ? 0.7 : null,
+    liveFog: null,
+    liveWind: null,
+  };
+}
+
 // [19] Seeded precipitation base field — pure typed arrays (t' buildStarField idiom;
 // headless-verifiable, an' Math.random is gone frae t' rigs entirely). y is uniform
 // ower t' column; x/z stay 0 because t' shader re-rolls them frae hash(aSeed, cycle)
@@ -556,6 +571,7 @@ export class Sky {
     this.lun = lunarState(this.time, this.yearPhase, this.day);
     this.weather = 'misty';
     this.weatherTimer = 60 + Math.random() * 60;
+    this.weatherOverride = null; // [warden] debug.setWeather() override; null = 'Live' (today's behaviour)
     this.fogFar = 90; this.fogTargetFar = 90;
     this.rainAmount = 0;
     this.dread = 0;
@@ -930,7 +946,16 @@ export class Sky {
     // weather state directly an' parks t' random timer. Falls back to t' random
     // machine below on any fetch fault (currentWeather() returns null).
     if (this.forceClear) { this.weather = 'clear'; this.weatherTimer = 1e9; } // title backdrop: always a clear morning
-    const live = this.forceClear ? null : currentWeather();
+    // [warden] scene-preview override (debug.setWeather) wins over BOTH the live forecast and
+    // the offline random machine below — checked before the live fetch so a real live sample
+    // can't stomp the chosen state a frame later. Never toasts (it's a preview action, not a
+    // narrative weather change).
+    else if (this.weatherOverride) {
+      const o = overrideWeatherState(this.weatherOverride);
+      this.weather = o.weather; this.liveRain = o.liveRain; this.liveFog = o.liveFog; this.liveWind = o.liveWind;
+      this.weatherTimer = 1e9;
+    }
+    const live = (this.forceClear || this.weatherOverride) ? null : currentWeather();
     if (live) {
       this.liveRain = live.rainAmount;
       this.liveFog = live.fogFar;
@@ -940,7 +965,7 @@ export class Sky {
         msg = msg || { type: 'weather', text: WEATHER_MSG[live.state] };
       }
       this.weatherTimer = 1e9; // park t' random machine while live weather rules
-    } else {
+    } else if (!this.forceClear && !this.weatherOverride) {
       this.liveRain = null;
       this.liveFog = null;
       this.liveWind = null;

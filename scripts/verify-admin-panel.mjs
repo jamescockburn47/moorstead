@@ -5,6 +5,7 @@
 // EVO endpoint are verified live/manually (see the plan's Task 7/9 verification steps).
 
 import { festivalBands } from '../src/festivals.js';
+import { overrideWeatherState } from '../src/sky.js';
 
 let failed = false;
 const ok  = m => console.log('  ok    ' + m);
@@ -24,6 +25,18 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
   }
   // determinism (INVARIANTS rule 6) — same catalogue, same output every time
   (JSON.stringify(festivalBands()) === JSON.stringify(festivalBands()) ? ok : bad)('deterministic — no Math.random');
+}
+
+// --- overrideWeatherState: Rain/Snow gets a REAL synthetic rainAmount, not just a label ---
+{
+  const clear = overrideWeatherState('clear');
+  (clear.weather === 'clear' && clear.liveRain === null ? ok : bad)('Clear override carries no rain amount');
+  const rain = overrideWeatherState('rain');
+  (rain.weather === 'rain' && rain.liveRain > 0 ? ok : bad)(
+    'Rain/Snow override forces a real rainAmount — winterPrecip only falls back to snow when ALREADY wintry, so without this a summer preview of Rain would silently produce nothing'
+  );
+  const fog = overrideWeatherState('fog');
+  (fog.weather === 'fog' && fog.liveFog === null ? ok : bad)('Fog override carries no forced fog distance (the weather string alone already drives baseFog for misty/fog)');
 }
 
 console.log(failed ? '\nRESULT: FAIL' : '\nRESULT: PASS');
