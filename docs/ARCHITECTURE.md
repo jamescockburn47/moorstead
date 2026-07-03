@@ -26,7 +26,8 @@ the EVO (see [CLAUDE.md](../CLAUDE.md)). Everything is procedural — no asset f
 | World / voxels | `src/world.js` | chunk store, streaming, `setBlock`, edit ledger, deeds store, remesh queue | main.js:536 | `verify-remesh`, `verify-regen`, `verify-deeds` |
 | Meshing | `src/mesher.js` | greedy face+AO meshing; the 3 shared Lambert materials (opaque/cutout/liquid) | (by world) | `verify-flora-rebuild`, `verify-roadperf` |
 | Terrain gen | `src/worldgen.js`, `src/moorsgeo.js`, `src/geography.js` | heightfield, villages, stations, rivers, coast from OS-map data | (by world) | `verify-moorsgeo`, `verify-geo-parity`, `verify-rivers-moors`, `verify-coast-moors`, `verify-landmarks-moors` |
-| Entities / mobs | `src/entities.js` | mob + villager meshes, AI state machine, drops, particles, **NPC wardrobe** | main.js:552 | `verify-villagers`, `verify-eveninglife`, `verify-npclooks`, `verify-menagerie`, `verify-herding` |
+| Entities / mobs | `src/entities.js` | mob + villager meshes, AI state machine, drops, particles, **NPC wardrobe** | main.js:552 | `verify-villagers`, `verify-eveninglife`, `verify-npclooks`, `verify-menagerie`, `verify-herding`, `verify-animalrest` |
+| Animal rest/sleep | `src/animalrest.js` | pure day duty-cycle + night huddle-sleep maths for grazing livestock (`REST_SPECIES`) | (by entities) | `verify-animalrest` |
 | Living NPC roster | `src/roster.js` | server-driven streamed NPCs (`game.rosterClient`), surface/platform geometry, render thinning | main.js:554 | `verify-roster` |
 | Villager flavour | `src/villagerlife.js` | greet/nosy remark pools, `villagerRemark` | (by entities) | `verify-villagers` |
 | Brain client | `src/npc.js` | `/brain` calls: `talk`, `talkGeneric`, `rosterState`, `standing`, `gift`, `gazette` | — | (live) `verify-live` |

@@ -10,6 +10,7 @@ import { dayPhase, villagerRemark } from './villagerlife.js';
 import { HEIGHT, WATER_LEVEL } from './defs.js';
 import { flockCentroid, driveTarget, dogGoal, foldAt } from './herding.js';
 import { wintry } from './festive.js';
+import { REST_SPECIES, REST_STEADY_SHARE, restPhaseDuration, shouldWake, alertDuration, reachedHuddle, HUDDLE_SEARCH_R } from './animalrest.js';
 
 // The only blocks a land beast may stand or spawn on: open, walkable ground.
 // NOT trees (LOG/LEAVES), NOT buildings (PLANKS/COBBLE/THATCH...), NOT water/bog.
@@ -23,6 +24,7 @@ function isBarrier(b) { return BARRIER.has(b); }
 function isAnimal(mob) { return mob.type !== 'villager' && mob.type !== 'coble'; }
 
 const HERD_RADIUS = 18; // how near a working dog will gather loose sheep
+const REST_FOLD = 1.0;  // radians a bedded beast's legs fold back, fully eased in
 
 const GRAVITY = 26;
 
@@ -1528,6 +1530,13 @@ export class Entities {
       target: null, fleeTimer: 0, attackCd: 0, flash: 0,
       walkPhase: Math.random() * 10,
     };
+    // grazing livestock: seed straight into the day duty-cycle's steady-state mix, mid-phase,
+    // so a freshly-spawned flock already reads as "some up, some bedded down" — not everyone
+    // standing until their first individual timer happens to expire.
+    if (REST_SPECIES.has(type)) {
+      mob.resting = Math.random() < REST_STEADY_SHARE;
+      mob.restT = Math.random() * restPhaseDuration(mob.resting);
+    }
     this.mobs.push(mob);
     if (type === 'pony') {
       const label = makeRideLabel();
@@ -2411,6 +2420,10 @@ export class Entities {
         }
       }
 
+      // any higher-priority state (herded, following, fleeing, chasing) rouses a bedded
+      // beast clean — the pose eases back to standing over the next few frames below.
+      if (mob.resting && mob.state !== 'idle' && mob.state !== 'wander') mob.resting = false;
+
       if (mob.state === 'follow') {
         if (!mob.naturalLamb && !mob.owner && !(t.follower && distP < 26)) mob.state = 'idle';
         // wish already set above
@@ -2436,20 +2449,67 @@ export class Entities {
       } else if (mob.state === 'herd' && mob.herdTarget) {
         const tx = mob.herdTarget.x - mob.pos.x, tz = mob.herdTarget.z - mob.pos.z, td = Math.hypot(tx, tz);
         if (td > 0.6) { wishX = tx / td; wishZ = tz / td; speed = t.speed * 0.85; }
-      } else { // idle / wander
-        if (mob.stateTimer <= 0) {
-          mob.stateTimer = 2 + Math.random() * 5;
-          if (Math.random() < (t.bask ? 0.12 : 0.6)) { // basking lizards mostly sit an' sun
-            mob.wanderYaw = Math.random() * Math.PI * 2;
-            mob.state = 'wander';
-          } else {
-            mob.state = 'idle';
+      } else { // idle / wander (or, for grazing livestock, bedded down resting/sleeping)
+        const canRest = REST_SPECIES.has(mob.type) && !mob.owner;
+        let seekingHuddle = false;
+
+        if (canRest) {
+          // startled up — not every approach rouses a bedded beast, but a close one always does
+          if (mob.resting && shouldWake(distP, dt)) {
+            mob.resting = false;
+            mob.alertT = alertDuration();
+            mob.restT = restPhaseDuration(false);
           }
-          if (audio && Math.random() < 0.25) audio.mobAmbient(mob.type, distP);
+          mob.alertT = Math.max(0, (mob.alertT || 0) - dt);
+
+          if (isNight) {
+            if (!mob.resting && mob.alertT <= 0) {
+              // gather wi' thi own kind afore bedding down — huddled sleep, not scattered singly
+              let cx = 0, cz = 0, n = 0;
+              for (const o of this.mobs) {
+                if (o === mob || o.dead || o.type !== mob.type || o.owner) continue;
+                const ox = o.pos.x - mob.pos.x, oz = o.pos.z - mob.pos.z;
+                if (ox * ox + oz * oz > HUDDLE_SEARCH_R * HUDDLE_SEARCH_R) continue;
+                cx += o.pos.x; cz += o.pos.z; n++;
+              }
+              const huddle = n ? { x: cx / n, z: cz / n } : { x: mob.pos.x, z: mob.pos.z };
+              if (reachedHuddle(mob.pos, huddle)) {
+                mob.resting = true;
+              } else {
+                const hx = huddle.x - mob.pos.x, hz = huddle.z - mob.pos.z, hd = Math.hypot(hx, hz) || 1;
+                wishX = hx / hd; wishZ = hz / hd; speed = t.speed * 0.5;
+                mob.state = 'wander'; seekingHuddle = true;
+              }
+            }
+            // else: freshly startled (alertT>0) or already bedded — stands/lies put, no directed wish
+          } else if (mob.alertT <= 0) {
+            // day duty-cycle: each beast keeps its own clock, so the flock doesn't flop down
+            // or spring back up in lockstep — some are always up grazing while others doze.
+            mob.restT = (mob.restT ?? restPhaseDuration(mob.resting)) - dt;
+            if (mob.restT <= 0) {
+              mob.resting = !mob.resting;
+              mob.restT = restPhaseDuration(mob.resting);
+            }
+          }
         }
-        if (mob.state === 'wander') {
-          wishX = Math.cos(mob.wanderYaw); wishZ = Math.sin(mob.wanderYaw);
-          speed = t.speed * 0.6;
+
+        if (canRest && mob.resting) {
+          wishX = 0; wishZ = 0; speed = 0;
+        } else if (!seekingHuddle) {
+          if (mob.stateTimer <= 0) {
+            mob.stateTimer = 2 + Math.random() * 5;
+            if (Math.random() < (t.bask ? 0.12 : 0.6)) { // basking lizards mostly sit an' sun
+              mob.wanderYaw = Math.random() * Math.PI * 2;
+              mob.state = 'wander';
+            } else {
+              mob.state = 'idle';
+            }
+            if (audio && Math.random() < 0.25) audio.mobAmbient(mob.type, distP);
+          }
+          if (mob.state === 'wander') {
+            wishX = Math.cos(mob.wanderYaw); wishZ = Math.sin(mob.wanderYaw);
+            speed = t.speed * 0.6;
+          }
         }
       }
 
@@ -2545,11 +2605,13 @@ export class Entities {
       const sp = Math.hypot(mob.vel.x, mob.vel.z);
       if (sp > 0.3) mob.yaw = Math.atan2(mob.vel.x, mob.vel.z);
 
-      // animate
+      // animate — bedded-down beasts ease into a folded-leg, settled pose instead o' t' stride
+      mob.restEase = (mob.restEase || 0) + ((mob.resting ? 1 : 0) - (mob.restEase || 0)) * Math.min(1, 4 * dt);
       mob.walkPhase += sp * dt * 3.2;
-      const swing = Math.sin(mob.walkPhase * Math.PI) * Math.min(1, sp / 3) * 0.6;
-      mob.model.legs.forEach((l, i) => { l.rotation.x = (i % 2 === 0 ? swing : -swing); });
-      mob.model.group.position.set(mob.pos.x, mob.pos.y, mob.pos.z);
+      const swing = Math.sin(mob.walkPhase * Math.PI) * Math.min(1, sp / 3) * 0.6 * (1 - mob.restEase);
+      mob.model.legs.forEach((l, i) => { l.rotation.x = (i % 2 === 0 ? swing : -swing) - REST_FOLD * mob.restEase; });
+      const sink = mob.model._restSink ?? (mob.model._restSink = (mob.model.legs[0]?.geometry?.parameters?.height || 0.5) * 0.72);
+      mob.model.group.position.set(mob.pos.x, mob.pos.y - sink * mob.restEase, mob.pos.z);
       mob.model.group.rotation.y = mob.yaw;
       // hurt flash
       const f = mob.flash > 0 ? 0.7 : 0;

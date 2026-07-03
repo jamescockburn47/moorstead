@@ -29,7 +29,12 @@ export function mapWeather(s) {
   let state;
   if (code === 45 || code === 48 || vis < 1000) state = 'fog';
   else if ((code >= 51 && code <= 99) || precip > 0.1) state = 'rain'; // drizzle/rain/snow/showers/storm
-  else if (cloud > 60) state = 'misty';                                // grey overcast
+  // cloud>60 read almost every Goathland hour as 'misty' (real cloud cover there commonly
+  // sits 60-85% on an ordinary, perfectly clear-feeling day — checked live 2026-07-03: 83%
+  // at 00:00 UTC, no rain, 37 km visibility) — so misty was the de facto default rather
+  // than the notable, atmospheric state the offline machine's rarity bias intends
+  // (James 2026-07-03: "fog comes in too frequently"). Only near-total overcast now reads.
+  else if (cloud > 85) state = 'misty';                                // properly overcast, not just cloudy
   else state = 'clear';
   return {
     state,

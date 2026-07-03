@@ -10,8 +10,13 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
 
 // --- state mapping across the WMO buckets ---
 (mapWeather({ weatherCode: 0, cloudCover: 5 }).state === 'clear' ? ok : bad)('code 0, low cloud → clear');
-(mapWeather({ weatherCode: 3, cloudCover: 85 }).state === 'misty' ? ok : bad)('overcast (cloud 85) → misty');
+(mapWeather({ weatherCode: 3, cloudCover: 95 }).state === 'misty' ? ok : bad)('near-total overcast (cloud 95) → misty');
 (mapWeather({ weatherCode: 2, cloudCover: 20 }).state === 'clear' ? ok : bad)('partly cloudy, low cloud → clear');
+// regression guard (James 2026-07-03, "fog comes in too frequently"): real Goathland cloud
+// cover commonly sits 60-85% on an ordinary day — that must NOT read as atmospheric haze,
+// or misty becomes the de facto default instead of a notable state.
+(mapWeather({ weatherCode: 3, cloudCover: 70 }).state === 'clear' ? ok : bad)('ordinary cloudy day (cloud 70) stays clear, not misty');
+(mapWeather({ weatherCode: 3, cloudCover: 83 }).state === 'clear' ? ok : bad)('quite cloudy (cloud 83, an actual live Goathland reading) still stays clear');
 (mapWeather({ weatherCode: 61, precipitation: 0.5 }).state === 'rain' ? ok : bad)('code 61 (rain) → rain');
 (mapWeather({ weatherCode: 80, precipitation: 2 }).state === 'rain' ? ok : bad)('code 80 (showers) → rain');
 (mapWeather({ weatherCode: 71, precipitation: 0.4 }).state === 'rain' ? ok : bad)('code 71 (snow) → rain (no season crossover in v1)');
