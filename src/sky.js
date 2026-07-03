@@ -328,24 +328,24 @@ export class Sky {
     this._moonDay = -1;      // forces t' first draw; update() redraws when this.day moves (incl. after deserialize)
     this._drawMoonPhase();
 
-    // [4] moon halo — 'a ring round t' moon means rain soon', an' in this game it
-    // genuinely does: misty precedes rain in t' live weather feed. One sprite wi' a
-    // feathered radial-ring texture (transparent centre), PARENTED to t' moon so it
-    // rides it for free — child scale 2.6 × t' moon's 12 units ≈ t' classic 22° ring.
-    // Opacity driven in update(): mistiness × moon-up × (1 − overcast grey).
+    // [4] moon burr — 'a ring round t' moon means rain soon', an' in this game it
+    // genuinely does: misty precedes rain in t' live weather feed. A defined ring at
+    // sprite scale read as a silly bright donut (James 2026-07-03) — a REAL 22° halo
+    // is huge an' whisper-faint. What tha actually sees most damp nights is t' moon's
+    // BURR: a soft aureole hugging t' disc, brightest just off t' limb, fading long
+    // an' smooth — no band, no ring edge. Parented to t' moon, opacity in update().
     const hc = document.createElement('canvas'); hc.width = hc.height = 64;
     const hx = hc.getContext('2d');
     const hg = hx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    hg.addColorStop(0.0, 'rgba(216,224,234,0)');
-    hg.addColorStop(0.55, 'rgba(216,224,234,0)');   // clear centre — t' moon shows through
-    hg.addColorStop(0.74, 'rgba(216,224,234,0.20)'); // soft inner feather
-    hg.addColorStop(0.82, 'rgba(224,228,238,0.34)'); // t' ring itself
-    hg.addColorStop(0.95, 'rgba(216,224,234,0)');   // feathered away
+    hg.addColorStop(0.00, 'rgba(220,226,236,0.16)'); // brightest at t' disc — mist scatters
+    hg.addColorStop(0.30, 'rgba(218,225,235,0.12)'); // in FRONT o' t' moon too, no hole
+    hg.addColorStop(0.60, 'rgba(216,224,234,0.05)'); // fading long…
+    hg.addColorStop(1.00, 'rgba(216,224,234,0)');    // …to nowt: a burr, not a ring
     hx.fillStyle = hg; hx.fillRect(0, 0, 64, 64);
     this.moonHalo = new THREE.Sprite(new THREE.SpriteMaterial({
       map: new THREE.CanvasTexture(hc), fog: false, transparent: true, depthWrite: false, opacity: 0,
     }));
-    this.moonHalo.scale.set(2.6, 2.6, 1);
+    this.moonHalo.scale.set(3.4, 3.4, 1);
     this.moonSprite.add(this.moonHalo);
     this._mistS = 0; // eased misty-weather scalar: drives t' halo [4] an' t' dawn-glow fog [22]
 
@@ -819,10 +819,11 @@ export class Sky {
     // a constant 1.0). Unbounded accumulator: same precedent as cloudT/uTime below.
     this._starU.uStarTime.value += dt;
     this._starU.uTwinkle.value = fine ? 1 : 0;
-    // [4] moon halo: mistiness × moon-up × clear-of-overcast — t' shepherd's rain-sign.
+    // [4] moon burr: mistiness² × moon-up × clear-of-overcast — t' shepherd's
+    // rain-sign, only in properly damp air (squared mist kills t' faint cases).
     // Moon-up eases in ower t' same -0.02 threshold t' Fine light rig swaps at.
     const moonVis = Math.max(0, Math.min(1, (-sunY - 0.02) * 6));
-    this.moonHalo.material.opacity = this._mistS * moonVis * (1 - grey);
+    this.moonHalo.material.opacity = this._mistS * this._mistS * moonVis * (1 - grey) * 0.8;
 
     // drift t' dome clouds on t' wind; coverage frae t' weather, lit by day.
     // While t' boss storm rages (sky.stormChurn, storm controller only) t' deck
@@ -979,11 +980,13 @@ export class Sky {
     x.closePath();
     x.save(); x.clip();
     x.fillStyle = '#d8e0ea'; x.fillRect(0, 0, 64, 64);
-    // 4 seeded grey maria, clipped to t' lit shape — they wax an' wane wi' it
+    // 4 seeded grey maria, clipped to t' lit shape — they wax an' wane wi' it.
+    // Kept well INBOARD o' t' limb (d+r ≤ 13.5 vs disc 26) an' soft: a mare at
+    // t' edge read as a black bite out o' t' moon (James 2026-07-03).
     const rnd = mulberry32(STAR_SEED + 7);
-    x.fillStyle = 'rgba(146,156,176,0.45)';
+    x.fillStyle = 'rgba(146,156,176,0.32)';
     for (let i = 0; i < 4; i++) {
-      const a = rnd() * Math.PI * 2, d = rnd() * 13, r = 4 + rnd() * 6;
+      const a = rnd() * Math.PI * 2, d = rnd() * 8, r = 3.5 + rnd() * 4;
       x.beginPath(); x.arc(32 + Math.cos(a) * d, 32 + Math.sin(a) * d, r, 0, Math.PI * 2); x.fill();
     }
     x.restore();

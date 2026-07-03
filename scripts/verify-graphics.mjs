@@ -473,8 +473,8 @@ ok(skySrc.includes('exp(-pow(dot(dir, GPOLE), 2.0) * 30.0)'), 'Milky Way: great-
 ok(skySrc.includes('cu.uStarAmt.value = starA * (1 - grey) * (1 - 0.55 * moonVis * mwIllum)'), 'Milky Way: night term, doused by overcast AND washed out by a bright moon (James 2026-07-03)');
 ok(skySrc.includes('if (this._moonDay !== this.day) this._drawMoonPhase()'), 'moon disc redrawn once per game DAY, never per frame');
 ok(skySrc.includes('this.moonSprite.add(this.moonHalo)'), 'halo parented to the moon sprite — rides it for free');
-ok(skySrc.includes('this.moonHalo.material.opacity = this._mistS * moonVis * (1 - grey)'),
-  'halo = mistiness × moon-up × clear-of-overcast — t\' shepherd\'s rain-sign');
+ok(skySrc.includes('this.moonHalo.material.opacity = this._mistS * this._mistS * moonVis * (1 - grey) * 0.8'),
+  'moon burr: mistiness SQUARED × moon-up × clear — soft aureole, no silly ring (James 2026-07-03)');
 ok(skySrc.includes('_fogC.lerp(this.sun.color, dawnAmt)'), 'dawn-glow fog: mist borrows the low sun\'s own colour');
 ok(skySrc.includes('this.scene.fog.color.copy(_fogC)') && skySrc.includes('this.domeMat.uniforms.bottomColor.value.copy(_fogC)'),
   '_fogC feeds BOTH scene fog and dome horizon — one colour at the fog line, tint or no tint');
