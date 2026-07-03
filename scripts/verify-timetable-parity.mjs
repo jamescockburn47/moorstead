@@ -34,4 +34,56 @@ for (const [from, to] of [[0, 3], [3, 0], [1, 2], [2, 1]]) {
   }
 }
 
-console.log(`verify-timetable-parity(pure): ${n} assertions OK`);
+// (pure-half total rolled into the combined total printed below)
+
+// ---- live-engine parity + committed-file staleness ----------------------------------
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+
+const tt = JSON.parse(readFileSync(new URL('../brain-sync/timetable.json', import.meta.url), 'utf8'));
+const fx = JSON.parse(readFileSync(new URL('../brain-sync/timetable-fixture.json', import.meta.url), 'utf8'));
+ok(tt.lines.length >= 1 && fx.length >= 10, 'timetable + fixture committed and non-trivial');
+
+// staleness: regenerating must be a no-op (determinism + committed copy in sync)
+const before = readFileSync(new URL('../brain-sync/timetable.json', import.meta.url), 'utf8')
+             + readFileSync(new URL('../brain-sync/timetable-fixture.json', import.meta.url), 'utf8');
+execFileSync(process.execPath, [new URL('./export-timetable.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')]);
+const after = readFileSync(new URL('../brain-sync/timetable.json', import.meta.url), 'utf8')
+            + readFileSync(new URL('../brain-sync/timetable-fixture.json', import.meta.url), 'utf8');
+ok(before === after, 'committed brain-sync files match a fresh export (not stale)');
+
+// every fixture departure re-derives to the same doubles (self-consistency).
+for (const s of fx.slice(0, 40)) {
+  const L = tt.lines.find(l => l.name === s.line);
+  const nn = L.stations.length;
+  const check = nextDeparture(L.legT, nn, s.from, s.to, s.tMin);
+  ok(check.dep === s.dep && check.arr === s.arr && check.dir === s.dir,
+     `fixture sample stable (${s.line} ${s.from}->${s.to})`);
+}
+
+// ---- LIVE-ENGINE PARITY: nextDeparture lands on real dwells of a faithful copy of
+// Game.trainScheduleFor's dwell logic (transcribed verbatim from main.js). This is the
+// parity that MATTERS — NPCs must board the train the PLAYER sees. Sample MID-DWELL
+// (dep + DWELL_T/2) so the check is robust to exact-boundary FP.
+function dwellStationAt(legT, nn, now) {
+  const oneway = legT.reduce((a, b) => a + b, 0) + nn * DWELL_T;
+  const dir = Math.floor(now / oneway) % 2;
+  const idx = k => (dir === 0 ? k : nn - 1 - k);
+  const leg = k => legT[dir === 0 ? k : nn - 2 - k];
+  let tt = ((now % oneway) + oneway) % oneway;
+  for (let k = 0; k < nn; k++) {
+    if (tt < DWELL_T) return idx(k);
+    tt -= DWELL_T;
+    if (k < nn - 1) { const L = leg(k); if (tt < L) return -1; tt -= L; }
+  }
+  return idx(nn - 1);
+}
+for (const s of fx) {
+  const L = tt.lines.find(l => l.name === s.line);
+  const nn = L.stations.length;
+  ok(dwellStationAt(L.legT, nn, s.dep + DWELL_T / 2) === s.from,
+     `engine dwells at 'from' mid-departure (${s.line} ${s.from}->${s.to})`);
+  ok(dwellStationAt(L.legT, nn, s.arr + DWELL_T / 2) === s.to,
+     `engine dwells at 'to' mid-arrival (${s.line} ${s.from}->${s.to})`);
+}
+console.log(`verify-timetable-parity: ${n} assertions OK`);

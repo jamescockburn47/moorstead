@@ -1,0 +1,60 @@
+{
+ "epoch": "unix",
+ "lines": [
+  {
+   "name": "Whitby & Pickering",
+   "stations": [
+    "Pickering",
+    "Levisham",
+    "Goathland",
+    "Grosmont",
+    "Sleights",
+    "Whitby"
+   ],
+   "legT": [
+    105.57902347638361,
+    125.72642038431006,
+    77.12919009948449,
+    79.6731455816471,
+    82.50038653870217
+   ],
+   "dwell": 30
+  },
+  {
+   "name": "Esk Valley",
+   "stations": [
+    "Grosmont",
+    "Egton",
+    "Glaisdale",
+    "Lealholm",
+    "Danby",
+    "Castleton"
+   ],
+   "legT": [
+    58.905631595218495,
+    72.00459084634126,
+    67.61706371339042,
+    87.49642938551841,
+    56.17042793908038
+   ],
+   "dwell": 30
+  },
+  {
+   "name": "Coast Line",
+   "stations": [
+    "Ravenscar",
+    "Robin Hood's Bay",
+    "Whitby",
+    "Sandsend",
+    "Staithes"
+   ],
+   "legT": [
+    85.10956829953871,
+    117.62169922080987,
+    76.08337649524911,
+    129.2855859612521
+   ],
+   "dwell": 30
+  }
+ ]
+}
