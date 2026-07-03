@@ -26,6 +26,10 @@ the EVO (see [CLAUDE.md](../CLAUDE.md)). Everything is procedural — no asset f
 | World / voxels | `src/world.js` | chunk store, streaming, `setBlock`, edit ledger, deeds store, remesh queue | main.js:536 | `verify-remesh`, `verify-regen`, `verify-deeds` |
 | Meshing | `src/mesher.js` | greedy face+AO meshing; the 3 shared Lambert materials (opaque/cutout/liquid) | (by world) | `verify-flora-rebuild`, `verify-roadperf` |
 | Terrain gen | `src/worldgen.js`, `src/moorsgeo.js`, `src/geography.js` | heightfield, villages, stations, rivers, coast from OS-map data | (by world) | `verify-moorsgeo`, `verify-geo-parity`, `verify-rivers-moors`, `verify-coast-moors`, `verify-landmarks-moors` |
+| Inn plan / tavern builder | `src/innplan.js` | `innPlan(geo, villageName, seed)` — deterministic site scan, footprint, protected box, parlour layout | `worldgen.js` `Gen` constructor | `verify-inn-interior` |
+| Inn worldgen carve | `src/worldgen.js` `stampInns()` | exterior shell + underground parlour voxels, cave/ore suppression in reserved columns | `generateChunk()` | `verify-inn-interior` |
+| Inn edit protection | `src/world.js` `isProtected()`, `src/multiplayer.js` `handle()` | refuses place/break inside any inn's protected box, local + relay (incl. netEdits bookkeeping skip) | `World.setBlock`, `Net.handle` | `verify-inn-protection` |
+| Inn threshold | `src/main.js` `crossThreshold()` | door interact → fade → teleport → fade in, both directions | interact dispatch | in-browser proof (D1) |
 | Entities / mobs | `src/entities.js` | mob + villager meshes, AI state machine, drops, particles, **NPC wardrobe** | main.js:552 | `verify-villagers`, `verify-eveninglife`, `verify-npclooks`, `verify-menagerie`, `verify-herding`, `verify-animalrest` |
 | Animal rest/sleep | `src/animalrest.js` | pure day duty-cycle + night huddle-sleep maths for grazing livestock (`REST_SPECIES`) | (by entities) | `verify-animalrest` |
 | Living NPC roster | `src/roster.js` | server-driven streamed NPCs (`game.rosterClient`), surface/platform geometry, render thinning | main.js:554 | `verify-roster` |
