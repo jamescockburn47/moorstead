@@ -635,6 +635,7 @@ export class RosterClient {
     for (const [, e] of this.npcs) {
       const m = e.mob, s = e.data && e.data.state;
       if (!m || m.chatting || m.bubble) continue;           // not mid player-chat, not already speaking
+      if (m.parloured) continue;                            // D3: teleported to the parlour — her banter partner near the player's real position would be a lie
       if (s && s.kind !== 'at') continue;                   // only idle, at-home folk natter
       if ((m.pos.x - pl.pos.x) ** 2 + (m.pos.z - pl.pos.z) ** 2 > NEAR_PL2) continue;
       cands.push(e);

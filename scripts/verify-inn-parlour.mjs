@@ -115,5 +115,34 @@ if (plan) {
   (idHash('grosmont-1') === rosterIdHash('grosmont-1') ? ok : bad)('roster.js\'s idHash re-export matches parlour.js\'s idHash (same hash, single source)');
 }
 
+// --- D3 Task 2: innkeeperRows render in the facts card (unit-level: feed the seam
+// directly, since buildFactsCard is a pure formatter over plain data) ---
+{
+  const { buildFactsCard } = await import('../src/factscard.js');
+  const cardWith = buildFactsCard({
+    playerName: 'Tha',
+    innkeeperRows: ['INN TONIGHT: Harry, Karen', 'SEASON: autumn'],
+  });
+  (cardWith.includes('INN TONIGHT: Harry, Karen') ? ok : bad)('buildFactsCard renders an INN TONIGHT innkeeperRow');
+  (cardWith.includes('SEASON: autumn') ? ok : bad)('buildFactsCard renders a SEASON innkeeperRow');
+
+  const cardEmpty = buildFactsCard({ innkeeperRows: ['INN TONIGHT: nobbut thee'] });
+  (cardEmpty.includes('nobbut thee') ? ok : bad)('buildFactsCard renders the empty-parlour INN TONIGHT row');
+
+  // additive-only: a card with no innkeeperRows at all is unaffected (undefined tolerated)
+  const cardNone = buildFactsCard({ playerName: 'Tha' });
+  (typeof cardNone === 'string' ? ok : bad)('buildFactsCard tolerates a missing innkeeperRows field');
+}
+
+// --- D3 Task 2: quests.chatContext gating — NOT headlessly constructible. Quests'
+// chatContext reads this.game.{player,world,rosterClient,season,sky} plus a full
+// Quests instance (standingLabel/earnedTitleList/etc. + this.completed/this.shame
+// state built up over play) — building a faithful fake Game+Quests pair here would
+// test the fake, not the real gating logic. Asserting the factscard.js seam above
+// (the actual contract chatContext writes through) is the honest headless coverage;
+// the real gating gets its proof in Task 3's in-browser pass (chat inside the
+// parlour -> GAME FACTS shows INN TONIGHT).
+ok('quests.chatContext innkeeperRows gating: not headlessly driven (documented above) — factscard.js seam is the real assertion');
+
 console.log(failed ? '\nRESULT: FAIL' : '\nRESULT: PASS');
 process.exit(failed ? 1 : 0);

@@ -12,6 +12,7 @@ import { buildFactsCard, trainLines } from './factscard.js';
 import { marketIntel, PRICES } from './economy.js';
 import { SKILLS, canVouch, commissionPrice, COMMISSION_WAIT_DAYS, promiseState } from './ledgers.js';
 import { canonicalRole } from './entities.js';
+import { playerInParlour } from './parlour.js';
 
 const STANDINGS = ['Newcomer', 'Known', 'Welcomed', 'Respected', 'Treasured'];
 const STANDING_THRESHOLDS = [0, 5, 20, 50, 100];
@@ -1725,6 +1726,25 @@ export class Quests {
     const g = this.game;
     const stationName = villager.village || null;
     const deps = (stationName && g.depsForStation) ? g.depsForStation(stationName, 2) : null;
+    // D3: presence-gated innkeeper rows — who's in tonight, what season it is.
+    // There is no innkeeper NPC yet, so this is NOT gated to an innkeeper role:
+    // any villager chatted to while the visitor is physically inside the parlour
+    // gets these rows (client-truthful — the visitor really is stood there).
+    let innkeeperRows = [];
+    const inns = g.world && g.world.gen && g.world.gen.inns;
+    const plan = stationName && inns ? inns.get(stationName) : null;
+    if (plan && g.player && playerInParlour(g.player.pos, plan)) {
+      const rc = g.rosterClient;
+      const names = [];
+      if (rc && rc.npcs) {
+        for (const [, o] of rc.npcs) {
+          if (o.mob && o.mob.parloured === plan) names.push(o.data.name);
+        }
+      }
+      innkeeperRows.push('INN TONIGHT: ' + (names.length ? names.join(', ') : 'nobbut thee'));
+      // season only — no weather forecast helper exists on g.season, so none is invented.
+      if (g.season && g.season.season) innkeeperRows.push('SEASON: ' + g.season.season);
+    }
     const card = buildFactsCard({
       playerName: g.player && g.player.name,
       standing: this.standingLabel(),
@@ -1737,6 +1757,7 @@ export class Quests {
       promises: g.player.promiseLog,
       trainRows: deps ? trainLines(stationName, deps) : [],
       marketRows: marketIntel(stationName || ''),
+      innkeeperRows,
     });
     if (card) parts.push(card);
     const sIdx = this.standingIndex();

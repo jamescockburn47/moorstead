@@ -19,6 +19,7 @@ export function buildFactsCard(f) {
   }
   for (const t of f.trainRows || []) rows.push(t);
   for (const m of f.marketRows || []) rows.push(m);
+  for (const r of f.innkeeperRows || []) rows.push(r);
   if (!rows.length) return '';
   let card = 'GAME FACTS (all true right now — trust these over anything you remember; '
            + 'weave them in naturally, never recite the list):\n- ' + rows.join('\n- ');
