@@ -25,7 +25,7 @@ export function buildFactsCard(f) {
 export function trainLines(station, deps) {
   const good = (deps || []).filter(d => d && d.dest && Number.isFinite(d.eta));
   if (!good.length) return [];
-  const fmt = s => s <= 60 ? 'due now' : `in ${Math.round(s / 60)} minutes`;
+  const fmt = s => { if (s <= 60) return 'due now'; const m = Math.round(s / 60); return `in ${m} minute${m === 1 ? '' : 's'}`; };
   const parts = good.slice(0, 2).map(d => `${d.dest} ${fmt(d.eta)}`);
   return [`Next trains from ${station}: ${parts.join(', then ')}. You may tell the visitor these times.`];
 }
