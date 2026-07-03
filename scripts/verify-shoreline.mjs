@@ -137,9 +137,13 @@ console.log('\n-- [16] shoreline: depth tint + foam fringe --\n');
       (yOK ? ok : bad)('every foam vert sits at surface + 0.01 (26.89) — ABOVE the water, depth-writing cutout');
       (uvOK ? ok : bad)('foam quads sample the TILE.FOAM payload rect');
       (floraV > 0 ? ok : bad)('flora quads share the geometry…');
-      let floraZero = true;
-      for (let i = 0; i < pos.count; i++) if (gli.getX(i) !== 1 && gli.getX(i) !== 0) floraZero = false;
-      (floraZero ? ok : bad)('…and carry aGlint 0 (only foam shimmers)');
+      // [D8] DELIBERATE UPDATE: chunk plant-flora now bakes aGlint = 0.4 (the dew channel),
+      // so heather glistens after rain / at dawn. Foam still bakes 1 (the always-on beacon
+      // the shader's step(0.75) split keeps shimmering). The invariant is now: every cutout
+      // vert is foam (1) or flora-dew (0.4) — no stray values; foam alone gets the base glint.
+      let floraDew = true;
+      for (let i = 0; i < pos.count; i++) { const g = gli.getX(i); if (g !== 1 && Math.abs(g - 0.4) > 1e-6) floraDew = false; }
+      (floraDew ? ok : bad)('…and carry the aGlint 0.4 dew channel (foam=1 keeps the base glint, flora=0.4 dew-only)');
     }
 
     // (f) determinism: an independent second build is byte-identical

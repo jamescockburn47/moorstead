@@ -19,6 +19,7 @@ const texSrc = src('../src/textures.js');
 const playerSrc = src('../src/player.js');
 const mesherSrc = src('../src/mesher.js');
 const stormSrc = src('../src/storm.js');
+const floraLayerSrc = src('../src/floraLayer.js');
 
 // ---- quality setting: persistence/resolution logic (pure) ----
 ok(resolveQuality('fine', true) === 'fine', 'stored fine wins, even on touch');
@@ -99,6 +100,73 @@ ok(mainSrc.includes('customDepthMaterial'), 'cutout foliage gets an alpha-tested
 ok(skySrc.includes("this.gfx === 'fine'"), 'sky: Fine-gated light curves');
 ok(skySrc.includes('0x9cbcf0'), 'sky: cool blue moonlight when the moon is up');
 ok(skySrc.includes('moonHigh'), 'sky: moonlit night floor raised under Fine');
+
+// ---- S5a [25]+[27]+[26]: living exposure / bloom / grade drives (Fine-only, deterministic) ----
+// [25] deterministic eye adaptation: the exposure constant is now a BASE + a per-frame eased
+// target frae dayness/roof/lantern state (no luminance readback). We deliberately re-pin the
+// base value (1.25) on the new named constant AND assert the adaptation drive is present.
+ok(mainSrc.includes('const EXPOSURE_BASE = 1.25'), '[25] exposure base constant pinned at 1.25 (was the inline literal — now the eye-adaptation base)');
+ok(mainSrc.includes('r.toneMappingExposure = EXPOSURE_BASE'), '[25] applyQuality seeds exposure frae EXPOSURE_BASE (not a bare literal)');
+ok(mainSrc.includes('r.toneMappingExposure += (expTarget - r.toneMappingExposure) * Math.min(1, dt * 0.4)'),
+  '[25] exposure eased toward the per-frame target at dt·0.4 (slow eye-adaptation lag)');
+ok(mainSrc.includes('let expTarget = EXPOSURE_BASE - 0.10 + nightness * 0.17;'),
+  '[25] exposure target: ~1.15 clear midday -> ~1.32 outdoors night (EXPOSURE_BASE-relative, dayness-driven)');
+ok(mainSrc.includes('if (this._covered) expTarget += 0.15;'), '[25] +0.15 exposure under a roof (reads the persisted covered/roof flag)');
+ok(mainSrc.includes('if (this._stormHeld || (this.torchLight && this.torchLight.intensity > 0)) expTarget += 0.05;'),
+  '[25] +0.05 exposure while a torch / storm-lantern is lit');
+ok(mainSrc.includes('this._covered = covered;'), '[25] roof/covered flag persisted on `this` for the renderFrame drive');
+// [27] living bloom drive: constructor literals (0.32/0.5/0.85) STAND — driven as properties at runtime.
+ok(/new UnrealBloomPass\(size, 0\.32, 0\.5, 0\.85\)/.test(mainSrc), '[27] UnrealBloomPass constructor literals unchanged (0.32/0.5/0.85) — driven at runtime, not in the ctor');
+ok(mainSrc.includes('this.bloomPass.strength = 0.32 + nightness * 0.14 + golden * 0.1;'),
+  '[27] bloom strength drive: 0.32 + nightness·0.14 + golden·0.1 (swells at dusk/night)');
+ok(mainSrc.includes('this.bloomPass.threshold = 0.85 - nightness * 0.06;'),
+  '[27] bloom threshold drive: 0.85 - nightness·0.06 (more of the scene blooms at night)');
+// nightness/golden derived frae sky.time the same way the S2a glitter / S3a cloud drives read dayness
+ok(mainSrc.includes('const sunY = Math.sin((sky.time - 0.25) * Math.PI * 2);') && mainSrc.includes('const nightness = 1 - dayness;'),
+  '[27] nightness = 1 - dayness, dayness frae the shared sky.time sun curve (same math as the glitter/cloud drives)');
+ok(mainSrc.includes('const golden = sunY > -0.05 ? Math.max(0, 1 - Math.abs(sunY) / 0.30) : 0;'),
+  '[27] golden = low-sun factor, peaks at the horizon hours, self-zeroes by full day OR deep night');
+// [26] GradeShader v2: uDread/uGrain/uWarmth uniforms + their GLSL, corner fringe, warmth split-tone
+ok(mainSrc.includes('uDread: { value: 0 }') && mainSrc.includes('uWarmth: { value: 0 }'),
+  '[26] uDread + uWarmth uniforms default 0 (fresh compile = today\'s plate)');
+ok(mainSrc.includes('uGrain: { value: 0.015 }'), '[26] uGrain uniform ~0.015 (period photographic-plate grain)');
+ok(mainSrc.includes('uniform float uDread;') && mainSrc.includes('uniform float uGrain;') && mainSrc.includes('uniform float uWarmth;'),
+  '[26] uDread/uGrain/uWarmth declared in the grade fragment shader');
+ok(mainSrc.includes('(hash12(vUv * 913.7 + fract(uTime) * 61.0) - 0.5) * uGrain * (1.0 - lum * 0.7)'),
+  '[26] film grain: hash12(uv,time)-based, luminance-scaled (stronger in shadow, like a period plate) — reuses the existing hash12/uTime');
+ok(mainSrc.includes('c = mix(c, vec3(lum), uDread * 0.35);'), '[26] dread desaturates toward luminance by uDread·0.35');
+ok(mainSrc.includes('c *= 1.0 - dot(q, q) * (0.42 + uDread * 0.2);'),
+  '[26] dread TIGHTENS the existing vignette (0.42 -> 0.42 + uDread·0.2) — the storm window closes in, not just dims');
+ok(mainSrc.includes('vec3 hiTone = mix(vec3(1.045, 1.005, 0.955), vec3(1.07, 1.01, 0.92), uWarmth);'),
+  '[26] warmth (killed-[3]\'s single owner): highlight split-tone leans amber ~1.07/1.01/0.92 as golden rises');
+ok(mainSrc.includes('c.r = texture2D(tDiffuse, vUv + fr).r;') && mainSrc.includes('c.b = texture2D(tDiffuse, vUv - fr).b;')
+  && mainSrc.includes('vec2 fr = qf * dot(qf, qf) * 0.0015;'),
+  '[26] corner fringe: 2 extra taps re-sample .r/.b pushed radially by q·dot(q,q)·0.0015 (nil except at extreme corners)');
+// per-frame grade uniform writes (Fine-only, deterministic frae sky state)
+ok(mainSrc.includes('gu.uDread.value = sky.dread || 0;'), '[26] uDread driven frae the live sky.dread storm level (read-only — no sky.js edit)');
+ok(mainSrc.includes('gu.uWarmth.value = golden;'), '[26] uWarmth driven frae the golden factor');
+// Plain byte-identical: the whole drive block is inside the composer/Fine branch of renderFrame.
+// Slice renderFrame's body and prove (a) the branch opens with the composer/Fine guard, (b) the
+// exposure/bloom/grade drives all sit before this.composer.render(), and (c) the else-arm is the
+// untouched direct render — so Plain never executes any drive (byte-identical to today).
+{
+  const rfStart = mainSrc.indexOf('renderFrame(dt) {');
+  const rfEnd = mainSrc.indexOf('netDiag()', rfStart);
+  ok(rfStart > 0 && rfEnd > rfStart, 'renderFrame body sliceable (anchors present)');
+  const rf = mainSrc.slice(rfStart, rfEnd);
+  const guardIdx = rf.indexOf("if (this.composer && this.gfxQuality === 'fine') {");
+  const renderIdx = rf.indexOf('this.composer.render();');
+  const elseIdx = rf.indexOf('this.renderer.render(this.scene, this.camera)');
+  ok(guardIdx >= 0 && renderIdx > guardIdx, 'S5a: composer/Fine guard opens renderFrame before the composer render call');
+  // every drive write sits inside the guard, before the composer render (i.e. Fine-only)
+  for (const drive of ['let expTarget = EXPOSURE_BASE', 'this.bloomPass.strength = 0.32', 'gu.uDread.value = sky.dread', 'gu.uWarmth.value = golden']) {
+    const di = rf.indexOf(drive);
+    ok(di > guardIdx && di < renderIdx, `S5a: drive "${drive}…" is inside the Fine branch, before composer.render() — Plain never runs it`);
+  }
+  ok(elseIdx > renderIdx, 'S5a: Plain else-arm (direct renderer.render) sits AFTER the Fine branch — untouched by the drives');
+}
+ok(mainSrc.includes('const EXPOSURE_BASE = 1.25') && !/toneMappingExposure = 1\.25/.test(mainSrc),
+  'S5a: the bare inline exposure literal 1.25 is gone — replaced by EXPOSURE_BASE + the adaptation');
 
 // ---- Plain path: today's pipeline, renderer untouched ----
 ok(mainSrc.includes('r.toneMapping = THREE.NoToneMapping'), 'Plain: no tone mapping (library default)');
@@ -439,5 +507,55 @@ ok(rainbowRising(0.4, 0.6, 0.3, 'fog') === 0, "'fog' is not a clearin' state (on
 ok(rainbowRising(0.1, 0.2, 0.3, 'clear') === 0, 'weak prior shower (prevRain ≤ 0.3) → no bow — a drizzle raises nowt');
 // DAY_LENGTH honesty: the cadence test hardcodes 1800 — assert the real source agrees
 ok(skySrc.includes('const DAY_LENGTH = 1800;'), 'DAY_LENGTH is 1800s in sky.js — the aurora cadence test\'s hardcoded 1800 stays honest');
+
+// ---- S3c [10]+[D14] wind sway + gust fronts, [D8] dew, [14] snow polish (behaviour in verify-sway.mjs) ----
+// module uniforms exist, default so a fresh compile is today's look byte-identical
+for (const u of ['uSwayAmp', 'uWindAmt', 'uGustPhase', 'uDew', 'uSparkle'])
+  ok(mesherSrc.includes(`${u}: { value: 0 }`), `${u} module uniform exists, defaults 0 (Plain/today byte-identical)`);
+ok(mesherSrc.includes("uWindDir: { value: new THREE.Vector2(0.83, 0.55) }"),
+  'uWindDir baked as the prevailing sou\'wester vec2(0.83,0.55) — period-true, zero feed risk');
+// still exactly the addSnow + addWater handlers/keys — no sibling handler snuck in for the slice
+ok((mesherSrc.match(/customProgramCacheKey/g) || []).length === 2,
+  'S3c added NO new handler: still exactly addSnow + addWater set cache keys (program COUNT unchanged)');
+ok(mesherSrc.includes("customProgramCacheKey = () => key + '-cloud-wet'"),
+  'the ONE addSnow key still carries every term — sway/dew/sparkle ride the existing program');
+// [10]/[D8] aSway + the dew channel bake into the ONE cutout program via GeoBuilder
+ok(mesherSrc.includes('attribute float aSway') && mesherSrc.includes('varying float vSway') && mesherSrc.includes('varying float vGust'),
+  'aSway attribute + vSway/vGust varyings declared in the addSnow vertex stage');
+ok(mesherSrc.includes("g.setAttribute('aSway'") && mesherSrc.includes('if (this.hasSway)'),
+  'aSway baked ONLY when a quad carries a non-zero value (missing-attr-defaults-0 idiom, like aGlint/aWet)');
+ok(mesherSrc.includes('this.sway.push(sway ? c[4] : 0)'),
+  '[10] aSway is PER-CORNER: top verts (c[4]===1) sway 1, rooted base 0 — the plant hinges at its base');
+ok(mesherSrc.includes('0, null, null, null, 0.4, 0, 1'),
+  '[10]/[D8] chunk plant flora bakes sway=1 + glint=0.4 (dew channel); structural cutouts keep the defaults');
+// [D14] DETERMINISM — the single most important correctness point: the gust plane wave rides
+// uGustPhase (fed Date.now in main.js), NOT the per-client uGlintTime accumulator
+ok(mesherSrc.includes('float gp = dot(wSnowPos.xz, uWindDir)') && mesherSrc.includes('vGust = vn1(gp * 0.045 - uGustPhase * uGustSpeed)'),
+  '[D14] gust is a plane wave along uWindDir on uGustPhase (the SHARED wall-clock, NOT uGlintTime)');
+ok(mesherSrc.includes('export function setGustPhase(t)'),
+  'setGustPhase exported (main.js drives it from the shared Date.now clock — wiring returned to the orchestrator)');
+ok((mesherSrc.match(/float vn1\(float x\)/g) || []).length === 1,
+  '[D14] vn1 (1-D value noise) defined exactly once — a plane wave is what a gust front is');
+// [10]/[D14] anchored after wSnowPos (string-ordering red-team catch): replace 'vSnowExp = aSnowExp;'
+ok(mesherSrc.includes(".replace('vSnowExp = aSnowExp;'"),
+  'sway/gust anchored on \'vSnowExp = aSnowExp;\' (AFTER wSnowPos) so phase reads the pre-displacement world pos');
+ok(mesherSrc.includes('transformed.xz += swayA * vec2(sin(uGlintTime * 1.4'),
+  '[10] sway displacement rides the per-blade oscillator (uGlintTime) but the FRONT rides uGustPhase');
+// [D8] dew channel split — base forage glint preserved EXACTLY (byte-parity at uDew=0)
+ok(mesherSrc.includes('step(0.75, vGlint) * 0.12 * (0.5 + 0.5 * sin(uGlintTime * 2.0 + vGlintH))'),
+  '[D8] base forage glint preserved to the bit: step(0.75,vGlint)*0.12 — byte-identical at uDew=0');
+ok(mesherSrc.includes('float glDew = vGlint * uDew * 0.18'),
+  '[D8] dew is a SEPARATE uDew-gated channel (vGlint*uDew*0.18) — collapses to 0 at uDew=0');
+ok(floraLayerSrc.includes('...HOST_FORAGE.map(h => h.tile)') && floraLayerSrc.includes('p.glintTiles.has(tile) ? 1 : 0.4'),
+  '[D8] floraLayer: glintTiles superset of HOST_FORAGE (bilberry bug fixed); every other cross gets the 0.4 dew channel');
+ok(floraLayerSrc.includes('[0, 0, 1, 1, 0, 0, 1, 1]'),
+  '[10] floraLayer crossGeom bakes aSway (top verts 1) — scatter flowers sway with the heather');
+// [14] snow polish + the SHARED sparkle-cell helper (landed ONCE, shared with [D8] dew)
+ok((mesherSrc.match(/float sparkleCell\(vec2 wxz, float scale, float t\)/g) || []).length === 1,
+  '[14] the sparkle-cell helper is defined EXACTLY once — shared by [14] frost + [D8] dew (single-ownership)');
+ok(mesherSrc.includes('vec3(0.78, 0.85, 1.0)') && mesherSrc.includes('smoothstep(0.34, 0.5, snowRaw)'),
+  '[14] shadow-blue snow (AO cools to blue) + drift edges (smoothstep band sharpens with cover)');
+ok(mesherSrc.includes('snow * uSparkle * sparkleCell'),
+  '[14] frost sparkle rides uSparkle (Fine-only, Plain 0), fires only where the snow wash is active');
 
 console.log(`verify-graphics: ${n} assertions OK`);

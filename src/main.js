@@ -11,7 +11,7 @@ import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_HASHES } from './defs.js';
 import { strSeed } from './noise.js';
 import { protectedAt } from './landmarks.js';
-import { initMaterials, setSnowLevel, setFrozen, setGlintTime, setWaterTime, setRippleAmp, setFlowAmp, setGlitter, setFresnel, setCloudTime, setCloudShadow, setWetness, setGroundWet, setSheen, setWetSky, getMaterials } from './mesher.js';
+import { initMaterials, setSnowLevel, setFrozen, setGlintTime, setWaterTime, setRippleAmp, setFlowAmp, setGlitter, setFresnel, setCloudTime, setCloudShadow, setWetness, setGroundWet, setSheen, setWetSky, setSwayAmp, setWindAmt, setGustPhase, setDew, setSparkle, getMaterials } from './mesher.js';
 import { stepGroundWet } from './wetness.js';
 import { stepAccumulation, accumulationTarget, isFrozen, overcastGrey } from './snow.js';
 import { getIconURL, retintAtlasForSeason, getCutoutAtlas } from './textures.js';
@@ -35,6 +35,8 @@ import { buildTrain } from './train.js';
 import { Rails } from './rails.js';
 import { RoadLayer } from './roads.js';
 import { FloraLayer } from './floraLayer.js';
+import { HearthLayer } from './hearthLayer.js';
+import { DripLayer } from './dripLayer.js';
 import { SeasonalLayer } from './seasonalLayer.js';
 import { FireLayer } from './fireLayer.js';
 import { MurmurationLayer } from './birds.js';
@@ -117,6 +119,11 @@ const SEA_RING = true;
 const SEA_RING_COL = 0x3a5e7a;            // base water colour (TILE.WATER's speckle base)
 const _seaRingCol = new THREE.Color();    // module scratch — no per-frame allocation
 
+// [25] deterministic eye-adaptation base: t' exposure a bright clear midday settles to.
+// renderFrame eases toneMappingExposure toward EXPOSURE_BASE-relative targets frae sky
+// state (no luminance readback). Fine-only — Plain runs NoToneMapping, so it's inert.
+const EXPOSURE_BASE = 1.25;
+
 // Final full-screen pass o' t' 'Fine' post stack (after tone mapping/OutputPass, so it
 // works in display sRGB): a gentle vignette, a period colour grade — slightly lifted
 // blacks, warm highlights / cool shadows, t' watercolour-plate feel, kept SUBTLE —
@@ -127,6 +134,11 @@ const GradeShader = {
     tDiffuse: { value: null }, uTime: { value: 0 },
     uSharp: { value: 0 },                                      // CAS strength — ~0 at full res, rises as t' governor steps t' resolution down
     uTexel: { value: new THREE.Vector2(1 / 1920, 1 / 1080) },  // 1 / render-target pixel; kept honest by applyResolution()
+    // [26] GradeShader v2 (Fine-only — Plain has no composer/grade). All default 0 so a
+    // fresh compile is today's plate exactly; driven per frame frae sky state in renderFrame.
+    uDread: { value: 0 },                                      // [26] Dracula dread: desaturate toward luma + tighten t' vignette
+    uGrain: { value: 0.015 },                                  // [26] period photographic-plate grain, luminance-scaled (stronger in shadow)
+    uWarmth: { value: 0 },                                     // [26] golden-hour warmth: leans t' split-tone toward amber (0..1)
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -136,6 +148,9 @@ const GradeShader = {
     uniform float uTime;
     uniform float uSharp;
     uniform vec2 uTexel;
+    uniform float uDread;   // [26]
+    uniform float uGrain;   // [26]
+    uniform float uWarmth;  // [26]
     varying vec2 vUv;
     float hash12(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
@@ -150,15 +165,31 @@ const GradeShader = {
       vec3 mx = max(c, max(max(nN, nS), max(nW, nE)));
       vec3 w = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, vec3(1e-4)), 0.0, 1.0)) * uSharp;
       c = max(vec3(0.0), c * (1.0 + 4.0 * w) - (nN + nS + nW + nE) * w); // kernel weights sum to 1
+      // [26] corner fringe — a whisper o' chromatic aberration only at t' extreme corners,
+      // as if shot through a period lens: 2 extra taps re-sample red/blue pushed radially
+      // out by q·dot(q,q)·0.0015 (nil in t' centre where dot(q,q)→0). Centre is untouched.
+      vec2 qf = vUv - 0.5;
+      vec2 fr = qf * dot(qf, qf) * 0.0015;
+      c.r = texture2D(tDiffuse, vUv + fr).r;
+      c.b = texture2D(tDiffuse, vUv - fr).b;
       float lum = dot(c, vec3(0.299, 0.587, 0.114));
-      // cool shadows, warm highlights — a Victorian hand-tinted plate, not teal-an'-orange
+      // cool shadows, warm highlights — a Victorian hand-tinted plate, not teal-an'-orange.
+      // [26] uWarmth leans t' warm-highlight vector further amber at golden hour (killed [3]'s
+      // warmth lands here as t' single owner): 1.045,1.005,0.955 -> ~1.07,1.01,0.92.
+      vec3 hiTone = mix(vec3(1.045, 1.005, 0.955), vec3(1.07, 1.01, 0.92), uWarmth);
       c = mix(c, c * vec3(0.965, 0.99, 1.055), (1.0 - smoothstep(0.0, 0.45, lum)) * 0.5);
-      c = mix(c, c * vec3(1.045, 1.005, 0.955), smoothstep(0.55, 1.0, lum) * 0.5);
+      c = mix(c, c * hiTone, smoothstep(0.55, 1.0, lum) * 0.5);
+      // [26] dread desaturate — t' Dracula window bleeds t' colour toward luma (uDread·0.35)
+      c = mix(c, vec3(lum), uDread * 0.35);
       // gently lifted blacks
       c = c * 0.965 + 0.014;
-      // vignette — soft, drawn in at t' corners only
+      // vignette — soft, drawn in at t' corners only. [26] dread TIGHTENS it (0.42 -> +uDread·0.2)
+      // so t' storm-window closes in on thee, not merely dims t' lights.
       vec2 q = vUv - 0.5;
-      c *= 1.0 - dot(q, q) * 0.42;
+      c *= 1.0 - dot(q, q) * (0.42 + uDread * 0.2);
+      // [26] film grain — a monochrome plate grain, stronger in t' shadows (1 - lum·0.7), like a
+      // period photographic emulsion. Reuses hash12 + uTime (viewer-local cosmetic, deterministic).
+      c += (hash12(vUv * 913.7 + fract(uTime) * 61.0) - 0.5) * uGrain * (1.0 - lum * 0.7);
       // ordered-ish temporal dither (±0.5 LSB) — kills sky banding
       c += (hash12(vUv * vec2(3141.59, 2718.28) + fract(uTime) * 17.0) - 0.5) / 255.0;
       gl_FragColor = vec4(c, 1.0);
@@ -339,10 +370,19 @@ class Game {
     // Plain darkens but takes no sky colour (darkenin' stays, tint is Fine-only).
     setSheen(fine ? 0.5 : 0);
     setWetSky(0, 0, 0);
+    // [10]+[D14] flora sway: Plain runs a gentler 0.04 amp (vertex-only, tablet-safe) so
+    // t' moor still breathes; [14] frost sparkle + [D8] dew are Fine-only (bloom-flattered).
+    setSwayAmp(fine ? 0.06 : 0.04);
+    setSparkle(fine ? 0.4 : 0);
+    setDew(0);
     const r = this.renderer;
     if (fine) {
       r.toneMapping = THREE.ACESFilmicToneMapping;
-      r.toneMappingExposure = 1.25; // tuned by eye on t' summer moor — 1.15 ran a touch murky at dawn
+      // [25] deterministic eye adaptation: base exposure EXPOSURE_BASE = 1.25 (tuned by eye on
+      // t' summer moor — 1.15 ran a touch murky at dawn); renderFrame eases it toward a
+      // per-frame target frae dayness/roof/lantern state (bright midday ~1.15 -> neet ~1.32,
+      // +0.15 under cover, +0.05 wi' a flame lit). Inert on Plain (NoToneMapping ignores it).
+      r.toneMappingExposure = EXPOSURE_BASE;
       r.outputColorSpace = THREE.SRGBColorSpace;
       r.shadowMap.enabled = true;
       r.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -485,6 +525,45 @@ class Game {
   renderFrame(dt) {
     if (this.composer && this.gfxQuality === 'fine') {
       if (this.gradePass) this.gradePass.uniforms.uTime.value = (this.gradePass.uniforms.uTime.value + dt) % 64;
+      // [25]/[26]/[27] living exposure/bloom/grade — three coordinated, DETERMINISTIC drives
+      // frae sky state already in hand (no luminance readback, no per-frame alloc). All Fine-
+      // only (guarded by this branch); Plain never reaches here, so it stays byte-identical.
+      if (this.sky) {
+        const sky = this.sky;
+        // dayness mirrors t' sky.js sun curve (same math as t' frame loop's dayness); nightness
+        // its complement; golden = a low-sun factor that peaks at t' horizon hours an' self-zeroes
+        // by full daylight OR deep neet (sun below −0.05 kills it, so it's dusk/dawn only).
+        const sunY = Math.sin((sky.time - 0.25) * Math.PI * 2);
+        const dayness = Math.max(0, Math.min(1, (sunY + 0.12) * 3));
+        const nightness = 1 - dayness;
+        const golden = sunY > -0.05 ? Math.max(0, 1 - Math.abs(sunY) / 0.30) : 0;
+
+        // A) [25] deterministic eye adaptation — ease toneMappingExposure toward a target frae
+        // dayness (bright midday ~1.15 -> neet ~1.32), +0.15 under a roof so lantern-lit interiors
+        // read, +0.05 while a flame's lit. Slow lag (dt·0.4) sells step-in/step-out.
+        const r = this.renderer;
+        let expTarget = EXPOSURE_BASE - 0.10 + nightness * 0.17; // 1.15 clear midday -> 1.32 outdoors neet
+        if (this._covered) expTarget += 0.15;
+        if (this._stormHeld || (this.torchLight && this.torchLight.intensity > 0)) expTarget += 0.05;
+        r.toneMappingExposure += (expTarget - r.toneMappingExposure) * Math.min(1, dt * 0.4);
+
+        // B) [27] living bloom — swells frae a daytime whisper to a proper amber halo at neet,
+        // wi' a golden-hour horizon flare. Constructor literals (0.32/0.5/0.85) stand; these are
+        // plain property writes UnrealBloomPass re-reads each render (r166) — no rebuild.
+        if (this.bloomPass) {
+          this.bloomPass.strength = 0.32 + nightness * 0.14 + golden * 0.1;
+          this.bloomPass.threshold = 0.85 - nightness * 0.06;
+        }
+
+        // C) [26] GradeShader v2 uniforms — dread frae t' live storm level (Dracula window
+        // desaturates + tightens t' vignette), warmth frae t' golden factor (amber split-tone),
+        // grain constant. Deterministic pure functions of sky state.
+        if (this.gradePass) {
+          const gu = this.gradePass.uniforms;
+          gu.uDread.value = sky.dread || 0;
+          gu.uWarmth.value = golden;
+        }
+      }
       this.composer.render();
     } else {
       this.renderer.render(this.scene, this.camera);
@@ -730,6 +809,10 @@ class Game {
     this.seasonalLayer = new SeasonalLayer(this.scene, this.world);
     if (this.fireLayer) this.fireLayer.dispose();
     this.fireLayer = new FireLayer(this.scene, this.world);
+    if (this.hearthLayer) this.hearthLayer.clear();
+    this.hearthLayer = new HearthLayer(this.scene, this.world);
+    if (this.dripLayer) this.dripLayer.dispose();
+    this.dripLayer = new DripLayer(this.scene, this.world, { plain: this.gfxQuality !== 'fine' });
     if (this.footprints) this.footprints.clear();
     this.footprints = new Footprints(this.scene, this.world);
     if (this.murmuration) this.murmuration.dispose();
@@ -793,6 +876,8 @@ class Game {
     if (this.floraLayer) { this.floraLayer.clear(); this.floraLayer = null; }
     if (this.seasonalLayer) { this.seasonalLayer.clear(); this.seasonalLayer = null; }
     if (this.fireLayer) { this.fireLayer.dispose(); this.fireLayer = null; }
+    if (this.hearthLayer) { this.hearthLayer.clear(); this.hearthLayer = null; }
+    if (this.dripLayer) { this.dripLayer.dispose(); this.dripLayer = null; }
     if (this.footprints) { this.footprints.clear(); this.footprints = null; }
     if (this.murmuration) { this.murmuration.dispose(); this.murmuration = null; }
     if (this.harbourLight) { this.harbourLight.dispose(); this.harbourLight = null; }
@@ -4951,6 +5036,7 @@ class Game {
       if (this.fireLayer) this.fireLayer.update(dt, this.player.pos, this.camera);
       if (this.murmuration) this.murmuration.update(dt, season);
       if (this.harbourLight) this.harbourLight.update(dt, this.camera, this.sky);
+      if (this.hearthLayer) this.hearthLayer.update(dt, this.player.pos, this.sky);
       // ONE global flame tick: drives the shared flame material's uTime, every
       // hero fire's embers/smoke, an' the pulsing bonfire light — so torches
       // (FireLayer) AND the festival bonfire (SeasonalLayer) animate off one clock.
@@ -4964,9 +5050,14 @@ class Game {
       } else if (this.footprints) this.footprints.clear();
       this.snowAccum = stepAccumulation(this.snowAccum, season, dt);
       setSnowLevel(this.snowAccum); // height-gated snow on the tops (cheap uniform)
-      setFrozen(isFrozen(season));
+      const _frozen = isFrozen(season);
+      setFrozen(_frozen);
       this._glintT = (this._glintT || 0) + dt; setGlintTime(this._glintT); // drive forage glint animation
       setWaterTime(this._glintT); // [15]/[D0] water ripples + becks ride t' same clock — no new tick
+      // [D14] gust fronts ride the SHARED wall-clock (NOT the per-client _glintT accumulator)
+      // so every player watches the same wave cross the same hillside (invariant 6).
+      setGustPhase((Date.now() / 1000) % 4096);
+      setWindAmt(this.sky.liveWind != null ? this.sky.liveWind : 0.35); // real Goathland windiness, tier-flat
       // dayness mirrors t' sky.js sun curve — hoisted out o' t' Fine block so t' TIER-FLAT
       // wetness dry-rate can read it too (overnight rain lingers to morning).
       const _sunY = Math.sin((this.sky.time - 0.25) * Math.PI * 2);
@@ -4980,6 +5071,9 @@ class Game {
       this.groundWet = stepGroundWet(this.groundWet, this.sky.rainAmount, season.warmth, dayness, dt);
       setWetness(this.groundWet);
       setGroundWet(this.groundWet);
+      // [D9] eaves drip for minutes after t' rain stops: only in t' just-stopped window,
+      // fadin' as t' ground dries (reads groundWet + live rain + frozen).
+      if (this.dripLayer) this.dripLayer.update(dt, this.player.pos, { groundWet: this.groundWet, rainAmount: this.sky.rainAmount, frozen: _frozen });
       // [15] sun-sparkle on t' water: full glitter at clear noon, nowt at neet or under
       // cloud. overcast mirrors sky.js's overcastGrey call (eased snowAmount stands in for
       // t' instantaneous snowfall). Fine only — applyQuality parks uGlitter at 0 an' Plain
@@ -5005,6 +5099,11 @@ class Game {
         setCloudTime(this.sky.cloudT || 0);
         const cover = this.sky.domeMat.uniforms.uClouds.value;
         setCloudShadow(Math.min(0.35, 1.4 * cover * dayness * (1 - overcast)));
+        // [D8] dew / after-rain glisten: droplets sparkle on flora AFTER a shower clears
+        // (groundWet high, rain stopped, some light), and again at a clear summer dawn.
+        const glisten = this.groundWet * (1 - this.sky.rainAmount) * dayness;
+        const dawnDew = Math.max(0, 1 - Math.abs(this.sky.time - 0.25) / 0.07) * (1 - overcast) * Math.max(0, season.warmth) * (this.sky.rainAmount < 0.05 ? 1 : 0);
+        setDew(Math.max(glisten, dawnDew));
       }
       const sbk = Math.floor(season.yearPhase * 40);
       if (sbk !== this._seasonBucket) { this._seasonBucket = sbk; retintAtlasForSeason(season); } // heather purple, bracken rust…
@@ -5015,6 +5114,7 @@ class Game {
         const ab = this.world.getBlock(_px, yy, _pz);
         if (ab !== B.AIR && ab !== B.WATER && !isCutout(ab)) { covered = true; break; }
       }
+      this._covered = covered; // [25] eye-adaptation reads t' roof flag in renderFrame (+0.15 exposure under cover)
       const msg = this.sky.update(dt, this.player.pos, season, covered);
 
       // economy on the game clock: deliver any due shipments and refill vendor drop-in purses.

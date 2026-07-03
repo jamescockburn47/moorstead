@@ -46,7 +46,10 @@ console.log('\n-- living water: ripple/flow bake + shader wiring --\n');
   (new Set(keys).size === 3 ? ok : bad)(`exactly 3 terrain programs (keys: ${keys.join(', ')})`);
   (keys[2].startsWith('liquid-ice') ? ok : bad)('liquid key stays liquid-ice-derived (ice + water share ONE handler)');
 
-  const shader = { uniforms: {}, vertexShader: '#include <begin_vertex>', fragmentShader: '#include <color_fragment>' };
+  // mock BOTH Lambert fragment chunks the liquid injection targets: color_fragment
+  // (glitter/lace/depth) AND opaque_fragment — the grazing fresnel is injected there so it
+  // reads `normal` (three's computed fragment normal), NOT the flat-strippable vNormal varying.
+  const shader = { uniforms: {}, vertexShader: '#include <begin_vertex>', fragmentShader: '#include <color_fragment>\n#include <opaque_fragment>' };
   mats.liquid.onBeforeCompile(shader);
   for (const u of ['uWaterTime', 'uRippleAmp', 'uFlowAmp', 'uGlitter', 'uFresnel', 'uFrozen']) {
     (shader.uniforms[u] && shader.uniforms[u].value === 0
@@ -60,6 +63,10 @@ console.log('\n-- living water: ripple/flow bake + shader wiring --\n');
     ? ok : bad)('ripple phase taken frae WORLD pos (modelMatrix — the addSnow idiom)');
   (shader.fragmentShader.includes('uGlitter') && shader.fragmentShader.includes('vViewPosition')
     ? ok : bad)('fragment carries world-space glitter + fresnel terms');
+  // regression guard: the fresnel MUST read `normal` (robust flat-or-smooth), never the raw
+  // `vNormal` varying which three strips under some program variants (a live compile fail).
+  (shader.fragmentShader.includes('normalize(normal)') && !shader.fragmentShader.includes('vNormal')
+    ? ok : bad)('water fresnel reads `normal`, not the flat-strippable vNormal varying');
   ((shader.fragmentShader.match(/diffuseColor\.rgb = mix\(diffuseColor\.rgb, vec3\(0\.80, 0\.88, 0\.95\), ice\)/) ? ok : bad))('the winter ice tint survives unchanged');
   setWaterTime(4.2);
   (shader.uniforms.uWaterTime.value === 4.2 ? ok : bad)('setWaterTime drives the live module uniform');

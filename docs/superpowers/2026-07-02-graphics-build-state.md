@@ -40,7 +40,7 @@ Specs: grep `### [n]` / `### [Dn]` in 2026-07-02-graphics-wow-audit.md. Codebase
 ### S3 — terrain/flora shader family (sequential, same addSnow handler)
 - [x] S3a [0] cloud shadows (fold into addSnow handler)
 - [x] S3b [9/17 merged] wet ground + [D6] puddles + [D10] slow dry + mud lanes — DONE
-- [ ] S3c [10]+[D14] wind sway + travelling gust fronts (shared-clock phase!) + [D8] dew
+- [x] S3c [10]+[D14] wind sway + gust fronts + [D8] dew + [14] snow polish — DONE
       (same GeoBuilder/crossGeom touch) + [14] snow polish (owns sparkle helper)
 
 ### S4 — sky/night/atmosphere (sky.js)
@@ -51,9 +51,9 @@ Specs: grep `### [n]` / `### [Dn]` in 2026-07-02-graphics-wow-audit.md. Codebase
 - [ ] S4d [D12] heat shimmer (grade + dome) → [D13] fire heat-haze
 
 ### S5 — light & post (main.js + new layers)
-- [ ] S5a [25]+[27]+[26] living exposure/bloom/grade v2
+- [x] S5a [25]+[27]+[26] living exposure/bloom/grade v2 — DONE
 - [ ] S5b [2] god rays (12 taps, governor-coupled)
-- [ ] S5c [5] hearthlight windows (new hearthLayer.js)
+- [x] S5c [5] hearthlight windows (hearthLayer.js) — DONE
 - [ ] S5d [6] baked lamp light (L; mesher BFS, aLamp varying, emitter caps)
 
 ### S6 — spectacle modules (parallel where files disjoint)
@@ -61,11 +61,12 @@ Specs: grep `### [n]` / `### [Dn]` in 2026-07-02-graphics-wow-audit.md. Codebase
 - [x] [36] forked lightning — DONE (pooled meshes; NEW sky.stormChurn flag because title flyover borrows stormPrecip)
 - [x] [32] murmuration (src/birds.js) — DONE (orchestrator fixed per-client clock → Date.now shared clock; update(dt, season)); [D17] swallows still queued
 - [x] [33] Whitby harbour light — DONE (sited harbour mouth 1829,3045 — East Cliff is inside Dracula arena; pier-end light is period-truer anyway)
-- [ ] [D9] eave drips (new dripLayer.js) · [D16] pollen/midges (festivalKit motes)
+- [x] [D9] eave drips (dripLayer.js) DONE · [D16] pollen/midges (festivalKit motes)
 - [x] [19] GPU wind-slanted precipitation — DONE (CPU loops deleted, ~40KB/frame uploads gone; wind+squall shared-clock; streak lean via map.rotation not object rotation; winterPrecip pooled)
 - [ ] [20] seasonal colour fronts (L) · [37] cinematic title plates
 
 ## RESUME LOG (day 2)
+- BATCH 2 (S3c+S5a+hearth+drips): flora sway+gust fronts (shared-clock), dew/after-rain glisten (+bilberry-glint bug fixed), snow polish; living exposure/bloom/grade v2; lit cottage windows; eave drips. TWO REAL shader bugs found via preview (headless gate blind to them): (1) uGlintTime redefinition — non-idempotent onBeforeCompile double-injected on recompile; fixed w/ sentinel-marker guard that still re-binds uniforms. (2) water fresnel used vNormal (flat-strippable varying, latent since S2a) → live compile fail; fixed to normal at opaque_fragment + regression-guard assertion. Both preview-confirmed (terrain+water render, probe shows fixed code). Gate green. NOTE: preview console tool buffers stale errors across reloads — trust the render+probe, not the buffer.
 - S3b wet ground (darken + puddles in hollows + slow-dry + mud lanes) + S4b rainbow/aurora COMMITTED. Gate green 231 graphics + verify-wetground. Preview-confirmed: wet darkening reads, double bow renders (PALE — brighten literal for James), aurora curtains render but SUBTLE on moonlit night (raise 1.6 gain), night sky lovely, 0 console errors. Fixed stale aurora-cadence comment.
 
 ## MORNING REPORT (overnight run ended — session token limit, resets ~01:40)

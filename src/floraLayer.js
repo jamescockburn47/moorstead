@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { tileUV } from './textures.js';
 import { getMaterials } from './mesher.js';
 import { activeScatter, activeAdornments } from './flora-season.js';
-import { activeForageables, fruitSpeciesAt, fruitTreeRipe, FRUIT_SPECIES } from './forage.js';
+import { activeForageables, fruitSpeciesAt, fruitTreeRipe, FRUIT_SPECIES, HOST_FORAGE } from './forage.js';
 import { cellInstances } from './flora-placement.js';
 import { hash2i } from './noise.js';
 import { B } from './defs.js';
@@ -25,6 +25,7 @@ function crossGeom(tile, glint = 0) {
   const [u0, v0, u1, v1] = tileUV(tile);
   const g = new THREE.BufferGeometry();
   const h = 1, w = 0.5;
+  //          v0-------- v1 (top) ---------v2   v4---------v5 (top) ------v6
   const pos = [-w, 0, 0, w, 0, 0, w, h, 0, -w, h, 0, 0, 0, -w, 0, 0, w, 0, h, w, 0, h, -w];
   const uv = [u0, v0, u1, v0, u1, v1, u0, v1, u0, v0, u1, v0, u1, v1, u0, v1];
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -33,6 +34,11 @@ function crossGeom(tile, glint = 0) {
   // geometry with no colour attribute renders BLACK (texture * 0). White = texture as-is.
   g.setAttribute('color', new THREE.Float32BufferAttribute(new Array(24).fill(1), 3));
   g.setAttribute('aGlint', new THREE.Float32BufferAttribute(new Array(8).fill(glint), 1));
+  // [10] aSway: the TWO top verts of each of the two crossed quads (y === h) hinge in the
+  // wind, the two rooted base verts (y === 0) stay put — so the scatter flowers sway with
+  // the heather they grow among (same compiled cutout program, same missing-attr-default-0
+  // idiom). Vert order per quad is [base, base, top, top], so the pattern is 0,0,1,1 twice.
+  g.setAttribute('aSway', new THREE.Float32BufferAttribute([0, 0, 1, 1, 0, 0, 1, 1], 1));
   g.setIndex([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]);
   g.computeVertexNormals();
   return g;
@@ -102,7 +108,11 @@ export class FloraLayer {
       this._pending = null;
       return;
     }
-    const glintTiles = new Set([...forage.map(f => f.tile), ...FRUIT_SPECIES.map(s => s.tile)]);
+    // [D8] glintTiles = the always-on beacon glint (aGlint=1, base channel). FIX: HOST_FORAGE
+    // bush adornments (bilberry, blackberry, rosehip, sloe, elder, hazel) were MISSING here —
+    // only scatter forage + tree fruit glinted — so ui.js:600's 'glinting bilberry bush'
+    // promise was a live lie. Fold the host-forage tiles in (set-fix: forage is forage).
+    const glintTiles = new Set([...forage.map(f => f.tile), ...FRUIT_SPECIES.map(s => s.tile), ...HOST_FORAGE.map(h => h.tile)]);
     this._pending = { cx, cz, key, scatter, adorn, forage, fruitRipe, glintTiles, x: cx - RADIUS, byTile: new Map() };
   }
 
@@ -178,7 +188,10 @@ export class FloraLayer {
     const mat = getMaterials().cutout;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
     for (const [tile, places] of p.byTile) {
-      const mesh = new THREE.InstancedMesh(crossGeom(tile, p.glintTiles.has(tile) ? 1 : 0), mat, places.length);
+      // [D8] forage/fruit/host-berry tiles get the always-on beacon (1); every other scatter
+      // cross gets the 0.4 dew channel — so ordinary flowers glisten after rain / at dawn too,
+      // while forage keeps its distinct steady glint (step(0.75) split in the shader).
+      const mesh = new THREE.InstancedMesh(crossGeom(tile, p.glintTiles.has(tile) ? 1 : 0.4), mat, places.length);
       mesh.frustumCulled = false;
       for (let i = 0; i < places.length; i++) {
         const [px, py, pz, yaw, sc] = places[i];
