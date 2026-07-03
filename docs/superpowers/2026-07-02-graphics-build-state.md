@@ -39,14 +39,14 @@ Specs: grep `### [n]` / `### [Dn]` in 2026-07-02-graphics-wow-audit.md. Codebase
 
 ### S3 — terrain/flora shader family (sequential, same addSnow handler)
 - [x] S3a [0] cloud shadows (fold into addSnow handler)
-- [ ] S3b [9/17 merged] wet ground + [D6] puddles (aWet bake) + [D10] slow dry
+- [ ] S3b [9/17 merged] wet ground + [D6] puddles (aWet bake) + [D10] slow dry  <-- NEXT UP (agent killed by session limit before any edit; tree clean)
 - [ ] S3c [10]+[D14] wind sway + travelling gust fronts (shared-clock phase!) + [D8] dew
       (same GeoBuilder/crossGeom touch) + [14] snow polish (owns sparkle helper)
 
 ### S4 — sky/night/atmosphere (sky.js)
 - [x] S4a [4] 1900 night sky (seeded stars — fixes Math.random violation, Milky Way, moon
       phases, halo) + [22-mod] dawn fog tint + scratch-Color hoist
-- [ ] S4b [30] rainbow + [31] aurora (dome shader)
+- [ ] S4b [30] rainbow + [31] aurora (dome shader)  <-- agent killed by session limit before any edit; tree clean
 - [ ] S4c [1] valley mist (mesher fog injection + sky drive) + [D15] summer haze
 - [ ] S4d [D12] heat shimmer (grade + dome) → [D13] fire heat-haze
 
@@ -65,7 +65,60 @@ Specs: grep `### [n]` / `### [Dn]` in 2026-07-02-graphics-wow-audit.md. Codebase
 - [x] [19] GPU wind-slanted precipitation — DONE (CPU loops deleted, ~40KB/frame uploads gone; wind+squall shared-clock; streak lean via map.rotation not object rotation; winterPrecip pooled)
 - [ ] [20] seasonal colour fronts (L) · [37] cinematic title plates
 
+## MORNING REPORT (overnight run ended — session token limit, resets ~01:40)
+
+**Where it stopped:** 5 clean commits on `feat/graphics-wow`, tree clean, **full gate green
+(184 graphics assertions + all ~62 scripts, exit 0)**, nothing deployed (per your standing
+rule — visual quality is your eye to sign off). The last two agents (S3b wet-ground, S4b
+rainbow/aurora) were killed by the token limit BEFORE writing anything, so the tree has no
+half-finished edits — it's safe to resume or ship as-is.
+
+**Shipped tonight (14 major items), in order:**
+1. **Your horizon band — FIXED.** Root cause: world meshes to 96 blocks but clear-weather fog
+   ran to 160, so edge terrain was only ~47% fogged against a fully-coloured dome — that
+   half-dissolved silhouette was the "solid block of colour". Fix: fog knee-clamped inside the
+   meshed edge (clear 160→84), dome holds the fog colour at the horizon, and later the UNFOGGED
+   sea-backdrop plane (a second offender, a blue streak from the tops) was deleted for a fogged
+   horizon sea ring. Confirmed gone from T' High Moor in every direction.
+2. Anti-aliasing (MSAA 4x desktop / FXAA touch) — the single biggest image-quality lift.
+3. Frame-time governor (sheds MSAA→FXAA→resolution under load) + CAS sharpen + the cross-monitor
+   DPR bug + two texture leaks fixed.
+4. Mip-mapped atlas with gutters — kills the distance shimmer/sparkle.
+5. Per-block hue variation — the moor stops reading as wallpaper.
+6. Living water: the Esk visibly FLOWS downstream with glitter, ripple, depth-tinted shallows.
+7. Coast: foam fringe at the sand, depth-darkened deep sea, sea to the horizon.
+8. 1900 night sky: seeded stars (fixed a real determinism bug), Milky Way, moon phases + halo.
+9. Cloud shadows sweeping the moor, locked to the dome clouds.
+10. GPU precipitation: rain/snow now lean in the real Goathland wind with squall bands — and it
+    DELETED the biggest per-frame CPU cost in the game (net faster).
+11. Forked lightning for the Dracula storm (pooled, seeded).
+12. Starling murmuration at dusk (600 birds, autumn/winter).
+13. Whitby harbour light with a sweeping beam.
+14. Chimney smoke from cottages on cold mornings.
+Plus: shadow-edge texel snap, dawn-glow fog, sky.update() made allocation-free.
+
+**To SEE it:** dev server on 5173, "New Single-Player World". Best shots: a hilltop at dusk
+(night sky + cloud shadows), the Esk west of Grosmont (flowing water), the Whitby strand
+(coast + harbour light), and force rain anywhere for wind-slant + puddle darkening on the
+ground. Toggle Fine/Plain in the pause menu to see the AA difference.
+
+**Eyeball checklist (things I tuned by numbers, not your taste):** cloud-shadow patch size
+(subtle from ground, best from the tops), Milky Way strength, moon terminator orientation,
+foam texture density, deep-sea darkness at dusk, glitter not blooming hot at noon. All have
+single-literal dials noted in each commit.
+
+**Known non-issues:** cottages have no stamped chimney block (smoke is hash-placed on the roof
+ridge — a future worldgen-baseline call, yours); FXAA emits one harmless ANGLE shader warning.
+
+**To resume (queue in order):** S3b wet-ground/puddles, S3c sway+gust+dew, S4b rainbow+aurora,
+S4c/d mist+heat-shimmer, S5 living-light/god-rays/hearthlight/baked-lamp-light, S6 stragglers
+(drips, midges, swallows, seasonal fronts, title plates). Each spec: grep `### [n]`/`### [Dn]`
+in the audit doc. Standing build rules at the top of this file. NOT deployed — `npm run deploy`
+is your call after you've looked.
+
 ## Log
+- OVERNIGHT END: tree clean at 3e807c8, gate green, 5 commits. S3b+S4b agents killed by token
+  limit pre-edit (no partial state). Waves 3b-onward remain; see MORNING REPORT above.
 - BATCH COMMIT (S2b+S4a+[19]+S3a): shoreline+horizon sea ring (unfogged seaPlane DELETED), 1900 night sky (stars seeded — determinism regained; Milky Way; moon phases+halo; dawn fog tint; sky.update allocation-free), GPU precipitation (net-negative cost, wind-slanted, squall bands), cloud shadows (dome-locked drift, cross-file coupling asserted). verify-graphics 184; verify-precip 29 new; verify-shoreline 29 new. Full gate green.
 - S2b DONE (uncommitted): depth tint (pure waterDepthTint, no shader change), foam fringe TILE.FOAM=87 +0.01 above surface cap 32, GeoBuilder aGlint array (baked only when nonzero — parity), fogged horizon sea ring replaces the UNFOGGED seaPlane (DELETED — blue streak confirmed gone from High Moor in preview). verify-shoreline.mjs 29 asserts; graphics 135→150. S4a DONE (uncommitted, assertions PENDING assembly): buildStarField seeded (determinism fixed), Milky Way GPOLE band, moon phases+halo (owns halo), dawn fog tint via single _fogC owner, sky.update() now ALLOCATION-FREE. S4a proposed asserts are in its task output — assemble with [19]s when it lands, then commit batch.
 - S2a + S6 batch COMPLETE, full gate green (verify-graphics 135; verify-water 40; verify-storm 300; new verify-birds/lighthouse/chimneys). Esk visibly flows w/ downstream glitter shear (preview-confirmed, 0 console errors). Murmuration 600pts + harbour light live in-game. NOTE: cottages have NO stamped chimney block (only stations/terraces/furnace) — plume-vs-chimney alignment is a future worldgen call (world-baseline change, James decides). Next: S2b (shoreline + retire unfogged sea backdrop) ∥ S4a (night sky).
