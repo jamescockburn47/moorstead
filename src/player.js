@@ -59,6 +59,7 @@ export class Player {
     this.commissions = [];                         // {id, item, price, giver, readyAtDay, state:'open'|'done'}
     this.vouches = [];                             // {by, day} — who's given their word for thee
     this.promiseLog = { kept: 0, broken: 0 };      // contract record; feeds the facts card
+    this.gameRecord = { games: {}, biggestWin: 0 }; // pub-games ledger (D4): gameId -> {w,l,d} lazily, biggest single wager won
     this.look = { ...DEFAULT_PLAYER_LOOK }; // "Dress thissen": chosen appearance (bounded indices) — shown to other players
   }
 
@@ -450,6 +451,7 @@ export class Player {
       commissions: this.commissions || [],
       vouches: this.vouches || [],
       promiseLog: this.promiseLog || { kept: 0, broken: 0 },
+      gameRecord: this.gameRecord || { games: {}, biggestWin: 0 },
       look: this.look, // "Dress thissen" — additive; old saves lack it an' default to a rambler
     };
   }
@@ -492,6 +494,7 @@ export class Player {
     this.commissions = d.commissions || [];
     this.vouches = d.vouches || [];
     this.promiseLog = d.promiseLog || { kept: 0, broken: 0 };
+    this.gameRecord = d.gameRecord || { games: {}, biggestWin: 0 };
     // additive + untrusted-input safe: an absent/old/junk look coerces to a rambler
     this.look = validatePlayerLook(d.look);
   }

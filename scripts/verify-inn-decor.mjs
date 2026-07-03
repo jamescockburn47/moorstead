@@ -182,6 +182,24 @@ console.log('\n-- inn decor: sign/hearth/glow/mounts — builds, ownership, hygi
   (fxMatCount() === base ? ok : bad)('Plain: clear() leaves fxMatCount at baseline');
 }
 
+// --- (i) [D4] bragging board: present with a player, absent without one --------
+{
+  setQuality('plain');
+  const withPlayer = new InnDecorLayer(new THREE.Scene(), makeWorld(), { gameRecord: { games: {}, biggestWin: 0 }, _gameRecRev: 0 });
+  withPlayer.update(1, PLAYER_AT_INN, { time: NOON, yearPhase: 0.5 }, { yearPhase: 0.5 });
+  const board = withPlayer.objects.find(o => o.userData && o.userData.braggingBoard);
+  (board ? ok : bad)('bragging board builds when a player is supplied');
+  withPlayer.clear();
+  const boardGone = withPlayer.objects.length === 0;
+  (boardGone ? ok : bad)('clear() tears the bragging board down with the rest');
+
+  const noPlayer = new InnDecorLayer(new THREE.Scene(), makeWorld());
+  noPlayer.update(1, PLAYER_AT_INN, { time: NOON, yearPhase: 0.5 }, { yearPhase: 0.5 });
+  const noBoard = !noPlayer.objects.some(o => o.userData && o.userData.braggingBoard);
+  (noBoard ? ok : bad)('no bragging board when no player is supplied (verify-harness 2-arg calls stay safe)');
+  noPlayer.clear();
+}
+
 // --- (h) empty inns map: builds nothing, does not throw -------------------------
 {
   setQuality('fine');
