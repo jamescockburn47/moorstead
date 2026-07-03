@@ -23,3 +23,40 @@ export function runProfile(len, tt) {
   return { dist: Math.max(0, Math.min(len, dist)), v: Math.max(0, v), tTotal };
 }
 export function legTime(len) { return runProfile(len, 0).tTotal; }
+
+// ---- call-time algebra over the pingpong service ------------------------------------
+// A "pass" is one directional run lasting `oneway` seconds; passes alternate
+// direction forever, phase-locked to the unix epoch (dir = floor(t/oneway) % 2 —
+// identical to Game.trainSchedule / trainScheduleFor). legT = seconds per leg in
+// dir-0 (ascending station index) order.
+
+// dwell-start offset of the k-th call within a directional pass
+export function callOffset(legT, n, dir, k) {
+  let off = k * DWELL_T;
+  for (let j = 0; j < k; j++) off += legT[dir === 0 ? j : n - 2 - j];
+  return off;
+}
+
+// which call (0-based within a pass) serves stationIdx when running dir
+export function stationCallK(n, dir, stationIdx) {
+  return dir === 0 ? stationIdx : n - 1 - stationIdx;
+}
+
+// Next bookable departure from fromIdx toward toIdx with dep >= tMin (absolute unix
+// seconds). Returns { dep, arr, dir } — dep/arr are dwell-START times at each station;
+// a passenger boards during [dep, dep + DWELL_T]. Values are the exact IEEE-754
+// doubles p*oneway + offset, so the Python port reproduces them bit-for-bit.
+export function nextDeparture(legT, n, fromIdx, toIdx, tMin) {
+  const oneway = legT.reduce((a, b) => a + b, 0) + n * DWELL_T;
+  const dir = toIdx > fromIdx ? 0 : 1;
+  const kF = stationCallK(n, dir, fromIdx), kT = stationCallK(n, dir, toIdx);
+  const offF = callOffset(legT, n, dir, kF), offT = callOffset(legT, n, dir, kT);
+  let p = Math.max(0, Math.floor((tMin - offF) / oneway) - 2);
+  for (;;) {
+    if (p % 2 === dir) {
+      const dep = p * oneway + offF;
+      if (dep >= tMin) return { dep, arr: p * oneway + offT, dir };
+    }
+    p++;
+  }
+}
