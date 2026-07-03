@@ -4,6 +4,7 @@ import { fbm2, fbm3, noise3, hash2i, hash3i, mulberry32, strSeed } from './noise
 import { Geography, ROSEBERRY, WAINSTONES, KILNS, CASTLE } from './geography.js';
 import { MoorsGeography } from './moorsgeo.js';
 import { stationOrient } from './railpath.js';
+import { innPlan } from './innplan.js';
 
 // The real-Moors world id — the seed string main.js uses for the solo world + the shared room
 export const MOORS_SEED = strSeed('t-moors-1900');
@@ -15,6 +16,15 @@ export class Gen {
   constructor(seed) {
     this.seed = seed | 0;
     this.geo = isMoorsSeed(seed) ? new MoorsGeography(seed) : new Geography(seed);
+
+    // One inn per configured village (innplan.js INN_NAMES), built once at
+    // construction time — deterministic, so every client with the same seed
+    // produces byte-identical inns (INVARIANTS.md rule 6).
+    this.inns = new Map();
+    for (const v of this.geo.villages || []) {
+      const plan = innPlan(this.geo, v.name, this.seed);
+      if (plan) this.inns.set(v.name, plan);
+    }
   }
 
   height(x, z) { return this.geo.height(x, z); }
@@ -289,6 +299,7 @@ export class Gen {
       for (let lx = 0; lx < CHUNK; lx++) {
         const x = x0 + lx, z = z0 + lz;
         const h = geo.height(x, z);
+        const inn = this.innAt(x, z);
         const bog = geo.bogginess(x, z);
         const coast = geo.coastT(x, z);
         const onCliff = coast > 0.03 && coast < 0.85 && h > WATER_LEVEL;
@@ -307,7 +318,7 @@ export class Gen {
           let id;
           if (y === 0) id = B.BEDROCK;
           else if (y < h - 3) {
-            id = this.caveAt(x, y, z, h) ? B.AIR : this.oreAt(x, y, z);
+            id = (inn ? false : this.caveAt(x, y, z, h)) ? B.AIR : this.oreAt(x, y, z);
           } else if (y < h) {
             id = beach ? B.SAND : blanketBog ? B.PEAT : (rocky ? B.STONE : B.DIRT);
           } else { // surface
@@ -516,9 +527,19 @@ export class Gen {
       for (let y = c.deck + 1; y <= top; y++) data[IDX(c.lx, y, c.lz)] = B.AIR;
       data[IDX(c.lx, c.deck, c.lz)] = c.d < 1.4 ? B.GRAVEL : c.d < 2.2 ? B.COBBLE : B.GRASS;
     }
+    this.stampInns(data, cx, cz);
     this.stampStations(data, cx, cz);
     this.stampBridges(data, cx, cz);
     return data;
+  }
+
+  // Is (x,z) inside any inn's protected box? O(inns) — inns.size is tiny,
+  // called once per column per chunk generation.
+  innAt(x, z) {
+    for (const p of this.inns.values()) {
+      if (x >= p.protectedBox.x0 && x <= p.protectedBox.x1 && z >= p.protectedBox.z0 && z <= p.protectedBox.z1) return p;
+    }
+    return null;
   }
 
   // Merlin's Keep: a great stone castle stood alone on t' empty north-west moor.
@@ -601,6 +622,60 @@ export class Gen {
     put(CXp, base + kh + 2, CZp, B.LANTERN); // a beacon atop the keep
 
     this._castleBase = base;
+  }
+
+  // One inn's exterior shell + underground parlour, stamped into whichever
+  // chunk(s) its protectedBox overlaps. Same idiom as stampStations: local
+  // put() closure bounds-checked against the current chunk only, so a
+  // structure straddling a chunk boundary gets finished by its OTHER chunk's
+  // own call — every chunk only ever writes its own CHUNK x CHUNK x HEIGHT slab.
+  stampInns(data, cx, cz) {
+    const x0 = cx * CHUNK, z0 = cz * CHUNK;
+    const put = (wx, wy, wz, id) => {
+      const lx = wx - x0, lz = wz - z0;
+      if (lx >= 0 && lx < CHUNK && lz >= 0 && lz < CHUNK && wy >= 0 && wy < HEIGHT) data[IDX(lx, wy, lz)] = id;
+    };
+    for (const p of this.inns.values()) {
+      if (p.protectedBox.x1 < x0 || p.protectedBox.x0 >= x0 + CHUNK || p.protectedBox.z1 < z0 || p.protectedBox.z0 >= z0 + CHUNK) continue;
+
+      // --- exterior shell: a modest stone building, slate roof, one door ---
+      const { x0: fx0, z0: fz0, x1: fx1, z1: fz1 } = p.footprint;
+      const wallH = 3, g = p.groundY;
+      for (let wx = fx0; wx <= fx1; wx++) for (let wz = fz0; wz <= fz1; wz++) {
+        const perim = (wx === fx0 || wx === fx1 || wz === fz0 || wz === fz1);
+        put(wx, g, wz, B.PLANKS); // floor
+        for (let y = g + 1; y <= g + wallH; y++) put(wx, y, wz, perim ? B.STONEBRICK : B.AIR);
+        put(wx, g + wallH + 1, wz, B.SLATE); // flat slate roof — a gable is D2 decor
+      }
+      // door: centred on doorSide, door block at ground+1, clear air at ground+2
+      const midX = Math.round((fx0 + fx1) / 2), midZ = Math.round((fz0 + fz1) / 2);
+      const doorPos = p.doorSide === 'n' ? [midX, fz0] : p.doorSide === 's' ? [midX, fz1]
+        : p.doorSide === 'e' ? [fx1, midZ] : [fx0, midZ];
+      put(doorPos[0], g + 1, doorPos[1], B.INN_DOOR);
+      put(doorPos[0], g + 2, doorPos[1], B.AIR);
+
+      // --- underground parlour: hollow room + solid stone shell, directly below the site ---
+      const { floorY, w: pw, l: pl, h: ph, wallThick: wt } = p.parlour;
+      const px0 = p.origin.x - Math.floor(pw / 2) - wt, px1 = px0 + pw + 2 * wt - 1;
+      const pz0 = p.origin.z - Math.floor(pl / 2) - wt, pz1 = pz0 + pl + 2 * wt - 1;
+      for (let wx = px0; wx <= px1; wx++) for (let wz = pz0; wz <= pz1; wz++) {
+        const inShell = (wx === px0 || wx === px1 || wz === pz0 || wz === pz1);
+        put(wx, floorY - 1, wz, B.STONEBRICK); // footing
+        put(wx, floorY, wz, B.STONEBRICK);     // floor — solid everywhere, not just the shell
+        for (let y = floorY + 1; y <= floorY + ph; y++) put(wx, y, wz, inShell ? B.STONEBRICK : B.AIR); // walls + hollow interior
+        put(wx, floorY + ph + 1, wz, B.STONEBRICK); // ceiling
+      }
+      // interior exit door in the wall matching the exterior doorSide
+      const exitPos = p.doorSide === 'n' ? [p.origin.x, pz0] : p.doorSide === 's' ? [p.origin.x, pz1]
+        : p.doorSide === 'e' ? [px1, p.origin.z] : [px0, p.origin.z];
+      put(exitPos[0], floorY + 1, exitPos[1], B.INN_DOOR);
+
+      // hearth: physical cell only in D1 (fire/decor arrive in D2/D3)
+      const ix0 = p.origin.x - Math.floor(pw / 2), iz0 = p.origin.z - Math.floor(pl / 2);
+      const hx = ix0 + p.parlour.hearth.x, hz = iz0 + p.parlour.hearth.z;
+      put(hx, floorY, hz, B.STONEBRICK);
+      put(hx, floorY + 1, hz, B.TORCH);
+    }
   }
 
   // Station: platforms laid parallel to t' rails, an NER timber (or grand

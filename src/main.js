@@ -1046,6 +1046,11 @@ class Game {
     await this.saveNow(false);
     if (this.net) { this.net.disconnect(); this.net = null; }
     this.netActive = false;
+    // a quit mid-threshold-fade would otherwise leave the canvas black until the
+    // pending fade-in timer fires — clear the cross-fade state before the title shows
+    this.renderer.domElement.style.transition = '';
+    this.renderer.domElement.style.opacity = '1';
+    this._thresholdBusy = false;
     this.state = 'title';
     document.exitPointerLock?.();
     this.ui.show('titleScreen');
@@ -2509,6 +2514,46 @@ class Game {
     } else if (m.posterPid === my) {
       this.ui.toast(`<b>${escHtml(String(m.takerName || 'Somebody'))}</b> took thi swap off t&rsquo; Tradin&rsquo; Post &mdash; their goods are on t&rsquo; way.`, 6000);
     }
+  }
+
+  // Threshold crossing: fade to black, teleport, fade back in. `plan` is the
+  // inn plan (src/innplan.js); `entering` picks parlour-vs-exterior destination.
+  // Drives the same canvas-opacity the title reveal uses, at a much shorter
+  // duration — no chunk-streaming gate needed: both destinations are inside the
+  // inn's own chunk(s), already generated because the player is stood at a door.
+  crossThreshold(plan, entering) {
+    if (this.state !== 'playing' || this._thresholdBusy) return;
+    this._thresholdBusy = true;
+    if (this.audio && this.audio.warnKnock) this.audio.warnKnock(0.3); // the latch
+    const dest = entering
+      ? { x: plan.origin.x + 0.5, y: plan.parlour.floorY + 1, z: plan.origin.z + 0.5 }
+      : this._innExteriorLanding(plan);
+    const el = this.renderer.domElement;
+    const FADE_MS = 260;
+    el.style.transition = `opacity ${FADE_MS}ms`;
+    el.style.opacity = '0';
+    setTimeout(() => {
+      this.player.pos = { x: dest.x, y: dest.y, z: dest.z };
+      this.player.vel = { x: 0, y: 0, z: 0 };
+      if (entering && this.audio && this.audio.hearthCrackle) this.audio.hearthCrackle(0.25);
+      el.style.opacity = '1';
+      setTimeout(() => { el.style.transition = ''; this._thresholdBusy = false; }, FADE_MS);
+    }, FADE_MS);
+  }
+
+  // Landing spot just outside the exterior door, one block out from the door
+  // cell on the doorSide. Lands at groundY+2 and lets gravity settle the final
+  // half-block, warp()'s idiom — the landing cell sits one block PAST the
+  // site-scan's flatness-checked corners, so its true ground can differ by ±1
+  // and a hard-place at groundY+1 could embed the player in a slope.
+  _innExteriorLanding(plan) {
+    const { x0, z0, x1, z1 } = plan.footprint;
+    const midX = Math.round((x0 + x1) / 2), midZ = Math.round((z0 + z1) / 2);
+    const out = plan.doorSide === 'n' ? { x: midX, z: z0 - 1 }
+      : plan.doorSide === 's' ? { x: midX, z: z1 + 1 }
+      : plan.doorSide === 'e' ? { x: x1 + 1, z: midZ }
+      : { x: x0 - 1, z: midZ };
+    return { x: out.x + 0.5, y: plan.groundY + 2, z: out.z + 0.5 };
   }
 
   readSignpost() {
@@ -4439,6 +4484,17 @@ class Game {
         if (st) { this.openStation(st); return; }
         this.openBoard(true); return;
       }
+      if (hit.id === B.INN_DOOR) {
+        for (const p of this.world.gen.inns.values()) {
+          const { x0, z0, x1, z1 } = p.protectedBox;
+          if (hit.x >= x0 && hit.x <= x1 && hit.z >= z0 && hit.z <= z1) {
+            // below-ground door = the parlour's exit; surface door = the way in.
+            this.crossThreshold(p, hit.y >= p.groundY);
+            break;
+          }
+        }
+        return;
+      }
       if (hit.id === B.SIGNPOST) { this.readSignpost(); return; }
       if (hit.id === B.RANGE) {
         this.state = 'range';
@@ -5474,7 +5530,8 @@ class Game {
           if (geo.isMuseumBoard(hit.x, hit.z)) hint = 'Right-click: Dracula Museum';
           else hint = geo.nearStation(hit.x, hit.z, 8)
             ? 'Right-click: departures board' : 'Right-click: parish notices an\u2019 jobs';
-        } else if (hit.id === B.SIGNPOST) hint = 'Right-click: read t\u2019 waymark';
+        } else if (hit.id === B.INN_DOOR) hint = 'Right-click: cross t\u2019 threshold';
+        else if (hit.id === B.SIGNPOST) hint = 'Right-click: read t\u2019 waymark';
         else if (hit.id === B.BENCH) hint = 'Right-click: joiner\u2019s bench (craftin\u2019)';
         else if (hit.id === B.RANGE) hint = 'Right-click: t\u2019 range (cookin\u2019 an\u2019 smeltin\u2019)';
         else if (hit.id === B.STRONGBOX) hint = 'Right-click: oak strongbox (stash thi goods an\u2019 brass)';

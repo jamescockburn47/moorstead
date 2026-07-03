@@ -134,7 +134,7 @@ in `innplan.js` (Task 1) and re-verifying — not hand-placing coordinates.
 - Create: `src/innplan.js`
 - Test: `scripts/verify-inn-interior.mjs`
 
-- [ ] **Step 1: Write the failing verify script (determinism + shape)**
+- [x] **Step 1: Write the failing verify script (determinism + shape)**
 
 ```js
 // scripts/verify-inn-interior.mjs
@@ -193,12 +193,12 @@ console.log(failed ? '\nRESULT: FAIL' : '\nRESULT: PASS');
 process.exit(failed ? 1 : 0);
 ```
 
-- [ ] **Step 2: Run it, confirm it fails on missing module**
+- [x] **Step 2: Run it, confirm it fails on missing module**
 
 Run: `node scripts/verify-inn-interior.mjs`
 Expected: `Error [ERR_MODULE_NOT_FOUND]` for `../src/innplan.js` (module doesn't exist yet).
 
-- [ ] **Step 3: Write `src/innplan.js`**
+- [x] **Step 3: Write `src/innplan.js`**
 
 ```js
 // src/innplan.js — deterministic inn/tavern plan builder. Pure: no THREE, no
@@ -308,12 +308,12 @@ export function innPlan(geo, villageName, seed) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node scripts/verify-inn-interior.mjs`
 Expected: every line `ok`, then `RESULT: PASS`, exit 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/innplan.js scripts/verify-inn-interior.mjs
@@ -328,7 +328,7 @@ git commit -m "feat(tavern): deterministic innPlan() builder for D1"
 - Modify: `src/defs.js:59` (append after `STRONGBOX: 61`), and the `D[]` block
   definitions section near `defs.js:185` (next to `D[B.GATE]`).
 
-- [ ] **Step 1: Add the block id**
+- [x] **Step 1: Add the block id**
 
 In `src/defs.js`, immediately after line 59 (`STRONGBOX: 61,`):
 
@@ -336,7 +336,7 @@ In `src/defs.js`, immediately after line 59 (`STRONGBOX: 61,`):
   INN_DOOR: 62,    // an inn's threshold — right-click to cross; never breaks (protected region)
 ```
 
-- [ ] **Step 2: Add the block definition**
+- [x] **Step 2: Add the block definition**
 
 In `src/defs.js`, immediately after the `D[B.GATE]` line (defs.js:185):
 
@@ -348,12 +348,12 @@ D[B.INN_DOOR] = { name: 'Tavern Door', kind: 'solid', tex: { t: TILE.LOG_TOP, s:
 Task 4 is the real guard, this just means an INN_DOOR block can never be selected
 by the normal mining-progress UI even if the protection check were ever bypassed.)
 
-- [ ] **Step 3: Verify no collision / defs.js still loads**
+- [x] **Step 3: Verify no collision / defs.js still loads**
 
 Run: `node -e "import('./src/defs.js').then(m => console.log(m.B.INN_DOOR, m.D[m.B.INN_DOOR].name))"`
 Expected: `62 Tavern Door`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/defs.js
@@ -369,7 +369,7 @@ git commit -m "feat(tavern): reserve B.INN_DOOR block id"
   `stampInns()`.
 - Test: extend `scripts/verify-inn-interior.mjs`.
 
-- [ ] **Step 1: Extend the verify script with a chunk-carve assertion (failing first)**
+- [x] **Step 1: Extend the verify script with a chunk-carve assertion (failing first)**
 
 Append to `scripts/verify-inn-interior.mjs`, before the final `console.log`:
 
@@ -401,14 +401,14 @@ don't exist yet — Step 1's job is only to prove the script fails for the right
 reason. Step 3 below replaces this block with the corrected version that imports
 the real constants instead of inventing test-local ones.)
 
-- [ ] **Step 2: Run it, confirm it fails (`Gen.inns` doesn't exist / ReferenceError)**
+- [x] **Step 2: Run it, confirm it fails (`Gen.inns` doesn't exist / ReferenceError)**
 
 Run: `node scripts/verify-inn-interior.mjs`
 Expected: `TypeError: Cannot read properties of undefined (reading 'get')` or a
 `ReferenceError` for the undefined test-local constants — either way, a clean
 failure, not a pass.
 
-- [ ] **Step 3: Fix the test to import real constants, then implement**
+- [x] **Step 3: Fix the test to import real constants, then implement**
 
 Replace the block added in Step 1 with:
 
@@ -568,12 +568,12 @@ immediately before it:
   }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node scripts/verify-inn-interior.mjs`
 Expected: all `ok`, `RESULT: PASS`, exit 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/worldgen.js scripts/verify-inn-interior.mjs
@@ -588,7 +588,7 @@ git commit -m "feat(tavern): carve Station Tavern shell + parlour into worldgen"
 - Modify: `src/world.js:100-104`
 - Test: create `scripts/verify-inn-protection.mjs`
 
-- [ ] **Step 1: Write the failing verify script**
+- [x] **Step 1: Write the failing verify script**
 
 ```js
 // scripts/verify-inn-protection.mjs
@@ -631,13 +631,13 @@ console.log(failed ? '\nRESULT: FAIL' : '\nRESULT: PASS');
 process.exit(failed ? 1 : 0);
 ```
 
-- [ ] **Step 2: Run it, confirm it fails**
+- [x] **Step 2: Run it, confirm it fails**
 
 Run: `node scripts/verify-inn-protection.mjs`
 Expected: the "cannot break"/"cannot place" assertions `FAIL` (protection doesn't
 exist yet — `setBlock` currently allows both).
 
-- [ ] **Step 3: Implement the guard in `src/world.js`**
+- [x] **Step 3: Implement the guard in `src/world.js`**
 
 In `src/world.js`, add this method to the `World` class, near `setBlock`
 (directly above it, so it reads top-to-bottom as "the rule, then the thing it
@@ -682,12 +682,12 @@ writes `data[]` directly during `generateChunk`, before the chunk is registered 
 so worldgen's own carve is unaffected by this guard, only post-generation edits
 are.)
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node scripts/verify-inn-protection.mjs`
 Expected: all `ok`, `RESULT: PASS`, exit 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/world.js scripts/verify-inn-protection.mjs
@@ -702,7 +702,7 @@ git commit -m "feat(tavern): protect inn shells from player edits (local setBloc
 - Modify: `src/multiplayer.js:237-243`
 - Test: extend `scripts/verify-inn-protection.mjs`
 
-- [ ] **Step 1: Extend the verify script (failing first)**
+- [x] **Step 1: Extend the verify script (failing first)**
 
 Append to `scripts/verify-inn-protection.mjs`, before the final `console.log`:
 
@@ -720,7 +720,7 @@ Append to `scripts/verify-inn-protection.mjs`, before the final `console.log`:
 }
 ```
 
-- [ ] **Step 2: Run it, confirm the new assertion fails**
+- [x] **Step 2: Run it, confirm the new assertion fails**
 
 Run: `node scripts/verify-inn-protection.mjs`
 Expected: the "incoming relay edit" line `FAIL`s — `world.setBlock` inside
@@ -733,7 +733,7 @@ straight to Step 3's explicit early-return for defence-in-depth (avoiding the
 `netEdits` bookkeeping at `multiplayer.js:241-242` running for a rejected edit)
 rather than relying solely on `setBlock`'s internal guard.
 
-- [ ] **Step 3: Add the explicit guard in `src/multiplayer.js`**
+- [x] **Step 3: Add the explicit guard in `src/multiplayer.js`**
 
 Change (`multiplayer.js:239-243`) from:
 
@@ -756,12 +756,12 @@ to:
       g.world.setBlock(m.x, m.y, m.z, m.id);
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node scripts/verify-inn-protection.mjs`
 Expected: all `ok`, `RESULT: PASS`, exit 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/multiplayer.js scripts/verify-inn-protection.mjs
@@ -779,7 +779,7 @@ This task is behaviour that needs a running browser to see, so it has no
 verify-script step of its own — Task 7's in-browser proof pass covers it. Write
 it carefully against the exact cited anchors.
 
-- [ ] **Step 1: Add the fade+teleport+audio flow**
+- [x] **Step 1: Add the fade+teleport+audio flow**
 
 Add this method to the `Game` class in `src/main.js`, near `warp()`
 (`main.js:638-652`, so related teleport logic stays together):
@@ -811,7 +811,7 @@ Add this method to the `Game` class in `src/main.js`, near `warp()`
   }
 ```
 
-- [ ] **Step 2: Wire the interact dispatch**
+- [x] **Step 2: Wire the interact dispatch**
 
 In `src/main.js`, at the interact handler (`main.js:4438-4442`), change:
 
@@ -840,7 +840,7 @@ to add a preceding branch (keep the signpost line unchanged immediately after):
 `groundY+1`, always well above `parlour.floorY` which is a fixed shallow y=3 —
 the two doors never overlap in y for any village.)
 
-- [ ] **Step 3: Add the interact hint text**
+- [x] **Step 3: Add the interact hint text**
 
 At `main.js:5475-5477`:
 
@@ -854,7 +854,7 @@ add immediately before it:
         } else if (hit.id === B.INN_DOOR) hint = 'Right-click: cross the threshold';
 ```
 
-- [ ] **Step 4: Manual check (documented, not automated — no headless DOM)**
+- [x] **Step 4: Manual check (documented, not automated — no headless DOM)**
 
 In-browser, via preview tools: `moorstead.debug.warp('Grosmont')`, walk to the
 Station Tavern door, right-click. Expect: latch-knock SFX, brief fade to black,
@@ -863,7 +863,7 @@ hearth-crackle SFX, fade back in. Right-click the parlour's own door: reverse
 the whole sequence, reappear just outside the tavern's exterior door. This is
 folded into Task 7's proof pass, not repeated here.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main.js
@@ -878,7 +878,7 @@ git commit -m "feat(tavern): threshold interaction — fade, teleport, fade back
 - Modify: `package.json` (verify chain)
 - Modify: `docs/ARCHITECTURE.md`
 
-- [ ] **Step 1: Wire both new scripts into the verify chain**
+- [x] **Step 1: Wire both new scripts into the verify chain**
 
 In `package.json`, add two entries alongside the existing `"verify:strongbox"`
 etc. block (`package.json:65` area):
@@ -892,14 +892,14 @@ And append both to the long `"verify"` chain (`package.json:13`, the
 hand-maintained `&&`-chain) — add `&& node scripts/verify-inn-interior.mjs &&
 node scripts/verify-inn-protection.mjs` at the end of that line.
 
-- [ ] **Step 2: Run the full gate**
+- [x] **Step 2: Run the full gate**
 
 Run: `npm run verify`
 Expected: every script in the chain prints `RESULT: PASS`, command exits 0. If
 any PRE-EXISTING script fails, stop — that is not this plan's job to fix; report
 it rather than papering over it.
 
-- [ ] **Step 3: Add ARCHITECTURE.md rows**
+- [x] **Step 3: Add ARCHITECTURE.md rows**
 
 In `docs/ARCHITECTURE.md`, in the module-map table (row format confirmed at
 `ARCHITECTURE.md:22-57`), add:

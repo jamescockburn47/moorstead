@@ -57,6 +57,7 @@ export const B = {
   COTTONGRASS: 59, // white-tufted sedge of the wet moor flushes
   HOME_FLAG: 60,   // a planted base flag — marks thi home; tha respawns here if tha falls
   STRONGBOX: 61,   // oak strongbox wi' iron banding — stash goods an' brass; what's boxed doesn't fall wi' thee
+  INN_DOOR: 62,    // an inn's threshold — right-click to cross; never breaks (protected region)
 };
 
 // ---- Item ids (blocks double as items; pure items start at 64) ----
@@ -183,6 +184,8 @@ D[B.FENCE] = { name: 'Sheep Hurdle', kind: 'solid', tex: { t: TILE.PLANKS, s: TI
 // physics lets the player through allus, an' an animal through only frae OUTSIDE the fold
 // (see boxCollides + entity.passGate). Log-built, so it reads different frae the hurdle.
 D[B.GATE] = { name: 'Field Gate', kind: 'solid', tex: { t: TILE.LOG_TOP, s: TILE.LOG_SIDE, b: TILE.LOG_TOP }, hard: 1.2, tool: 'axe', drop: B.GATE };
+// An inn's threshold — right-click to cross; never breaks (region-protected in a later task).
+D[B.INN_DOOR] = { name: 'Tavern Door', kind: 'solid', tex: { t: TILE.LOG_TOP, s: TILE.PLANKS, b: TILE.LOG_TOP }, hard: 999, tool: null, drop: null };
 D[B.MINE_ENTRANCE] = { name: 'Mine Entrance', kind: 'solid', tex: { t: TILE.MINE_ENTRANCE, s: TILE.MINE_ENTRANCE, b: TILE.MINE_ENTRANCE }, hard: 2.5, tool: 'pick', drop: B.MINE_ENTRANCE };
 D[B.PIT_PROPS] = { name: 'Pit Props', kind: 'solid', tex: { t: TILE.PIT_PROPS, s: TILE.PIT_PROPS, b: TILE.PIT_PROPS }, hard: 1.5, tool: 'axe', drop: B.PIT_PROPS };
 D[B.SAFETY_LAMP] = { name: 'Safety Lamp', kind: 'solid', tex: { t: TILE.SAFETY_LAMP, s: TILE.SAFETY_LAMP, b: TILE.SAFETY_LAMP }, hard: 0.4, tool: 'pick', drop: B.SAFETY_LAMP, light: true };
