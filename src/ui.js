@@ -260,6 +260,18 @@ export function stallRowHTML(offer) {
     `<b>${escHtml(describeStacks(offer && offer.give))}</b> for <b>${escHtml(describeStacks(offer && offer.want))}</b></div>`;
 }
 
+// [warden] Pure: inverts buildBigMap()'s own world->screen projection (w2x/w2y, stored on
+// the UI instance as `_mapXf` after every buildBigMap() call). Exported standalone so both
+// the admin-panel map click handler AND this headless test can use the exact same maths
+// without needing a real UI instance or canvas.
+export function bigMapScreenToWorld(mapXf, sx, sy) {
+  const { s, offH, offV, minZ, maxX } = mapXf;
+  return {
+    x: Math.round(maxX - (sy - offV) / s),
+    z: Math.round((sx - offH) / s + minZ),
+  };
+}
+
 function pixURL(pattern, fullColor, dim) {
   const rows = pattern.length, cols = pattern[0].length;
   const c = document.createElement('canvas');

@@ -6,6 +6,7 @@
 
 import { festivalBands } from '../src/festivals.js';
 import { overrideWeatherState } from '../src/sky.js';
+import { bigMapScreenToWorld } from '../src/ui.js';
 
 let failed = false;
 const ok  = m => console.log('  ok    ' + m);
@@ -37,6 +38,21 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
   );
   const fog = overrideWeatherState('fog');
   (fog.weather === 'fog' && fog.liveFog === null ? ok : bad)('Fog override carries no forced fog distance (the weather string alone already drives baseFog for misty/fog)');
+}
+
+// --- bigMapScreenToWorld: inverts buildBigMap()'s own w2x/w2y projection exactly ---
+{
+  // A representative transform shape — the real one is built by ui.js's buildBigMap() from
+  // world bounds; this is deliberately a plain object so the test needs no DOM/canvas at all.
+  const xf = { s: 0.42, offH: 60, offV: 40, minZ: -1200, maxX: 900 };
+  // Forward-project a known world point the SAME way buildBigMap() does, then invert it.
+  const wx = 150, wz = -300;
+  const sx = xf.offH + (wz - xf.minZ) * xf.s;
+  const sy = xf.offV + (xf.maxX - wx) * xf.s;
+  const back = bigMapScreenToWorld(xf, sx, sy);
+  (Math.abs(back.x - wx) < 1 && Math.abs(back.z - wz) < 1 ? ok : bad)('inverts a forward-projected point back to (within rounding)');
+  // determinism
+  (JSON.stringify(bigMapScreenToWorld(xf, 100, 100)) === JSON.stringify(bigMapScreenToWorld(xf, 100, 100)) ? ok : bad)('deterministic');
 }
 
 console.log(failed ? '\nRESULT: FAIL' : '\nRESULT: PASS');
