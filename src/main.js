@@ -678,6 +678,28 @@ class Game {
         G.snowAccum = accumulationTarget(G.seasonOverride != null ? seasonStateAtPhase(G.seasonOverride) : seasonState());
         return G.seasonOverride;
       },
+      // dev/warden: force a weather state ('clear'|'misty'|'rain'|'fog'), or null/'live' to
+      // resume the real forecast. Overrides win over BOTH the live feed and the random
+      // offline machine (see sky.js's weatherOverride handling). 'rain' also forces a real
+      // rainAmount so precipitation actually falls regardless of season — see
+      // overrideWeatherState() in sky.js.
+      //   moorstead.debug.setWeather('rain')   moorstead.debug.setWeather(null) // back to live
+      setWeather(state) {
+        const known = ['clear', 'misty', 'rain', 'fog'];
+        if (state == null || state === 'live') { G.sky.weatherOverride = null; return 'live'; }
+        if (!known.includes(state)) return { error: 'unknown weather', known };
+        G.sky.weatherOverride = state;
+        return state;
+      },
+      // dev/warden: jump to any time of day (0..1 day-fraction), or leave unset to keep
+      // advancing normally. One-shot set — mirrors setSeason's clamp; time keeps ticking
+      // forward from wherever this leaves it (same behaviour the title-flyover's hardcoded
+      // sky.time assignment already has).
+      //   moorstead.debug.setTime(0.75)   // dusk
+      setTime(t) {
+        G.sky.time = Math.max(0, Math.min(0.999, t));
+        return G.sky.time;
+      },
       // dev: jump to any year phase (0..1) or null to resume wall-clock time.
       // Returns { phase, season, festival } so caller can see what was selected.
       // When clearing, season/festival reflect the live wall-clock state.
