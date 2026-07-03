@@ -111,7 +111,7 @@ export const I = {
 // separate frae owt anybody plays on.
 // (Note: t' dash returns acct = sha1(code)[:10], so t' first hash is sha256 o' THAT.
 //  T' second hash is sha256 o' t' warden login key entered on t' landing page.)
-export const ADMIN_HASHES = ['29889b77f82b79d1585f514ac0e6489deed67ddb27b55a81109492a443b8e950', 'd3586a9e0a64041ad379c88e7e646866232700925b973f26297e7be1c5b62c14'];
+export const ADMIN_HASHES = ['29889b77f82b79d1585f514ac0e6489deed67ddb27b55a81109492a443b8e950', 'd3586a9e0a64041ad379c88e7e646866232700925b973f26297e7be1c5b62c14', '5a19e539f87a5776ee01e7d8d603fcc7b63e810a14f23c471f94150437e854d8'];
 
 // kind: 'solid' | 'cutout' (cross plants) | 'liquid' | 'air'
 // tex: {t, s, b} tile ids; hard: seconds to break by hand; tool: best tool
