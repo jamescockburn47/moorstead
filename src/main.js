@@ -5766,7 +5766,10 @@ class Game {
         let vd = 1e9;
         for (const v of geo.villages) { const d = Math.hypot(v.x - p.x, v.z - p.z); if (d < vd) vd = d; }
         const evening = this.sky.time > this.sky.sol.sunsetT - 0.15 || this.sky.time < 0.05; // [SOLAR] dusk through t' small hours (equinox = t' owd 0.6)
-        this._nearInn = (evening && vd < 16) ? 1 : 0;
+        // suppress the exterior pub-ambience bed while the player is INSIDE a
+        // parlour — the D3 interior murmur/SFX tick below owns the room's sound
+        // (one-frame-stale flag is fine for an ambience toggle; review 2026-07-03)
+        this._nearInn = (evening && vd < 16 && !this._playerInParlour) ? 1 : 0;
         let water = 0;
         for (const [dx, dz] of [[0, 0], [3, 0], [-3, 0], [0, 3], [0, -3], [4, 4], [-4, 4], [4, -4], [-4, -4]]) {
           if (this.world.getBlock(px + dx, py - 1, pz + dz) === B.WATER || this.world.getBlock(px + dx, py, pz + dz) === B.WATER) { water = 1; break; }
@@ -5783,6 +5786,7 @@ class Game {
       for (const p of this.world.gen.inns.values()) {
         if (playerInParlour(this.player.pos, p)) { inPlan = p; break; }
       }
+      this._playerInParlour = !!inPlan; // read by the exterior _nearInn ambience gate above
       if (inPlan) {
         this._murmurTimer = (this._murmurTimer == null) ? 10 + Math.random() * 10 : this._murmurTimer - dt;
         if (this._murmurTimer <= 0) {

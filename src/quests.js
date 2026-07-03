@@ -1741,9 +1741,13 @@ export class Quests {
           if (o.mob && o.mob.parloured === plan) names.push(o.data.name);
         }
       }
-      innkeeperRows.push('INN TONIGHT: ' + (names.length ? names.join(', ') : 'nobbut thee'));
+      // sentence-style rows matching the rest of the card (review 2026-07-03) —
+      // the LLM reads these; ALL-CAPS label prefixes were a stylistic outlier.
+      innkeeperRows.push(names.length
+        ? 'In t’ parlour tonight: ' + names.join(', ') + '.'
+        : 'T’ parlour’s empty tonight — nobbut thee.');
       // season only — no weather forecast helper exists on g.season, so none is invented.
-      if (g.season && g.season.season) innkeeperRows.push('SEASON: ' + g.season.season);
+      if (g.season && g.season.season) innkeeperRows.push('The season is ' + g.season.season + '.');
     }
     const card = buildFactsCard({
       playerName: g.player && g.player.name,

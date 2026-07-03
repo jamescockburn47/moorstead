@@ -121,13 +121,13 @@ if (plan) {
   const { buildFactsCard } = await import('../src/factscard.js');
   const cardWith = buildFactsCard({
     playerName: 'Tha',
-    innkeeperRows: ['INN TONIGHT: Harry, Karen', 'SEASON: autumn'],
+    innkeeperRows: ['In t’ parlour tonight: Harry, Karen.', 'The season is autumn.'],
   });
-  (cardWith.includes('INN TONIGHT: Harry, Karen') ? ok : bad)('buildFactsCard renders an INN TONIGHT innkeeperRow');
-  (cardWith.includes('SEASON: autumn') ? ok : bad)('buildFactsCard renders a SEASON innkeeperRow');
+  (cardWith.includes('In t’ parlour tonight: Harry, Karen.') ? ok : bad)('buildFactsCard renders a who’s-in-tonight innkeeperRow');
+  (cardWith.includes('The season is autumn.') ? ok : bad)('buildFactsCard renders a season innkeeperRow');
 
-  const cardEmpty = buildFactsCard({ innkeeperRows: ['INN TONIGHT: nobbut thee'] });
-  (cardEmpty.includes('nobbut thee') ? ok : bad)('buildFactsCard renders the empty-parlour INN TONIGHT row');
+  const cardEmpty = buildFactsCard({ innkeeperRows: ['T’ parlour’s empty tonight — nobbut thee.'] });
+  (cardEmpty.includes('nobbut thee') ? ok : bad)('buildFactsCard renders the empty-parlour row');
 
   // additive-only: a card with no innkeeperRows at all is unaffected (undefined tolerated)
   const cardNone = buildFactsCard({ playerName: 'Tha' });
