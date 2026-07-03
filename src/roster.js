@@ -182,6 +182,21 @@ export function waitMode(due, rank) {
   return 'potter';
 }
 
+// --- booked journeys (timetable-truth brains send dep/arr; spec 2026-07-03) ----------
+// With a booking there is no lottery: she potters in town until the lead window,
+// walks in to arrive just before her train, and boards on the dwell. The ranked
+// waitMode above remains ONLY as the fallback for a dep-less (older) brain.
+export const RAIL_WAIT_LEAD = 75;   // seconds before dep to set off for the platform
+export function railWaitMode(nowSec, dep, lead = RAIL_WAIT_LEAD) {
+  if (dep == null) return null;
+  return (dep - nowSec) <= lead ? 'approach' : 'potter';
+}
+
+// seat 1..16 across the two coaches, stable per NPC
+export function rideSlot(id) { return 1 + (idHash(id) % 16); }
+// metres behind the loco lead for a slot — 16 seats spread down the rake
+export function slotBack(slot) { return 11 + slot * 0.42; }
+
 // logical state -> {x,y,z, frac?}. Returns null if any referenced name can't be resolved
 // (the caller then skips that NPC this frame rather than crashing).
 export function npcVoxelPos(npc, nowEff, geo) {
@@ -517,7 +532,8 @@ export class RosterClient {
       }
       if (s && s.kind === 'rail') {                         // commit a NEW ride (only when ride-less)
         if (e._pony) this._despawnMount(e);                 // off the lane onto the rails — no orphan pony
-        e.ride = { line: s.line, from: s.fromStn, to: s.toStn, phase: 'wait', t: 0 };
+        e.ride = { line: s.line, from: s.fromStn, to: s.toStn, phase: 'wait', t: 0,
+                   dep: s.dep != null ? s.dep : null, arr: s.arr != null ? s.arr : null };
         this._driveRail(e, m, dt, rankMap);
         continue;
       }
@@ -707,8 +723,8 @@ export class RosterClient {
       if (grp && !grp.visible) grp.visible = true;
       if (vt && vt.path && vt.chainage != null) {
         const poseFwd = vt.dir === 0 ? 1 : -1;
-        if (e.ride.slot == null) e.ride.slot = 1 + (Math.round(Math.abs(_spread(e.data.id).dx * 7)) % 8); // 1..8 along the rake
-        const back = 11 + e.ride.slot * 0.75;               // ~12..17 m behind the loco lead — within the two coaches
+        if (e.ride.slot == null) e.ride.slot = rideSlot(e.data.id); // 1..16 across the two coaches
+        const back = slotBack(e.ride.slot);                 // ~11.4..17.7 m behind the loco lead — 16 seats down the rake
         const cr = Math.max(0, Math.min(vt.path.length, vt.chainage - back * poseFwd));
         const sp = this.geo.samplePosOn(vt.path, cr);
         const lat = (e.ride.slot % 2 ? 0.55 : -0.55);
@@ -734,6 +750,18 @@ export class RosterClient {
       this._walkTo(m, platformPoint(this.world, this.geo, ride.line, ride.from) || a, dt);
       return;
     }
+    // Booked journey: no lottery, no platform cap — she times her walk to the train.
+    const bm = railWaitMode(Date.now() / 1000, ride.dep);
+    if (bm === 'potter') {
+      const sp = _spread(e.data.id);
+      this._potterAt(m, { x: a.x + sp.dx, z: a.z + sp.dz }, this._nowEff(), dt);
+      return;
+    }
+    if (bm === 'approach') {
+      this._walkTo(m, platformPoint(this.world, this.geo, ride.line, ride.from) || a, dt);
+      return;
+    }
+    // (bm === null: dep-less legacy brain — ranked waitMode below still applies)
     const due = this._nextTrainCall(ride.line, ride.from);
     const group = (rankMap && rankMap.get(ride.line + '|' + ride.from)) || [e.data.id];
     const mode = waitMode(due, waiterRank(e.data.id, group));
