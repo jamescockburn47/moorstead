@@ -46,6 +46,24 @@ check(Array.isArray(nowhere), 'unknown village -> array (may be empty), never th
 // dear-case truthfulness: no dear line may claim a cheap source (spreadHint.best is another DEAR market)
 check(!whitby.some(l => /dear price here.*cheap/i.test(l)), 'dear lines never invent a cheap source');
 
+// --- brain-sync/items.json: the item vocabulary the EVO brain validates against ---
+import { execFileSync } from 'node:child_process';
+const itemsUrl = new URL('../brain-sync/items.json', import.meta.url);
+const itemsBefore = readFileSync(itemsUrl, 'utf8');
+execFileSync(process.execPath, [new URL('./export-items.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')]);
+check(itemsBefore === readFileSync(itemsUrl, 'utf8'),
+      'committed items.json matches a fresh export (not stale)');
+const items = JSON.parse(itemsBefore);
+check(Array.isArray(items) && items.length > 50, `item vocabulary is non-trivial (${items.length} names)`);
+// the names the client ACTUALLY sends: recordTrade ships full lowercased display names
+// ('swaledale wool', 'coal'), the gift path additionally strips '(...)' / ' bush' suffixes
+check(items.includes('swaledale wool') && items.includes('coal'),
+      "vocabulary carries 'swaledale wool' and 'coal'");
+check(items.includes('heather') && items.includes('bilberry'),
+      "gift-normalised forms present ('heather', 'bilberry')");
+check(items.every(n => n === n.toLowerCase() && !/^(raw|roast)\s/.test(n)),
+      'every name lowercased with raw/roast prefixes stripped');
+
 // --- source wiring (lands in B2; expected FAIL until then) ---
 const q = readFileSync(new URL('../src/quests.js', import.meta.url), 'utf8');
 check(/buildFactsCard\(/.test(q), 'quests.chatContext prepends the facts card');
