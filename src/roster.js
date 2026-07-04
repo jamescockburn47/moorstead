@@ -830,15 +830,24 @@ export class RosterClient {
         ride.dep = nowSec + due;
       }
     }
-    // Booked journey: no lottery, no platform cap — she times her walk to the train.
-    const bm = railWaitMode(Date.now() / 1000, ride.dep);
+    // Booked journey: she times her walk to the train. STAGGER the set-off per NPC over a
+    // 60–150s window (id-hashed) so folk TRICKLE onto the platform as the train nears
+    // rather than all converging at the same instant — that lockstep rush was the
+    // platform cluster (James 2026-07-04: "why can't they get there ~10 min before,
+    // walk the village, and all board when it's there"). Until the lead window they
+    // live in the village (wide _potterAt above); then they head over spread out.
+    const lead = 60 + (idHash(e.data.id) % 90);
+    const bm = railWaitMode(Date.now() / 1000, ride.dep, lead);
     if (bm === 'potter') {
       const sp = _spread(e.data.id);
       this._potterAt(m, { x: a.x + sp.dx, z: a.z + sp.dz }, this._nowEff(), dt);
       return;
     }
     if (bm === 'approach') {
-      this._walkTo(m, platformPoint(this.world, this.geo, ride.line, ride.from) || a, dt);
+      // stand SPREAD along the platform, not stacked on the one marker cell
+      const pt = platformPoint(this.world, this.geo, ride.line, ride.from) || a;
+      const sp = _spread(e.data.id);
+      this._walkTo(m, { x: pt.x + sp.dx * 0.7, z: pt.z + sp.dz * 0.7 }, dt);
       return;
     }
     // (bm === null: dep-less legacy brain — ranked waitMode below still applies)
@@ -932,21 +941,27 @@ export class RosterClient {
     return m._parlourIdx >= 0 ? plan : null;
   }
 
-  // Potter gently about a patch so a town looks alive, not frozen: a slow wander around `anchor`
-  // (+ obstacle check), re-aimed every 5–13s. Used by resting 'at' folk AND by rail travellers
-  // who are waiting for a train that isn't due yet (so they wait in town, not on the platform).
+  // Walk about the village properly so a town looks alive, not frozen and not clumped:
+  // a wander over a WIDE radius (roams the streets, not a tight shuffle on the marker),
+  // re-aimed every ~7–20s. Used by resting 'at' folk AND by rail travellers waiting for a
+  // train that isn't due yet (so they live in the village, not loiter on the platform).
   _potterAt(m, anchor, nowEff, dt) {
     if (m._ambleT == null || nowEff > m._ambleT) {
-      m._ambleT = nowEff + 4 + Math.random() * 7;
-      const r = Math.random() * 5.0, ang = Math.random() * Math.PI * 2;
-      const cx = anchor.x + Math.cos(ang) * r, cz = anchor.z + Math.sin(ang) * r;
+      m._ambleT = nowEff + 7 + Math.random() * 13;                 // longer legs -> real strolls
       const fromG = this.geo.height(Math.round(anchor.x), Math.round(anchor.z));
-      if (walkableStep(this.world, this.geo, cx, cz, fromG)) { m._ambleDX = Math.cos(ang) * r; m._ambleDZ = Math.sin(ang) * r; }
-      else { m._ambleDX = 0; m._ambleDZ = 0; }
+      // pick a walkable spot up to ~18 blocks off the anchor — try a few headings so a big
+      // radius still finds open ground (streets/greens) rather than stalling against a wall.
+      let found = false;
+      for (let tryN = 0; tryN < 5 && !found; tryN++) {
+        const r = 4 + Math.random() * 14, ang = Math.random() * Math.PI * 2;
+        const cx = anchor.x + Math.cos(ang) * r, cz = anchor.z + Math.sin(ang) * r;
+        if (walkableStep(this.world, this.geo, cx, cz, fromG)) { m._ambleDX = Math.cos(ang) * r; m._ambleDZ = Math.sin(ang) * r; found = true; }
+      }
+      if (!found) { m._ambleDX = 0; m._ambleDZ = 0; }
     }
     const tx = anchor.x + (m._ambleDX || 0), tz = anchor.z + (m._ambleDZ || 0);
     const dx = tx - m.pos.x, dz = tz - m.pos.z, d = Math.hypot(dx, dz);
-    const spd = d > 0.4 ? Math.min(1.1, d * 1.4) : 0;   // a gentle amble; settle when arrived
+    const spd = d > 0.4 ? Math.min(1.5, d * 1.4) : 0;   // a walking pace; settle when arrived
     npcMove(m, d > 0.001 ? dx / d * spd : 0, d > 0.001 ? dz / d * spd : 0, this.world, dt);
   }
 
