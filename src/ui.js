@@ -967,15 +967,16 @@ export class UI {
   }
 
   // Open the Ow Ter Play handbook to a named tab — called by onboarding / hints.
-  openHow(tabName) {
+  openHow(tabName, returnTo) {
     if (this.howTabBtns && this.howTabBtns[tabName]) {
       this.howTabBtns[tabName].click();
     }
-    // Release the pointer lock and route the close button back to the pause screen, so an
-    // opened handbook is always clickable/dismissable and never traps gameplay.
-    if (this.game && this.game.state === 'playing') {
+    // Release the pointer lock and route the close button back to `returnTo` (default the
+    // pause screen; the entry-reminder passes '__play__' so closing drops straight into the
+    // game), so an opened handbook is always clickable/dismissable and never traps gameplay.
+    if (this.game && (this.game.state === 'playing' || this.game.state === 'paused')) {
       this.game.state = 'paused';
-      this.game.howReturn = 'pauseScreen';
+      this.game.howReturn = returnTo || 'pauseScreen';
       try { document.exitPointerLock?.(); } catch { /* not locked */ }
     }
     this.show('howScreen');

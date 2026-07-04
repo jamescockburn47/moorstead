@@ -1123,7 +1123,10 @@ class Game {
     ui.btnContinue.addEventListener('click', () => { this.audio.init(); this.continueGame(); });
     ui.btnHow.addEventListener('click', () => { this.howReturn = 'titleScreen'; ui.show('howScreen'); });
     ui.btnHow2.addEventListener('click', () => { this.howReturn = 'pauseScreen'; ui.show('howScreen'); });
-    ui.btnHowClose.addEventListener('click', () => ui.show(this.howReturn || 'titleScreen'));
+    ui.btnHowClose.addEventListener('click', () => {
+      if (this.howReturn === '__play__') this.resume();   // entry reminder: straight into the game
+      else ui.show(this.howReturn || 'titleScreen');
+    });
     ui.btnResume.addEventListener('click', () => this.resume());
     ui.btnSave.addEventListener('click', () => this.saveNow());
     // "Dress thissen" — the wardrobe. Preview re-dresses a mini avatar; Done saves +
@@ -1783,6 +1786,13 @@ class Game {
     this.state = 'playing';
     this.ui.show(null);
     this.lockPointer();
+  }
+
+  // Pop the full Controls handbook on each entry into a world, as a reminder. Closing it
+  // ("Reet, Got It" or `) drops straight into the game via the '__play__' return sentinel.
+  showEntryControls() {
+    if (this.state !== 'playing') return;
+    this.ui.openHow('Controls', '__play__');
   }
 
   openInventory() {
@@ -5347,6 +5357,10 @@ class Game {
       this.ui.toast('Punch a tree for wood, or dig owt wi&rsquo; thi hands.', 6000);
       this.spawnVillagers();
       if (this.netActive) this.connectNet();
+      // Remind every player of the controls on each entry into the world (James 2026-07-04).
+      // Safe here: the pointer isn't grabbed yet at the moment of entry, so the handbook is
+      // clickable; "Reet, Got It"/` close it and drop straight into the game.
+      this.showEntryControls();
       if (!this.player.onboarded) {
         this.player.onboarded = true;
         if (this.saveNow) this.saveNow(false);
@@ -5356,11 +5370,10 @@ class Game {
         setTimeout(() => {
           this.ui.toast('📋 Find a <b>notice board</b> for jobs, or walk up to a villager an’ press <b>T</b> to talk.', 8500);
         }, 7000);
-        // NB: do NOT auto-open the handbook here — it pauses the game while the pointer is still
-        // locked to the canvas, so the player can't click to close it (it traps gameplay). The
-        // welcome toasts above guide newcomers; the handbook stays one click away on "Ow Ter Play".
+        // The full Controls handbook already popped on entry (showEntryControls above); this
+        // just points newcomers at the rest of the guide, reachable any time via the pause menu.
         setTimeout(() => {
-          this.ui.toast('👉 New here? <b>Ow Ter Play</b> on the pause menu (<b>Esc</b>) has the full guide.', 8000);
+          this.ui.toast('👉 New here? <b>Ow Ter Play</b> on the pause menu (<b>&#96;</b>) has the full guide.', 8000);
         }, 11500);
       }
     }
