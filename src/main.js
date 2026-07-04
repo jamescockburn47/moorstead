@@ -2872,6 +2872,7 @@ class Game {
     if (this.netActive && this.net && this.net.connected) {
       this.ui.sleepText.textContent = 'waiting for t’ others to kip down...';
       this.net.sendSleep(true);
+      this._wantSleepVoted = true; // vote cache follows the wire (review 2026-07-04)
     } else {
       this.ui.sleepText.textContent = '';
     }
@@ -2882,6 +2883,9 @@ class Game {
     this.state = 'playing';
     this.ui.sleepScreen.classList.add('hidden');
     if (this.netActive && this.net && this.net.connected) this.net.sendSleep(false);
+    // the vote cache must follow the wire, or the frame-loop edge trigger can
+    // never send the corrective re-vote after a modal cancel (review 2026-07-04)
+    this._wantSleepVoted = false;
     if (msg) this.ui.toast(msg, 4000);
   }
 
@@ -2905,7 +2909,18 @@ class Game {
   // modal or no — that's the whole point of a quorum: kip in t' pub's parlour
   // wi'out ever pressing N, an' still wek warmed through.
   onWake() {
-    if (this.state === 'sleeping') { this.finishWake(); return; }
+    if (this.state === 'sleeping') {
+      this.finishWake();
+      // press-N INSIDE the parlour must not forfeit the quorum reward the
+      // do-nothing player gets (review 2026-07-04): layer the warm-bed bonus
+      // over the owd modal's flat rules.
+      if (this._playerInParlour && this.player) {
+        this.player.fatigue = 0;
+        this.player.temperature = 20;
+        this.ui.toast('Tha wakes warmed an’ rested.', 5000);
+      }
+      return;
+    }
     if (!this.player || this.player.dead) return;
     const p = this.player;
     const out = wakeOutcome(!!this._playerInParlour, { hunger: p.hunger, temperature: p.temperature });
@@ -5873,6 +5888,10 @@ class Game {
       // death
       if (this.player.dead && this.state !== 'dead') {
         this._abandonGameSession('death'); // records the loss + clears session state BEFORE the state flip (review 2026-07-04)
+        // a dead player mustn't hold a live sleep vote (review 2026-07-04):
+        // the vote-loop is gated on !dead so it can never send the corrective false
+        if (this._wantSleepVoted && this.netActive && this.net && this.net.connected) this.net.sendSleep(false);
+        this._wantSleepVoted = false;
         this.state = 'dead';
         this.chatOpen = false;          // dying mid-chat must not permanently silence the parish
         this.mouseDown = [false, false, false];
@@ -6278,11 +6297,13 @@ class Game {
           if (this.net && this.net.connected) this.net.sendSleep(wantSleep);
         }
         if (!wantSleep) this._soloSleepArmed = false; // leaving the window/parlour re-arms next time
-      } else {
+      } else if (!this.player.creative) {
         // solo world: a quorum of one. After NOTE_SOLO_SLEEP_IDLE_S of standing
         // genuinely still (same "wish-to-move key" test the hearth-doze code
         // above already uses) inside the window, skip the night locally —
         // once per night, re-armed the moment the window/parlour condition drops.
+        // Creative is excluded (review 2026-07-04): a builder idling in the
+        // parlour must not have their world's clock yanked about.
         if (!wantSleep) {
           this._soloSleepArmed = false;
           this._soloSleepIdleT = 0;

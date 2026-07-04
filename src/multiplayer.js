@@ -185,6 +185,10 @@ export class Net {
 
   onInit(m) {
     const g = this.game;
+    // a fresh socket means the relay forgot our sleep vote (its leave path
+    // clears it) — null the client cache so the frame-loop edge trigger
+    // re-votes if the player is still abed (review 2026-07-04, reconnect case)
+    g._wantSleepVoted = null;
     // ---- world-epoch gate ----
     // A warden factory-reset bumps the room's epoch. If the relay's epoch is newer
     // than the one this browser last synced, our local shared state is stale.
