@@ -728,10 +728,12 @@ export class RosterClient {
       if (ride.phase === 'wait' && vt.station === ride.from && this._atPlatform(m, ride)) ride.phase = 'aboard';
       else if (ride.phase === 'aboard' && vt.station === ride.to) ride.phase = 'done';
     }
-    // safety net: never wait OR ride forever — each phase resolves within ~1.6 train cycles, so a
-    // train that never dwells at `from` (couldn't board) OR never reaches `to` (stuck aboard) both
-    // fall back gracefully. The short 'done' walk clears the ride long before its clock runs out.
-    if (ride.t > 720) { this._resolveToBrain(e, m); return; }
+    // safety net: never wait OR ride forever. MUST exceed one full line cycle,
+    // or a terminus passenger (dwelt once per ~17-min round trip) times out and
+    // warps off BEFORE her train comes back — the reason booked NPCs never
+    // boarded (James 2026-07-04). Longest cycle measured ~1301s (Whitby&Pickering),
+    // so 1500s gives a whole cycle to catch the one dwell, plus margin.
+    if (ride.t > 1500) { this._resolveToBrain(e, m); return; }
 
     if (ride.phase === 'aboard') {
       // ride VISIBLY as a passenger in the coaches: sit on the rail deck behind the loco.
@@ -764,6 +766,23 @@ export class RosterClient {
     if (ride.titleForced) {                                 // title preview: converge straight on to board the watched train
       this._walkTo(m, platformPoint(this.world, this.geo, ride.line, ride.from) || a, dt);
       return;
+    }
+    // Keep ride.dep aimed at a train the VISIBLE service can actually make: the
+    // brain's booked dep is its LOGICAL departure and often doesn't line up with
+    // when the one visible train next dwells at `from`. Re-aim to the real next
+    // dwell when the booked dep is already past (she'd have missed it) or is
+    // further out than a whole cycle (a terminus booking that would strand her).
+    // Reset the phase clock only when the TARGET dwell actually changes, so the
+    // 1500s timeout still tracks the current attempt without being reset every
+    // frame. (James 2026-07-04: booked but never boarded.)
+    const nowSec = Date.now() / 1000;
+    if (ride.dep == null || nowSec > ride.dep + 30 || ride.dep - nowSec > 1400) {
+      const due = this._nextTrainCall(ride.line, ride.from);
+      if (due != null) {
+        const target = Math.round(nowSec + due);
+        if (ride._aimDwell == null || Math.abs(target - ride._aimDwell) > 5) { ride._aimDwell = target; ride.t = 0; }
+        ride.dep = nowSec + due;
+      }
     }
     // Booked journey: no lottery, no platform cap — she times her walk to the train.
     const bm = railWaitMode(Date.now() / 1000, ride.dep);
