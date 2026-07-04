@@ -2373,9 +2373,11 @@ export class UI {
   // ---------------- [warden] big interactive travel map ----------------
   openWardenMap() {
     const g = this.game; if (!g || !g.world) return;
+    if (this._wardenOpen) return;   // already open — never stack a second rAF loop
     this.buildBigMap(g.player, g.world);   // fresh transform every open — never stale (the root of the click-lands-wrong bug)
     this.wardenScreen.classList.remove('hidden');
     this._wardenOpen = true;
+    this._wardenMarker = null; this._wardenHoverFeat = null;
     document.addEventListener('keydown', this._wardenKey, true);
     const loop = () => { if (!this._wardenOpen) return; this._wardenDraw(); this._wardenRaf = requestAnimationFrame(loop); };
     loop();
