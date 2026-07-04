@@ -440,7 +440,7 @@ export class UI {
 
     // ---------- title ----------
     this.titleScreen = this.el('div', 'overlay', body); this.titleScreen.id = 'title-screen';
-    this.el('h1', 'title', this.titleScreen, 'MOORSTEAD');
+    this.el('h1', 'title', this.titleScreen, 'Moorstead 1900');
     this.el('div', 'subtitle', this.titleScreen, 'A realistic, playable recreation of the North York Moors in 1900 &mdash; powered and built by AI');
     // Co-developer credit — Henry &amp; James playtested the moor to bits and shaped it with detailed notes.
     this.el('div', 'title-credit', this.titleScreen, '&#x1F6E0;&#xFE0F; Co-developed &amp; rigorously playtested by <b>Henry (8)</b> &amp; <b>James (12)</b> &mdash; whose detailed feedback shaped the game');
