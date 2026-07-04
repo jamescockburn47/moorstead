@@ -22,7 +22,7 @@ const EXT_L = 7;               // exterior building footprint length (z), blocks
 const EXT_MARGIN = 2;          // no-edit buffer beyond the exterior footprint, blocks
 
 const INN_MIN_R = 14;          // site-scan: nearest ring to try (blocks from village centre)
-const INN_MAX_R = 28;          // site-scan: furthest ring to try before giving up
+const INN_MAX_R = 46;          // site-scan: furthest ring — widened so a clear site exists past the rails/station/works
 
 // Flagship + confirmed candidates. Villages not listed here have no inn.
 const INN_NAMES = {
@@ -34,11 +34,33 @@ const INN_NAMES = {
   Egton: 'Postgate',
 };
 const GAMES = ['merrils', 'draughts', 'dominoes', 'shoveha'];
-const DOOR_SIDES = ['n', 's', 'e', 'w'];
 
-function pick(rng, arr) { return arr[Math.floor(rng() * arr.length)]; } // rng() < 1 strictly, so the index never reaches arr.length
+const RAIL_CLEAR = 13;     // centre-to-nearest-rail: the whole footprint + forecourt clears the line
+const STATION_CLEAR = 26;  // centre-to-station: well clear of the platform/station building
+
+// Is (x,z) a clear tavern site — offset from roads, rivers, rails, stations and
+// works so the pub never lands ON a structure or the line (James 2026-07-04:
+// "pubs need to be offset from all structures and train lines" — the Pickering
+// pub had generated on the track in front of the grand station). Pure (x,z).
+function siteClear(geo, x, z) {
+  if (typeof geo.nearStation === 'function' && geo.nearStation(x, z, STATION_CLEAR)) return false;
+  if (typeof geo.railInfo === 'function') { const ri = geo.railInfo(x, z); if (ri && ri.d < RAIL_CLEAR) return false; }
+  // sample the centre + the footprint+margin+forecourt extent so no corner of the
+  // pub (or its cleared doorstep) sits on a road/river/works or grazes the rails
+  const hw = Math.floor(EXT_W / 2) + EXT_MARGIN + 2, hl = Math.floor(EXT_L / 2) + EXT_MARGIN + 2;
+  for (const [dx, dz] of [[0, 0], [-hw, -hl], [hw, -hl], [-hw, hl], [hw, hl], [-hw, 0], [hw, 0], [0, -hl], [0, hl]]) {
+    const px = x + dx, pz = z + dz;
+    if (typeof geo.onRoad === 'function' && geo.onRoad(px, pz)) return false;
+    if (typeof geo.riverColumn === 'function' && geo.riverColumn(px, pz)) return false;
+    if (typeof geo.worksAt === 'function' && geo.worksAt(px, pz)) return false;
+    if (typeof geo.railInfo === 'function') { const ri = geo.railInfo(px, pz); if (ri && ri.d < 4) return false; }
+  }
+  return true;
+}
 
 // Deterministic clear-site scan near the village centre. Pure (x,z) queries only.
+// Returns the site AND the door side (facing OUTWARD, away from the village/station,
+// onto the open ground the site sits in — never back into a structure).
 function scanSite(geo, v, rng) {
   const saltAngle = rng() * Math.PI * 2;
   for (let r = INN_MIN_R; r <= INN_MAX_R; r += 2) {
@@ -46,8 +68,7 @@ function scanSite(geo, v, rng) {
       const angle = (ai / 12) * Math.PI * 2 + saltAngle;
       const x = v.x + Math.round(r * Math.cos(angle));
       const z = v.z + Math.round(r * Math.sin(angle));
-      if (typeof geo.onRoad === 'function' && geo.onRoad(x, z)) continue;
-      if (typeof geo.riverColumn === 'function' && geo.riverColumn(x, z)) continue;
+      if (!siteClear(geo, x, z)) continue;
       const h = geo.height(x, z);
       // flat enough: every corner of the exterior box within 1 block of centre height
       let flat = true;
@@ -56,7 +77,10 @@ function scanSite(geo, v, rng) {
         if (Math.abs(geo.height(x + dx, z + dz) - h) > 1) { flat = false; break; }
       }
       if (!flat) continue;
-      return { x, z, groundY: h };
+      // door faces outward (away from the village centre): +x=north, +z=east.
+      const ox = x - v.x, oz = z - v.z;
+      const doorSide = Math.abs(ox) >= Math.abs(oz) ? (ox >= 0 ? 'n' : 's') : (oz >= 0 ? 'e' : 'w');
+      return { x, z, groundY: h, doorSide };
     }
   }
   return null;
@@ -72,7 +96,7 @@ export function innPlan(geo, villageName, seed) {
   const site = scanSite(geo, v, rng);
   if (!site) return null;
 
-  const doorSide = pick(rng, DOOR_SIDES);
+  const doorSide = site.doorSide;  // faces outward onto the open ground the site sits in (scanSite)
 
   const ex0x = site.x - Math.floor(EXT_W / 2), ex1x = ex0x + EXT_W - 1;
   const ex0z = site.z - Math.floor(EXT_L / 2), ex1z = ex0z + EXT_L - 1;

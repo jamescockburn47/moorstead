@@ -103,16 +103,17 @@ const geo = new MoorsGeography();
   const { innPlan: innPlanD2 } = await import('../src/innplan.js');
   const IDX = (x, y, z) => x + z * CHUNK + y * CHUNK * CHUNK;
 
-  // pinned snapshot of the PRE-D2 plan for `geo` (seed 0) + seed 12345 (computed
-  // with the code as it stood before this task — origin/doorSide/footprint must
-  // be byte-identical after adding `furnish`, since furnish is derived data
-  // appended after all existing RNG draws, not a new draw before them)
+  // pinned snapshot of the seed-12345 plan — a determinism/back-compat tripwire.
+  // Re-pinned 2026-07-04 when scanSite gained rail/station/works clearance +
+  // outward doors (James: "pubs must be offset from all structures and train
+  // lines"), which deliberately re-sited every pub; these are the NEW intended
+  // values, so an ACCIDENTAL future geometry change still trips this.
   const pinned = innPlanD2(geo, 'Grosmont', 12345);
-  (pinned && pinned.origin.x === 1420 && pinned.origin.z === 2593 ? ok : bad)('D2: origin unchanged vs pinned pre-change snapshot (1420,2593)');
-  (pinned && pinned.groundY === 28 ? ok : bad)('D2: groundY unchanged vs pinned pre-change snapshot (28)');
-  (pinned && pinned.doorSide === 'w' ? ok : bad)('D2: doorSide unchanged vs pinned pre-change snapshot (w)');
-  (pinned && pinned.footprint.x0 === 1416 && pinned.footprint.z0 === 2590 && pinned.footprint.x1 === 1424 && pinned.footprint.z1 === 2596
-    ? ok : bad)('D2: footprint unchanged vs pinned pre-change snapshot (1416,2590)-(1424,2596)');
+  (pinned && pinned.origin.x === 1419 && pinned.origin.z === 2632 ? ok : bad)('D2: origin matches pinned snapshot (1419,2632)');
+  (pinned && pinned.groundY === 32 ? ok : bad)('D2: groundY matches pinned snapshot (32)');
+  (pinned && pinned.doorSide === 'e' ? ok : bad)('D2: doorSide matches pinned snapshot (e, faces outward)');
+  (pinned && pinned.footprint.x0 === 1415 && pinned.footprint.z0 === 2629 && pinned.footprint.x1 === 1423 && pinned.footprint.z1 === 2635
+    ? ok : bad)('D2: footprint matches pinned snapshot (1415,2629)-(1423,2635)');
 
   // --- the actual worldgen probes use Gen(12345)'s OWN internal geo (a different
   // seed than the pinned-snapshot `geo` above — Gen seeds MoorsGeography with its
@@ -307,6 +308,18 @@ const geo = new MoorsGeography();
       return data[IDX(wx - cx * CHUNK, wy, wz - cz * CHUNK)];
     };
     checkForecourt(plan, at, plan.groundY, B, ' (LIVE seed)');
+  }
+
+  // --- siting: every pub is offset from rails and stations (James 2026-07-04:
+  // the Pickering pub had generated on the track in front of the grand station).
+  // scanSite now rejects rail-near / station-near sites; guard that here. ---
+  const geo = gen.geo;
+  for (const plan of gen.inns.values()) {
+    const o = plan.origin;
+    const ri = typeof geo.railInfo === 'function' ? geo.railInfo(o.x, o.z) : null;
+    (!ri || ri.d >= 8 ? ok : bad)(`siting: ${plan.village} pub is well clear of the rails (dist ${ri ? ri.d.toFixed(1) : '∞'})`);
+    const st = typeof geo.nearStation === 'function' ? geo.nearStation(o.x, o.z, 20) : null;
+    (!st ? ok : bad)(`siting: ${plan.village} pub is clear of any station (within 20)`);
   }
 }
 
