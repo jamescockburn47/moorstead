@@ -38,7 +38,8 @@ the EVO (see [CLAUDE.md](../CLAUDE.md)). Everything is procedural — no asset f
 | Living NPC roster | `src/roster.js` | server-driven streamed NPCs (`game.rosterClient`), surface/platform geometry, render thinning | main.js:554 | `verify-roster` |
 | Villager flavour | `src/villagerlife.js` | greet/nosy remark pools, `villagerRemark` | (by entities) | `verify-villagers` |
 | Brain client | `src/npc.js` | `/brain` calls: `talk`, `talkGeneric`, `rosterState`, `standing`, `gift`, `gazette` | — | (live) `verify-live` |
-| Player | `src/player.js` | inventory slots, brass, physics state, `serialize`/`deserialize`, home base | — | `verify-survival` |
+| Player | `src/player.js` | inventory slots, brass, physics state, `serialize`/`deserialize`, home base, [D5] fatigue + warmedUntil fields, misery-tier movement | — | `verify-survival`, `verify-fatigue` |
+| Fatigue / weariness | `src/fatigue.js` | pure rates + tiers (fresh/weary/flagging/spent), `applyDoze`, `swayAmpFor`, `fatigueSpeedMul`, `bairnsScale` — misery-not-death, no collapse | — | `verify-fatigue` |
 | Physics | `src/physics.js` | AABB collision, DDA raycast, `moveEntity` | — | (via survival/mining) |
 | Sky / lighting | `src/sky.js` | sun/moon light curves, dome, clouds, stars, fog, `lanternFlicker`, quality light tiers | main.js:560 | `verify-season`, `verify-weather`, `verify-graphics` |
 | Renderer quality | `src/main.js` (`applyQuality`, `setupComposer`, `GradeShader`) | ACES, shadows, bloom, grade, Fine/Plain toggle | — | `verify-graphics` |
