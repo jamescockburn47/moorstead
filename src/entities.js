@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { B, I, BLOCKS, isSolid } from './defs.js';
 import { FARM_THRESHOLD } from './economy.js';
-import { moveEntity } from './physics.js';
+import { moveEntity, boxCollides } from './physics.js';
 import { getIconURL, tileColor } from './textures.js';
 import { hash2i } from './noise.js';
 import { TAME_GOAL, FOLLOW_RANGE, feedTrust, chooseName } from './pets.js';
@@ -2567,14 +2567,20 @@ export class Entities {
       }
       const preX = mob.pos.x, preZ = mob.pos.z;
       moveEntity(this.world, mob, dt);
-      // hop up single blocks — but a penned beast won't hop a built barrier (wall/hurdle/gate),
-      // so walls and folds actually hold stock. Terrain still hops; people cross freely. A
-      // COOLDOWN keeps a beast from re-hopping every frame against uneven ground (the bouncing).
-      mob._hopCd = Math.max(0, (mob._hopCd || 0) - dt);
-      if (mob.hitWall && mob.onGround && mob._hopCd <= 0 && (Math.abs(wishX) > 0.1 || Math.abs(wishZ) > 0.1)) {
+      // SMOOTH step-up a single block — glide onto the step, never a ballistic hop, so beasts
+      // don't bounce their way over the moor's uneven ground. A penned beast still won't step a
+      // built barrier (wall/hurdle/gate), so walls and folds hold stock; terrain steps, people
+      // cross open ground freely.
+      if (mob.hitWall && mob.onGround && (Math.abs(wishX) > 0.1 || Math.abs(wishZ) > 0.1)) {
         const ax = Math.floor(mob.pos.x + wishX * 0.6), az = Math.floor(mob.pos.z + wishZ * 0.6);
         const ahead = this.world.getBlock(ax, Math.floor(mob.pos.y) + 1, az);
-        if (!(isAnimal(mob) && isBarrier(ahead))) { mob.vel.y = 7.5; mob._hopCd = 0.5; }
+        if (!(isAnimal(mob) && isBarrier(ahead))) {
+          const tx = preX + wishX * dt, tz = preZ + wishZ * dt, ty = mob.pos.y + 1.0, pg = mob.passGate;
+          if (!boxCollides(this.world, mob.pos.x, ty, mob.pos.z, mob.hw, mob.h, pg) &&
+              !boxCollides(this.world, tx, ty, tz, mob.hw, mob.h, pg)) {
+            mob.pos.x = tx; mob.pos.z = tz; mob.pos.y = ty; mob.vel.y = 0; mob.onGround = true;
+          }
+        }
       }
       // open water is a WALL for land beasts. The sea sits LOWER than the shore, so scan
       // the column below her feet for the first solid/liquid.

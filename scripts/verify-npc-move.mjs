@@ -48,6 +48,16 @@ const slab = (x0, x1, y0, y1, z0, z1) => { const s = new Set(); for (let x = x0;
   (m.pos.x > 9 && m.pos.y > 1.8 ? ok : bad)(`a mob auto-steps UP a 1-block rise and walks the terrace (x=${m.pos.x.toFixed(2)}, y=${m.pos.y.toFixed(2)})`);
 }
 
+// 3d. NO BOUNCING: walking on flat ground, the mob's y stays steady (the step-up is a
+// smooth glide only when it hits a wall, never a ballistic hop on open ground)
+{
+  const w = makeWorld(new Set());
+  const m = mkMob(5.5, 1, 5.5);
+  let maxY = 1, minY = 1;
+  for (let i = 0; i < 200; i++) { npcMove(m, 3, 0, w, 1 / 30); maxY = Math.max(maxY, m.pos.y); minY = Math.min(minY, m.pos.y); }
+  (maxY - minY < 0.06 ? ok : bad)(`no bouncing on flat ground — y is steady (range ${(maxY - minY).toFixed(3)})`);
+}
+
 // 4. a mob does NOT climb a 2-block wall (blocks at y=1 and y=2)
 {
   const m = mkMob(5.5, 1, 5.5);

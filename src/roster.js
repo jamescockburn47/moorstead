@@ -293,8 +293,9 @@ export function walkableStep(world, geo, x, z, fromY, ford = false) {
 
 // The player's own movement constants (player.js), so streamed folk obey the SAME
 // constraints the player does: they can't walk through walls, can't float onto roofs,
-// and step up one block — but no higher — exactly like a person on foot.
-const NPC_GRAVITY = 26, NPC_JUMP = 8.6, NPC_STEP_UP_CLEAR = 1.25;
+// and step up one block — but no higher — exactly like a person on foot (a SMOOTH glide
+// up a step, not a ballistic jump, so they don't bounce over the moor's uneven ground).
+const NPC_GRAVITY = 26;
 
 // Drive a streamed NPC one physics step through the SAME gate the player uses
 // (physics.moveEntity: per-axis AABB collision + ground detection), given a wish
@@ -312,32 +313,31 @@ export function npcMove(mob, vx, vz, world, dt) {
   }
   if (!mob.vel) mob.vel = { x: 0, y: 0, z: 0 };
   if (mob.passGate === undefined) mob.passGate = true; // folk pass field gates, like the farmer
-  const px = mob.pos.x, pz = mob.pos.z;
+  const px = mob.pos.x, pz = mob.pos.z;   // pre-move, for the step-up retry
   mob.vel.x = vx; mob.vel.z = vz;
   // in a beck this frame? drives the haul-out hop; the grace persists a moment after exit
   const inWater = world.getBlock(Math.round(mob.pos.x), Math.floor(mob.pos.y), Math.round(mob.pos.z)) === B.WATER;
   if (inWater) mob._waterGrace = 0.35; else mob._waterGrace = Math.max(0, (mob._waterGrace || 0) - dt);
-  // HOP — with a small COOLDOWN so folk don't bounce every frame against uneven ground:
-  //  - hauling out of a beck up a bank -> a STRONG hop (mirrors the player's swimGrace,
-  //    player.js:272), so they climb out onto a HIGHER bank instead of stalling in the water;
-  //  - otherwise a plain 1-block auto-step over a rise (a person on foot steps up one, not two).
-  mob._hopCd = Math.max(0, (mob._hopCd || 0) - dt);
-  if ((vx || vz) && mob.hitWall) {
-    if (mob._waterGrace > 0) {
-      // haul out of a beck: hold a strong upward velocity EVERY frame while pressed to the
-      // bank (mirrors the player's swimGrace, player.js:272), so it rises out CONTINUOUSLY
-      // and clears a higher bank — not one ballistic hop that just falls back in.
-      mob.vel.y = Math.max(mob.vel.y, 7.8); mob.onGround = false;
-    } else if (mob._hopCd <= 0 && mob.onGround &&
-        !boxCollides(world, mob.pos.x, mob.pos.y + NPC_STEP_UP_CLEAR, mob.pos.z, mob.hw, 0.6, mob.passGate)) {
-      mob.vel.y = NPC_JUMP; mob.onGround = false; mob._hopCd = 0.45;   // 1-block step-up (cooled, to stop the bounce)
-    }
-  }
+  // WATER haul-out ONLY: hold a strong upward velocity EVERY frame while pressed to a bank
+  // (mirrors the player's swimGrace, player.js:272) so folk rise out of a beck continuously.
+  // Dry-land steps are handled AFTER the move by a SMOOTH glide (below), never a jump.
+  if ((vx || vz) && mob.hitWall && mob._waterGrace > 0) { mob.vel.y = Math.max(mob.vel.y, 7.8); mob.onGround = false; }
   mob.vel.y -= NPC_GRAVITY * dt;
   mob.vel.y = Math.max(mob.vel.y, -50);
   moveEntity(world, mob, dt);
+  // SMOOTH 1-block step-up (no ballistic jump -> NO BOUNCING, James 2026-07-04): if we bumped
+  // a wall while walking on the ground, retry the blocked move lifted one block; if that
+  // clears (a step, not a taller wall) with headroom, GLIDE straight up onto it, like walking
+  // up a stair. The old auto-JUMP sprang folk into the air at every terrain undulation.
+  if ((vx || vz) && mob.hitWall && mob.onGround && mob._waterGrace <= 0) {
+    const tx = px + vx * dt, tz = pz + vz * dt, ty = mob.pos.y + 1.0;
+    if (!boxCollides(world, mob.pos.x, ty, mob.pos.z, mob.hw, mob.h, mob.passGate) &&   // headroom to rise
+        !boxCollides(world, tx, ty, tz, mob.hw, mob.h, mob.passGate)) {                  // one block up ahead is clear (a step, not a 2-block wall)
+      mob.pos.x = tx; mob.pos.z = tz; mob.pos.y = ty; mob.vel.y = 0; mob.onGround = true;
+    }
+  }
   // wade on the surface, don't crawl the bed (lanes are bridgeless fords, roads.js) — but
-  // only while NOT hopping up (vel.y<=0), so the haul-out hop above isn't cancelled.
+  // only while NOT rising out (vel.y<=0), so the haul-out hop above isn't cancelled.
   if (mob.vel.y <= 0 && world.getBlock(Math.round(mob.pos.x), Math.floor(mob.pos.y), Math.round(mob.pos.z)) === B.WATER) {
     const rx = Math.round(mob.pos.x), rz = Math.round(mob.pos.z);
     let top = Math.floor(mob.pos.y); while (world.getBlock(rx, top + 1, rz) === B.WATER) top++;
