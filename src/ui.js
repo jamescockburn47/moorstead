@@ -441,9 +441,15 @@ export class UI {
     // ---------- title ----------
     this.titleScreen = this.el('div', 'overlay', body); this.titleScreen.id = 'title-screen';
     this.el('h1', 'title', this.titleScreen, 'Moorstead 1900');
-    this.el('div', 'subtitle', this.titleScreen, 'A realistic, playable recreation of the North York Moors in 1900 &mdash; powered and built by AI');
+    this.el('div', 'subtitle', this.titleScreen, 'The real North York Moors of 1900, rebuilt to scale and brought to life by AI.');
+    // A descriptive lede — what makes Moorstead 1900 different, in plain terms.
+    this.el('p', 'title-lede', this.titleScreen,
+      'A whole parish rebuilt to scale from Ordnance Survey maps: the true dales, becks, coast and villages, joined by the 1900 railway. ' +
+      'More than a hundred neighbours run on local AI models, each with a trade and a daily round. They hold real conversations, ' +
+      'remember you between visits, walk the lanes, catch the trains, and stop to pass the time of day with one another. ' +
+      'Every hillside, face and folk tale is generated in code, with not a single asset file in the whole of it.');
     // Co-developer credit — Henry &amp; James playtested the moor to bits and shaped it with detailed notes.
-    this.el('div', 'title-credit', this.titleScreen, '&#x1F6E0;&#xFE0F; Co-developed &amp; rigorously playtested by <b>Henry (8)</b> &amp; <b>James (12)</b> &mdash; whose detailed feedback shaped the game');
+    this.el('div', 'title-credit', this.titleScreen, '&#x1F6E0;&#xFE0F; Co-developed &amp; rigorously playtested by <b>Henry (8)</b> &amp; <b>James (12)</b>, whose detailed feedback shaped the game');
     // "About" + "Feedback & bugs" pinned together to the top-right corner (see .title-links)
     const titleLinks = this.el('div', 'title-links', this.titleScreen);
     this.aboutBtn = this.el('a', 'about-btn', titleLinks, 'About');
@@ -465,12 +471,14 @@ export class UI {
     // what the world IS, at a glance — not a changelog
     const feats = this.el('div', 'title-feats', this.titleScreen);
     feats.innerHTML =
-      '<div class="feat"><div class="ico">&#9935;</div><div class="ft">Build &amp; delve</div><div class="fd">Claim your land; license a deep mine</div></div>' +
-      '<div class="feat"><div class="ico">&#127968;</div><div class="ft">A living parish</div><div class="fd">Folk who talk naturally and get to know you</div></div>' +
-      '<div class="feat"><div class="ico">&#128642;</div><div class="ft">The moors line</div><div class="fd">Ride her; or take the regulator</div></div>' +
-      '<div class="feat"><div class="ico">&#128017;</div><div class="ft">Sheepdog &amp; fold</div><div class="fd">Whistle her round, fold thi flock</div></div>' +
-      '<div class="feat"><div class="ico">&#128176;</div><div class="ft">Brass &amp; trade</div><div class="fd">Buy cheap, sell dear by rail</div></div>' +
-      '<div class="feat"><div class="ico">&#127769;</div><div class="ft">Owd tales</div><div class="fd">Folklore stirs once the sun&rsquo;s down</div></div>';
+      '<div class="feat"><div class="ico">&#128506;&#65039;</div><div class="ft">The real moors, to scale</div><div class="fd">Dales, becks, coast an&rsquo; villages set where they truly stand, frae OS maps</div></div>' +
+      '<div class="feat"><div class="ico">&#127968;</div><div class="ft">A living AI parish</div><div class="fd">A hundred folk run on local AI: they talk, remember thee, an&rsquo; keep their trades</div></div>' +
+      '<div class="feat"><div class="ico">&#128642;</div><div class="ft">The 1900 railway</div><div class="fd">A real timetable to ride, or take the regulator an&rsquo; drive the loco thissen</div></div>' +
+      '<div class="feat"><div class="ico">&#9935;</div><div class="ft">Build &amp; delve</div><div class="fd">Fell trees, cut peat, sink a licensed mine an&rsquo; raise thi own homestead</div></div>' +
+      '<div class="feat"><div class="ico">&#128176;</div><div class="ft">Brass &amp; trade</div><div class="fd">Markets that move: buy cheap in one dale, sell dear by rail in the next</div></div>' +
+      '<div class="feat"><div class="ico">&#127754;</div><div class="ft">Coast, becks &amp; seasons</div><div class="fd">Swim the rivers, wade the fords, an&rsquo; watch the seasons an&rsquo; festivals turn</div></div>' +
+      '<div class="feat"><div class="ico">&#128017;</div><div class="ft">Sheepdog &amp; fold</div><div class="fd">Whistle the dog round, drove an&rsquo; fold thi Swaledale flock across the moor</div></div>' +
+      '<div class="feat"><div class="ico">&#127769;</div><div class="ft">Owd tales after dark</div><div class="fd">Folklore stirs at neet: the barghest, the giants, an&rsquo; the Count on the East Cliff</div></div>';
     // login (invite code) — shown till tha's claimed thi place in t' village
     this.loginBox = this.el('div', 'login-box', this.titleScreen);
     this.el('div', 'login-title', this.loginBox, 'Tha&rsquo;ll need thi invite to settle in Moorstead');
@@ -515,7 +523,7 @@ export class UI {
     this.btnContinue = this.el('button', 'mc', this.titleScreen, '&#x1F3E1; Re-enter Single-Player');
     this.btnNew = this.el('button', 'mc', this.titleScreen, '&#x2728; New Single-Player World');
     this.btnHow = this.el('button', 'mc', this.titleScreen, 'Ow Ter Play');
-    this.el('div', 'moors-note', this.titleScreen, 'T&rsquo; real North York Moors, built to scale frae <b>Ordnance Survey</b> maps &mdash; t&rsquo; true landscape, dales, rivers an&rsquo; coast, t&rsquo; 1900 railways, livin&rsquo; folk an&rsquo; their tales (an&rsquo; mind t&rsquo; Count up on t&rsquo; East Cliff of a stormy neet).');
+    this.el('div', 'moors-note', this.titleScreen, 'No levels to clear, no timer running: Moorstead is a <b>place to live in</b>, not a game to win. Make a name for thissen, or a living, or just wander the moor an&rsquo; see who tha meets.');
     this.el('div', 'muted-note', this.titleScreen, 'New to t&rsquo; moor? <b>Give &lsquo;Ow Ter Play&rsquo; a read</b>: learn how to build, ride, drive, and stay alive.');
     this.el('div', 'muted-note', this.titleScreen, 'Watch thissen at neet: t&rsquo; barghest walks when t&rsquo; sun goes down.');
     this.el('div', 'title-foot', this.titleScreen, 'Created purely with AI by a non-coder &middot; procedurally generated, not a single asset file &middot; villagers, jobs an&rsquo; adventures run on large local AI models &middot; <a href="/about.html?tab=security" style="color:#d8b95a">Security &amp; privacy</a>');
