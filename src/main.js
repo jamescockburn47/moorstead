@@ -1648,7 +1648,12 @@ class Game {
 
   // Warden travel: tha doesn't walk, tha ARRIVES — dropped frae t' sky,
   // landing wi' a thump as t' parish will notice.
-  adminTeleport(x, z, label) {
+  // keepPaused: called from the big travel map, which STAYS OPEN so the warden can
+  // hop about. resume() re-locks the pointer, and once pointer-lock engages the
+  // browser FREEZES clientX/clientY — so the next map click would read a stale
+  // cursor and land wrong (review 2026-07-04). When keepPaused, teleport but leave
+  // the map/pause alone; closeWardenMap() resumes when the warden's done.
+  adminTeleport(x, z, label, keepPaused = false) {
     const p = this.player;
     const g = this.world.gen.height(Math.floor(x), Math.floor(z));
     p.pos.x = x + 0.5; p.pos.z = z + 0.5;
@@ -1657,7 +1662,7 @@ class Game {
     p.fallStart = null;
     p.flying = false; // creative hover would spoil t' entrance
     this.wardenDrop = { label, t: 0 };
-    this.resume();
+    if (!keepPaused) this.resume();
     this.ui.toast(`Dropping in ower <b>${label}</b>...`, 2500);
   }
 

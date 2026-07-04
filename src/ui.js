@@ -2431,8 +2431,10 @@ export class UI {
     const feat = this._wardenNearestFeature(sx, sy);   // click near a town? land ON it
     const tx = feat ? Math.round(feat.x) : x, tz = feat ? Math.round(feat.z) : z;
     this._wardenMarker = { x: tx, z: tz, at: performance.now() };
-    if (this.game && this.game.adminTeleport) this.game.adminTeleport(tx, tz, feat ? feat.name : `${tx}, ${tz}`);
-    // stays open so the warden can hop about; the pulse shows the drop
+    // keepPaused=true: don't resume/re-lock the pointer — that would freeze the
+    // cursor coords and make the NEXT click land wrong (review 2026-07-04). The
+    // map stays open so the warden can hop about; closeWardenMap resumes.
+    if (this.game && this.game.adminTeleport) this.game.adminTeleport(tx, tz, feat ? feat.name : `${tx}, ${tz}`, true);
   }
 
   _wardenDraw() {
