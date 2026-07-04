@@ -1456,18 +1456,18 @@ class Game {
     // instant-arrival feel.
     const mapCol = ui.el('div', '', scene); mapCol.style.cssText = 'flex:1.3;min-width:220px;';
     if (ui.mapBaseKey !== this.world.gen.seed) ui.buildBigMap(this.player, this.world);
+    // a THUMBNAIL: clicking it opens the big interactive travel map (precise
+    // click-to-drop, hover names, live players) rather than teleporting blind
+    // from a 320px image (James 2026-07-04: the tiny map's click landed wrong).
     const mapCanvas = ui.el('canvas', 'admin-map', mapCol);
     mapCanvas.width = ui.mapBase.width; mapCanvas.height = ui.mapBase.height;
-    mapCanvas.style.cssText = 'width:100%;max-width:320px;border-radius:4px;cursor:crosshair;';
+    mapCanvas.style.cssText = 'width:100%;max-width:320px;border-radius:4px;cursor:pointer;';
     mapCanvas.getContext('2d').drawImage(ui.mapBase, 0, 0);
-    ui.el('div', 'r-needs', mapCol, 'Click the map to drop in — uses the settings below.');
-    mapCanvas.addEventListener('click', (e) => {
-      const rect = mapCanvas.getBoundingClientRect();
-      const sx = (e.clientX - rect.left) * (mapCanvas.width / rect.width);
-      const sy = (e.clientY - rect.top) * (mapCanvas.height / rect.height);
-      const { x, z } = bigMapScreenToWorld(ui._mapXf, sx, sy);
-      this.adminTeleport(x, z, `${x}, ${z}`);
-    });
+    mapCanvas.addEventListener('click', () => ui.openWardenMap());
+    const bigBtn = ui.el('button', 'mc', mapCol, '🗺 Open big travel map');
+    bigBtn.style.cssText = 'width:100%;margin-top:6px;';
+    bigBtn.addEventListener('click', () => ui.openWardenMap());
+    ui.el('div', 'r-needs', mapCol, 'Open the map, then click anywhere to drop in — settings below apply.');
 
     const sliderCol = ui.el('div', '', scene); sliderCol.style.cssText = 'flex:1;min-width:220px;display:flex;flex-direction:column;gap:12px;';
 
@@ -1648,7 +1648,12 @@ class Game {
 
   // Warden travel: tha doesn't walk, tha ARRIVES — dropped frae t' sky,
   // landing wi' a thump as t' parish will notice.
-  adminTeleport(x, z, label) {
+  // keepPaused: called from the big travel map, which STAYS OPEN so the warden can
+  // hop about. resume() re-locks the pointer, and once pointer-lock engages the
+  // browser FREEZES clientX/clientY — so the next map click would read a stale
+  // cursor and land wrong (review 2026-07-04). When keepPaused, teleport but leave
+  // the map/pause alone; closeWardenMap() resumes when the warden's done.
+  adminTeleport(x, z, label, keepPaused = false) {
     const p = this.player;
     const g = this.world.gen.height(Math.floor(x), Math.floor(z));
     p.pos.x = x + 0.5; p.pos.z = z + 0.5;
@@ -1657,7 +1662,7 @@ class Game {
     p.fallStart = null;
     p.flying = false; // creative hover would spoil t' entrance
     this.wardenDrop = { label, t: 0 };
-    this.resume();
+    if (!keepPaused) this.resume();
     this.ui.toast(`Dropping in ower <b>${label}</b>...`, 2500);
   }
 

@@ -381,6 +381,32 @@ export class UI {
     this.bigMap.width = 900; this.bigMap.height = 760;
     this.mapBase = document.createElement('canvas'); // cached static layer
     this.mapBaseKey = null;
+    // [warden] a big, interactive travel map: click to drop in, hover for names,
+    // live player/train dots. Replaces the cramped 320px admin-panel thumbnail
+    // whose blind click was hard to aim (James 2026-07-04: "map too small, click
+    // lands wrong"). Built once, shown on demand via openWardenMap().
+    this.wardenScreen = this.el('div', 'hidden', document.body); this.wardenScreen.id = 'warden-map';
+    this.wardenScreen.style.cssText = 'position:fixed;inset:0;z-index:120;background:rgba(6,8,12,0.88);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;';
+    const wmHead = this.el('div', '', this.wardenScreen);
+    wmHead.style.cssText = 'display:flex;align-items:center;gap:16px;color:#e8d8a0;font:600 15px system-ui,sans-serif;';
+    this.el('span', '', wmHead, '🗺 Warden’s Travel Map');
+    this.wardenReadout = this.el('span', '', wmHead, 'move over the map — click to travel');
+    this.wardenReadout.style.cssText = 'color:#9fb6c8;font-weight:400;min-width:320px;';
+    const wmClose = this.el('button', 'mc', wmHead, 'Close (Esc)');
+    wmClose.style.cssText = 'width:auto;min-height:0;padding:4px 12px;margin:0;';
+    wmClose.addEventListener('click', () => this.closeWardenMap());
+    const wmWrap = this.el('div', '', this.wardenScreen);
+    wmWrap.style.cssText = 'position:relative;box-shadow:0 8px 40px rgba(0,0,0,0.6);border-radius:6px;overflow:hidden;';
+    this.wardenCanvas = this.el('canvas', '', wmWrap);
+    this.wardenCanvas.width = 900; this.wardenCanvas.height = 760;
+    this.wardenCanvas.style.cssText = 'display:block;cursor:crosshair;height:min(82vh,760px);width:auto;max-width:95vw;';
+    this.el('div', '', this.wardenScreen,
+      'Click anywhere to travel · <span style="color:#5ad0ff">●</span> live players · <span style="color:#ffd98a">▮</span> trains · <span style="color:#caa84a">●</span> towns · <span style="color:#fff">▲</span> you')
+      .style.cssText = 'color:#8a97a5;font:400 12px system-ui,sans-serif;';
+    this.wardenCanvas.addEventListener('mousemove', (e) => this._wardenHover(e));
+    this.wardenCanvas.addEventListener('click', (e) => this._wardenClick(e));
+    this._wardenOpen = false; this._wardenHoverFeat = null; this._wardenCursor = null; this._wardenMarker = null; this._wardenRaf = null;
+    this._wardenKey = (e) => { if (e.key === 'Escape' && this._wardenOpen) { e.stopPropagation(); e.preventDefault(); this.closeWardenMap(); } };
     // ride-camera switcher — shown while riding the train; keys 1/2/3 pick the view
     this.rideViewMenu = this.el('div', '', document.body); this.rideViewMenu.id = 'ride-view-menu';
     this.rideViewMenu.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);display:none;gap:7px;z-index:60;pointer-events:none;font:600 13px system-ui,sans-serif';
@@ -2279,16 +2305,25 @@ export class UI {
   drawBigMapDots(player, net) {
     const ctx = this.bigMap.getContext('2d');
     ctx.drawImage(this.mapBase, 0, 0);
+    if (!this._mapXf) return;
+    this._drawMapDots(ctx, player, net);
+  }
+
+  // Live overlay (remote players, trains, self arrow, mining pulses) drawn onto
+  // `ctx` using the current `_mapXf`. Shared by the Tab peek map and the warden
+  // travel map so the two never drift. `dotScale` upsizes markers for the big map.
+  _drawMapDots(ctx, player, net, dotScale = 1) {
     const xf = this._mapXf; if (!xf) return;
     const w2x = (x, z) => xf.offH + (z - xf.minZ) * xf.s, w2y = (x, z) => xf.offV + (xf.maxX - x) * xf.s;
     net = net || (this.game && this.game.net);
     if (net && net.remotes) {                                           // other folk, named
-      ctx.font = '11px sans-serif'; ctx.textAlign = 'left';
+      ctx.font = `${Math.round(11 * dotScale)}px sans-serif`; ctx.textAlign = 'left';
       for (const r of net.remotes.values()) {
         const p = r.mob ? r.mob.pos : r.target; if (!p) continue;
         const X = w2x(p.x, p.z), Y = w2y(p.x, p.z);
         ctx.fillStyle = '#5ad0ff'; ctx.strokeStyle = '#013'; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(X, Y, 4, 0, 7); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(X, Y, 4 * dotScale, 0, 7); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#031018'; ctx.lineWidth = 3; ctx.strokeText(r.name || 'rambler', X + 6, Y + 3);
         ctx.fillStyle = '#cdefff'; ctx.fillText(r.name || 'rambler', X + 6, Y + 3);
       }
     }
@@ -2304,19 +2339,19 @@ export class UI {
       ctx.textAlign = 'left';
       for (const t of trains) {
         const TX = w2x(t.x, t.z), TY = w2y(t.x, t.z);
-        ctx.save(); ctx.translate(TX, TY);
+        ctx.save(); ctx.translate(TX, TY); ctx.scale(dotScale, dotScale);
         ctx.fillStyle = 'rgba(245,245,245,0.85)'; ctx.beginPath(); ctx.arc(-5, -6, 3, 0, 7); ctx.fill();  // steam
         ctx.fillStyle = '#241310'; ctx.fillRect(-7, -4, 14, 8);                                           // loco body
         ctx.fillStyle = '#d34b38'; ctx.fillRect(2, -4, 5, 8);                                             // red boiler front
         ctx.strokeStyle = '#f4dca0'; ctx.lineWidth = 1.4; ctx.strokeRect(-7, -4, 14, 8);                  // gold outline
         ctx.restore();
-        ctx.font = 'bold 11px sans-serif';
+        ctx.font = `bold ${Math.round(11 * dotScale)}px sans-serif`;
         ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.strokeText(t.name, TX + 10, TY + 4);
         ctx.fillStyle = '#ffd98a'; ctx.fillText(t.name, TX + 10, TY + 4);
       }
     }
     const X = w2x(player.pos.x, player.pos.z), Y = w2y(player.pos.x, player.pos.z);  // thee
-    ctx.save(); ctx.translate(X, Y); ctx.rotate(-player.yaw - Math.PI / 2);
+    ctx.save(); ctx.translate(X, Y); ctx.rotate(-player.yaw - Math.PI / 2); ctx.scale(dotScale, dotScale);
     ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(6, 7); ctx.lineTo(0, 3); ctx.lineTo(-6, 7); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.restore();
@@ -2332,6 +2367,111 @@ export class UI {
         ctx.fillStyle = h.kind === 'quarry' ? '#caa84a' : '#ffb040';
         ctx.beginPath(); ctx.arc(X, Y, 5, 0, 7); ctx.fill();
       }
+    }
+  }
+
+  // ---------------- [warden] big interactive travel map ----------------
+  openWardenMap() {
+    const g = this.game; if (!g || !g.world) return;
+    if (this._wardenOpen) return;   // already open — never stack a second rAF loop
+    this.buildBigMap(g.player, g.world);   // fresh transform every open — never stale (the root of the click-lands-wrong bug)
+    this.wardenScreen.classList.remove('hidden');
+    this._wardenOpen = true;
+    this._wardenMarker = null; this._wardenHoverFeat = null;
+    document.addEventListener('keydown', this._wardenKey, true);
+    const loop = () => { if (!this._wardenOpen) return; this._wardenDraw(); this._wardenRaf = requestAnimationFrame(loop); };
+    loop();
+  }
+
+  closeWardenMap() {
+    if (!this._wardenOpen) return;
+    this._wardenOpen = false;
+    if (this._wardenRaf) cancelAnimationFrame(this._wardenRaf);
+    document.removeEventListener('keydown', this._wardenKey, true);
+    this.wardenScreen.classList.add('hidden');
+  }
+
+  // cursor client px -> {canvas px sx/sy, world x/z} through the SAME transform the
+  // map was drawn with (rebuilt on open), so a click always lands where it points —
+  // DPR/zoom-safe because rect and canvas.width scale together.
+  _wardenScreenToWorld(e) {
+    const cv = this.wardenCanvas, rect = cv.getBoundingClientRect();
+    const sx = (e.clientX - rect.left) * (cv.width / rect.width);
+    const sy = (e.clientY - rect.top) * (cv.height / rect.height);
+    const { x, z } = bigMapScreenToWorld(this._mapXf, sx, sy);
+    return { sx, sy, x, z };
+  }
+
+  _wardenNearestFeature(sx, sy) {
+    const g = this.game; if (!g || !g.world) return null;
+    const geo = g.world.gen.geo, xf = this._mapXf;
+    const w2x = (x, z) => xf.offH + (z - xf.minZ) * xf.s, w2y = (x, z) => xf.offV + (xf.maxX - x) * xf.s;
+    let best = null, bestD = 24 * 24;  // snap radius, canvas px
+    const consider = (name, x, z, kind) => { const dx = w2x(x, z) - sx, dy = w2y(x, z) - sy, d = dx * dx + dy * dy; if (d < bestD) { bestD = d; best = { name, x, z, kind }; } };
+    for (const v of geo.villages) consider(v.name, v.x, v.z, 'town');
+    const stations = (geo.realWorld && geo.data) ? geo.data.stations : geo.railway();
+    for (const s of stations) consider(s.name, s.x, s.z, 'station');
+    return best;
+  }
+
+  _wardenHover(e) {
+    const { sx, sy, x, z } = this._wardenScreenToWorld(e);
+    this._wardenCursor = { sx, sy, x, z };
+    const feat = this._wardenNearestFeature(sx, sy);
+    this._wardenHoverFeat = feat;
+    const g = this.game;
+    const dist = g && g.player ? Math.round(Math.hypot(x - g.player.pos.x, z - g.player.pos.z)) : 0;
+    this.wardenReadout.textContent = feat
+      ? `${feat.name} — ${feat.kind === 'station' ? 'station' : 'town'} · N ${feat.x}, E ${feat.z}`
+      : `N ${x}, E ${z} · ${dist} blocks off · click to travel`;
+  }
+
+  _wardenClick(e) {
+    const { sx, sy, x, z } = this._wardenScreenToWorld(e);
+    const feat = this._wardenNearestFeature(sx, sy);   // click near a town? land ON it
+    const tx = feat ? Math.round(feat.x) : x, tz = feat ? Math.round(feat.z) : z;
+    this._wardenMarker = { x: tx, z: tz, at: performance.now() };
+    // keepPaused=true: don't resume/re-lock the pointer — that would freeze the
+    // cursor coords and make the NEXT click land wrong (review 2026-07-04). The
+    // map stays open so the warden can hop about; closeWardenMap resumes.
+    if (this.game && this.game.adminTeleport) this.game.adminTeleport(tx, tz, feat ? feat.name : `${tx}, ${tz}`, true);
+  }
+
+  _wardenDraw() {
+    const g = this.game; if (!g || !g.world) return;
+    const ctx = this.wardenCanvas.getContext('2d');
+    ctx.drawImage(this.mapBase, 0, 0);
+    const xf = this._mapXf; if (!xf) return;
+    const w2x = (x, z) => xf.offH + (z - xf.minZ) * xf.s, w2y = (x, z) => xf.offV + (xf.maxX - x) * xf.s;
+    this._drawMapDots(ctx, g.player, g.net, 1.35);
+    // hovered feature: a bright ring so it's clear what a click will snap to
+    if (this._wardenHoverFeat) {
+      const f = this._wardenHoverFeat, HX = w2x(f.x, f.z), HY = w2y(f.x, f.z);
+      ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(HX, HY, 11, 0, 7); ctx.stroke();
+    }
+    // cursor crosshair + a floating name tooltip pinned to the cursor when over a town
+    if (this._wardenCursor) {
+      const { sx, sy } = this._wardenCursor;
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(sx - 9, sy); ctx.lineTo(sx + 9, sy); ctx.moveTo(sx, sy - 9); ctx.lineTo(sx, sy + 9); ctx.stroke();
+      if (this._wardenHoverFeat) {
+        const label = this._wardenHoverFeat.name;
+        ctx.font = 'bold 15px system-ui, sans-serif'; ctx.textAlign = 'left';
+        const tw = ctx.measureText(label).width;
+        const bx = Math.min(this.wardenCanvas.width - tw - 14, sx + 14), by = Math.max(20, sy - 16);
+        ctx.fillStyle = 'rgba(10,14,20,0.92)'; ctx.fillRect(bx - 6, by - 15, tw + 12, 22);
+        ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 1; ctx.strokeRect(bx - 6, by - 15, tw + 12, 22);
+        ctx.fillStyle = '#ffe8a0'; ctx.fillText(label, bx, by);
+      }
+    }
+    // drop-in pulse
+    if (this._wardenMarker) {
+      const age = performance.now() - this._wardenMarker.at;
+      if (age < 1300) {
+        const MX = w2x(this._wardenMarker.x, this._wardenMarker.z), MY = w2y(this._wardenMarker.x, this._wardenMarker.z);
+        ctx.strokeStyle = `rgba(120,235,150,${1 - age / 1300})`; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(MX, MY, 6 + age / 55, 0, 7); ctx.stroke();
+      } else this._wardenMarker = null;
     }
   }
 

@@ -55,5 +55,32 @@ const bad = m => { failed = true; console.log('  FAIL  ' + m); };
   (JSON.stringify(bigMapScreenToWorld(xf, 100, 100)) === JSON.stringify(bigMapScreenToWorld(xf, 100, 100)) ? ok : bad)('deterministic');
 }
 
+// --- LIVE-SEED map click round-trip (James 2026-07-04: warden map click landed
+// wrong). Build the REAL transform buildBigMap() would at MOORS_SEED (same maths,
+// no DOM: a 900x760 canvas over the world bounds), forward-project every village
+// to a map pixel, invert it, and assert it lands back on that village — so a
+// coordinate/axis regression in the click path fails the gate, not the player. ---
+{
+  const { Gen, MOORS_SEED } = await import('../src/worldgen.js');
+  const geo = new Gen(MOORS_SEED).geo;
+  const W = 900, H = 760;
+  const { minX, maxX, minZ, maxZ } = geo.worldBounds();
+  const wwX = maxX - minX, wwZ = maxZ - minZ;
+  const s = Math.min(W / wwZ, H / wwX);
+  const offH = (W - wwZ * s) / 2, offV = (H - wwX * s) / 2;
+  const xf = { s, offH, offV, minZ, maxX };
+  const w2x = (x, z) => offH + (z - minZ) * s, w2y = (x, z) => offV + (maxX - x) * s;
+  let allBack = true;
+  for (const v of geo.villages) {
+    const back = bigMapScreenToWorld(xf, w2x(v.x, v.z), w2y(v.x, v.z));
+    if (Math.abs(back.x - v.x) > 1 || Math.abs(back.z - v.z) > 1) allBack = false;
+  }
+  (allBack ? ok : bad)(`live-seed: every village's map pixel inverts back to it (${geo.villages.length} towns)`);
+  // a deliberately-wrong axis (swap x/z in the inverse) must NOT round-trip — proves the check has teeth
+  const v0 = geo.villages[0];
+  const swapped = bigMapScreenToWorld({ s, offH, offV, minZ: minX, maxX: maxZ }, w2x(v0.x, v0.z), w2y(v0.x, v0.z));
+  (Math.abs(swapped.x - v0.x) > 1 || Math.abs(swapped.z - v0.z) > 1 ? ok : bad)('a wrong transform does NOT round-trip (the check can fail)');
+}
+
 console.log(failed ? '\nRESULT: FAIL' : '\nRESULT: PASS');
 process.exit(failed ? 1 : 0);
