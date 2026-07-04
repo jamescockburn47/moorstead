@@ -2445,11 +2445,20 @@ export class UI {
       const f = this._wardenHoverFeat, HX = w2x(f.x, f.z), HY = w2y(f.x, f.z);
       ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(HX, HY, 11, 0, 7); ctx.stroke();
     }
-    // cursor crosshair
+    // cursor crosshair + a floating name tooltip pinned to the cursor when over a town
     if (this._wardenCursor) {
       const { sx, sy } = this._wardenCursor;
       ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(sx - 9, sy); ctx.lineTo(sx + 9, sy); ctx.moveTo(sx, sy - 9); ctx.lineTo(sx, sy + 9); ctx.stroke();
+      if (this._wardenHoverFeat) {
+        const label = this._wardenHoverFeat.name;
+        ctx.font = 'bold 15px system-ui, sans-serif'; ctx.textAlign = 'left';
+        const tw = ctx.measureText(label).width;
+        const bx = Math.min(this.wardenCanvas.width - tw - 14, sx + 14), by = Math.max(20, sy - 16);
+        ctx.fillStyle = 'rgba(10,14,20,0.92)'; ctx.fillRect(bx - 6, by - 15, tw + 12, 22);
+        ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 1; ctx.strokeRect(bx - 6, by - 15, tw + 12, 22);
+        ctx.fillStyle = '#ffe8a0'; ctx.fillText(label, bx, by);
+      }
     }
     // drop-in pulse
     if (this._wardenMarker) {
