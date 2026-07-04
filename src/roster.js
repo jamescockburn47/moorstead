@@ -4,6 +4,7 @@ import { rosterState, talkGeneric } from './npc.js';
 import { B, CHUNK, WATER_LEVEL } from './defs.js';
 import { reportQuiet } from './feedback.js';
 import { idHash, innOpen, eveningAtInn, parlourCrowd, parlourSeatFor } from './parlour.js';
+import { moveEntity, boxCollides } from './physics.js';
 
 // re-exported so existing callers of roster.js's idHash keep working — the
 // hash itself now lives in parlour.js (D3 2026-07-03) so parlour.js can stay
@@ -288,38 +289,80 @@ export function walkableStep(world, geo, x, z, fromY, ford = false) {
   return true;
 }
 
+// The player's own movement constants (player.js), so streamed folk obey the SAME
+// constraints the player does: they can't walk through walls, can't float onto roofs,
+// and step up one block — but no higher — exactly like a person on foot.
+const NPC_GRAVITY = 26, NPC_JUMP = 8.6, NPC_STEP_UP_CLEAR = 1.25;
+
+// Drive a streamed NPC one physics step through the SAME gate the player uses
+// (physics.moveEntity: per-axis AABB collision + ground detection), given a wish
+// velocity (vx,vz). Adds gravity so it can never float onto a roof, and an AUTO-HOP
+// over a single-block rise (a person on foot steps up; an NPC can't press Space, so
+// we hop it for them when it bumps a climbable step). Replaces the old direct
+// pos-write + surfaceHeight-snap that let NPCs clip walls, stand on roofs and teleport.
+// Cosmetic (the brain owns logical state), so it needn't be deterministic run-to-run.
+export function npcMove(mob, vx, vz, world, dt) {
+  // an unloaded chunk reads as solid stone everywhere (world.js getBlock) — running
+  // collision there would wedge the body; hold position until it streams in.
+  if (typeof world.isLoaded === 'function' && !world.isLoaded(mob.pos.x, mob.pos.z)) {
+    if (vx || vz) mob.yaw = Math.atan2(vx, vz);
+    return;
+  }
+  if (!mob.vel) mob.vel = { x: 0, y: 0, z: 0 };
+  if (mob.passGate === undefined) mob.passGate = true; // folk pass field gates, like the farmer
+  const px = mob.pos.x, pz = mob.pos.z;
+  mob.vel.x = vx; mob.vel.z = vz;
+  // auto-step: bumped a wall last frame, on the ground, and a body's height is clear one
+  // block up -> hop the 1-block rise (mirrors the player's mounted step-hop, player.js).
+  if (mob.hitWall && mob.onGround &&
+      !boxCollides(world, mob.pos.x, mob.pos.y + NPC_STEP_UP_CLEAR, mob.pos.z, mob.hw, 0.6, mob.passGate)) {
+    mob.vel.y = NPC_JUMP; mob.onGround = false;
+  }
+  mob.vel.y -= NPC_GRAVITY * dt;
+  mob.vel.y = Math.max(mob.vel.y, -50);
+  moveEntity(world, mob, dt);
+  // wade on the surface, don't crawl the bed: the lanes are BRIDGELESS fords (roads.js),
+  // so float the feet to just below a beck/river surface rather than sinking through the
+  // non-solid water to the bed and walking along it submerged.
+  const fx = Math.round(mob.pos.x), fz = Math.round(mob.pos.z), fyc = Math.floor(mob.pos.y);
+  if (world.getBlock(fx, fyc, fz) === B.WATER) {
+    let top = fyc; while (world.getBlock(fx, top + 1, fz) === B.WATER) top++;
+    const surf = top + 1;                                // world y of the water surface
+    if (mob.pos.y < surf - 0.35) { mob.pos.y = surf - 0.35; if (mob.vel.y < 0) mob.vel.y = 0; mob.onGround = true; }
+  }
+  if (vx || vz) mob.yaw = Math.atan2(vx, vz);
+  // stuck watchdog: with hard collision a walker can wedge against a collider with no
+  // clip-through escape (rail travellers have a timeout rescue; walkers/potterers didn't).
+  // Accrue no-progress time here; the caller (_unstickDriven) snaps it free on threshold.
+  if ((vx || vz) && Math.hypot(mob.pos.x - px, mob.pos.z - pz) < 0.02) mob._stuckT = (mob._stuckT || 0) + dt;
+  else mob._stuckT = 0;
+}
+
 // Steer a walking mob toward its destination anchor, skirting buildings/walls/trees and
 // following the ground, paced to arrive by `eta`. Mutates mob.pos/yaw. The streamed mob's
 // own wander AI is off (it's driven here, like a ridden pony / remote player), so this owns
 // its locomotion. Server keeps the LOGICAL leg + eta; the client owns HOW it walks there.
-// `pace` (blocks/sec), when given, overrides the eta-paced speed — a mounted NPC trots at a fixed
-// ride pace rather than dawdling to an eta. Omitted -> unchanged eta pacing (all walk call sites).
+// `pace` (blocks/sec), when given, overrides the eta-paced speed. It now drives the mob
+// through npcMove (real collision + gravity + step-up), not a direct pos write.
 export function steerWalk(mob, from, to, started, eta, now, world, geo, dt, pace, ford = false) {
   const dx = to.x - mob.pos.x, dz = to.z - mob.pos.z;
   const dist = Math.hypot(dx, dz);
-  if (dist < 1.2) { mob.pos.x = to.x; mob.pos.z = to.z; mob.pos.y = to.y; return; } // arrived
   const remain = Math.max(1, eta - now);
   const speed = pace != null ? pace : Math.max(1.2, Math.min(3.0, dist / remain));  // fixed ride pace, or eta-paced
   const goal = Math.atan2(dx, dz);
-  const fromY = surfaceHeight(world, geo, Math.round(mob.pos.x), Math.round(mob.pos.z));  // her real standing height
-  // context steering: take the most direct heading (fanned out from the goal) that's walkable
+  // context steering: take the most direct heading (fanned out from the goal) that looks
+  // walkable ahead, so folk skirt obstacles BEFORE bumping; collision is the hard backstop.
+  const fromY = Math.round(mob.pos.y);
   let best = null;
   for (const off of [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4]) {
     const h = goal + off;
     const lx = mob.pos.x + Math.sin(h) * 1.6, lz = mob.pos.z + Math.cos(h) * 1.6;  // look-ahead
     if (walkableStep(world, geo, lx, lz, fromY, ford)) { best = h; break; }
   }
-  if (best == null) best = goal;          // boxed in -> head at the goal; rescue recovers later
-  const step = speed * dt;
-  const nx = mob.pos.x + Math.sin(best) * step, nz = mob.pos.z + Math.cos(best) * step;
-  mob.pos.x = nx; mob.pos.z = nz;
-  let ny = surfaceHeight(world, geo, nx, nz);                        // follow the built surface, not just DEM
-  // fording a beck on a road leg: wade at the water surface, not submerged along the riverbed
-  if (ford && typeof geo.riverColumn === 'function' && geo.riverColumn(Math.round(nx), Math.round(nz))) {
-    ny = Math.max(ny, WATER_LEVEL + 0.3);
-  }
-  mob.pos.y = ny;
-  mob.yaw = best;
+  if (best == null) best = goal;          // boxed in -> head at the goal; collision + rescue recover
+  // ease off near the anchor so we settle on it rather than shoving through it
+  const v = dist >= 0.8 ? speed : 0;
+  npcMove(mob, Math.sin(best) * v, Math.cos(best) * v, world, dt);
 }
 
 // Polls the brain's roster, holds logical state, and drives one villager mob per NPC.
@@ -586,6 +629,9 @@ export class RosterClient {
               this._strideMount(e._pony, dt); this._seatRider(e);
             }
           }
+          // rescue a wedged walker/pony: hard collision can trap it and (unlike a rail
+          // traveller) there's no timeout to save it — snap it free on the stuck threshold.
+          if (this._unstickDriven(drv, e, nowEff) && e._pony) this._seatRider(e);
         }
       } else {                                              // 'at': potter about her patch — afoot, drop any leg pony
         if (e._pony) this._despawnMount(e);
@@ -603,7 +649,7 @@ export class RosterClient {
         } else {
           m.parloured = null;
           const p = npcVoxelPos(e.data, nowEff, this.geo);
-          if (p) this._potterAt(m, p, nowEff, dt);
+          if (p) { this._potterAt(m, p, nowEff, dt); this._unstickDriven(m, e, nowEff); }
         }
       }
       // seabed guard: after this frame's drive, a body grounded on a sub-sea column is hidden
@@ -836,6 +882,22 @@ export class RosterClient {
     const grp = m.model && m.model.group; if (grp) grp.visible = true;
   }
 
+  // A walker/potterer wedged by hard collision (no clip-through escape, and no rail
+  // timeout to save it — that only fires for e.ride): after ~7s of no progress (tracked
+  // by npcMove as _stuckT) snap it to the brain's current voxel position, past whatever
+  // it caught on, and carry on. Rare; the alternative is a body frozen against a wall.
+  _unstickDriven(drv, e, nowEff) {
+    if ((drv._stuckT || 0) <= 7) return false;
+    const p = npcVoxelPos(e.data, nowEff, this.geo);
+    if (p) {
+      drv.pos.x = p.x; drv.pos.z = p.z;
+      drv.pos.y = surfaceHeight(this.world, this.geo, p.x, p.z);
+      if (drv.vel) { drv.vel.x = 0; drv.vel.y = 0; drv.vel.z = 0; }
+    }
+    drv._stuckT = 0;
+    return true;
+  }
+
   // D3: is this 'at'-kind NPC in the pub tonight? Her village needs a plan (an
   // inn), it needs to be the evening crowd window, and her id needs to be one
   // of tonight's PARLOUR_CAP drawn from parlourCrowd (salted per-village, so a
@@ -883,11 +945,9 @@ export class RosterClient {
       else { m._ambleDX = 0; m._ambleDZ = 0; }
     }
     const tx = anchor.x + (m._ambleDX || 0), tz = anchor.z + (m._ambleDZ || 0);
-    const k = Math.min(1, dt * 1.6);
-    m.pos.x += (tx - m.pos.x) * k; m.pos.z += (tz - m.pos.z) * k;
-    m.pos.y += (surfaceHeight(this.world, this.geo, m.pos.x, m.pos.z) - m.pos.y) * k;
-    const ddx = tx - m.pos.x, ddz = tz - m.pos.z;
-    if (ddx * ddx + ddz * ddz > 0.02) m.yaw = Math.atan2(ddx, ddz);
+    const dx = tx - m.pos.x, dz = tz - m.pos.z, d = Math.hypot(dx, dz);
+    const spd = d > 0.4 ? Math.min(1.1, d * 1.4) : 0;   // a gentle amble; settle when arrived
+    npcMove(m, d > 0.001 ? dx / d * spd : 0, d > 0.001 ? dz / d * spd : 0, this.world, dt);
   }
 
   // Seconds until the VISIBLE train next calls (dwells) at `stationName` on `lineName`, or null.
