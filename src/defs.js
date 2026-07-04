@@ -200,6 +200,20 @@ export const BLOCKS = D;
 export function isSolid(id) { const d = D[id]; return d && d.kind === 'solid'; }
 export function isLiquid(id) { const d = D[id]; return d && d.kind === 'liquid'; }
 export function isCutout(id) { const d = D[id]; return d && d.kind === 'cutout'; }
+
+// The moor's own LANDFORM — the natural ground blocks the terrain is made of. These are the
+// only rises a person on foot (or a beast) will STEP UP onto: a river bank, a moor step, a
+// rocky outcrop, an exposed seam. Everything else that's solid — walls, planks, cobble, dressed
+// stone, station boarding, benches, tree trunks, roofs — is a BUILDING or obstacle to walk
+// AROUND, never climb. This is what lets folk tell a bank from a building: they mount the one
+// and skirt the other, so they stop scaling cottages and standing on rooftops. (Infrastructure
+// meant to be climbed — bridge decks, embankments, platform planks — is reached via the road/
+// rail `climbBuilt` path, which bypasses this gate.)
+export const NATURAL_GROUND = new Set([
+  B.GRASS, B.DIRT, B.PEAT, B.STONE, B.GRAVEL, B.SAND,
+  B.COAL_ORE, B.IRON_ORE, B.JET_ORE, B.ALUM_SHALE, B.POLYHALITE, B.ROCK_SALT, B.BEDROCK,
+]);
+export function isNaturalGround(id) { return NATURAL_GROUND.has(id); }
 // blocks that fully hide a neighbouring solid face
 export function isOpaque(id) { return isSolid(id); }
 

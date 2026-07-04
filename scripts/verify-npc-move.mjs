@@ -14,16 +14,18 @@ let failed = false;
 const ok = m => console.log('  ok    ' + m);
 const bad = m => { failed = true; console.log('  FAIL  ' + m); };
 
-// a tiny fake world: solid ground for y<=0, plus any blocks the test marks solid.
-function makeWorld(solid) {
+// a tiny fake world: natural ground for y<=0, plus any blocks the test marks solid. The solid
+// block DEFAULTS to natural terrain (DIRT) — a bank/moor-step folk step up. Pass a BUILT block
+// (PLANKS, STONEBRICK...) to model a building wall they must skirt, not climb.
+function makeWorld(solid, block = B.DIRT) {
   return {
     isLoaded: () => true,
-    getBlock: (x, y, z) => (y <= 0 ? B.STONEBRICK : (solid.has(x + ',' + y + ',' + z) ? B.STONEBRICK : B.AIR)),
+    getBlock: (x, y, z) => (y <= 0 ? B.DIRT : (solid.has(x + ',' + y + ',' + z) ? block : B.AIR)),
     setBlock: () => {},
   };
 }
 const mkMob = (x, y, z) => ({ pos: { x, y, z }, vel: { x: 0, y: 0, z: 0 }, hw: 0.3, h: 1.7, onGround: false });
-const run = (mob, world, vx, vz, steps = 160, dt = 1 / 30) => { for (let i = 0; i < steps; i++) npcMove(mob, vx, vz, world, dt); };
+const run = (mob, world, vx, vz, steps = 160, dt = 1 / 30, climbBuilt = false) => { for (let i = 0; i < steps; i++) npcMove(mob, vx, vz, world, dt, climbBuilt); };
 const slab = (x0, x1, y0, y1, z0, z1) => { const s = new Set(); for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) s.add(x + ',' + y + ',' + z); return s; };
 
 // 1. gravity settles a floating mob onto the ground
@@ -46,6 +48,50 @@ const slab = (x0, x1, y0, y1, z0, z1) => { const s = new Set(); for (let x = x0;
   const m = mkMob(5.5, 1, 5.5);
   run(m, makeWorld(slab(8, 40, 1, 1, 3, 8)), 3, 0, 240);
   (m.pos.x > 9 && m.pos.y > 1.8 ? ok : bad)(`a mob auto-steps UP a 1-block rise and walks the terrace (x=${m.pos.x.toFixed(2)}, y=${m.pos.y.toFixed(2)})`);
+}
+
+// 3b. A BUILDING is not a bank: a 1-block rise made of a BUILT block (PLANKS) is a wall to walk
+// AROUND, not climb — an idle mob (climbBuilt=false) does NOT mount it (no scaling cottages).
+{
+  const m = mkMob(5.5, 1, 5.5);
+  run(m, makeWorld(slab(8, 40, 1, 1, 3, 8), B.PLANKS), 3, 0, 240);
+  (m.pos.x < 8 - 0.3 + 0.06 && m.pos.y < 1.5 ? ok : bad)(`a mob does NOT climb a built (planks) step — skirts the building (x=${m.pos.x.toFixed(2)}, y=${m.pos.y.toFixed(2)})`);
+}
+
+// 3c. ...but the SAME built step IS mounted on an infrastructure leg (climbBuilt=true): road/rail
+// walkers step onto bridge decks, embankments and platform planks.
+{
+  const m = mkMob(5.5, 1, 5.5);
+  run(m, makeWorld(slab(8, 40, 1, 1, 3, 8), B.PLANKS), 3, 0, 240, 1 / 30, true);
+  (m.pos.x > 9 && m.pos.y > 1.8 ? ok : bad)(`a road/rail mob (climbBuilt) DOES mount a planked deck and walk it (x=${m.pos.x.toFixed(2)}, y=${m.pos.y.toFixed(2)})`);
+}
+
+// 3e. ELEVATED sampling is correct (refutes a reviewed off-by-one claim): the step-up samples
+// the block AHEAD at foot level, NOT the mob's own support block — so it stays right when the mob
+// is ALREADY stood on a BUILT platform. From planks (pos.y~2), a NATURAL step one higher ahead is
+// still climbed... (if the sample were off-by-one it would read the support planks / the air and
+// wrongly refuse this, or read the ground under the step and wrongly allow a building.)
+{
+  const plat = new Set(); for (let x = 0; x <= 7; x++) for (let z = 3; z <= 8; z++) plat.add(x + ',1,' + z);       // planks deck the mob stands on
+  const step = new Set(); for (let x = 8; x <= 40; x++) for (let y = 1; y <= 2; y++) for (let z = 3; z <= 8; z++) step.add(x + ',' + y + ',' + z); // dirt rise, top y3
+  const w = { isLoaded: () => true, setBlock: () => {},
+    getBlock: (x, y, z) => (y <= 0 ? B.DIRT : (plat.has(x + ',' + y + ',' + z) ? B.PLANKS : (step.has(x + ',' + y + ',' + z) ? B.DIRT : B.AIR))) };
+  const m = mkMob(5.5, 2, 5.5);   // stood on the planks platform
+  run(m, w, 3, 0, 240);
+  (m.pos.x > 9 && m.pos.y > 2.8 ? ok : bad)(`from a built platform, a mob still climbs a NATURAL step one higher (x=${m.pos.x.toFixed(2)}, y=${m.pos.y.toFixed(2)})`);
+}
+
+// 3f. ...and from that same built platform, a BUILT step one higher is still refused (no scaling a
+// wall just because you're stood on decking).
+{
+  const built = new Set();
+  for (let x = 0; x <= 7; x++) for (let z = 3; z <= 8; z++) built.add(x + ',1,' + z);                              // deck
+  for (let x = 8; x <= 40; x++) for (let y = 1; y <= 2; y++) for (let z = 3; z <= 8; z++) built.add(x + ',' + y + ',' + z); // planks wall/step ahead
+  const w = { isLoaded: () => true, setBlock: () => {},
+    getBlock: (x, y, z) => (y <= 0 ? B.DIRT : (built.has(x + ',' + y + ',' + z) ? B.PLANKS : B.AIR)) };
+  const m = mkMob(5.5, 2, 5.5);
+  run(m, w, 3, 0, 240);
+  (m.pos.x < 8 - 0.3 + 0.06 && m.pos.y < 2.5 ? ok : bad)(`from a built platform, a mob does NOT climb a BUILT step one higher (x=${m.pos.x.toFixed(2)}, y=${m.pos.y.toFixed(2)})`);
 }
 
 // 3d. NO BOUNCING: walking on flat ground, the mob's y stays steady (the step-up is a

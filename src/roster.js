@@ -1,7 +1,7 @@
 // Phase B.1 — render the brain's living roster. The brain owns logical state; this file
 // owns ALL geometry: it maps {at|walk|rail} to a voxel position the client can draw.
 import { rosterState, talkGeneric } from './npc.js';
-import { B, CHUNK, WATER_LEVEL } from './defs.js';
+import { B, CHUNK, WATER_LEVEL, isNaturalGround } from './defs.js';
 import { reportQuiet } from './feedback.js';
 import { idHash, innOpen, eveningAtInn, parlourCrowd, parlourSeatFor } from './parlour.js';
 import { moveEntity, boxCollides } from './physics.js';
@@ -25,6 +25,14 @@ export const RENDER_FRACTION = 0.78;
 // through the ambient-speak etiquette) must agree on, so a pair can never be picked as
 // "near enough to matter" by one and treated as "far, speak freely" by the other.
 const NEAR_PL2 = 22 * 22;
+
+// ---- neighbours stopping to natter (a PHYSICAL pause; the LLM voice, when a player's near, is
+// layered on top by _maybeBanter — but folk stop and face each other even with no dialogue) ----
+const NATTER_MEET2 = 2.6 * 2.6;   // start a natter when two idle folk drift this near (~2.6 blocks)
+const NATTER_END2 = 5 * 5;        // end it if the partner strays this far (pulled onto an errand, say)
+const NATTER_MIN = 4, NATTER_MAX = 9;   // seconds a natter lasts — a passing word, not a vigil
+const NATTER_CHANCE = 0.5;        // odds a near idle pair strikes up, per ~1.5s scan
+const NATTER_COOL_MIN = 25, NATTER_COOL_MAX = 60;   // a breather before the same body natters again
 
 // The true voxel surface at (x,z): one block ABOVE the top non-air/non-water block, so a body
 // stands ON the platform deck / building floor rather than sunk into it. geo.height is DEM-only
@@ -286,6 +294,13 @@ export function walkableStep(world, geo, x, z, fromY, ford = false) {
   const s = surfaceHeight(world, geo, rx, rz);
   if (Math.abs(s - fromY) > (ford ? 3.2 : 1.3)) return false;
   if (!ford && (world.getBlock(rx, s, rz) === B.WATER || world.getBlock(rx, s - 1, rz) === B.WATER)) return false;
+  // A step UP onto a BUILT surface (a wall course, a cobbled kerb, a bench, a platform, a tree
+  // trunk) is a building to walk AROUND, not a landform to climb — only the moor's own ground
+  // (banks, moor steps, rock) is steppable. So folk skirt cottages BEFORE they bump them, instead
+  // of scaling the walls. Road/rail walkers (`ford`) are exempt: they DO mount bridge decks,
+  // embankments and platform planks. A level or downward move onto built ground (walking a path)
+  // is fine — only the upward mount is refused.
+  if (!ford && s > fromY + 0.5 && !isNaturalGround(world.getBlock(rx, s - 1, rz))) return false;
   const head = world.getBlock(rx, s + 1, rz);
   if (head !== B.AIR && head !== B.WATER) return false;
   return true;
@@ -304,7 +319,7 @@ const NPC_GRAVITY = 26;
 // we hop it for them when it bumps a climbable step). Replaces the old direct
 // pos-write + surfaceHeight-snap that let NPCs clip walls, stand on roofs and teleport.
 // Cosmetic (the brain owns logical state), so it needn't be deterministic run-to-run.
-export function npcMove(mob, vx, vz, world, dt) {
+export function npcMove(mob, vx, vz, world, dt, climbBuilt = false) {
   // an unloaded chunk reads as solid stone everywhere (world.js getBlock) — running
   // collision there would wedge the body; hold position until it streams in.
   if (typeof world.isLoaded === 'function' && !world.isLoaded(mob.pos.x, mob.pos.z)) {
@@ -331,7 +346,14 @@ export function npcMove(mob, vx, vz, world, dt) {
   // up a stair. The old auto-JUMP sprang folk into the air at every terrain undulation.
   if ((vx || vz) && mob.hitWall && mob.onGround && mob._waterGrace <= 0) {
     const tx = px + vx * dt, tz = pz + vz * dt, ty = mob.pos.y + 1.0;
-    if (!boxCollides(world, mob.pos.x, ty, mob.pos.z, mob.hw, mob.h, mob.passGate) &&   // headroom to rise
+    // Only climb the moor's OWN ground (a bank, a moor step, a rock) — never a building. The
+    // block we'd bump into and mount is the one dead ahead at foot height; if it's built
+    // (wall/planks/cobble/bench/platform/tree) we treat it as a wall and DON'T step up, so folk
+    // skirt cottages instead of scaling them. `climbBuilt` (road/rail travel) lifts this so they
+    // still mount bridge decks, embankments and platform planks. James 2026-07-04.
+    const stepBlk = world.getBlock(Math.round(tx), Math.floor(mob.pos.y + 0.05), Math.round(tz));
+    if ((climbBuilt || isNaturalGround(stepBlk)) &&
+        !boxCollides(world, mob.pos.x, ty, mob.pos.z, mob.hw, mob.h, mob.passGate) &&   // headroom to rise
         !boxCollides(world, tx, ty, tz, mob.hw, mob.h, mob.passGate)) {                  // one block up ahead is clear (a step, not a 2-block wall)
       mob.pos.x = tx; mob.pos.z = tz; mob.pos.y = ty; mob.vel.y = 0; mob.onGround = true;
     }
@@ -376,7 +398,10 @@ export function steerWalk(mob, from, to, started, eta, now, world, geo, dt, pace
   if (best == null) best = goal;          // boxed in -> head at the goal; collision + rescue recover
   // ease off near the anchor so we settle on it rather than shoving through it
   const v = dist >= 0.8 ? speed : 0;
-  npcMove(mob, Math.sin(best) * v, Math.cos(best) * v, world, dt);
+  // A road/rail leg (`ford`) may mount built infrastructure — bridge decks, embankments, platform
+  // planks — so its step-up climbs built blocks too. An idle potterer (ford=false) only steps the
+  // moor's own ground, so it skirts cottages rather than climbing them.
+  npcMove(mob, Math.sin(best) * v, Math.cos(best) * v, world, dt, ford);
 }
 
 // Polls the brain's roster, holds logical state, and drives one villager mob per NPC.
@@ -662,8 +687,11 @@ export class RosterClient {
           m.parloured = parlourPlan;
         } else {
           m.parloured = null;
-          const p = npcVoxelPos(e.data, nowEff, this.geo);
-          if (p) { this._potterAt(m, p, nowEff, dt); this._unstickDriven(m, e, nowEff); }
+          // stopped for a natter with a neighbour? stand and face them; otherwise potter about.
+          if (!this._natterHold(m, nowEff, dt)) {
+            const p = npcVoxelPos(e.data, nowEff, this.geo);
+            if (p) { this._potterAt(m, p, nowEff, dt); this._unstickDriven(m, e, nowEff); }
+          }
         }
       }
       // seabed guard: after this frame's drive, a body grounded on a sub-sea column is hidden
@@ -674,7 +702,66 @@ export class RosterClient {
       if (grp) grp.visible = vis;
       if (e._pony && e._pony.model) e._pony.model.group.visible = vis;
     }
-    this._maybeBanter(dt);                                  // ambient NPC↔NPC natter when a player's nearby
+    this._socialScan(dt);                                   // pair up idle neighbours to stop for a natter (behaviour, no dialogue needed)
+    this._maybeBanter(dt);                                  // ...and, when a player's near, voice one such pair through the brain
+  }
+
+  // ---- neighbours stopping to natter (the PHYSICAL behaviour) ----
+  // James: "they should stop to talk to each other properly, even if we don't generate the
+  // dialogue." So this is pure behaviour, independent of the player and the brain: idle, at-home
+  // folk who drift near one another occasionally stop, turn face-to-face and hold a few seconds
+  // before moving on. _maybeBanter (below) layers a real spoken line on top ONLY when a player is
+  // in earshot and the brain's free — but with no player or no brain, they still visibly natter.
+  _socialScan(dt) {
+    this._natterScan = (this._natterScan || 0) - dt;
+    if (this._natterScan > 0) return;
+    this._natterScan = 1.5;                                 // hunt for fresh pairs every ~1.5s
+    const nowEff = this._nowEff();
+    const idle = [];
+    for (const [, e] of this.npcs) {
+      const m = e.mob, s = e.data && e.data.state;
+      if (!m) continue;
+      // release a natter whose time's up OR whose owner has left the idle 'at' state (pulled onto a
+      // walk/rail errand) — so she can natter again later and doesn't pin her old partner's mob
+      // object for the whole trip. (_natterHold clears + cools the in-'at' case each frame; this
+      // catches the one that walked off before it could.)
+      if (m._natter && (nowEff > m._natter.until || (s && s.kind !== 'at'))) m._natter = null;
+      if (m.chatting || m.parloured || m._natter) continue;   // not mid player-chat, not in the pub, not already nattering
+      if (s && s.kind !== 'at') continue;                  // only idle, at-home folk — never travellers or rail waiters
+      if (m._natterCool && nowEff < m._natterCool) continue;
+      idle.push(m);
+    }
+    for (let i = 0; i < idle.length; i++) {
+      for (let j = i + 1; j < idle.length; j++) {
+        const a = idle[i], b = idle[j];
+        if (a._natter || b._natter) continue;              // one may have paired earlier this pass
+        if ((a.pos.x - b.pos.x) ** 2 + (a.pos.z - b.pos.z) ** 2 <= NATTER_MEET2 && Math.random() < NATTER_CHANCE) {
+          const until = nowEff + NATTER_MIN + Math.random() * (NATTER_MAX - NATTER_MIN);
+          a._natter = { other: b, until }; b._natter = { other: a, until };   // mutual, so both stop together
+        }
+      }
+    }
+  }
+
+  // If `m` is mid-natter, hold her: stand still, face her neighbour, legs stilled — and return
+  // true so the caller skips the wander. Ends (returns false, starts a cooldown) when the time's
+  // up, the partner's gone/dead, or the partner has strayed (e.g. was pulled onto an errand).
+  _natterHold(m, nowEff, dt) {
+    const o = m._natter;
+    if (!o) return false;
+    const other = o.other;
+    const strayed = !other || other.dead ||
+      (m.pos.x - other.pos.x) ** 2 + (m.pos.z - other.pos.z) ** 2 > NATTER_END2;
+    if (nowEff > o.until || strayed) {
+      m._natter = null;
+      m._natterCool = nowEff + NATTER_COOL_MIN + Math.random() * (NATTER_COOL_MAX - NATTER_COOL_MIN);
+      return false;
+    }
+    this._faceEachOther(m, other);
+    m.walkPhase = 0;                                        // still the stride — she's stood talking, not shuffling
+    m.activityShort = 'passing the time of day';
+    npcMove(m, 0, 0, this.world, dt);                       // no wander; gravity still settles her
+    return true;
   }
 
   // ---- ambient NPC↔NPC banter (LLM-voiced, but gated to keep the brain cool) ----
@@ -700,15 +787,18 @@ export class RosterClient {
       if ((m.pos.x - pl.pos.x) ** 2 + (m.pos.z - pl.pos.z) ** 2 > NEAR_PL2) continue;
       cands.push(e);
     }
+    // Prefer voicing a pair that's ALREADY stopped to natter (_socialScan paired them), so the
+    // spoken line lands on two folk visibly stood face-to-face; otherwise fall back to any near pair.
+    let fallback = null;
     for (let i = 0; i < cands.length; i++) {
       for (let j = i + 1; j < cands.length; j++) {
         const a = cands[i].mob, b = cands[j].mob;
-        if ((a.pos.x - b.pos.x) ** 2 + (a.pos.z - b.pos.z) ** 2 <= NEAR_EACH2) {
-          this._runBanter(cands[i], cands[j]);
-          return;
-        }
+        if ((a.pos.x - b.pos.x) ** 2 + (a.pos.z - b.pos.z) ** 2 > NEAR_EACH2) continue;
+        if (a._natter && a._natter.other === b) { this._runBanter(cands[i], cands[j]); return; }
+        if (!fallback) fallback = [cands[i], cands[j]];
       }
     }
+    if (fallback) this._runBanter(fallback[0], fallback[1]);
   }
 
   _faceEachOther(m, other) {
@@ -882,11 +972,14 @@ export class RosterClient {
     this._walkTo(m, platformPoint(this.world, this.geo, ride.line, ride.from) || a, dt);   // approach the platform
   }
 
-  // Walk a streamed mob toward a point at a steady pace, grounded on the built surface.
+  // Walk a streamed mob toward a point at a steady pace, grounded on the built surface. Used only
+  // for rail infrastructure moves (approaching a platform, returning to the station town), so it
+  // walks with `ford=true`: it may mount the raised planked platform deck and wade a beck on the
+  // way — an idle village potterer, by contrast, keeps `climbBuilt=false` and skirts buildings.
   _walkTo(m, to, dt, pace = 2.2) {
     const ty = surfaceHeight(this.world, this.geo, to.x, to.z);
     const dist = Math.hypot(to.x - m.pos.x, to.z - m.pos.z);
-    steerWalk(m, null, { x: to.x, y: ty, z: to.z }, 0, Math.max(1, dist / pace), 0, this.world, this.geo, dt);
+    steerWalk(m, null, { x: to.x, y: ty, z: to.z }, 0, Math.max(1, dist / pace), 0, this.world, this.geo, dt, undefined, true);
   }
 
   // Has she reached the boarding spot for this ride's origin platform? (true if unresolved, so a
