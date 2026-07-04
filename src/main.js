@@ -1577,6 +1577,30 @@ class Game {
     const pony = ui.el('button', 'mc', row, 'Find a Pony (drop by t’ nearest)');
     pony.addEventListener('click', () => this.wardenToPony());
 
+    // ---- Studio: record a cinematic season/location showreel for marketing footage ----
+    ui.el('div', 'r-needs', panel, 'Studio (marketing footage):');
+    const studioRow = ui.el('div', 'admin-btns', panel);
+    const startReel = (record) => {
+      ui.adminPanel.classList.add('hidden');            // hide the panel (it'd sit over the flythrough on screen)
+      if (this.state === 'paused') this.resume();       // unpause so the loop runs + chunks stream at each stop
+      ui.toast(record
+        ? 'Filming the showreel — about a minute. A .webm downloads when it’s done.'
+        : 'Previewing the showreel (no file saved) — about a minute.', 6000);
+      // a floating STOP button — DOM only, so it's never in the captured canvas
+      const stop = document.createElement('button');
+      stop.textContent = '■ Stop reel';
+      stop.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:99999;' +
+        'padding:8px 16px;font:600 13px system-ui;background:#7a1414;color:#fff;border:1px solid #c9503a;border-radius:6px;cursor:pointer;';
+      stop.addEventListener('click', () => stopShowreel(this));
+      document.body.appendChild(stop);
+      runShowreel(this, { record }).finally(() => stop.remove());
+    };
+    const recBtn = ui.el('button', 'mc', studioRow, '🎬 Record Showreel (~1 min)');
+    recBtn.addEventListener('click', () => startReel(true));
+    const preBtn = ui.el('button', 'mc', studioRow, '🎬 Preview (no file)');
+    preBtn.addEventListener('click', () => startReel(false));
+    ui.el('div', 'r-needs', panel, 'A clean 1080p .webm (no HUD) touring the seasons & the moor. Best in a solo world, fullscreen (F11). Add music/captions in an editor after.');
+
     // drop in on a player (shared moor only — t' relay answers wardens wi' t' map)
     if (this.netActive && this.net && this.net.connected) {
       ui.el('div', 'r-needs', panel, 'Drop in on a player:');
