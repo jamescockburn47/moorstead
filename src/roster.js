@@ -89,9 +89,11 @@ export function platformPoint(world, geo, line, station) {
     const pz = p.z + (p.tx) * PLATFORM_OFFSET * s;
     const y = surfaceHeight(world, geo, px, pz);
     const dDeck = Math.abs((y - 1) - p.deck);                  // plank side reads ~deck; open side reads ground
-    if (!best || dDeck < best.dDeck) best = { x: px, y, z: pz, dDeck };
+    if (!best || dDeck < best.dDeck) best = { x: px, y, z: pz, dDeck, s };
   }
-  const out = { x: best.x, y: best.y, z: best.z };
+  // tx,tz = unit tangent ALONG the track (line folk up in a row on the platform);
+  // nx,nz = unit normal from the platform TOWARD the rail (so they can face the line).
+  const out = { x: best.x, y: best.y, z: best.z, tx: p.tx, tz: p.tz, nx: p.tz * best.s, nz: -p.tx * best.s };
   _platCache.set(key, out);
   return out;
 }
@@ -830,13 +832,13 @@ export class RosterClient {
         ride.dep = nowSec + due;
       }
     }
-    // Booked journey: she times her walk to the train. STAGGER the set-off per NPC over a
-    // 60–150s window (id-hashed) so folk TRICKLE onto the platform as the train nears
-    // rather than all converging at the same instant — that lockstep rush was the
-    // platform cluster (James 2026-07-04: "why can't they get there ~10 min before,
-    // walk the village, and all board when it's there"). Until the lead window they
-    // live in the village (wide _potterAt above); then they head over spread out.
-    const lead = 60 + (idHash(e.data.id) % 90);
+    // Booked journey: they live in the village until the LAST minute, then ALL set off
+    // together (no stagger) so they arrive by the rail no more than ~30s before the
+    // train (James 2026-07-04). The lead is DISTANCE-based (walk time from the village +
+    // ~20s), identical for every NPC of this (line, from), so they leave in step and
+    // reach the platform at the same time — not a trickle.
+    const pt = platformPoint(this.world, this.geo, ride.line, ride.from) || a;
+    const lead = Math.min(150, Math.hypot(a.x - pt.x, a.z - pt.z) / 2.0 + 22);
     const bm = railWaitMode(Date.now() / 1000, ride.dep, lead);
     if (bm === 'potter') {
       const sp = _spread(e.data.id);
@@ -844,10 +846,16 @@ export class RosterClient {
       return;
     }
     if (bm === 'approach') {
-      // stand SPREAD along the platform, not stacked on the one marker cell
-      const pt = platformPoint(this.world, this.geo, ride.line, ride.from) || a;
-      const sp = _spread(e.data.id);
-      this._walkTo(m, { x: pt.x + sp.dx * 0.7, z: pt.z + sp.dz * 0.7 }, dt);
+      // line up ALONG the platform (parallel to the rail, off the track), spread by id, then
+      // STAND STILL by the rail facing the line — no jittering about on the track.
+      const lane = pt.tx != null ? ((idHash(e.data.id) % 7) - 3) : 0;   // -3..+3 blocks along the platform
+      const target = { x: pt.x + (pt.tx || 0) * lane, z: pt.z + (pt.tz || 0) * lane };
+      if ((m.pos.x - target.x) ** 2 + (m.pos.z - target.z) ** 2 < 1.6) {
+        if (pt.nx != null) m.yaw = Math.atan2(pt.nx, pt.nz);            // face the rail
+        npcMove(m, 0, 0, this.world, dt);                              // stand and wait (gravity settles)
+      } else {
+        this._walkTo(m, target, dt);
+      }
       return;
     }
     // (bm === null: dep-less legacy brain — ranked waitMode below still applies)
