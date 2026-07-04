@@ -220,24 +220,30 @@ export class InnDecorLayer {
     this.scene.add(mesh);
     this.objects.push(mesh);
 
-    // hanging bracket sign: same texture reused (shared — this layer owns the
-    // texture but two materials may point at it; both disposed on clear()),
-    // half scale, perpendicular to the wall at the door's side.
-    const bracketMat = new THREE.MeshBasicMaterial({ map: tex, transparent: false, side: THREE.DoubleSide });
-    const bracketGeo = new THREE.PlaneGeometry(1.5, 0.375);
-    const bracket = new THREE.Mesh(bracketGeo, bracketMat);
-    bracket.rotation.y = d.yaw + Math.PI / 2; // perpendicular to the wall
+    // hanging bracket sign: perpendicular to the wall at the door's side, and
+    // DOUBLE-FACED the way a real pub sign is — two front-facing planes
+    // back-to-back, NOT one THREE.DoubleSide plane (DoubleSide renders the
+    // back face with mirrored UVs — James saw backwards lettering live,
+    // 2026-07-04). Same texture reused; both materials disposed on clear().
     const sideOff = 1.3; // out from the door, along the wall
-    bracket.position.set(
-      d.x + 0.5 + offX * 6 - Math.cos(d.yaw) * sideOff,
-      plan.groundY + 2.6,
-      d.z + 0.5 + offZ * 6 + Math.sin(d.yaw) * sideOff
-    );
-    bracket.frustumCulled = false;
-    bracket.userData.ownGeometry = true;
-    bracket.userData.sign = true;
-    this.scene.add(bracket);
-    this.objects.push(bracket);
+    const bx = d.x + 0.5 + offX * 6 - Math.cos(d.yaw) * sideOff;
+    const bz = d.z + 0.5 + offZ * 6 + Math.sin(d.yaw) * sideOff;
+    for (const flip of [0, Math.PI]) {
+      const bracketMat = new THREE.MeshBasicMaterial({ map: tex, transparent: false });
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.375), bracketMat);
+      face.rotation.y = d.yaw + Math.PI / 2 + flip;
+      // nudge each face a hair along its own outward normal so they never z-fight
+      face.position.set(
+        bx + Math.sin(face.rotation.y) * 0.006,
+        plan.groundY + 2.6,
+        bz + Math.cos(face.rotation.y) * 0.006
+      );
+      face.frustumCulled = false;
+      face.userData.ownGeometry = true;
+      face.userData.sign = true;
+      this.scene.add(face);
+      this.objects.push(face);
+    }
   }
 
   // -- 2. hearth fire -------------------------------------------------------------

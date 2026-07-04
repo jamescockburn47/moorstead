@@ -671,6 +671,19 @@ export class Gen {
         : p.doorSide === 'e' ? [fx1, midZ] : [fx0, midZ];
       put(doorPos[0], g + 1, doorPos[1], B.INN_DOOR);
       put(doorPos[0], g + 2, doorPos[1], B.AIR);
+      // doorstep: the site scan tolerates ±1 of terrain slope at the corners, so
+      // the ground OUTSIDE the door can sit a block proud and wall the doorway
+      // off (James, live at Grosmont 2026-07-04: "not possible to enter — the
+      // door is blocked"). Carve a two-cell approach clear at head height and
+      // lay a cobble step so every inn door is walkable whatever the bank does.
+      const [odx, odz] = p.doorSide === 'n' ? [0, -1] : p.doorSide === 's' ? [0, 1]
+        : p.doorSide === 'e' ? [1, 0] : [-1, 0];
+      for (let step = 1; step <= 2; step++) {
+        const sx = doorPos[0] + odx * step, sz = doorPos[1] + odz * step;
+        put(sx, g, sz, B.COBBLE);          // a firm step at the tavern's own floor level
+        put(sx, g + 1, sz, B.AIR);         // clear the bank at body height
+        put(sx, g + 2, sz, B.AIR);         // and head height
+      }
 
       // windows: 2 per long wall (z=fz0, z=fz1) at g+2, skipping the door column
       for (const wz of [fz0, fz1]) {

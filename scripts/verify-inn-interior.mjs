@@ -155,6 +155,27 @@ const geo = new MoorsGeography();
     }
     (chimneyFound ? ok : bad)('D2: a chimney (RBRICK column) rises above the ridge peak');
 
+    // --- door approach is walkable (James, live 2026-07-04: a terrain bank one
+    // block proud of the tavern floor walled the doorway off — the site scan
+    // tolerates ±1 slope at the CORNERS, so the door-side cells specifically
+    // must be carved clear + stepped by stampInns) ---
+    {
+      const doorP = plan.doorSide === 'n' ? [Math.round((fx0 + fx1) / 2), fz0]
+        : plan.doorSide === 's' ? [Math.round((fx0 + fx1) / 2), fz1]
+        : plan.doorSide === 'e' ? [fx1, midZ] : [fx0, midZ];
+      const [odx, odz] = plan.doorSide === 'n' ? [0, -1] : plan.doorSide === 's' ? [0, 1]
+        : plan.doorSide === 'e' ? [1, 0] : [-1, 0];
+      let approachOk = true;
+      for (let step = 1; step <= 2; step++) {
+        const sx = doorP[0] + odx * step, sz = doorP[1] + odz * step;
+        if (at(sx, g + 1, sz) !== B.AIR) approachOk = false;   // body height clear
+        if (at(sx, g + 2, sz) !== B.AIR) approachOk = false;   // head height clear
+        if (at(sx, g, sz) === B.AIR) approachOk = false;       // solid footing (the cobble step)
+      }
+      (approachOk ? ok : bad)('door approach: two cells clear at body+head height with solid footing');
+      (at(doorP[0], g + 1, doorP[1]) === B.INN_DOOR ? ok : bad)('door block survives the doorstep carve');
+    }
+
     // --- parlour furniture ---
     const { floorY, w: pw, l: pl } = plan.parlour;
     const ix0 = plan.origin.x - Math.floor(pw / 2), iz0 = plan.origin.z - Math.floor(pl / 2);
