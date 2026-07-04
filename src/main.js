@@ -1456,18 +1456,18 @@ class Game {
     // instant-arrival feel.
     const mapCol = ui.el('div', '', scene); mapCol.style.cssText = 'flex:1.3;min-width:220px;';
     if (ui.mapBaseKey !== this.world.gen.seed) ui.buildBigMap(this.player, this.world);
+    // a THUMBNAIL: clicking it opens the big interactive travel map (precise
+    // click-to-drop, hover names, live players) rather than teleporting blind
+    // from a 320px image (James 2026-07-04: the tiny map's click landed wrong).
     const mapCanvas = ui.el('canvas', 'admin-map', mapCol);
     mapCanvas.width = ui.mapBase.width; mapCanvas.height = ui.mapBase.height;
-    mapCanvas.style.cssText = 'width:100%;max-width:320px;border-radius:4px;cursor:crosshair;';
+    mapCanvas.style.cssText = 'width:100%;max-width:320px;border-radius:4px;cursor:pointer;';
     mapCanvas.getContext('2d').drawImage(ui.mapBase, 0, 0);
-    ui.el('div', 'r-needs', mapCol, 'Click the map to drop in — uses the settings below.');
-    mapCanvas.addEventListener('click', (e) => {
-      const rect = mapCanvas.getBoundingClientRect();
-      const sx = (e.clientX - rect.left) * (mapCanvas.width / rect.width);
-      const sy = (e.clientY - rect.top) * (mapCanvas.height / rect.height);
-      const { x, z } = bigMapScreenToWorld(ui._mapXf, sx, sy);
-      this.adminTeleport(x, z, `${x}, ${z}`);
-    });
+    mapCanvas.addEventListener('click', () => ui.openWardenMap());
+    const bigBtn = ui.el('button', 'mc', mapCol, '🗺 Open big travel map');
+    bigBtn.style.cssText = 'width:100%;margin-top:6px;';
+    bigBtn.addEventListener('click', () => ui.openWardenMap());
+    ui.el('div', 'r-needs', mapCol, 'Open the map, then click anywhere to drop in — settings below apply.');
 
     const sliderCol = ui.el('div', '', scene); sliderCol.style.cssText = 'flex:1;min-width:220px;display:flex;flex-direction:column;gap:12px;';
 
