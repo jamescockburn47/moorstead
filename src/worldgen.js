@@ -527,9 +527,16 @@ export class Gen {
       for (let y = c.deck + 1; y <= top; y++) data[IDX(c.lx, y, c.lz)] = B.AIR;
       data[IDX(c.lx, c.deck, c.lz)] = c.d < 1.4 ? B.GRAVEL : c.d < 2.2 ? B.COBBLE : B.GRASS;
     }
-    this.stampInns(data, cx, cz);
     this.stampStations(data, cx, cz);
     this.stampBridges(data, cx, cz);
+    // Inns stamp LAST so the tavern always wins inside its own protected box.
+    // Grosmont & Pickering taverns sit hard against their (grand) stations, and
+    // the station's platform-clearing was wiping the tavern's door forecourt
+    // footing — walling the door (James, live 2026-07-04; caught by the live-seed
+    // forecourt check in verify-inn-interior). The inn box is small and edit-
+    // protected; where it overlaps a station the tavern takes a clean bite, which
+    // is far better than an unenterable pub.
+    this.stampInns(data, cx, cz);
     return data;
   }
 
@@ -671,18 +678,24 @@ export class Gen {
         : p.doorSide === 'e' ? [fx1, midZ] : [fx0, midZ];
       put(doorPos[0], g + 1, doorPos[1], B.INN_DOOR);
       put(doorPos[0], g + 2, doorPos[1], B.AIR);
-      // doorstep: the site scan tolerates ±1 of terrain slope at the corners, so
-      // the ground OUTSIDE the door can sit a block proud and wall the doorway
-      // off (James, live at Grosmont 2026-07-04: "not possible to enter — the
-      // door is blocked"). Carve a two-cell approach clear at head height and
-      // lay a cobble step so every inn door is walkable whatever the bank does.
+      // doorstep forecourt: the site scan tolerates ±1 of terrain slope at the
+      // corners, so the ground outside the door can sit a block proud and wall
+      // the doorway off (James, live at Grosmont 2026-07-04: "the door is
+      // blocked"). A single-file 2-cell slot was reachable but claustrophobic —
+      // widen to a 3-WIDE, 2-DEEP flat cobbled forecourt at the tavern's own
+      // floor level, cleared to head+1 (so a proud bank AND any cutout scrub —
+      // a blackthorn generated at head height fouled the east approach — can't
+      // wall it). Kept 2 deep on purpose: a 3rd row would punch into the
+      // Grosmont station building that sits ~3 blocks off the south door.
       const [odx, odz] = p.doorSide === 'n' ? [0, -1] : p.doorSide === 's' ? [0, 1]
         : p.doorSide === 'e' ? [1, 0] : [-1, 0];
-      for (let step = 1; step <= 2; step++) {
-        const sx = doorPos[0] + odx * step, sz = doorPos[1] + odz * step;
-        put(sx, g, sz, B.COBBLE);          // a firm step at the tavern's own floor level
-        put(sx, g + 1, sz, B.AIR);         // clear the bank at body height
-        put(sx, g + 2, sz, B.AIR);         // and head height
+      // lateral offsets perpendicular to the door's out-direction (±1 across the front)
+      const lat = (p.doorSide === 'n' || p.doorSide === 's') ? [[-1, 0], [0, 0], [1, 0]]
+        : [[0, -1], [0, 0], [0, 1]];
+      for (let step = 1; step <= 2; step++) for (const [lx, lz] of lat) {
+        const sx = doorPos[0] + odx * step + lx, sz = doorPos[1] + odz * step + lz;
+        put(sx, g, sz, B.COBBLE);              // a firm step at the tavern's own floor level
+        for (let y = g + 1; y <= g + 3; y++) put(sx, y, sz, B.AIR); // clear bank + scrub to head+1
       }
 
       // windows: 2 per long wall (z=fz0, z=fz1) at g+2, skipping the door column

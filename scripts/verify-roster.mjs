@@ -3,7 +3,7 @@
 import assert from 'node:assert';
 import { Gen, MOORS_SEED } from '../src/worldgen.js';
 import { B, WATER_LEVEL } from '../src/defs.js';
-import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity, surfaceHeight, __resetSurfCache, idHash, waiterRank, waitMode, PLATFORM_CAP, WAIT_LEAD, platformPoint, roadWaypoints, ridesThisLeg, RIDE_PACE, RosterClient } from '../src/roster.js';
+import { npcVoxelPos, townAnchor, steerWalk, walkableStep, npcActivity, surfaceHeight, __resetSurfCache, idHash, waiterRank, waitMode, PLATFORM_CAP, WAIT_LEAD, platformPoint, roadWaypoints, ridesThisLeg, RIDE_PACE, RosterClient, railWaitMode, RAIL_WAIT_LEAD } from '../src/roster.js';
 
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
 const geo = new Gen(MOORS_SEED).geo;
@@ -160,6 +160,20 @@ __resetSurfCache();
   ok(approaching.length === PLATFORM_CAP, `at most ${PLATFORM_CAP} approach a busy platform (got ${approaching.length})`);
   const overflow = ids.filter(id => waiterRank(id, ids) >= PLATFORM_CAP);
   ok(overflow.every(id => waitMode(5, waiterRank(id, ids)) === 'potter'), 'overflow folk potter in town instead');
+}
+
+// --- railWaitMode: a booked passenger's walk-to-platform timing (James 2026-07-04:
+// booked NPCs never boarded). The load-bearing property for the fix is that a
+// PAST dep keeps her heading to the platform ('approach'), not giving up — so a
+// stranded waiter stays put for the next train (which the raised 1500s ride
+// timeout now lets her wait out) rather than pottering off. ---
+{
+  const now = 1000;
+  ok(railWaitMode(now, null) === null, 'no booked dep -> null (legacy ranked fallback applies)');
+  ok(railWaitMode(now, now + RAIL_WAIT_LEAD + 60) === 'potter', 'dep well ahead -> potter in town');
+  ok(railWaitMode(now, now + RAIL_WAIT_LEAD - 5) === 'approach', 'dep within the lead -> approach the platform');
+  ok(railWaitMode(now, now - 200) === 'approach', 'PAST dep -> still approach (never abandon the platform on a stale booking)');
+  ok(railWaitMode(now, now) === 'approach', 'dep exactly now -> approach');
 }
 
 // --- roadWaypoints: a road-linked village pair yields an oriented lane; an unlinked pair, null ---

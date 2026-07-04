@@ -49,6 +49,16 @@ export class World {
     if (c) return c;
     const saved = this.savedChunks.get(k);
     const data = saved ? new Uint8Array(saved) : this.gen.generateChunk(cx, cz);
+    // A SAVED chunk skips generateChunk, so any worldgen change to an inn (the
+    // shell, the parlour, the door approach) can never reach an existing solo
+    // world — an old save freezes a stale/half-built tavern, walling its door
+    // (James, live 2026-07-04). Re-stamp any inn overlapping a loaded chunk so
+    // the authored inn always reflects current worldgen. LOSSLESS: the whole
+    // inn region is edit-protected (isProtected refuses every setBlock there),
+    // so no player build can live inside it — stampInns only ever overwrites
+    // its own authored cells, never a player's. Fresh chunks already ran
+    // stampInns inside generateChunk, so this is the saved-path only.
+    if (saved) this.gen.stampInns(data, cx, cz);
     // shared-moor edits arriving afore their chunk exists land here on gen
     if (this.netEdits) {
       for (const [ek, id] of this.netEdits) {

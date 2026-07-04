@@ -6,6 +6,32 @@ let failed = false;
 const ok = m => console.log('  ok    ' + m);
 const bad = m => { failed = true; console.log('  FAIL  ' + m); };
 
+// A tavern door must be walkable: stampInns carves a 3-wide × 2-deep cobbled
+// forecourt cleared to head+1 out from the door. Assert every forecourt cell is
+// clear at body+head with solid footing, and the door block survived — this is
+// the guard that catches a proud terrain bank, a cutout scrub, OR (crucially) a
+// later stamp (station/terrace) overwriting the approach. `at(wx,wy,wz)` routes
+// a world coord to the right generated chunk. Reused for seed 12345 AND the live
+// MOORS_SEED (the gap that let the real Grosmont door ship walled).
+function checkForecourt(plan, at, g, B, label) {
+  const { x0: fx0, z0: fz0, x1: fx1, z1: fz1 } = plan.footprint;
+  const mX = Math.round((fx0 + fx1) / 2), mZ = Math.round((fz0 + fz1) / 2);
+  const doorP = plan.doorSide === 'n' ? [mX, fz0] : plan.doorSide === 's' ? [mX, fz1]
+    : plan.doorSide === 'e' ? [fx1, mZ] : [fx0, mZ];
+  const [odx, odz] = plan.doorSide === 'n' ? [0, -1] : plan.doorSide === 's' ? [0, 1]
+    : plan.doorSide === 'e' ? [1, 0] : [-1, 0];
+  const lat = (plan.doorSide === 'n' || plan.doorSide === 's') ? [[-1, 0], [0, 0], [1, 0]] : [[0, -1], [0, 0], [0, 1]];
+  let okAll = true;
+  for (let step = 1; step <= 2; step++) for (const [lx, lz] of lat) {
+    const sx = doorP[0] + odx * step + lx, sz = doorP[1] + odz * step + lz;
+    if (at(sx, g + 1, sz) !== B.AIR) okAll = false;   // body height clear
+    if (at(sx, g + 2, sz) !== B.AIR) okAll = false;   // head height clear
+    if (at(sx, g, sz) === B.AIR) okAll = false;       // solid footing (the cobble step)
+  }
+  (okAll ? ok : bad)(`door forecourt 3-wide×2-deep clear + footing${label} [${plan.village} door ${plan.doorSide}]`);
+  (at(doorP[0], g + 1, doorP[1]) === B.INN_DOOR ? ok : bad)(`door block survives the forecourt carve${label} [${plan.village}]`);
+}
+
 const geo = new MoorsGeography();
 
 // --- determinism: same village + seed -> byte-identical plan ---
@@ -156,25 +182,12 @@ const geo = new MoorsGeography();
     (chimneyFound ? ok : bad)('D2: a chimney (RBRICK column) rises above the ridge peak');
 
     // --- door approach is walkable (James, live 2026-07-04: a terrain bank one
-    // block proud of the tavern floor walled the doorway off — the site scan
-    // tolerates ±1 slope at the CORNERS, so the door-side cells specifically
-    // must be carved clear + stepped by stampInns) ---
-    {
-      const doorP = plan.doorSide === 'n' ? [Math.round((fx0 + fx1) / 2), fz0]
-        : plan.doorSide === 's' ? [Math.round((fx0 + fx1) / 2), fz1]
-        : plan.doorSide === 'e' ? [fx1, midZ] : [fx0, midZ];
-      const [odx, odz] = plan.doorSide === 'n' ? [0, -1] : plan.doorSide === 's' ? [0, 1]
-        : plan.doorSide === 'e' ? [1, 0] : [-1, 0];
-      let approachOk = true;
-      for (let step = 1; step <= 2; step++) {
-        const sx = doorP[0] + odx * step, sz = doorP[1] + odz * step;
-        if (at(sx, g + 1, sz) !== B.AIR) approachOk = false;   // body height clear
-        if (at(sx, g + 2, sz) !== B.AIR) approachOk = false;   // head height clear
-        if (at(sx, g, sz) === B.AIR) approachOk = false;       // solid footing (the cobble step)
-      }
-      (approachOk ? ok : bad)('door approach: two cells clear at body+head height with solid footing');
-      (at(doorP[0], g + 1, doorP[1]) === B.INN_DOOR ? ok : bad)('door block survives the doorstep carve');
-    }
+    // block proud of the tavern floor walled the doorway off; the single-file
+    // 2-cell slot was reachable but cramped, so it's now a 3-wide × 2-deep
+    // cobbled forecourt cleared to head+1). checkForecourt is reused by the
+    // live-seed pass at the bottom of this file — a Gen(12345) check alone let
+    // the real MOORS_SEED door orientation ship unguarded. ---
+    checkForecourt(plan, at, g, B, ' (seed 12345)');
 
     // --- parlour furniture ---
     const { floorY, w: pw, l: pl } = plan.parlour;
@@ -267,6 +280,33 @@ const geo = new MoorsGeography();
       }
       (boardFound ? ok : bad)('D6: a notes board (B.BOARD) sits on the parlour wall near the exit door at floorY+2');
     }
+  }
+}
+
+// --- LIVE-SEED door-reachability pass (James, 2026-07-04): the checks above run
+// on Gen(12345), but production runs MOORS_SEED. At 12345 the doors face
+// elsewhere, so the real Grosmont south-into-the-station-bank door was never
+// guarded and shipped walled. Assert the forecourt is clear for EVERY inn at the
+// real seed, so a siting/carve regression that re-walls a live door fails here. ---
+{
+  const { Gen, MOORS_SEED } = await import('../src/worldgen.js');
+  const { B, CHUNK, HEIGHT } = await import('../src/defs.js');
+  const IDX = (x, y, z) => x + z * CHUNK + y * CHUNK * CHUNK;
+  const gen = new Gen(MOORS_SEED);
+  (gen.inns.size > 0 ? ok : bad)(`live seed builds inns (${gen.inns.size})`);
+  for (const plan of gen.inns.values()) {
+    const { x0: pbx0, z0: pbz0, x1: pbx1, z1: pbz1 } = plan.protectedBox;
+    const cx0 = Math.floor((pbx0 - 2) / CHUNK), cx1 = Math.floor((pbx1 + 2) / CHUNK);
+    const cz0 = Math.floor((pbz0 - 2) / CHUNK), cz1 = Math.floor((pbz1 + 2) / CHUNK);
+    const cd = new Map();
+    for (let cx = cx0; cx <= cx1; cx++) for (let cz = cz0; cz <= cz1; cz++) cd.set(`${cx},${cz}`, gen.generateChunk(cx, cz));
+    const at = (wx, wy, wz) => {
+      if (wy < 0 || wy >= HEIGHT) return B.AIR;
+      const cx = Math.floor(wx / CHUNK), cz = Math.floor(wz / CHUNK);
+      const data = cd.get(`${cx},${cz}`); if (!data) return undefined;
+      return data[IDX(wx - cx * CHUNK, wy, wz - cz * CHUNK)];
+    };
+    checkForecourt(plan, at, plan.groundY, B, ' (LIVE seed)');
   }
 }
 
