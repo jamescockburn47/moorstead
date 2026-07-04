@@ -34,6 +34,60 @@ export function eveningAtInn(skyTime) {
   return skyTime >= 0.70 || skyTime < 0.15;
 }
 
+// --- D6: the relay-night window a quorum vote (or, solo, a lone kip) can pass
+// through. Matches worldsvc's own [0.95, 0.20) window exactly (see the D6 relay
+// handoff) — deliberately wraps midnight, so it's `>= 0.95 || < 0.20`, not a
+// plain range compare. Pure + exported so verify-inn-notes can pin the boundaries.
+export function sleepWindow(skyTime) {
+  return skyTime >= 0.95 || skyTime < 0.20;
+}
+
+// --- D6: what waking up does to the player, split by whether they were
+// sheltered in a parlour (rewarded) or caught outside when the neet turned
+// (mildly punished — NEVER a kill, per the plan). Pure: takes the player's
+// hunger/temperature and returns the DELTAS/targets the caller applies, so
+// this is headlessly testable without a Player/THREE/DOM.
+//   inParlour: fatigue -> 0, temperature -> 20 (warmed through, comfortable)
+//   outside:   hunger -4 (floor 1, never starves 'em to 0), temperature -> min(temp, 4) (nithered)
+export function wakeOutcome(inParlour, { hunger, temperature }) {
+  if (inParlour) {
+    return { fatigue: 0, temperature: 20, hunger };
+  }
+  return { fatigue: null, temperature: Math.min(temperature, 4), hunger: Math.max(1, hunger - 4) };
+}
+
+// --- D6: t' inn notes board caps — mirrors t' relay's own limits exactly (see
+// the D6 relay handoff: notepost errs 'empty'/'cap'/'boardfull' at these same
+// numbers), so a SOLO world's local board behaves identically to a shared one.
+export const NOTE_MAX_LEN = 160;
+export const NOTE_CAP_PER_PLAYER = 2;
+export const NOTE_CAP_BOARD = 24;
+
+// Pure: given the board's current notes, a poster's pid/name and raw text,
+// returns either { notes: [...] } (the new list, note appended) or
+// { error: 'empty'|'cap'|'boardfull' } — never throws, never mutates its
+// argument. Used by BOTH the solo-world local board (main.js, localStorage-
+// backed) and this file's own verify script; the relay enforces the identical
+// rule server-side for shared worlds; this is the client-side mirror.
+export function postLocalNote(notes, pid, name, text, ts) {
+  const clean = String(text || '').trim().slice(0, NOTE_MAX_LEN);
+  if (!clean) return { error: 'empty' };
+  const mine = notes.filter(n => n.pid === pid).length;
+  if (mine >= NOTE_CAP_PER_PLAYER) return { error: 'cap' };
+  if (notes.length >= NOTE_CAP_BOARD) return { error: 'boardfull' };
+  const id = (ts || Date.now()) + '-' + Math.random().toString(36).slice(2, 8);
+  return { notes: [...notes, { id, pid, name, text: clean, ts: ts || Date.now() }] };
+}
+
+// Pure: remove a note by id, but only if `pid` is its poster (mirrors the
+// relay's poster-only pull rule). Returns the same array (no-op) if the note
+// isn't found or isn't owned by `pid`.
+export function pullLocalNote(notes, pid, id) {
+  const n = notes.find(x => x.id === id);
+  if (!n || n.pid !== pid) return notes;
+  return notes.filter(x => x.id !== id);
+}
+
 export const PARLOUR_CAP = 5;
 
 // Which NPCs go to the pub tonight, for this village/inn (`salt`). Deterministic,

@@ -55,7 +55,7 @@ import { temperatureTarget, stepTemperature, miseryOf, warmedThroughUntil, skyTi
 import { bairnsScale, swayAmpFor, applyDoze } from './fatigue.js';
 import { isFine } from './festivalKit.js';
 import { boardingFolk } from './trainfolk.js';
-import { innOpen, playerInParlour, MURMUR_LINES } from './parlour.js';
+import { innOpen, playerInParlour, MURMUR_LINES, sleepWindow, wakeOutcome, postLocalNote, pullLocalNote, NOTE_CAP_PER_PLAYER, NOTE_CAP_BOARD } from './parlour.js';
 import { tableAt, newSession, sessionMove, sessionNpcReply, sessionForfeit, settleWager, opponentSeed, gameLabel, npcToMove } from './gameTable.js';
 import { recordGameResult, wagerAllowed, WAGER_MAX } from './ledgers.js';
 import { CarolBox } from './carolBox.js';
@@ -1257,7 +1257,7 @@ class Game {
         if (num >= 1 && num <= 9) { this.player.hotbar = num - 1; this.ui.invDirty = true; }
       } else if (this.state === 'inv' || this.state === 'range' || this.state === 'box') {
         if (e.code === 'KeyE' || e.code === 'Escape') this.closeScreens();
-      } else if (this.state === 'board' || this.state === 'museum' || this.state === 'challenge') {
+      } else if (this.state === 'board' || this.state === 'museum' || this.state === 'challenge' || this.state === 'notes') {
         if (e.code === 'KeyQ' || e.code === 'Escape') this.closeScreens();
       } else if (this.state === 'chat') {
         if (e.code === 'Escape') this.closeChat();
@@ -2895,21 +2895,68 @@ class Game {
     this.ui.toast('Tha wakes wi’ t’ dawn, right as rain — an’ a bit peckish.', 5000);
   }
 
-  // relay says t' neet has passed for t' whole room (time lands separately)
+  // relay says t' neet has passed for t' whole room (multiplayer.js's onWake handler
+  // has already applied m.time to this.sky BEFORE calling this — see Net.handle).
+  // Two paths converge here: the owd press-N "trySleep" modal (state 'sleeping',
+  // canSleepHere's roof+light rule), an' D6's automatic parlour quorum vote (no
+  // modal, driven off the frame-loop's wantSleep vote above). Only the FORMER
+  // gets the owd finishWake (health/hunger/air, dismiss t' modal); D6's reward/
+  // penalty applies to EVERY player in the room the instant the neet turns,
+  // modal or no — that's the whole point of a quorum: kip in t' pub's parlour
+  // wi'out ever pressing N, an' still wek warmed through.
   onWake() {
-    if (this.state === 'sleeping') this.finishWake();
+    if (this.state === 'sleeping') { this.finishWake(); return; }
+    if (!this.player || this.player.dead) return;
+    const p = this.player;
+    const out = wakeOutcome(!!this._playerInParlour, { hunger: p.hunger, temperature: p.temperature });
+    if (out.fatigue !== null) p.fatigue = out.fatigue;
+    p.temperature = out.temperature;
+    p.hunger = out.hunger;
+    this.ui.toast(this._playerInParlour
+      ? 'Tha wakes warmed an’ rested.'
+      : 'Tha nodded off in t’ cold — hungry an’ nithered.', 5000);
   }
 
-  onSleepers(n, total) {
+  onSleepers(n, total, deadline) {
     if (this.state === 'sleeping') {
       this.ui.sleepText.textContent = `waiting for t’ others to kip down... (${n}/${total} abed)`;
-    } else if (n > 0 && this.sky.isNight() && this.state === 'playing') {
+      return;
+    }
+    if (deadline) {
+      // D6: quorum's just been struck — t' shelter timer's runnin'. A single
+      // countdown toast (the relay only sends this once per quorum-strike, so
+      // no throttle needed here unlike the ongoing nag below).
+      this.ui.toast(`T’ parish is turnin’ in — ${deadline} seconds to get thissen abed!`, deadline * 1000);
+      return;
+    }
+    if (n > 0 && this.sky.isNight() && this.state === 'playing') {
       const now = performance.now() / 1000;
       if (!this._sleepNag || now - this._sleepNag > 60) {
         this._sleepNag = now;
-        this.ui.toast(`${n} o’ ${total} are abed — find a roof an’ a light, press <b>N</b>, an’ t’ neet will pass for all.`, 8000);
+        this.ui.toast(this._playerInParlour
+          ? `${n} o’ ${total} abed at t’ inn…`
+          : `${n} o’ ${total} are abed — find a roof an’ a light, press <b>N</b>, an’ t’ neet will pass for all.`, 8000);
       }
     }
+  }
+
+  // ---------------- D6: solo-world lone kip (a quorum of one) ----------------
+  // No relay round-trip — the SP world just skips the night locally the moment
+  // the idle countdown (frame loop, above) completes. sky.js's own day-wrap rule
+  // (time >= 1 wraps and bumps day) is honoured here by hand: waking at 0.25
+  // after a time that was >= 0.95 crosses midnight, so day must bump; waking
+  // from the tail-end of the window (time already < 0.20) does NOT cross a day
+  // boundary, so day stays put — mirrors exactly what the relay's own wake
+  // (m.time, applied in multiplayer.js's onWake handler) does for a shared world.
+  performSoloNightSkip() {
+    if (!this.player || this.player.dead || !this.sky) return;
+    const wasLate = this.sky.time >= 0.95;
+    this.sky.time = 0.25;
+    if (wasLate) this.sky.day = (this.sky.day || 1) + 1;
+    const p = this.player;
+    p.fatigue = 0;
+    p.temperature = 20;
+    this.ui.toast('Tha wakes warmed an’ rested.', 5000);
   }
 
   // ---------------- t' shared moor ----------------
@@ -4318,6 +4365,64 @@ class Game {
     this.ui.openMuseum();
   }
 
+  // ---------------- D6: t' inn notes board ----------------
+  // Shared worlds: relay-authoritative (Net.notes, kept live by the 'notes'
+  // broadcast — see multiplayer.js). Solo worlds: a local board, kept in
+  // localStorage under a fixed key (no room to key it by — solo worlds have
+  // no netRoom), using the SAME cap/trim rules (parlour.js's postLocalNote/
+  // pullLocalNote) so the two boards behave identically to the player.
+  soloNotesStorageKey() { return 'moorstead.innnotes.solo'; }
+
+  loadSoloNotes() {
+    try {
+      const raw = localStorage.getItem(this.soloNotesStorageKey());
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  }
+
+  saveSoloNotes(notes) {
+    try { localStorage.setItem(this.soloNotesStorageKey(), JSON.stringify(notes)); } catch { /* storage blocked */ }
+  }
+
+  openInnNotes() {
+    this.state = 'notes';
+    this.mouseDown = [false, false, false];
+    this.clearKeys();
+    document.exitPointerLock?.();
+    if (this.netActive && this.net) this.net.sendNoteList(); // refresh from the relay (init may predate a late board-open)
+    this.ui.openInnNotes();
+  }
+
+  // Post a note from the currently-open panel's textarea. Routes to the relay
+  // in a shared world (the relay is the authority there — errors come back as
+  // a 'noteerr' broadcast, handled in multiplayer.js) or the local solo board.
+  postInnNote(text) {
+    if (this.netActive && this.net) { this.net.sendNotePost(text); return; }
+    const pid = this.devicePid();
+    const name = (this.player && this.player.name) || 'rambler';
+    const notes = this.loadSoloNotes();
+    const r = postLocalNote(notes, pid, name, text, Date.now());
+    if (r.error) {
+      const NOTE_ERR_MSG = {
+        empty: 'Tha can’t pin a blank note.',
+        cap: 'Tha’s already got two notices up — pull one down first.',
+        boardfull: 'T’ board’s full up — nowt more’ll fit.',
+      };
+      this.ui.toast(NOTE_ERR_MSG[r.error], 5000);
+      return;
+    }
+    this.saveSoloNotes(r.notes);
+    this.ui.openInnNotes(); // re-render wi' the fresh list
+  }
+
+  pullInnNote(id) {
+    if (this.netActive && this.net) { this.net.sendNotePull(id); return; }
+    const pid = this.devicePid();
+    const notes = pullLocalNote(this.loadSoloNotes(), pid, id);
+    this.saveSoloNotes(notes);
+    this.ui.openInnNotes();
+  }
+
   nearBench() {
     const p = this.player.pos;
     for (let dx = -3; dx <= 3; dx++) for (let dy = -2; dy <= 2; dy++) for (let dz = -3; dz <= 3; dz++) {
@@ -4702,6 +4807,12 @@ class Game {
         if (geo.isMuseumBoard(hit.x, hit.z)) { this.openMuseum(); return; }
         const st = geo.nearStation(hit.x, hit.z, 8);
         if (st) { this.openStation(st); return; }
+        // D6: a board INSIDE a parlour is t' inn notes board, not t' parish
+        // board — the only way to reach a parlour board's coordinate at all is
+        // to be standing in that same parlour (it's mounted on the interior
+        // face of a wall the shell keeps solid from outside), so this._playerInParlour
+        // (set every frame just before this hint/interact code runs) is a safe gate.
+        if (this._playerInParlour) { this.ui.openInnNotes(); return; }
         this.openBoard(true); return;
       }
       if (hit.id === B.INN_DOOR) {
@@ -5847,6 +5958,7 @@ class Game {
         if (hit.id === B.BOARD) {
           const geo = this.world.gen.geo;
           if (geo.isMuseumBoard(hit.x, hit.z)) hint = 'Right-click: Dracula Museum';
+          else if (this._playerInParlour) hint = 'Right-click: inn notices';
           else hint = geo.nearStation(hit.x, hit.z, 8)
             ? 'Right-click: departures board' : 'Right-click: parish notices an\u2019 jobs';
         } else if (hit.id === B.INN_DOOR) {
@@ -6151,6 +6263,47 @@ class Game {
       } else {
         this._murmurTimer = null;
         this._pubSfxTimer = null;
+      }
+    }
+
+    // ---------------- D6: quorum sleep votes (shared worlds) + solo lone-kip ----------------
+    // `this._playerInParlour` and the night `sleepWindow` gate both hold for this
+    // frame (set just above / read off this.sky.time) — vote edge-triggered so we
+    // send `sleep` exactly once per state change, not every frame.
+    if (this.player && !this.player.dead && this.state === 'playing') {
+      const wantSleep = !!this._playerInParlour && sleepWindow(this.sky.time);
+      if (this.netActive) {
+        if (wantSleep !== this._wantSleepVoted) {
+          this._wantSleepVoted = wantSleep;
+          if (this.net && this.net.connected) this.net.sendSleep(wantSleep);
+        }
+        if (!wantSleep) this._soloSleepArmed = false; // leaving the window/parlour re-arms next time
+      } else {
+        // solo world: a quorum of one. After NOTE_SOLO_SLEEP_IDLE_S of standing
+        // genuinely still (same "wish-to-move key" test the hearth-doze code
+        // above already uses) inside the window, skip the night locally —
+        // once per night, re-armed the moment the window/parlour condition drops.
+        if (!wantSleep) {
+          this._soloSleepArmed = false;
+          this._soloSleepIdleT = 0;
+        } else if (!this._soloSleepArmed) {
+          const moving = !!(this.input && (this.input.keys['KeyW'] || this.input.keys['KeyS'] ||
+            this.input.keys['KeyA'] || this.input.keys['KeyD'] || this.input.keys['Space']));
+          if (moving || this.breakTarget) {
+            this._soloSleepIdleT = 0;
+          } else {
+            this._soloSleepIdleT = (this._soloSleepIdleT || 0) + dt;
+            const SOLO_SLEEP_IDLE_S = 10;
+            if (this._soloSleepIdleT >= SOLO_SLEEP_IDLE_S) {
+              this._soloSleepArmed = true;
+              this._soloSleepIdleT = 0;
+              this.performSoloNightSkip();
+            } else if (this._soloSleepIdleT > 1 && Math.floor(this._soloSleepIdleT) !== this._soloSleepIdleShown) {
+              this._soloSleepIdleShown = Math.floor(this._soloSleepIdleT);
+              this.ui.toast(`Settlin' in for t' neet... (${Math.ceil(SOLO_SLEEP_IDLE_S - this._soloSleepIdleT)}s)`, 1200);
+            }
+          }
+        }
       }
     }
 

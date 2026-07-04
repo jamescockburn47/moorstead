@@ -24,6 +24,7 @@ export class Net {
     this.staleAfterMs = 60000; // heard nowt back this long => half-open, force a reconnect
     this.stalls = [];          // t' Tradin' Post's open offers (relay-authoritative)
     this.stallsSynced = false; // true once t' relay's told us (init or a stalls message)
+    this.notes = [];           // t' inn notes board (D6) — relay-authoritative in shared worlds
     // ---- connection diagnostics (observability-first, like the Bot Council) ----
     // every lifecycle event is timestamped + classified so we can SEE why the
     // thread drops, not guess. Read it live with `netDiag()` in the console, or
@@ -206,6 +207,9 @@ export class Net {
     // t' Tradin' Post's open offers ride t' init when t' relay knows 'em (an owd
     // relay simply omits t' key — stallsSynced stays false an' t' board asks)
     if (Array.isArray(m.stalls)) { this.stalls = m.stalls; this.stallsSynced = true; }
+    // t' inn notes board (D6): init carries `notes` when t' relay knows 'em (an
+    // owd relay simply omits t' key — this.notes stays whatever it was, i.e. [])
+    if (Array.isArray(m.notes)) this.notes = m.notes;
     g.world.netEdits = g.world.netEdits || new Map();
     for (const [x, y, z, id] of m.edits) {
       g.world.netEdits.set(`${x},${y},${z}`, id);
@@ -274,10 +278,36 @@ export class Net {
     } else if (m.type === 'time') {
       g.sky.time = m.time;
     } else if (m.type === 'sleepers') {
-      // who's kipping: t' neet only passes when everybody's abed
-      if (g.onSleepers) g.onSleepers(m.n, m.total);
+      // who's kipping: t' neet only passes when everybody's abed. A `deadline`
+      // field means quorum's just been struck — t' shelter timer's runnin'
+      // (D6: worldsvc broadcasts this once, then `wake` ~15s later if quorum holds).
+      if (g.onSleepers) g.onSleepers(m.n, m.total, m.deadline);
     } else if (m.type === 'wake') {
+      // D6: the room's clock jumped to morning. Apply it to the shared sky clock
+      // straight away — don't wait on the next 'time'/timeq round-trip (the keepalive
+      // beat is ~25s; a player mid-frame shouldn't sit at 11pm for half a minute
+      // after their own parish just turned in). Same day-wrap rule sky.js's own
+      // update() uses (time >= 1 wraps and bumps day) — a wake landing just past
+      // midnight (m.time ~0.25) is always a NEW day relative to the pre-wake
+      // night window, so bump day whenever the applied time is less than what
+      // was showing (the wrap already happened relay-side).
+      if (typeof m.time === 'number' && g.sky) {
+        if (m.time < g.sky.time) g.sky.day = (g.sky.day || 1) + 1;
+        g.sky.time = m.time;
+      }
       if (g.onWake) g.onWake();
+    } else if (m.type === 'notes') {
+      // t' inn notes board (D6) — relay-authoritative in shared worlds, same
+      // "store + re-render if open" idiom as t' Tradin' Post's `stalls` above.
+      this.notes = Array.isArray(m.notes) ? m.notes : [];
+      if (g.ui && g.ui.onNotesUpdated) g.ui.onNotesUpdated();
+    } else if (m.type === 'noteerr') {
+      const NOTE_ERR_MSG = {
+        empty: 'Tha can’t pin a blank note.',
+        cap: 'Tha’s already got two notices up — pull one down first.',
+        boardfull: 'T’ board’s full up — nowt more’ll fit.',
+      };
+      if (g.ui) g.ui.toast(NOTE_ERR_MSG[m.reason] || 'T’ board wouldn’t tek that.', 5000);
     } else if (m.type === 'where') {
       // warden's map o' who's where (t' relay only answers wardens)
       if (this.onWhere) this.onWhere(m.players || []);
@@ -435,6 +465,10 @@ export class Net {
   sendStallAccept(id) { return this.send({ type: 'stallaccept', id }); }
   sendChat(text) { this.send({ type: 'chat', text }); }
   sendSleep(on) { this.send({ type: 'sleep', on: !!on }); }
+  // ---- t' inn notes board (D6): relay-authoritative in shared worlds ----
+  sendNotePost(text) { this.send({ type: 'notepost', text: String(text || '').slice(0, 160) }); }
+  sendNoteList() { this.send({ type: 'notelist' }); }
+  sendNotePull(id) { this.send({ type: 'notepull', id }); }
   sendSave(data) { this.send({ type: 'save', data }); }
 
   disconnect() {

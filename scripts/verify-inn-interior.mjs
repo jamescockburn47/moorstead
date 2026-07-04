@@ -213,6 +213,40 @@ const geo = new MoorsGeography();
       (chimOk && chimneyBaseSlate ? ok : bad)('D2 full-grid: chimney column ridgeY+1..+3 sits ON intact ridge slate');
     }
   }
+
+  // --- D6: t' inn notes board — a B.BOARD cell exists somewhere on the
+  // parlour wall, near the exit door, at floorY+2 ---
+  {
+    const gen2 = new Gen(12345);
+    const plan2 = gen2.inns.get('Grosmont');
+    if (plan2) {
+      const { floorY, wallThick: wt, w: pw, l: pl } = plan2.parlour;
+      const ix0 = plan2.origin.x - Math.floor(pw / 2), iz0 = plan2.origin.z - Math.floor(pl / 2);
+      const px0 = ix0 - wt, px1 = px0 + pw + 2 * wt - 1;
+      const pz0 = iz0 - wt, pz1 = pz0 + pl + 2 * wt - 1;
+      const exitPos = plan2.doorSide === 'n' ? [plan2.origin.x, pz0] : plan2.doorSide === 's' ? [plan2.origin.x, pz1]
+        : plan2.doorSide === 'e' ? [px1, plan2.origin.z] : [px0, plan2.origin.z];
+      const cx = Math.floor(plan2.origin.x / CHUNK), cz = Math.floor(plan2.origin.z / CHUNK);
+      const chunkData2 = new Map();
+      for (let dcx = -1; dcx <= 1; dcx++) for (let dcz = -1; dcz <= 1; dcz++) {
+        chunkData2.set(`${cx + dcx},${cz + dcz}`, gen2.generateChunk(cx + dcx, cz + dcz));
+      }
+      const at2 = (wx, wy, wz) => {
+        const ccx = Math.floor(wx / CHUNK), ccz = Math.floor(wz / CHUNK);
+        const d = chunkData2.get(`${ccx},${ccz}`);
+        if (!d) return undefined;
+        return d[IDX(wx - ccx * CHUNK, wy, wz - ccz * CHUNK)];
+      };
+      let boardFound = false;
+      const onNS = plan2.doorSide === 'n' || plan2.doorSide === 's';
+      for (const off of [2, -2]) {
+        const bx = onNS ? exitPos[0] + off : exitPos[0];
+        const bz = onNS ? exitPos[1] : exitPos[1] + off;
+        if (at2(bx, floorY + 2, bz) === B.BOARD) { boardFound = true; break; }
+      }
+      (boardFound ? ok : bad)('D6: a notes board (B.BOARD) sits on the parlour wall near the exit door at floorY+2');
+    }
+  }
 }
 
 console.log(failed ? '\nRESULT: FAIL' : '\nRESULT: PASS');

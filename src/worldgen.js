@@ -743,6 +743,39 @@ export class Gen {
           const w = toWorld(p.furnish.strongbox);
           if (!isDoor(w.x, w.z)) put(w.x, floorY + 1, w.z, B.STRONGBOX);
         }
+
+        // --- D6: t' inn notes board — ONE B.BOARD cell mounted ON t' parlour
+        // wall beside t' exit door, at floorY+2 (a hand's-reach above t' door
+        // lintel — the same wall coordinate space the door itself uses: exitPos
+        // sits directly on the shell perimeter, replacing wall stone, exactly as
+        // B.INN_DOOR does above). Slides two cells along the SAME wall from the
+        // door (its long axis: z for a n/s door on the x-midline, x for an e/w
+        // door on the z-midline), trying +2 then -2, skipping any cell already
+        // occupied by furniture/hearth (checked via the INTERIOR cell one step
+        // in from the wall, since that's what the furnish list is keyed in) so
+        // it never lands over a bench/table/servery/strongbox reachable from
+        // that same wall face.
+        {
+          const occInterior = new Set([`${p.parlour.hearth.x},${p.parlour.hearth.z}`]);
+          for (const t of p.parlour.tables) occInterior.add(`${t.x},${t.z}`);
+          for (const b of p.furnish.benches) occInterior.add(`${b.x},${b.z}`);
+          occInterior.add(`${p.furnish.servery.x},${p.furnish.servery.z}`);
+          occInterior.add(`${p.furnish.strongbox.x},${p.furnish.strongbox.z}`);
+
+          const onNS = (p.doorSide === 'n' || p.doorSide === 's'); // wall runs along x; slide in x
+          const candidates = onNS
+            ? [[exitPos[0] + 2, exitPos[1]], [exitPos[0] - 2, exitPos[1]]]
+            : [[exitPos[0], exitPos[1] + 2], [exitPos[0], exitPos[1] - 2]];
+          for (const [bx, bz] of candidates) {
+            // the interior cell one step off the wall, toward the room centre —
+            // used only to check it's not already claimed by furniture
+            const inX = onNS ? bx - ix0 : (p.doorSide === 'e' ? bx - 1 - ix0 : bx + 1 - ix0);
+            const inZ = onNS ? (p.doorSide === 'n' ? bz + 1 - iz0 : bz - 1 - iz0) : bz - iz0;
+            if (occInterior.has(`${inX},${inZ}`)) continue;
+            put(bx, floorY + 2, bz, B.BOARD);
+            break;
+          }
+        }
       }
     }
   }
