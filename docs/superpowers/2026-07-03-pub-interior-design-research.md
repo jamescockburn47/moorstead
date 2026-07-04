@@ -422,3 +422,29 @@ to being the default finish of a rough moorland tap room.
 the public room (wrong room), exposed/bare feature stone walls (later decorating fashion, not
 period practice), heavy dark wood-panelling as the dominant wall finish (limewash/pale walls are
 the better-evidenced default).
+
+---
+
+## Late-arriving cross-check (appended 2026-07-04, post-D6)
+
+A final research pass landed after the D2 decor shipped. Two findings preserved:
+
+1. **Grosmont c.1900 is POST-peak, not boomtown.** The ironworks closed 1891
+   (population 1,600 → 872 by 1901); the wider Eskdale mine revived 1906–15
+   (~50 men). A 1900 Station Tavern crowd is railwaymen, farmers, and men who
+   REMEMBER the furnaces — good material for the brain's table-talk and any
+   D-later flavour text. (Sources in the pass: Grosmont Iron Works / NMRS /
+   Cleveland Mining Heritage Society; "~500 ironworks employees" is an
+   unconfirmed working estimate, don't cite it as fact.)
+
+2. **Interior-style tension, resolved.** The late pass recommended
+   "gin-palace-adjacent scaled down" (mahogany/glass/gas) for a Victorian pub
+   and dated beams-and-inglenooks to the 1920s-30s Brewer's Tudor wave. This
+   OVERGENERALISES the urban style: the committed brief's grounding is the
+   Birch Hall Inn at Beck Hole — a real, unchanged, small moorland pub minutes
+   from Grosmont with stone flags, genuinely old low beams (vernacular fabric,
+   not mock-Tudor retrofit), hatch service, and no mahogany counter. For a
+   small rural NYM pub the Birch Hall model stands; the gin-palace correction
+   applies to TOWN pubs (Whitby/Pickering, if they ever get interiors).
+   The mythology corrections both passes AGREE on: no fake inglenook set-piece,
+   no horse brasses, no Brewer's Tudor dressing — all post-1910.
