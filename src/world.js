@@ -114,7 +114,9 @@ export class World {
   // stampInns writes chunk data directly during generation, never through here.
   isProtected(x, z) {
     for (const p of this.gen.inns.values()) {
-      if (x >= p.protectedBox.x0 && x <= p.protectedBox.x1 && z >= p.protectedBox.z0 && z <= p.protectedBox.z1) return true;
+      const pb = p.protectedBox;
+      if (x < pb.x0 || x > pb.x1 || z < pb.z0 || z > pb.z1) continue; // cheap bounding-box pre-reject
+      for (const r of p.protectedRects) if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) return true;
     }
     return false;
   }

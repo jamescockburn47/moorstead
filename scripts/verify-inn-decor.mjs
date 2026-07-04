@@ -31,20 +31,14 @@
 global.document = {
   createElement: (tag) => {
     if (tag !== 'canvas') return {};
-    const ctx2d = {
-      clearRect: () => {},
-      fillRect: () => {},
-      drawImage: () => {},
-      strokeText: () => {},
-      fillText: () => {},
-      measureText: () => ({ width: 10 }),
-      fillStyle: '',
-      strokeStyle: '',
-      lineWidth: 1,
-      font: '',
-      textAlign: '',
-      textBaseline: '',
-    };
+    // a Proxy 2D context: every drawing method (fillRect, strokeRect, arc,
+    // beginPath, moveTo, lineTo, stroke, fill, …) is a no-op; measureText returns
+    // a dummy width; style props read/write normally. Robust to any new painter
+    // (the undercroft props use arc/strokeRect/beginPath the old stub lacked).
+    const ctx2d = new Proxy(
+      { measureText: () => ({ width: 10 }), fillStyle: '', strokeStyle: '', lineWidth: 1, font: '', textAlign: '', textBaseline: '' },
+      { get: (t, p) => (p in t ? t[p] : () => {}), set: (t, p, v) => { t[p] = v; return true; } }
+    );
     return { width: 0, height: 0, getContext: () => ctx2d };
   },
 };

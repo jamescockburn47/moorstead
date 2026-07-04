@@ -4,7 +4,7 @@ import { fbm2, fbm3, noise3, hash2i, hash3i, mulberry32, strSeed } from './noise
 import { Geography, ROSEBERRY, WAINSTONES, KILNS, CASTLE } from './geography.js';
 import { MoorsGeography } from './moorsgeo.js';
 import { stationOrient } from './railpath.js';
-import { innPlan } from './innplan.js';
+import { innPlan, relCell } from './innplan.js';
 
 // The real-Moors world id — the seed string main.js uses for the solo world + the shared room
 export const MOORS_SEED = strSeed('t-moors-1900');
@@ -540,11 +540,14 @@ export class Gen {
     return data;
   }
 
-  // Is (x,z) inside any inn's protected box? O(inns) — inns.size is tiny,
-  // called once per column per chunk generation.
+  // Is (x,z) inside any inn's PRECISE protected region (the per-room rects, not the
+  // phantom-cornered bounding box)? protectedBox is a cheap pre-reject. O(inns*rooms) —
+  // both tiny — called once per column per chunk generation.
   innAt(x, z) {
     for (const p of this.inns.values()) {
-      if (x >= p.protectedBox.x0 && x <= p.protectedBox.x1 && z >= p.protectedBox.z0 && z <= p.protectedBox.z1) return p;
+      const pb = p.protectedBox;
+      if (x < pb.x0 || x > pb.x1 || z < pb.z0 || z > pb.z1) continue;
+      for (const r of p.protectedRects) if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) return p;
     }
     return null;
   }
@@ -714,95 +717,95 @@ export class Gen {
         for (let y = ridgeY + 1; y <= ridgeY + 3; y++) put(chx, y, midZ, B.RBRICK);
       }
 
-      // --- underground parlour: hollow room + solid stone shell, directly below the site ---
-      const { floorY, w: pw, l: pl, h: ph, wallThick: wt } = p.parlour;
-      const px0 = p.origin.x - Math.floor(pw / 2) - wt, px1 = px0 + pw + 2 * wt - 1;
-      const pz0 = p.origin.z - Math.floor(pl / 2) - wt, pz1 = pz0 + pl + 2 * wt - 1;
-      for (let wx = px0; wx <= px1; wx++) for (let wz = pz0; wz <= pz1; wz++) {
-        const inShell = (wx === px0 || wx === px1 || wz === pz0 || wz === pz1);
-        put(wx, floorY - 1, wz, B.STONEBRICK); // footing
-        put(wx, floorY, wz, B.STONEBRICK);     // floor — solid everywhere, not just the shell
-        for (let y = floorY + 1; y <= floorY + ph; y++) put(wx, y, wz, inShell ? B.STONEBRICK : B.AIR); // walls + hollow interior
-        put(wx, floorY + ph + 1, wz, B.STONEBRICK); // ceiling
-      }
-      // interior exit door in the wall matching the exterior doorSide
-      const exitPos = p.doorSide === 'n' ? [p.origin.x, pz0] : p.doorSide === 's' ? [p.origin.x, pz1]
-        : p.doorSide === 'e' ? [px1, p.origin.z] : [px0, p.origin.z];
-      put(exitPos[0], floorY + 1, exitPos[1], B.INN_DOOR);
+      // --- THE UNDERCROFT: a big multi-room warren carved into the rock below the
+      // site, reached by the teleport (crossThreshold drops the player at origin,
+      // floorY+1). Authored in the door-relative (f,l) frame (innplan.js relCell),
+      // so ONE layout is correct for every doorSide. Two passes — fill every room's
+      // wall-ring SOLID, THEN hollow every interior — so no room's wall can ever
+      // overwrite a neighbour's hollow (order-independent, review-proof). ---
+      const par = p.parlour;
+      const fY = par.floorY, ph = par.h;                 // main floor y, interior clear height
+      const rc = (f, l) => relCell(p.origin, p.doorSide, f, l);
 
-      // hearth: physical cell only in D1 (fire/decor arrive in D2/D3)
-      const ix0 = p.origin.x - Math.floor(pw / 2), iz0 = p.origin.z - Math.floor(pl / 2);
-      const hx = ix0 + p.parlour.hearth.x, hz = iz0 + p.parlour.hearth.z;
-      put(hx, floorY, hz, B.STONEBRICK);
-      put(hx, floorY + 1, hz, B.TORCH);
-
-      // --- D2: furnish the parlour from p.furnish (servery/strongbox/benches) +
-      // the existing game tables. All coords are parlour-interior-local, same
-      // space as parlour.hearth/tables — resolve to world coords the same way
-      // the hearth does above (ix0/iz0 + local). Bounds-check against the
-      // interior box (walls sit AT the shell perimeter, one ring outside the
-      // interior 0..pw-1 / 0..pl-1 range) and skip the hearth cell so furniture
-      // never lands in a wall or on top of the fire.
-      if (p.furnish) {
-        const toWorld = (local) => ({ x: ix0 + local.x, z: iz0 + local.z });
-        const inInterior = (local) => local.x >= 0 && local.x < pw && local.z >= 0 && local.z < pl;
-        const isHearth = (local) => local.x === p.parlour.hearth.x && local.z === p.parlour.hearth.z;
-        const isDoor = (wx, wz) => wx === exitPos[0] && wz === exitPos[1];
-
-        for (const t of p.parlour.tables) {
-          if (!inInterior(t) || isHearth(t)) continue;
-          const w = toWorld(t);
-          if (isDoor(w.x, w.z)) continue;
-          put(w.x, floorY + 1, w.z, B.PLANKS); // game table
-        }
-        for (const b of p.furnish.benches) {
-          if (!inInterior(b) || isHearth(b)) continue;
-          const w = toWorld(b);
-          if (isDoor(w.x, w.z)) continue;
-          put(w.x, floorY + 1, w.z, B.BENCH);
-        }
-        if (inInterior(p.furnish.servery) && !isHearth(p.furnish.servery)) {
-          const w = toWorld(p.furnish.servery);
-          if (!isDoor(w.x, w.z)) put(w.x, floorY + 1, w.z, B.PLANKS); // hatch/servery counter
-        }
-        if (inInterior(p.furnish.strongbox) && !isHearth(p.furnish.strongbox)) {
-          const w = toWorld(p.furnish.strongbox);
-          if (!isDoor(w.x, w.z)) put(w.x, floorY + 1, w.z, B.STRONGBOX);
-        }
-
-        // --- D6: t' inn notes board — ONE B.BOARD cell mounted ON t' parlour
-        // wall beside t' exit door, at floorY+2 (a hand's-reach above t' door
-        // lintel — the same wall coordinate space the door itself uses: exitPos
-        // sits directly on the shell perimeter, replacing wall stone, exactly as
-        // B.INN_DOOR does above). Slides two cells along the SAME wall from the
-        // door (its long axis: z for a n/s door on the x-midline, x for an e/w
-        // door on the z-midline), trying +2 then -2, skipping any cell already
-        // occupied by furniture/hearth (checked via the INTERIOR cell one step
-        // in from the wall, since that's what the furnish list is keyed in) so
-        // it never lands over a bench/table/servery/strongbox reachable from
-        // that same wall face.
-        {
-          const occInterior = new Set([`${p.parlour.hearth.x},${p.parlour.hearth.z}`]);
-          for (const t of p.parlour.tables) occInterior.add(`${t.x},${t.z}`);
-          for (const b of p.furnish.benches) occInterior.add(`${b.x},${b.z}`);
-          occInterior.add(`${p.furnish.servery.x},${p.furnish.servery.z}`);
-          occInterior.add(`${p.furnish.strongbox.x},${p.furnish.strongbox.z}`);
-
-          const onNS = (p.doorSide === 'n' || p.doorSide === 's'); // wall runs along x; slide in x
-          const candidates = onNS
-            ? [[exitPos[0] + 2, exitPos[1]], [exitPos[0] - 2, exitPos[1]]]
-            : [[exitPos[0], exitPos[1] + 2], [exitPos[0], exitPos[1] - 2]];
-          for (const [bx, bz] of candidates) {
-            // the interior cell one step off the wall, toward the room centre —
-            // used only to check it's not already claimed by furniture
-            const inX = onNS ? bx - ix0 : (p.doorSide === 'e' ? bx - 1 - ix0 : bx + 1 - ix0);
-            const inZ = onNS ? (p.doorSide === 'n' ? bz + 1 - iz0 : bz - 1 - iz0) : bz - iz0;
-            if (occInterior.has(`${inX},${inZ}`)) continue;
-            put(bx, floorY + 2, bz, B.BOARD);
-            break;
-          }
+      // pass 1: fill each room's wall-ring box SOLID (footing, floor, walls, ceiling)
+      for (const r of par.rooms) {
+        for (let f = r.f0 - 1; f <= r.f1 + 1; f++) for (let l = r.l0 - 1; l <= r.l1 + 1; l++) {
+          const w = rc(f, l);
+          put(w.x, fY - 1, w.z, B.STONEBRICK);            // footing
+          for (let y = fY; y <= fY + ph + 1; y++) put(w.x, y, w.z, B.STONEBRICK); // floor..walls..ceiling
         }
       }
+      // pass 2: hollow each room's INTERIOR (floor + ceiling stay solid)
+      for (const r of par.rooms) {
+        for (let f = r.f0; f <= r.f1; f++) for (let l = r.l0; l <= r.l1; l++) {
+          const w = rc(f, l);
+          for (let y = fY + 1; y <= fY + ph; y++) put(w.x, y, w.z, B.AIR);
+        }
+      }
+      // pass 3: carve 2-wide × 2-high doorways through the shared partitions
+      for (const d of par.doors) {
+        for (const [f, l] of d.cells) {
+          const w = rc(f, l);
+          put(w.x, fY + 1, w.z, B.AIR);
+          put(w.x, fY + 2, w.z, B.AIR);
+        }
+      }
+
+      // interior exit door: a B.INN_DOOR in the Entry Hall's BACK wall (f=-2,l=0),
+      // at floorY+1 (low y, so main.js reads hit.y<groundY as "leaving"). It's a
+      // teleport trigger, not a passage — right-clicking it returns to the surface.
+      {
+        const w = rc(-2, 0);
+        put(w.x, fY + 1, w.z, B.INN_DOOR);
+        put(w.x, fY + 2, w.z, B.AIR);
+        const b = rc(-2, 1);                              // the inn notes board beside it (D6)
+        put(b.x, fY + 2, b.z, B.BOARD);
+      }
+
+      // the sunken Strongroom vault: a 2×2 pit in the Servery floor, two treads
+      // down to vaultFloorY, open to the room above, red-brick-lined.
+      {
+        const vfY = par.vaultFloorY, pit = par.vault.pit;
+        for (let f = pit.f0; f <= pit.f1; f++) for (let l = pit.l0; l <= pit.l1; l++) {
+          const w = rc(f, l);
+          for (let y = vfY + 1; y <= fY; y++) put(w.x, y, w.z, B.AIR);  // open the shaft down to the pit
+          put(w.x, vfY, w.z, B.RBRICK);                   // pit floor (sits on bedrock y0)
+        }
+        for (const [f, l, topY] of par.vault.treads) {    // step down: servery floor -> y2 -> pit
+          const w = rc(f, l);
+          for (let y = topY + 1; y <= fY; y++) put(w.x, y, w.z, B.AIR);
+          put(w.x, topY, w.z, B.STONEBRICK);
+        }
+      }
+
+      // --- furniture (from plan fields, door-relative → world) ---
+      const fur = p.furnish;
+      for (const t of par.tables) { const w = rc(t.f, t.l); put(w.x, fY + 1, w.z, B.PLANKS); } // game tables
+      for (const b of fur.benches) { const w = rc(b.f, b.l); put(w.x, fY + 1, w.z, B.BENCH); } // a settle by each
+      // servery hatch: a 2-wide counter opening in the tap/servery wall (bench at
+      // counter height, air above so you can see and be served over it)
+      for (const [f, l] of [[fur.servery.f, fur.servery.l], [fur.servery.f + 1, fur.servery.l]]) {
+        const w = rc(f, l);
+        put(w.x, fY + 1, w.z, B.BENCH);
+        put(w.x, fY + 2, w.z, B.AIR);
+      }
+      // the cast-iron range in the tap forward-wall inglenook, flanked by settles
+      {
+        const h = rc(fur.hearth.f, fur.hearth.l);
+        put(h.x, fY + 1, h.z, B.RANGE);
+        for (const [f, l] of [[fur.hearth.f, fur.hearth.l - 1], [fur.hearth.f, fur.hearth.l + 1]]) {
+          const w = rc(f, l); put(w.x, fY + 1, w.z, B.BENCH);
+        }
+      }
+      for (const bd of fur.beds) { const w = rc(bd.f, bd.l); put(w.x, fY + 1, w.z, B.WOOL); } // letting beds
+      { const w = rc(fur.strongbox.f, fur.strongbox.l); put(w.x, fur.strongbox.y, w.z, B.STRONGBOX); } // the vault chest
+
+      // --- lighting: a lantern hung near each room's centre + a torch by the door ---
+      for (const r of par.rooms) {
+        const w = rc(Math.round((r.f0 + r.f1) / 2), Math.round((r.l0 + r.l1) / 2));
+        put(w.x, fY + ph, w.z, B.LANTERN);
+      }
+      { const t = rc(-2, -1); put(t.x, fY + 2, t.z, B.TORCH); } // a torch in the back wall by the exit door (off the walkway)
     }
   }
 

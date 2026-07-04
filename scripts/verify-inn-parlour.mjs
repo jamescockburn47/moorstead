@@ -58,21 +58,19 @@ for (let i = 0; i < 40; i++) ids.push('npc-' + i);
   (JSON.stringify(a) === JSON.stringify(a2) ? ok : bad)('parlourCrowd is stable across repeated calls with the same input');
 }
 
-// --- parlourSeatFor: lands inside the parlour interior, distinct cells per index ---
+// --- parlourSeatFor: every seat lands inside an undercroft room, distinct cells ---
 if (plan) {
-  const { floorY, w: pw, l: pl } = plan.parlour;
-  const ix0 = plan.origin.x - Math.floor(pw / 2), iz0 = plan.origin.z - Math.floor(pl / 2);
-  const ix1 = ix0 + pw - 1, iz1 = iz0 + pl - 1;
-
+  const floorY = plan.parlour.floorY;
   const seats = [];
   for (let i = 0; i < PARLOUR_CAP; i++) seats.push(parlourSeatFor(i, plan));
 
   let allInside = true, allYCorrect = true;
   for (const s of seats) {
-    if (s.x < ix0 || s.x > ix1 || s.z < iz0 || s.z > iz1) allInside = false;
+    // a seat must be a spot where the player reads as "in the parlour" (multi-room union)
+    if (!playerInParlour({ x: s.x + 0.5, y: s.y, z: s.z + 0.5 }, plan)) allInside = false;
     if (s.y !== floorY + 1) allYCorrect = false;
   }
-  (allInside ? ok : bad)('parlourSeatFor: every seat (index 0..cap-1) lands inside the parlour interior box');
+  (allInside ? ok : bad)('parlourSeatFor: every seat (index 0..cap-1) lands inside an undercroft room');
   (allYCorrect ? ok : bad)('parlourSeatFor: every seat sits at y = floorY + 1');
 
   const cellKeys = seats.map(s => s.x + ',' + s.z);
@@ -81,22 +79,18 @@ if (plan) {
   const a = parlourSeatFor(0, plan), b = parlourSeatFor(0, plan);
   (JSON.stringify(a) === JSON.stringify(b) ? ok : bad)('parlourSeatFor is deterministic for the same (index, plan)');
 
-  // table-seated indices carry the table's game name; standing spots do not
   const tableSeated = seats.filter(s => s.table);
   (tableSeated.length > 0 ? ok : bad)('parlourSeatFor: at least one seat is a table seat carrying `table`/`game`');
-  for (const s of tableSeated) {
-    if (typeof s.game !== 'string' || !s.game) { allYCorrect = false; }
-  }
+  for (const s of tableSeated) if (typeof s.game !== 'string' || !s.game) allYCorrect = false;
 }
 
-// --- playerInParlour: true inside, false at/above the surface door ---
+// --- playerInParlour: true inside a room, false at/above the surface door ---
 if (plan) {
-  const { floorY, w: pw, l: pl } = plan.parlour;
-  const ix0 = plan.origin.x - Math.floor(pw / 2), iz0 = plan.origin.z - Math.floor(pl / 2);
-  const insidePos = { x: ix0 + 1, y: floorY + 1, z: iz0 + 1 };
-  const surfacePos = { x: plan.origin.x, y: plan.groundY + 1, z: plan.origin.z };
-  (playerInParlour(insidePos, plan) ? ok : bad)('playerInParlour: true for a position inside the parlour interior/depth');
-  (!playerInParlour(surfacePos, plan) ? ok : bad)('playerInParlour: false for a position at the surface door/ground level');
+  const seat = parlourSeatFor(0, plan);
+  const insidePos = { x: seat.x + 0.5, y: seat.y, z: seat.z + 0.5 };
+  const surfacePos = { x: plan.origin.x + 0.5, y: plan.groundY + 1, z: plan.origin.z + 0.5 };
+  (playerInParlour(insidePos, plan) ? ok : bad)('playerInParlour: true for a position inside an undercroft room');
+  (!playerInParlour(surfacePos, plan) ? ok : bad)('playerInParlour: false at the surface door/ground level (y-band excludes the surface hut)');
 }
 
 // --- MURMUR_LINES: non-empty pool, no duplicates, all non-empty strings ---

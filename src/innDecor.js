@@ -23,6 +23,7 @@ import { festivalState } from './festivals.js';
 import { Fire, makeSmoke, registerFxMat, unregisterFxMat } from './fire.js';
 import { gameStatsRows } from './ledgers.js';
 import { formatBrass } from './economy.js';
+import { relCell, doorFrame } from './innplan.js';
 
 const RADIUS = 48;
 const REBUILD_MOVE = 8;
@@ -82,12 +83,10 @@ function doorCellExterior(plan) {
   return { x: fx0, z: midZ };
 }
 
-// Parlour-interior-local -> world coords, same idiom as worldgen.js stampInns'
-// toWorld() and main.js crossThreshold (origin + floor(dim/2) offset).
-function parlourToWorld(plan, local) {
-  const { w: pw, l: pl } = plan.parlour;
-  const ix0 = plan.origin.x - Math.floor(pw / 2), iz0 = plan.origin.z - Math.floor(pl / 2);
-  return { x: ix0 + local.x, z: iz0 + local.z };
+// Door-relative (f,l) undercroft cell -> world coords (innplan.js relCell — the
+// single source of truth the worldgen carve and parlour seats also use).
+function parlourToWorld(plan, cell) {
+  return relCell(plan.origin, plan.doorSide, cell.f, cell.l);
 }
 
 // -- sign canvas texture -------------------------------------------------------
@@ -139,6 +138,75 @@ function makeBoardTexture(lines) {
     while (x.measureText(str).width > maxw && str.length > 3) str = str.slice(0, -2) + '…';
     x.fillText(str, pad, rowH * i + rowH / 2);
   });
+  return new THREE.CanvasTexture(c);
+}
+
+// -- undercroft prop textures: things the voxel palette can't do, painted onto
+// canvases the same way the sign is. Period-plain, warm, no anachronisms. --------
+function newCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+
+// back-bar: dark shelving, ranked bottles, a foxed brewery mirror, a pewter row.
+function makeBackBarTexture() {
+  const c = newCanvas(384, 224), x = c.getContext('2d');
+  x.fillStyle = '#20140b'; x.fillRect(0, 0, c.width, c.height);
+  // mirror (centre)
+  x.fillStyle = '#3b4a4a'; x.fillRect(150, 30, 84, 150);
+  x.strokeStyle = '#6a5230'; x.lineWidth = 4; x.strokeRect(150, 30, 84, 150);
+  // three shelves
+  for (const sy of [70, 118, 166]) { x.fillStyle = '#4a3018'; x.fillRect(6, sy, 372, 6); }
+  const bottleCols = ['#7a1f1f', '#2f5a2f', '#8a6a1f', '#4a2a5a', '#6a3a1a', '#2a4a6a'];
+  for (let s = 0; s < 3; s++) {
+    for (let i = 0; i < 10; i++) {
+      const bx = 12 + i * 36; if (bx > 130 && bx < 240) continue; // clear the mirror
+      const by = 40 + s * 48;
+      x.fillStyle = bottleCols[(i + s) % bottleCols.length];
+      x.fillRect(bx, by, 12, 26); x.fillRect(bx + 3, by - 8, 6, 8); // body + neck
+    }
+  }
+  // pewter tankards hung along the top
+  x.fillStyle = '#9aa0a6';
+  for (let i = 0; i < 8; i++) { x.fillRect(20 + i * 46, 8, 16, 14); x.fillRect(35 + i * 46, 11, 5, 8); }
+  return new THREE.CanvasTexture(c);
+}
+
+// a public-bar dartboard: cream/black wedges with red+green rings.
+function makeDartboardTexture() {
+  const c = newCanvas(200, 200), x = c.getContext('2d'), cx = 100, cy = 100;
+  x.clearRect(0, 0, 200, 200);
+  for (let r = 96; r > 0; r -= 2) {
+    const wedge = Math.floor(r / 6) % 2;
+    x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2);
+    x.fillStyle = r > 90 ? '#111' : (r % 24 < 4 ? (wedge ? '#8a1f1f' : '#2f6a2f') : (wedge ? '#0d0d0d' : '#e8dcc0'));
+    x.fill();
+  }
+  x.fillStyle = '#8a1f1f'; x.beginPath(); x.arc(cx, cy, 8, 0, Math.PI * 2); x.fill();
+  x.fillStyle = '#2f6a2f'; x.beginPath(); x.arc(cx, cy, 4, 0, Math.PI * 2); x.fill();
+  x.strokeStyle = 'rgba(0,0,0,0.5)'; x.lineWidth = 1;
+  for (let a = 0; a < 20; a++) { x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx + Math.cos(a / 20 * 6.283) * 90, cy + Math.sin(a / 20 * 6.283) * 90); x.stroke(); }
+  return new THREE.CanvasTexture(c);
+}
+
+// a made-up letting bed: a patchwork coverlet. Varied by index (no randomness).
+function makeQuiltTexture(i) {
+  const c = newCanvas(96, 96), x = c.getContext('2d');
+  const palettes = [['#7a3b2e', '#c9a24b', '#3b5a4a'], ['#3a4a6a', '#b0a58a', '#6a2f3a'], ['#5a4a2a', '#8a9a6a', '#7a3b2e'], ['#4a3b5a', '#c9a24b', '#3b5a4a']];
+  const pal = palettes[i % palettes.length];
+  for (let a = 0; a < 6; a++) for (let b = 0; b < 6; b++) { x.fillStyle = pal[(a + b + i) % pal.length]; x.fillRect(a * 16, b * 16, 16, 16); }
+  x.strokeStyle = 'rgba(0,0,0,0.25)'; x.lineWidth = 1;
+  for (let a = 0; a <= 6; a++) { x.beginPath(); x.moveTo(a * 16, 0); x.lineTo(a * 16, 96); x.stroke(); x.beginPath(); x.moveTo(0, a * 16); x.lineTo(96, a * 16); x.stroke(); }
+  return new THREE.CanvasTexture(c);
+}
+
+// a plain-dial tavern wall clock (NOT a longcase — period-correct for a tap room).
+function makeClockTexture() {
+  const c = newCanvas(128, 128), x = c.getContext('2d'), cx = 64, cy = 64;
+  x.clearRect(0, 0, 128, 128);
+  x.fillStyle = '#1a1207'; x.beginPath(); x.arc(cx, cy, 62, 0, 6.2832); x.fill();
+  x.fillStyle = '#efe6cf'; x.beginPath(); x.arc(cx, cy, 52, 0, 6.2832); x.fill();
+  x.strokeStyle = '#1a1207'; x.lineWidth = 3;
+  for (let h = 0; h < 12; h++) { const a = h / 12 * 6.2832; x.beginPath(); x.moveTo(cx + Math.sin(a) * 46, cy - Math.cos(a) * 46); x.lineTo(cx + Math.sin(a) * 40, cy - Math.cos(a) * 40); x.stroke(); }
+  x.lineWidth = 4; x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx + 20, cy - 14); x.stroke(); // hour ~ 2 o'clock
+  x.lineWidth = 3; x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx - 6, cy - 40); x.stroke(); // minute
   return new THREE.CanvasTexture(c);
 }
 
@@ -199,6 +267,7 @@ export class InnDecorLayer {
       this.buildLampGlow(plan);
       this.buildSeasonalMounts(plan, fest);
       this.buildBraggingBoard(plan);
+      this.buildUndercroftProps(plan);
     }
   }
 
@@ -254,10 +323,13 @@ export class InnDecorLayer {
       scale: 0.6,
       layers: fine ? 2 : 1,
       seed,
-      smoke: false, // the parlour's underground — its own chimney plume is built separately, outside
+      smoke: false, // the undercroft's below-ground — its own chimney plume is built separately, outside
       light: fine,
     });
-    fire.position.set(hw.x + 0.5, plan.parlour.floorY + 1.2, hw.z + 0.5);
+    // the range sits against the tap forward wall; nudge the flame to its front
+    // face (−forward, into the room) so it glows in the firebox, not inside the block.
+    const { fwd } = doorFrame(plan.doorSide);
+    fire.position.set(hw.x + 0.5 - fwd[0] * 0.42, plan.parlour.floorY + 1.35, hw.z + 0.5 - fwd[1] * 0.42);
     this.scene.add(fire);
     this.objects.push(fire);
   }
@@ -288,16 +360,13 @@ export class InnDecorLayer {
   }
 
   // -- 4. paraffin-lamp glow inside (always, subtle) -------------------------------
+  // One warm amber pool of light near the centre of every undercroft room, so each
+  // room has its own lit heart (no gas/electric — period, per the research doc).
   buildLampGlow(plan) {
-    const { w: pw, l: pl, floorY } = plan.parlour;
-    const ix0 = plan.origin.x - Math.floor(pw / 2), iz0 = plan.origin.z - Math.floor(pl / 2);
-    // two wall-mounted quads, facing inward, on opposite long walls
-    const spots = [
-      { x: ix0 + 2 + 0.5, z: iz0 + 0.05, yaw: 0 },
-      { x: ix0 + pw - 3 + 0.5, z: iz0 + pl - 0.05, yaw: Math.PI },
-    ];
-    for (const s of spots) {
-      addWindowGlow(this.scene, this.objects, s.x, floorY + 2.3, s.z, s.yaw, { color: 0xffb35c, opacity: 0.55 });
+    const fY = plan.parlour.floorY;
+    for (const r of (plan.parlour.rooms || [])) {
+      const w = relCell(plan.origin, plan.doorSide, Math.round((r.f0 + r.f1) / 2), Math.round((r.l0 + r.l1) / 2));
+      addWindowGlow(this.scene, this.objects, w.x + 0.5, fY + 2.3, w.z + 0.5, 0, { color: 0xffb35c, opacity: 0.5 });
       const added = this.objects[this.objects.length - 1];
       added.userData.lampGlow = true;
     }
@@ -335,25 +404,18 @@ export class InnDecorLayer {
   // only ever shows what the visitor themself has won or lost.
   buildBraggingBoard(plan) {
     if (!this.player) return;
-    const furnish = plan.furnish;
-    if (!furnish || !furnish.servery) return;
-    const { w: pw, l: pl, floorY } = plan.parlour;
-    const s = furnish.servery;
-    // distance to each of the 4 interior wall lines (local coords; walls sit
-    // one ring outside the 0..pw-1 / 0..pl-1 interior box — same box the
-    // furnish carve in worldgen.js bounds-checks against).
-    const dist = { n: s.z, s: (pl - 1) - s.z, w: s.x, e: (pw - 1) - s.x };
-    let nearest = 'n', best = dist.n;
-    for (const side of ['s', 'w', 'e']) if (dist[side] < best) { best = dist[side]; nearest = side; }
-
-    const ix0 = plan.origin.x - Math.floor(pw / 2), iz0 = plan.origin.z - Math.floor(pl / 2);
-    // world position flush against the chosen wall face, 0.06 out from it,
-    // facing INTO the room (opposite the sign's outward-facing convention).
-    let wx = ix0 + s.x + 0.5, wz = iz0 + s.z + 0.5, yaw = 0;
-    if (nearest === 'n') { wz = iz0 - 0.06; yaw = 0; }              // wall at z=-1, face +z (into room)
-    else if (nearest === 's') { wz = iz0 + pl + 0.06; yaw = Math.PI; } // wall at z=pl, face -z
-    else if (nearest === 'w') { wx = ix0 - 0.06; yaw = Math.PI / 2; }  // wall at x=-1, face +x
-    else { wx = ix0 + pw + 0.06; yaw = -Math.PI / 2; }                // wall at x=pw, face -x
+    const par = plan.parlour;
+    if (!par || !par.rooms) return;
+    // mounted on the Games Room's back (-lat) wall, facing into the room over the
+    // tables — the club/games room is where a drinker's record belongs.
+    const games = par.rooms.find(r => r.name === 'games') || par.rooms[0];
+    const floorY = par.floorY;
+    const cf = Math.round((games.f0 + games.f1) / 2);
+    const { lat } = doorFrame(plan.doorSide);
+    const inner = relCell(plan.origin, plan.doorSide, cf, games.l0); // interior cell against the -lat wall
+    const yaw = Math.atan2(lat[0], lat[1]);                          // face +lat (into the room)
+    const wx = inner.x + 0.5 - lat[0] * 0.45;
+    const wz = inner.z + 0.5 - lat[1] * 0.45;
 
     const rows = gameStatsRows(this.player.gameRecord, formatBrass).slice(0, 4);
     const lines = ['TAVERN GAMES', ...(rows.length ? rows : ["nowt won nor lost yet."])].slice(0, 5);
@@ -368,6 +430,52 @@ export class InnDecorLayer {
     mesh.userData.braggingBoard = true;
     this.scene.add(mesh);
     this.objects.push(mesh);
+  }
+
+  // -- 7. undercroft painted props: back-bar bottles+mirror, a dartboard, bed
+  // quilts, a plain-dial clock — the "visuals are the point" detail the voxel
+  // palette can't express, mounted flush on the right room walls via relCell. ----
+  buildUndercroftProps(plan) {
+    const par = plan.parlour;
+    if (!par || !par.rooms) return;
+    const fY = par.floorY;
+    const { fwd, lat } = doorFrame(plan.doorSide);
+    const room = n => par.rooms.find(r => r.name === n);
+    // a flat painted plane at door-relative (f,l), FACING (faceF*fwd + faceL*lat),
+    // flush 0.46 off the wall into the room.
+    const wallProp = (f, l, faceF, faceL, y, wM, hM, tex, tag) => {
+      const c = relCell(plan.origin, plan.doorSide, f, l);
+      const nx = fwd[0] * faceF + lat[0] * faceL, nz = fwd[1] * faceF + lat[1] * faceL;
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(wM, hM), mat);
+      mesh.rotation.y = Math.atan2(nx, nz);
+      mesh.position.set(c.x + 0.5 + nx * 0.46, y, c.z + 0.5 + nz * 0.46);
+      mesh.frustumCulled = false; mesh.userData.ownGeometry = true; mesh.userData[tag] = true;
+      this.scene.add(mesh); this.objects.push(mesh);
+    };
+    // a horizontal painted plane laid on top of a block (a bed coverlet)
+    const flatProp = (f, l, y, size, tex, tag) => {
+      const c = relCell(plan.origin, plan.doorSide, f, l);
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(c.x + 0.5, y, c.z + 0.5);
+      mesh.frustumCulled = false; mesh.userData.ownGeometry = true; mesh.userData[tag] = true;
+      this.scene.add(mesh); this.objects.push(mesh);
+    };
+
+    // 1. back-bar bottles + mirror on the servery's far (+lat) wall, facing the hatch
+    const sv = room('servery');
+    if (sv) wallProp(Math.round((sv.f0 + sv.f1) / 2), sv.l1, 0, -1, fY + 1.7, 2.6, 1.5, makeBackBarTexture(), 'ucProp');
+    // 2. dartboard on the games room's forward wall, facing back into the room
+    const gm = room('games');
+    if (gm) wallProp(gm.f1, Math.round((gm.l0 + gm.l1) / 2), -1, 0, fY + 1.9, 0.95, 0.95, makeDartboardTexture(), 'ucProp');
+    // 3. a patchwork quilt laid on top of each letting bed (the WOOL block's top
+    // face is at world y = floorY+2, so the coverlet sits a hair above it)
+    (plan.furnish.beds || []).forEach((b, i) => flatProp(b.f, b.l, fY + 2.03, 0.92, makeQuiltTexture(i), 'ucProp'));
+    // 4. a plain-dial tavern clock high on the tap forward wall, beside the range
+    const tap = room('tap');
+    if (tap) wallProp(tap.f1, tap.l1 - 1, -1, 0, fY + 2.5, 0.8, 0.8, makeClockTexture(), 'ucProp');
   }
 
   clear() {

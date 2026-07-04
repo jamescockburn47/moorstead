@@ -11,6 +11,10 @@
 // roster.js now imports idHash FROM here and re-exports it, so there is a
 // single source of truth for the hash (see roster.js's import + re-export).
 
+// relCell resolves the door-relative (f,l) undercroft frame to world coords — the
+// same one worldgen.js carves in. Pure (no THREE), so this module stays headless.
+import { relCell } from './innplan.js';
+
 // stable FNV-1a over a string — deterministic run-to-run (Math.imul keeps it 32-bit).
 // (moved from roster.js 2026-07-03 — same algorithm, single source now.)
 export function idHash(id) {
@@ -113,58 +117,46 @@ export function parlourCrowd(ids, salt) {
 }
 
 // A seated/standing spot for the occupant at this INDEX within tonight's crowd
-// (0..PARLOUR_CAP-1 — the deterministic order parlourCrowd returns, so distinct
-// occupants always land on distinct cells; pure per-id hashing can collide on a
-// shared seat, which the plan doc rules out). Indices 0..3 -> the bench beside
-// each of the 4 game tables (`plan.furnish.benches[i]`, carrying that table's
-// `game` from `plan.parlour.tables[i]`); index 4 (and any overflow, wrapped) ->
-// one of 2 standing spots near the servery. World coords; y = floorY + 1.
+// (0..PARLOUR_CAP-1). Indices 0..3 -> the settle beside each of the 4 game tables
+// (`plan.furnish.benches[i]`, carrying that table's `game` from `plan.parlour.tables[i]`
+// — 2 in the Tap Room, 2 in the Games Room); index 4 (and overflow, wrapped) -> one
+// of 2 standing spots at the servery hatch. Door-relative (f,l) -> world; y=floorY+1.
 export function parlourSeatFor(index, plan) {
-  const { floorY, w: pw, l: pl } = plan.parlour;
-  const ix0 = plan.origin.x - Math.floor(pw / 2), iz0 = plan.origin.z - Math.floor(pl / 2);
-  const toWorld = (local) => ({ x: ix0 + local.x, y: floorY + 1, z: iz0 + local.z });
-
+  const fY = plan.parlour.floorY;
+  const rc = (f, l) => relCell(plan.origin, plan.doorSide, f, l);
   const benches = plan.furnish.benches;
   const tables = plan.parlour.tables;
   if (index >= 0 && index < benches.length) {
-    const w = toWorld(benches[index]);
-    return { x: w.x, y: w.y, z: w.z, table: true, game: tables[index].game };
+    const w = rc(benches[index].f, benches[index].l);
+    return { x: w.x, y: fY + 1, z: w.z, table: true, game: tables[index].game };
   }
-  // standing spots: two cells one step OUT from the servery counter (toward
-  // room centre), offset ±1 along z. Checked against every occupied cell
-  // (benches, tables, hearth) so a standing spot can never land on a seat
-  // regardless of how the plan's numbers happen to fall — the fixed servery.x-1
-  // offset alone collided with bench[1] on the real Grosmont plan (both landed
-  // on local {8,3}), so this scans a small ring instead of trusting one offset.
-  const servery = plan.furnish.servery;
-  const occupied = new Set();
-  for (const b of benches) occupied.add(b.x + ',' + b.z);
-  for (const t of tables) occupied.add(t.x + ',' + t.z);
-  occupied.add(plan.parlour.hearth.x + ',' + plan.parlour.hearth.z);
-  const standIdx = (index - benches.length) % 2; // wraps if ever asked beyond cap+overflow
-  const candidates = [
-    { x: servery.x - 1, z: servery.z + (standIdx === 0 ? -1 : 1) },
-    { x: servery.x - 1, z: servery.z + (standIdx === 0 ? -2 : 2) },
-    { x: servery.x - 2, z: servery.z + (standIdx === 0 ? -1 : 1) },
-    { x: servery.x - 1, z: servery.z },
-  ];
-  let standLocal = candidates.find(c =>
-    c.x >= 0 && c.x < pw && c.z >= 0 && c.z < pl && !occupied.has(c.x + ',' + c.z));
-  if (!standLocal) standLocal = candidates[0]; // shouldn't happen on any real plan; fall back rather than throw
-  const w = toWorld(standLocal);
-  return { x: w.x, y: w.y, z: w.z, table: false, game: null };
+  // standing spots at the servery hatch, one step into the Tap Room (−l from the
+  // counter) at the hatch's two cells — the same cells the worldgen leaves clear.
+  const sv = plan.furnish.servery;
+  const standIdx = (index - benches.length) % 2; // wraps beyond cap+overflow
+  const cell = standIdx === 0 ? { f: sv.f, l: sv.l - 1 } : { f: sv.f + 1, l: sv.l - 1 };
+  const w = rc(cell.f, cell.l);
+  return { x: w.x, y: fY + 1, z: w.z, table: false, game: null };
 }
 
-// Is `pos` inside the parlour interior, at parlour depth? y within
-// floorY..floorY+h (the hollowed clear space), x/z within the interior bounds
-// (the same box parlourSeatFor places bodies in).
+// Is `pos` inside the undercroft? A UNION of the actual room rectangles (NOT one
+// bounding box — the warren is L/T-shaped, so a bounding box would read true in the
+// concave rock corners), covering the main level and down into the sunken vault.
+// Each room's (f,l) box rotates to an axis-aligned world x/z box (relCell is a 90°
+// rotation, so min/max of two opposite corners suffice). Excludes the surface hut
+// by the y-band. Read every frame for warmth/sleep/murmur/games gating.
 export function playerInParlour(pos, plan) {
-  if (!pos || !plan) return false;
-  const { floorY, w: pw, l: pl, h: ph } = plan.parlour;
-  const ix0 = plan.origin.x - Math.floor(pw / 2), iz0 = plan.origin.z - Math.floor(pl / 2);
-  const ix1 = ix0 + pw - 1, iz1 = iz0 + pl - 1;
-  return pos.x >= ix0 && pos.x <= ix1 && pos.z >= iz0 && pos.z <= iz1
-    && pos.y >= floorY && pos.y <= floorY + ph;
+  if (!pos || !plan || !plan.parlour || !plan.parlour.rooms) return false;
+  const { floorY, h: ph, vaultFloorY } = plan.parlour;
+  if (pos.y < (vaultFloorY || floorY) || pos.y > floorY + ph + 1) return false;
+  const px = Math.floor(pos.x), pz = Math.floor(pos.z);
+  for (const r of plan.parlour.rooms) {
+    const a = relCell(plan.origin, plan.doorSide, r.f0, r.l0);
+    const b = relCell(plan.origin, plan.doorSide, r.f1, r.l1);
+    if (px >= Math.min(a.x, b.x) && px <= Math.max(a.x, b.x)
+      && pz >= Math.min(a.z, b.z) && pz <= Math.max(a.z, b.z)) return true;
+  }
+  return false;
 }
 
 // Period Yorkshire pub murmur — weather, t' trains, iron, sheep, t' fire, t' ale.

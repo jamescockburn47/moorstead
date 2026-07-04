@@ -19,16 +19,17 @@ const check = (c, m) => (c ? ok(m) : bad(m));
   check(!!plan, 'Gen(12345) builds a Grosmont plan to test against');
 
   if (plan) {
-    const { floorY, w: pw, l: pl } = plan.parlour;
-    const ix0 = plan.origin.x - Math.floor(pw / 2);
-    const iz0 = plan.origin.z - Math.floor(pl / 2);
+    const { relCell } = await import('../src/innplan.js');
+    const floorY = plan.parlour.floorY;
     const tables = plan.parlour.tables;
+    const rc = (t) => relCell(plan.origin, plan.doorSide, t.f, t.l);
     check(tables.length === 4, 'the plan has 4 parlour tables');
 
     let allFound = true;
     const gamesSeen = new Set();
     for (const t of tables) {
-      const hit = tableAt(ix0 + t.x, floorY + 1, iz0 + t.z, inns);
+      const w = rc(t);
+      const hit = tableAt(w.x, floorY + 1, w.z, inns);
       if (!hit || hit.plan !== plan || hit.game !== t.game) allFound = false;
       gamesSeen.add(t.game);
     }
@@ -36,10 +37,10 @@ const check = (c, m) => (c ? ok(m) : bad(m));
     check(gamesSeen.size === 4, 'the 4 tables carry 4 distinct games');
 
     // reject a neighbouring (non-table) cell, and a table cell at the wrong y
-    const t0 = tables[0];
-    const missY = tableAt(ix0 + t0.x, floorY + 2, iz0 + t0.z, inns);
+    const w0 = rc(tables[0]);
+    const missY = tableAt(w0.x, floorY + 2, w0.z, inns);
     check(missY === null, 'tableAt rejects the right x/z at the wrong y');
-    const missXZ = tableAt(ix0 + t0.x + 1, floorY + 1, iz0 + t0.z + 1, inns);
+    const missXZ = tableAt(w0.x + 1, floorY + 1, w0.z + 1, inns);
     check(missXZ === null, 'tableAt rejects a neighbouring (non-table) cell');
     check(tableAt(0, 0, 0, inns) === null, 'tableAt rejects a wild-off-map coordinate');
     check(tableAt(0, 0, 0, null) === null, 'tableAt tolerates a missing inns map');

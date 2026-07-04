@@ -57,6 +57,7 @@ import { isFine } from './festivalKit.js';
 import { boardingFolk } from './trainfolk.js';
 import { innOpen, playerInParlour, MURMUR_LINES, sleepWindow, wakeOutcome, postLocalNote, pullLocalNote, NOTE_CAP_PER_PLAYER, NOTE_CAP_BOARD } from './parlour.js';
 import { tableAt, newSession, sessionMove, sessionNpcReply, sessionForfeit, settleWager, opponentSeed, gameLabel, npcToMove } from './gameTable.js';
+import { relCell } from './innplan.js';
 import { recordGameResult, wagerAllowed, WAGER_MAX } from './ledgers.js';
 import { CarolBox } from './carolBox.js';
 import { RosterClient, invalidateSurfCache } from './roster.js';
@@ -5532,10 +5533,11 @@ class Game {
         this.player.pos = { ...snap.pos };
         this.player.vel = { x: 0, y: 0, z: 0 };
         const plan = this._gameTable.plan;
-        const { w: pw, l: pl } = plan.parlour;
-        const ix0 = plan.origin.x - Math.floor(pw / 2), iz0 = plan.origin.z - Math.floor(pl / 2);
+        // table cells are door-relative (f,l) in the undercroft — resolve via relCell
+        // (the single source tableAt/worldgen use), NOT the removed parlour.w/l + t.x/t.z.
         const t = plan.parlour.tables[this._gameTable.index];
-        const tx = ix0 + t.x + 0.5, tz = iz0 + t.z + 0.5;
+        const tw = relCell(plan.origin, plan.doorSide, t.f, t.l);
+        const tx = tw.x + 0.5, tz = tw.z + 0.5;
         const dx = tx - snap.pos.x, dz = tz - snap.pos.z;
         this.player.yaw = Math.atan2(dx, dz);
         this.player.pitch = -0.9;

@@ -18,6 +18,7 @@ import * as draughts from './games/draughts.js';
 import * as dominoes from './games/dominoes.js';
 import * as shoveha from './games/shoveha.js';
 import { strSeed } from './noise.js';
+import { relCell } from './innplan.js';
 
 export const ENGINES = {
   [merrils.GAME_ID]: merrils,
@@ -46,27 +47,22 @@ export function levelForRole(role) {
 
 // --- table lookup -----------------------------------------------------
 
-// Does world cell (x, y, z) sit on one of the 4 parlour game tables of any
-// plan in `inns` (a Map<villageName, plan> — world.gen.inns)? Table cells
-// have no unique block id (they're plain B.PLANKS, per the handoff), so we
-// match by coordinate: each plan's parlour.tables[i] is a LOCAL {x,z} cell,
-// translated to world space exactly as parlour.js's toWorld does (single
-// source of truth for that formula lives there; duplicated here in the same
-// terms since parlour.js doesn't export a per-cell converter). Returns
-// { plan, index, game } or null.
+// Does world cell (x, y, z) sit on one of the 4 undercroft game tables of any
+// plan in `inns` (a Map<villageName, plan> — world.gen.inns)? Table cells have no
+// unique block id (they're plain B.PLANKS), so we match by coordinate: each
+// plan's parlour.tables[i] is a door-relative (f,l) cell, resolved to world via
+// innplan.js relCell (the single source of truth the worldgen carve also uses).
+// Returns { plan, index, game } or null.
 export function tableAt(x, y, z, inns) {
   if (!inns) return null;
   for (const plan of inns.values()) {
-    const { floorY, w: pw, l: pl } = plan.parlour;
+    const floorY = plan.parlour.floorY;
     if (y !== floorY + 1) continue;
-    const ix0 = plan.origin.x - Math.floor(pw / 2);
-    const iz0 = plan.origin.z - Math.floor(pl / 2);
     const tables = plan.parlour.tables;
     for (let i = 0; i < tables.length; i++) {
       const t = tables[i];
-      if (ix0 + t.x === x && iz0 + t.z === z) {
-        return { plan, index: i, game: t.game };
-      }
+      const w = relCell(plan.origin, plan.doorSide, t.f, t.l);
+      if (w.x === x && w.z === z) return { plan, index: i, game: t.game };
     }
   }
   return null;
