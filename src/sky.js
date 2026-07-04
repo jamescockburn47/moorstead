@@ -582,6 +582,7 @@ export class Sky {
     this.weatherOverride = null; // [warden] debug.setWeather() override; null = 'Live' (today's behaviour)
     this.fogFar = 90; this.fogTargetFar = 90;
     this.rainAmount = 0;
+    this._snapPrecip = false; // [showreel] one-frame flag: complete the precip lerp instantly on a scene cut
     this.dread = 0;
     this.dreadTarget = 0;
     this.flash = 0;       // transient lightning-flash term (0..1), spiked by the storm controller, decays each frame
@@ -1284,9 +1285,13 @@ export class Sky {
     // reaches t' shader), an' one rig-follows-camera position write per rig.
     // Wind = live Goathland windiness (cached above; offline a 0.35 breeze) ×
     // shared-clock gust, hardened by t' boss-storm churn — every client leans as one.
-    this.rainAmount += (targetRain - this.rainAmount) * Math.min(1, dt * 0.8);
+    // [showreel] a ONE-FRAME snap: when the warden's showreel jumps to a new scene it forces the
+    // precipitation straight to its target for that scene, so last shot's rain/snow doesn't fade
+    // slowly into a clear summer one (and winter starts snowing at once). Off-camera during settle.
+    const snap = this._snapPrecip; this._snapPrecip = false;
+    this.rainAmount += (targetRain - this.rainAmount) * (snap ? 1 : Math.min(1, dt * 0.8));
     this.rain.material.opacity = covered ? 0 : this.rainAmount * 0.5; // no rain through a roof
-    this.snowAmount += ((covered ? 0 : snowFall) - this.snowAmount) * Math.min(1, dt * 0.5);
+    this.snowAmount += ((covered ? 0 : snowFall) - this.snowAmount) * (snap ? 1 : Math.min(1, dt * 0.5));
     this.snow.material.opacity = this.snowAmount * 0.85;
     const rainOn = !covered && this.rainAmount > 0.02;
     const snowOn = this.snowAmount > 0.02;

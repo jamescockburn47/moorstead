@@ -42,6 +42,15 @@ const KNOWN_FESTIVALS = ['easter', 'mayday', 'midsummer', 'harvest', 'bonfire', 
   (p.lookAt && p.lookAt.y > 0 ? ok : bad)(`the look point sits a touch above the ground (y=${p.lookAt.y})`);
 }
 
+// 3g. FIXED altitude: over VARIED terrain the camera Y must NOT step as it sweeps (it holds a
+// constant height off the target's ground, like the title flyover — not the moving camera's ground)
+{
+  const bumpy = (x) => Math.floor(x / 3) % 5;         // ground jumps around as x changes
+  const b = { x: 50, z: 50, dist: 20, height: 15, az0: 0, az1: 3 };
+  const y0 = cameraPose(b, 0, bumpy).y, ymid = cameraPose(b, 0.5, bumpy).y, y1 = cameraPose(b, 1, bumpy).y;
+  (y0 === ymid && y0 === y1 ? ok : bad)(`the orbit holds a FIXED altitude over varied terrain — no stepping (y=${y0})`);
+}
+
 // 4. the orbit sweeps — start and end poses differ (a moving camera, not a freeze-frame)
 {
   const b = { x: 0, z: 0, dist: 20, height: 12, az0: 0.2, az1: 0.9 };

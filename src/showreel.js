@@ -34,12 +34,16 @@ const groundAt = (g, x, z) => {
 
 // PURE: the camera pose for a beat at sweep fraction u (0..1). Orbits at `dist`/`height` around the
 // target, looking at it. `ground(x,z)` supplies terrain height (injected so this is unit-testable).
+// The camera holds a FIXED altitude for the whole orbit — derived from the TARGET's ground, not the
+// camera's own moving (x,z) — so it glides smoothly like the title flyover instead of STEPPING down
+// as it sweeps over hills and dales (James 2026-07-04).
 export function cameraPose(beat, u, ground) {
   const az = beat.az0 + (beat.az1 - beat.az0) * Math.max(0, Math.min(1, u));
   const x = beat.x + Math.sin(az) * beat.dist;
   const z = beat.z + Math.cos(az) * beat.dist;
-  const y = ground(x, z) + beat.height;
-  const ty = ground(beat.x, beat.z) + (beat.lookUp != null ? beat.lookUp : 3);   // look a touch above the ground
+  const base = ground(beat.x, beat.z);                                            // one altitude for the whole sweep
+  const y = base + beat.height;
+  const ty = base + (beat.lookUp != null ? beat.lookUp : 3);                      // look a touch above the ground
   return { x, y, z, lookAt: { x: beat.x, y: ty, z: beat.z } };
 }
 
@@ -126,6 +130,7 @@ export async function runShowreel(g, opts = {}) {
       else if (b.phase != null) g.debug.setSeason(b.phase);
       if (b.time != null) g.debug.setTime(b.time);
       g.debug.setWeather(b.weather || null);
+      g.sky._snapPrecip = true;                        // snap rain/snow to THIS scene at once (no fade-over from the last)
       // warp the player so the target's chunks stream in, and frame the opening pose at once
       const gy = ground(b.x, b.z);
       g.player.pos = { x: b.x + 0.5, y: gy + 2, z: b.z + 0.5 };
