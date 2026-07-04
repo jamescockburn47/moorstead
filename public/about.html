@@ -130,16 +130,20 @@
     new content into it on request.
   </p>
   <p class="lede">
-    You explore, build, mine, farm, herd sheep with a real working dog, trade in old money, sail,
-    and ride a steam train across a moor <strong>rebuilt block by block from Ordnance Survey
-    data</strong>, on a phone or at a desk, alongside other players and folk who remember you. The
-    detail's in the boxes below.
+    You explore, build, mine, farm, herd sheep with a real working dog, trade in old money, sail the
+    coast and swim the becks, gather at the tavern of an evening, and ride a steam train across a moor
+    <strong>rebuilt block by block from Ordnance Survey data</strong>, through real seasons and their
+    festivals, on a phone or at a desk, alongside other players and folk who remember you. The detail's
+    in the boxes below.
   </p>
 
   <div>
     <span class="tag">Three.js / WebGL</span>
     <span class="tag">Real terrain from Ordnance Survey</span>
     <span class="tag">Real c.1900 layout</span>
+    <span class="tag">Flowing water &amp; real coast</span>
+    <span class="tag">Seasons &amp; festivals</span>
+    <span class="tag">Living taverns &amp; pub games</span>
     <span class="tag">Self-hosted multiplayer</span>
     <span class="tag">Local-LLM villagers with agency</span>
     <span class="tag">Improves itself overnight</span>
@@ -157,24 +161,23 @@
     tablet with full on-screen touch controls as readily as with a mouse and keyboard at a desk.
   </p>
   <p>
-    There are two worlds. The first is a stylised moor, the original build, invented in code and
-    grown from a single number (a "seed") by noise functions, so the same seed always produces the
-    same moor. The second, the one this page is mostly about, is the <strong>real North York
-    Moors built from Ordnance Survey data</strong>: the actual relief of the place, the real
-    coastline, the real rivers, with the towns and the railway sited where they truly were c.1900.
-    You choose which to enter from the front of the game.
+    Moorstead is now a single world: the <strong>real North York Moors built from Ordnance Survey
+    data</strong>, the actual relief of the place, the real coastline, the real rivers, with the towns
+    and the railway sited where they truly were around 1900. There was once a second, stylised moor,
+    the original build, grown in code from a single number (a "seed") by noise functions. It has been
+    retired. Everyone who plays now, solo or together, walks the same surveyed land.
   </p>
   <p>
-    Either way, there is still <strong>not a single image, sound, or 3D model file in the
-    project</strong>. Textures are painted into a canvas at load time, every creature is assembled
-    from boxes in a few lines of geometry, and all the sound is synthesised. What changed in the
-    real-moor world is where the <em>shape of the land</em> comes from: not from noise any more,
-    but from the survey of the actual place.
+    There is still <strong>not a single image, sound, or 3D model file in the project</strong>.
+    Textures are painted into a canvas at load time, every creature is assembled from boxes in a few
+    lines of geometry, and all the sound is synthesised. What the survey changed is where the
+    <em>shape of the land</em> comes from: not from noise any more, but from the measured height of
+    the actual place.
   </p>
 
   <h3>The real moor, all the way back to Ordnance Survey</h3>
   <p>
-    The first world was a believable invention. The second is the place itself. I took a
+    The original build was a believable invention. This one is the place itself. I took a
     <strong>digital elevation model of the whole map</strong>, the Ordnance Survey's own height
     data for the North York Moors, and turned it into the voxel landscape block by block. The
     relief you walk is the real relief: the high plateau, the way the dales actually cut down
@@ -248,6 +251,49 @@
     To protect your builds from griefing, you can stake a land claim. Active claims prevent your buildings from decaying; unclaimed builds decay after 30 days. If your claim's weekly upkeep lapses, the builds will crumble gradually over time. In the children's world, claims and builds decay twice as slow. Finally, keeping two or more animals of the same species in an active claim allows them to breed tamed baby offspring, rewarding active animal husbandry.
   </p>
 
+  <h3>The water, and the coast</h3>
+  <p>
+    The becks and rivers are not painted-on blue. The <strong>water flows</strong>: each river carries
+    a real current down its course, faster in the narrows, and it pushes you along if you wade or swim
+    in it, so the Esk runs to the sea and you can feel which way is downhill. Step out of your depth and
+    you <strong>swim</strong>, treading water, ducking under, coming up for air. To the east the land
+    ends at the <strong>real North Sea coast</strong>, cut from the same survey, with a moving
+    <strong>shoreline</strong> where the surf breaks and foams against the cliffs and the sands, and
+    fishing <strong>cobles</strong> drawn up on the coast. After rain the ground itself goes
+    <strong>wet and dark</strong> and drips from the eaves, and dries again as the weather clears. None
+    of it is a texture swap; it is the same "everything is a function of the state of the world" idea,
+    pointed at water.
+  </p>
+
+  <h3>The sky, the seasons, and the festivals</h3>
+  <p>
+    The sky runs off the real clock. The <strong>sun and moon</strong> cross it, the <strong>stars</strong>
+    come out at night, and the light and shadow move with the hour, so dusk on the moor is a real dusk
+    to plan around (the barghest walks after dark). The <strong>four seasons</strong> turn the land over
+    the year: the heather and the trees change, and <strong>winter brings snow</strong> that settles on
+    the tops and the roofs. Over the top of that runs the <strong>live weather</strong>, tied to the
+    real conditions at Goathland (below), so when the real moor is under mist, so is the game. And the
+    year has its <strong>festivals</strong>: carols and a decorated tree and lit windows at Christmas,
+    a bonfire on the fifth of November, a maypole in spring, midsummer, harvest and Easter, each with
+    its own procedurally-played bells and music and its own dressing on the villages. All of it, again,
+    is computed rather than stored: no music file, no snow texture, no painted sky.
+  </p>
+
+  <h3>The tavern of an evening</h3>
+  <p>
+    Each of the dale villages has its <strong>inn</strong>, and the inn is where the moor gathers. Push
+    the door and you drop into the <strong>cellars beneath it</strong>, a warren of low stone rooms far
+    bigger than the building above: a vaulted tap room round a cast-iron range, a games room, a
+    screened snug, a servery, letting rooms with beds, and a sunken strongroom. Of an evening the
+    <strong>villagers come in off the moor</strong> to drink and sit by the fire, and you can join them.
+    You can sit down at a table and play the <strong>old pub games</strong> for brass, real working
+    engines for merrils (nine men's morris), draughts, dominoes and shove-ha'penny, against an
+    opponent whose sharpness fits who they are. And the inn is a <strong>refuge</strong>: warm through
+    out of the cold and the wet, stash your goods in the <strong>strongbox</strong> so that a death on
+    the moor never costs you them, and if enough drinkers are of a mind you can vote the night away and
+    wake warm and rested rather than frozen out on the tops.
+  </p>
+
   </details>
 
   <details class="about-detail"><summary>2. How I built it</summary>
@@ -306,23 +352,22 @@
     <li><strong>Efficient rendering.</strong> Only block faces that touch air are turned into
       geometry ("culled-face meshing"), with soft shadowing in the corners baked into the mesh
       ("ambient occlusion") rather than computed by lights every frame.</li>
-    <li><strong>Procedural terrain (the stylised world).</strong> Heights come from layered value-noise (fractal
-      Brownian motion). Caves are carved by 3D noise. Trees, ore and detail are placed by
-      hashing coordinates. All of it is deterministic.</li>
-    <li><strong>Surveyed terrain (the real world).</strong> Heights come instead from the Ordnance
-      Survey elevation model: the height of the land at each point is looked up from the real survey
-      and turned into the block column there. The rivers are carved down their real courses and the
-      coast is cut where the data says the land ends. The result is the actual relief of the moors,
-      not a generated stand-in.</li>
+    <li><strong>Surveyed terrain.</strong> Heights come from the Ordnance Survey elevation model: the
+      height of the land at each point is looked up from the real survey and turned into the block
+      column there. The rivers are carved down their real courses and the coast is cut where the data
+      says the land ends. The result is the actual relief of the moors, not a generated stand-in.</li>
+    <li><strong>Detail on top of the real relief.</strong> The smaller stuff is still placed by maths:
+      layered value-noise (fractal Brownian motion), 3D noise for caves, and coordinate hashing for
+      the trees, the ore and the scatter. So the surveyed landscape is dressed and populated
+      deterministically without any of the actual geography being invented.</li>
   </ul>
 
   <h3>Two ideas that make the rest simple</h3>
   <p>
-    <strong>The world is a pure function of fixed data.</strong> In the stylised world that data is
-    a single seed; in the real world it is the Ordnance Survey heights, the same on every machine.
-    Either way every client can compute the identical terrain for itself, so nobody ever downloads a
-    map. The server only needs to remember the differences players have made, the blocks they have
-    dug or placed. This keeps multiplayer tiny and joins instant. For the real-moor world I prove
+    <strong>The world is a pure function of fixed data.</strong> That data is the Ordnance Survey
+    heights, the same on every machine, so every client can compute the identical terrain for itself
+    and nobody ever downloads a map. The server only needs to remember the differences players have
+    made, the blocks they have dug or placed. This keeps multiplayer tiny and joins instant. I prove
     the two sides agree: a check confirms the landscape the server computes and the landscape the
     browser computes are the same to the block, so no one ever sees a different moor from anyone else.
   </p>
@@ -683,7 +728,7 @@
     <li><strong>No access to your files.</strong> The game cannot read your documents, photos, or other folders. It uses only what browsers allow games to use: memory, graphics, and optional local storage inside the browser.</li>
     <li><strong>No ads or third-party trackers.</strong> There are no advertising networks, analytics pixels, or social-media widgets. The client sends a once-per-session landing ping to my server (browser id only) so I can see who visited; see below.</li>
     <li><strong>No cryptocurrency or background mining.</strong> Nothing in the client hashes coins or runs hidden work when the tab is closed.</li>
-    <li><strong>Network use is limited.</strong> If you play solo on your own seed, after the first load the world can run from your browser alone. Multiplayer, villager chat, and login talk to my home server. Weather optionally reads a public forecast for Goathland.</li>
+    <li><strong>Network use is limited.</strong> If you play a solo single-player world, after the first load it can run from your browser alone. Multiplayer, villager chat, and login talk to my home server. Weather optionally reads a public forecast for Goathland.</li>
   </ul>
 
   <h3>Technically (for the curious)</h3>
@@ -772,7 +817,7 @@
   <ul>
     <li>This is a hobby project on a home server, not a bank or a Fortune 500 SaaS. I apply the same guardrail thinking I use in my professional work, but capacity and uptime are those of one box behind a tunnel.</li>
     <li>No system is perfectly secure. I reduce risk by keeping the client tiny, the attack surface small, sessions token-bound, and admin tools off the public internet. You further reduce risk by using an up-to-date browser and not sharing invites.</li>
-    <li>If you need a guarantee no one will ever see your IP or chat, play solo on your own seed only. That mode sends nothing to my server.</li>
+    <li>If you need a guarantee no one will ever see your IP or chat, play a solo single-player world only. That mode sends nothing to my server.</li>
   </ul>
 
   </div><!-- /panel-security -->

@@ -518,12 +518,6 @@ export class UI {
     this.el('div', 'moors-note', this.titleScreen, 'T&rsquo; real North York Moors, built to scale frae <b>Ordnance Survey</b> maps &mdash; t&rsquo; true landscape, dales, rivers an&rsquo; coast, t&rsquo; 1900 railways, livin&rsquo; folk an&rsquo; their tales (an&rsquo; mind t&rsquo; Count up on t&rsquo; East Cliff of a stormy neet).');
     this.el('div', 'muted-note', this.titleScreen, 'New to t&rsquo; moor? <b>Give &lsquo;Ow Ter Play&rsquo; a read</b>: learn how to build, ride, drive, and stay alive.');
     this.el('div', 'muted-note', this.titleScreen, 'Watch thissen at neet: t&rsquo; barghest walks when t&rsquo; sun goes down.');
-    // The original stylised game, kept as a legacy option at the foot.
-    this.legacyBox = this.el('div', 'title-legacy hidden', this.titleScreen);
-    this.el('div', 'muted-note', this.legacyBox, 'Or play t&rsquo; original <b>stylised</b> Moorstead (one solo save at a time &mdash; starting a world begins fresh):');
-    this.seedInput = this.el('input', 'seed', this.legacyBox);
-    this.seedInput.placeholder = "Custom seed (optional)";
-    this.btnLegacy = this.el('button', 'mc legacy-btn', this.legacyBox, 'Play t&rsquo; Original (Stylised) Moorstead');
     this.el('div', 'title-foot', this.titleScreen, 'Created purely with AI by a non-coder &middot; procedurally generated, not a single asset file &middot; villagers, jobs an&rsquo; adventures run on large local AI models &middot; <a href="/about.html?tab=security" style="color:#d8b95a">Security &amp; privacy</a>');
 
     // ---------- pause ----------
@@ -1950,7 +1944,6 @@ export class UI {
     this.btnNew.classList.toggle('hidden', !loggedIn);
     this.btnShared.classList.toggle('hidden', !loggedIn);
     this.btnContinue.classList.toggle('hidden', !loggedIn);
-    this.legacyBox.classList.toggle('hidden', !loggedIn);   // contains the seed input + legacy button
     this.whoBox.classList.toggle('hidden', !loggedIn);
     if (!loggedIn) return;
     if (auth.guest) {

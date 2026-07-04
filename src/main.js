@@ -742,15 +742,14 @@ class Game {
   }
 
   // ---------------- world lifecycle ----------------
-  async newWorld(seedStr) {
+  async newWorld() {
     if (this.net) { this.net.disconnect(); this.net = null; }
     this.netActive = false;
     const { clearSave } = await import('./save.js');
     await clearSave();
-    // v2: the real-Moors 1900 world is the main world. A blank "New World" starts it
-    // (persistent, saved); a typed seed still makes a custom stylised world to explore.
-    const seed = seedStr ? strSeed(seedStr) : strSeed('t-moors-1900');
-    this.startWorld(seed, null, new Map());
+    // The real-Moors c.1900 world is THE world now — a fresh solo world always starts it.
+    // (The old stylised world has been retired, James 2026-07-04.)
+    this.startWorld(strSeed('t-moors-1900'), null, new Map());
     this.ensureDaemon();   // thi daemon walks every world wi' thee, solo or shared
   }
 
@@ -762,12 +761,6 @@ class Game {
     this.startWorld(strSeed('t-moors-1900'), null, new Map());
     this.moorsPreview = true; // a transient explore world: never persisted, never clobbers the solo save
     this.ensureDaemon();
-  }
-
-  // The original stylised Moorstead, kept as a legacy option (any NON-moors seed; blank →
-  // a fixed classic seed). Shares the single solo save slot, so it starts fresh like New World.
-  async startLegacyWorld(seedStr) {
-    return this.newWorld((seedStr && seedStr.trim()) ? seedStr.trim() : 'moorstead-classic');
   }
 
   async continueGame() {
@@ -1128,7 +1121,6 @@ class Game {
       } else if (e.code === 'Escape') this.closeNetChat();
     });
     ui.btnContinue.addEventListener('click', () => { this.audio.init(); this.continueGame(); });
-    ui.btnLegacy.addEventListener('click', () => { this.audio.init(); this.startLegacyWorld(ui.seedInput.value.trim()); });
     ui.btnHow.addEventListener('click', () => { this.howReturn = 'titleScreen'; ui.show('howScreen'); });
     ui.btnHow2.addEventListener('click', () => { this.howReturn = 'pauseScreen'; ui.show('howScreen'); });
     ui.btnHowClose.addEventListener('click', () => ui.show(this.howReturn || 'titleScreen'));
@@ -2991,14 +2983,11 @@ class Game {
     // t' warden may walk onto any world — bairns or adults, not just their own
     if (this.isAdmin()) room = (await this.ui.pickWorld(room)) || room;
     this.netRoom = room;
-    // the shared moor, the bairns' world AND the free kids' world all play the real c.1900 NYM
-    // world. baseRoom() means shards (bairns-2, bairns-free-2) share their world's terrain too.
-    const rb = baseRoom(room);
-    // moor, the bairns world, and every free world share the real c.1900 NYM seed; tying this to
-    // rooms.js (isBairnsRoom/isFreeRoom) means a future free room can't desync from its terrain.
-    const seedStr = (rb === 'moor' || isBairnsRoom(rb) || isFreeRoom(rb) || rb === 'moors1900') ? 't-moors-1900'
-      : 't-shared-moor:' + rb;
-    this.startWorld(ss(seedStr), null, new Map());
+    // EVERY shared world now plays the real c.1900 North York Moors. The old stylised
+    // world has been retired (James 2026-07-04): no room falls through to a t-shared-moor:<room>
+    // seed any more, so a custom-invite room can't land on the old terrain. The relay is
+    // seed-agnostic (it only relays per-room edits), so terrain is decided here, client-side.
+    this.startWorld(ss('t-moors-1900'), null, new Map());
     // folk wake spread across t' villages, same one each visit
     const who = (this.auth && this.auth.acct) || this.devicePid();
     const idx = Math.floor(hash2i(ss(who), 7, 99) * this.world.gen.geo.villages.length);
