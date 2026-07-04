@@ -1186,6 +1186,10 @@ class Game {
       if (e.code === 'Space') this.input.jumpTapped = true;
 
       if (this.state === 'playing') {
+        // MENU key: ` (Backquote), not Esc. Esc exits browser fullscreen; releasing the
+        // pointer lock does NOT, and the pointerlockchange handler then opens the pause
+        // menu — so ` pauses cleanly in fullscreen. (Esc still works for non-fullscreen.)
+        if (e.code === 'Backquote') { e.preventDefault(); document.exitPointerLock?.(); return; }
         if (e.code === 'KeyF' && this.boat) { this.leaveBoat(); return; }
         if (e.code === 'KeyF' && this.mount) { this.dismountPony(); return; }
         if (e.code === 'KeyE') this.openInventory();
@@ -1248,14 +1252,16 @@ class Game {
         }
         const num = parseInt(e.key);
         if (num >= 1 && num <= 9) { this.player.hotbar = num - 1; this.ui.invDirty = true; }
+      } else if (this.state === 'paused') {
+        if (e.code === 'Backquote') this.resume();                 // ` toggles the menu shut again
       } else if (this.state === 'inv' || this.state === 'range' || this.state === 'box') {
-        if (e.code === 'KeyE' || e.code === 'Escape') this.closeScreens();
+        if (e.code === 'KeyE' || e.code === 'Escape' || e.code === 'Backquote') this.closeScreens();
       } else if (this.state === 'board' || this.state === 'museum' || this.state === 'challenge' || this.state === 'notes') {
-        if (e.code === 'KeyQ' || e.code === 'Escape') this.closeScreens();
+        if (e.code === 'KeyQ' || e.code === 'Escape' || e.code === 'Backquote') this.closeScreens();
       } else if (this.state === 'chat') {
         if (e.code === 'Escape') this.closeChat();
       } else if (this.state === 'sleeping') {
-        if (e.code === 'KeyN' || e.code === 'Escape') this.cancelSleep('Up an’ about again, then.');
+        if (e.code === 'KeyN' || e.code === 'Escape' || e.code === 'Backquote') this.cancelSleep('Up an’ about again, then.');
       } else if (this.state === 'riding') {
         if (e.code === 'Escape' && this.ride) this.wardenLeaveTrain();   // any rider can step off, not just a warden
         else if (e.code === 'Digit1') this.setRideView('seat');

@@ -682,7 +682,7 @@ export class UI {
 <b>L</b> Find shelter &mdash; bearing and distance to the nearest moor shelter and back to Moorstead<br>
 <b>M</b> Mute sound<br>
 <b>P</b> Sketch t&rsquo; view &mdash; a framed keepsake, saved to thi downloads<br>
-<b>Esc</b> Pause / Close screens<br>
+<b>&#96;</b> (backtick, top-left) Pause menu &mdash; use this in fullscreen; <b>Esc</b> also pauses/closes screens but exits fullscreen<br>
 <b>Space &times;2</b> Toggle flying (creative mode only)
 </div>
 <p class="how-note"><b>Riding & driving:</b> On a pony or the train footplate, use <b>W A S D</b> to move. Press <b>F</b> to dismount a pony or shovel coal on the train. Press <b>E</b> to stop the train and step down. Full details under <b>Ponies</b> and <b>T’ Railway</b>.</p>
