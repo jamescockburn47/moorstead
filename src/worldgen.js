@@ -727,12 +727,19 @@ export class Gen {
       const fY = par.floorY, ph = par.h;                 // main floor y, interior clear height
       const rc = (f, l) => relCell(p.origin, p.doorSide, f, l);
 
-      // pass 1: fill each room's wall-ring box SOLID (footing, floor, walls, ceiling)
+      // pass 1: fill each room's wall-ring box SOLID. Walls are WAINSCOTED — wood
+      // panelling (PLANKS) for the lower two rows, dressed STONEBRICK above — over a
+      // SLATE flagstone floor, so the rooms read as a panelled pub, not a stone box.
+      // (Interior cells get these too, then pass 2 hollows them.)
       for (const r of par.rooms) {
         for (let f = r.f0 - 1; f <= r.f1 + 1; f++) for (let l = r.l0 - 1; l <= r.l1 + 1; l++) {
           const w = rc(f, l);
           put(w.x, fY - 1, w.z, B.STONEBRICK);            // footing
-          for (let y = fY; y <= fY + ph + 1; y++) put(w.x, y, w.z, B.STONEBRICK); // floor..walls..ceiling
+          put(w.x, fY, w.z, B.SLATE);                     // flagstone floor
+          put(w.x, fY + 1, w.z, B.PLANKS);                // wainscot row 1
+          put(w.x, fY + 2, w.z, B.PLANKS);                // wainscot row 2
+          for (let y = fY + 3; y <= fY + ph; y++) put(w.x, y, w.z, B.STONEBRICK); // dressed stone above
+          put(w.x, fY + ph + 1, w.z, B.STONEBRICK);       // ceiling
         }
       }
       // pass 2: hollow each room's INTERIOR (floor + ceiling stay solid)
@@ -789,21 +796,34 @@ export class Gen {
         put(w.x, fY + 1, w.z, B.BENCH);
         put(w.x, fY + 2, w.z, B.AIR);
       }
-      // the cast-iron range in the tap forward-wall inglenook, flanked by settles
+      // the cast-iron range set in a red-brick chimney breast on the tap forward
+      // wall, an oak mantel shelf over it, flanked by high-backed settles. The
+      // innDecor layer drops a living flame into the firebox in front.
       {
         const h = rc(fur.hearth.f, fur.hearth.l);
-        put(h.x, fY + 1, h.z, B.RANGE);
+        put(h.x, fY + 1, h.z, B.RANGE);                                   // the range
+        const breast = rc(fur.hearth.f + 1, fur.hearth.l);                // the wall cell behind
+        for (let y = fY + 1; y <= fY + ph; y++) put(breast.x, y, breast.z, B.RBRICK); // brick chimney breast
+        put(h.x, fY + 2, h.z, B.LOG);                                     // oak mantel shelf over the firebox
         for (const [f, l] of [[fur.hearth.f, fur.hearth.l - 1], [fur.hearth.f, fur.hearth.l + 1]]) {
-          const w = rc(f, l); put(w.x, fY + 1, w.z, B.BENCH);
+          const w = rc(f, l); put(w.x, fY + 1, w.z, B.BENCH);             // a settle either side
         }
       }
       for (const bd of fur.beds) { const w = rc(bd.f, bd.l); put(w.x, fY + 1, w.z, B.WOOL); } // letting beds
       { const w = rc(fur.strongbox.f, fur.strongbox.l); put(w.x, fur.strongbox.y, w.z, B.STRONGBOX); } // the vault chest
 
-      // --- lighting: a lantern hung near each room's centre + a torch by the door ---
+      // --- exposed oak ceiling beams: a LOG tie-beam every 3 cells across each room,
+      // just under the ceiling, for the low-beamed pub feel ---
+      for (const r of par.rooms) {
+        for (let f = r.f0; f <= r.f1; f += 3) for (let l = r.l0; l <= r.l1; l++) {
+          const w = rc(f, l); put(w.x, fY + ph, w.z, B.LOG);
+        }
+      }
+      // --- lighting: a lantern hung from the beams near each room's centre + a torch
+      // by the exit door. Lanterns emit real light; no floating glow quads. ---
       for (const r of par.rooms) {
         const w = rc(Math.round((r.f0 + r.f1) / 2), Math.round((r.l0 + r.l1) / 2));
-        put(w.x, fY + ph, w.z, B.LANTERN);
+        put(w.x, fY + ph - 1, w.z, B.LANTERN);   // hung just below the beamed ceiling
       }
       { const t = rc(-2, -1); put(t.x, fY + 2, t.z, B.TORCH); } // a torch in the back wall by the exit door (off the walkway)
     }

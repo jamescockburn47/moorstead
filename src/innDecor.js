@@ -210,6 +210,36 @@ function makeClockTexture() {
   return new THREE.CanvasTexture(c);
 }
 
+// a game board chalked/inlaid on a tabletop, one per game, so a game table reads
+// as a game in play and can't be mistaken for a plain settle.
+function makeGameBoardTexture(game) {
+  const c = newCanvas(128, 128), x = c.getContext('2d');
+  x.fillStyle = '#5a3d22'; x.fillRect(0, 0, 128, 128); // dark polished wood
+  const dot = (px, py, col) => { x.fillStyle = col; x.beginPath(); x.arc(px, py, 4, 0, 6.2832); x.fill(); };
+  if (game === 'merrils') {
+    x.strokeStyle = '#e8dcc0'; x.lineWidth = 3;
+    for (const m of [14, 32, 50]) x.strokeRect(m, m, 128 - 2 * m, 128 - 2 * m);
+    x.beginPath();
+    x.moveTo(64, 14); x.lineTo(64, 50); x.moveTo(64, 78); x.lineTo(64, 114);
+    x.moveTo(14, 64); x.lineTo(50, 64); x.moveTo(78, 64); x.lineTo(114, 64); x.stroke();
+    for (const [a, b] of [[14, 14], [64, 14], [114, 14], [14, 64], [114, 64], [14, 114], [64, 114], [114, 114], [32, 32], [64, 32], [96, 32], [32, 64], [96, 64], [32, 96], [64, 96], [96, 96], [50, 50], [64, 50], [78, 50], [50, 64], [78, 64], [50, 78], [64, 78], [78, 78]]) dot(a, b, '#e8dcc0');
+    dot(14, 14, '#1a1208'); dot(64, 32, '#1a1208'); dot(114, 114, '#efe6cf'); dot(64, 96, '#efe6cf');
+  } else if (game === 'draughts') {
+    for (let a = 0; a < 8; a++) for (let b = 0; b < 8; b++) { x.fillStyle = (a + b) % 2 ? '#3a2816' : '#c9a86a'; x.fillRect(a * 16, b * 16, 16, 16); }
+    for (const [a, b, col] of [[1, 0, '#1a1208'], [3, 0, '#1a1208'], [5, 2, '#1a1208'], [0, 7, '#efe6cf'], [2, 7, '#efe6cf'], [6, 5, '#efe6cf']]) dot(a * 16 + 8, b * 16 + 8, col);
+  } else if (game === 'dominoes') {
+    x.fillStyle = '#2f4a2f'; x.fillRect(8, 8, 112, 112); // green baize
+    const tile = (px, py, w, h) => { x.fillStyle = '#efe6cf'; x.fillRect(px, py, w, h); x.strokeStyle = '#333'; x.lineWidth = 1; x.strokeRect(px, py, w, h); x.beginPath(); x.moveTo(px, py + h / 2); x.lineTo(px + w, py + h / 2); x.stroke(); };
+    tile(22, 30, 46, 20); tile(38, 60, 20, 46); tile(72, 66, 46, 20);
+  } else { // shoveha
+    x.fillStyle = '#c9a86a'; x.fillRect(10, 10, 108, 108);
+    x.strokeStyle = '#3a2816'; x.lineWidth = 2;
+    for (let i = 1; i <= 9; i++) { const py = 10 + i * 10.8; x.beginPath(); x.moveTo(10, py); x.lineTo(118, py); x.stroke(); }
+    for (const [px, py] of [[40, 26], [70, 48], [55, 70], [85, 92]]) dot(px, py, '#b8b8c0');
+  }
+  return new THREE.CanvasTexture(c);
+}
+
 export class InnDecorLayer {
   // player is optional (verify harness constructs with 2 args) — the bragging
   // board simply doesn't build without one; every other prop is unaffected.
@@ -319,19 +349,24 @@ export class InnDecorLayer {
   buildHearthFire(plan, fine) {
     const hw = parlourToWorld(plan, plan.parlour.hearth);
     const seed = (plan.origin.x * 928371 + plan.origin.z) >>> 0;
-    const fire = Fire({
-      scale: 0.6,
-      layers: fine ? 2 : 1,
-      seed,
-      smoke: false, // the undercroft's below-ground — its own chimney plume is built separately, outside
-      light: fine,
-    });
-    // the range sits against the tap forward wall; nudge the flame to its front
-    // face (−forward, into the room) so it glows in the firebox, not inside the block.
+    const fY = plan.parlour.floorY;
     const { fwd } = doorFrame(plan.doorSide);
-    fire.position.set(hw.x + 0.5 - fwd[0] * 0.42, plan.parlour.floorY + 1.35, hw.z + 0.5 - fwd[1] * 0.42);
+    // a real, ALWAYS-lit fire burning in the range firebox — big and multi-layered,
+    // nudged to the front face (−forward, into the room) so it burns in the opening,
+    // not inside the block. This is the "genuine hearth with a flame".
+    const fire = Fire({ scale: 1.05, layers: fine ? 3 : 2, seed, smoke: false, light: true });
+    // pull it well clear of the range's solid front face (~0.65 blocks into the room)
+    // and raise it into the firebox opening, or the block buries it (tested live).
+    fire.position.set(hw.x + 0.5 - fwd[0] * 1.15, fY + 1.7, hw.z + 0.5 - fwd[1] * 1.15);
     this.scene.add(fire);
     this.objects.push(fire);
+    // a warm amber firelight pool cast on the flags in front of the hearth
+    const gm = new THREE.MeshBasicMaterial({ color: 0xff8a3a, transparent: true, opacity: 0.3, depthWrite: false });
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.2), gm);
+    glow.rotation.x = -Math.PI / 2;
+    glow.position.set(hw.x + 0.5 - fwd[0] * 1.1, fY + 1.05, hw.z + 0.5 - fwd[1] * 1.1);
+    glow.frustumCulled = false; glow.userData.ownGeometry = true; glow.userData.hearthGlow = true;
+    this.scene.add(glow); this.objects.push(glow);
   }
 
   // -- one chimney-top smoke plume outside (the tavern isn't in v.buildings, so
@@ -360,15 +395,19 @@ export class InnDecorLayer {
   }
 
   // -- 4. paraffin-lamp glow inside (always, subtle) -------------------------------
-  // One warm amber pool of light near the centre of every undercroft room, so each
-  // room has its own lit heart (no gas/electric — period, per the research doc).
+  // A warm amber light pool cast on the FLOOR beneath each room's lantern (a
+  // horizontal quad, not the floating vertical square the old version dropped in
+  // mid-air). The lantern block itself emits the real light; this is just its pool.
   buildLampGlow(plan) {
     const fY = plan.parlour.floorY;
     for (const r of (plan.parlour.rooms || [])) {
       const w = relCell(plan.origin, plan.doorSide, Math.round((r.f0 + r.f1) / 2), Math.round((r.l0 + r.l1) / 2));
-      addWindowGlow(this.scene, this.objects, w.x + 0.5, fY + 2.3, w.z + 0.5, 0, { color: 0xffb35c, opacity: 0.5 });
-      const added = this.objects[this.objects.length - 1];
-      added.userData.lampGlow = true;
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffb35c, transparent: true, opacity: 0.16, depthWrite: false });
+      const glow = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 3.6), mat);
+      glow.rotation.x = -Math.PI / 2;
+      glow.position.set(w.x + 0.5, fY + 1.04, w.z + 0.5);
+      glow.frustumCulled = false; glow.userData.ownGeometry = true; glow.userData.lampGlow = true;
+      this.scene.add(glow); this.objects.push(glow);
     }
   }
 
@@ -473,6 +512,9 @@ export class InnDecorLayer {
     // 3. a patchwork quilt laid on top of each letting bed (the WOOL block's top
     // face is at world y = floorY+2, so the coverlet sits a hair above it)
     (plan.furnish.beds || []).forEach((b, i) => flatProp(b.f, b.l, fY + 2.03, 0.92, makeQuiltTexture(i), 'ucProp'));
+    // 3b. a chalked/inlaid game board on each table top, so a game table reads as a
+    // game in play and can't be mistaken for a plain settle
+    (par.tables || []).forEach(t => flatProp(t.f, t.l, fY + 2.03, 0.94, makeGameBoardTexture(t.game), 'ucProp'));
     // 4. a plain-dial tavern clock high on the tap forward wall, beside the range
     const tap = room('tap');
     if (tap) wallProp(tap.f1, tap.l1 - 1, -1, 0, fY + 2.5, 0.8, 0.8, makeClockTexture(), 'ucProp');
