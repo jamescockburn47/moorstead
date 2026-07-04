@@ -357,6 +357,11 @@ export class UI {
     for (let i = 0; i < 10; i++) {
       const t = this.el('img', 'pip', this.tempEl); t.src = this.tempFull; this.tempImgs.push(t);
     }
+    // D5 Task 2: fatigue glyph — one small moon next to the temp bar. Opacity tracks
+    // fatigue/20; shown in bairns/free worlds too (penalties are off there, but the
+    // plan's call: kids like seeing it), hidden below fatigue 1 and in creative.
+    this.fatigueEl = this.el('div', '', stats, '\u{1F319}'); this.fatigueEl.id = 'fatigue';
+    this.fatigueEl.title = 'Weariness';
 
     this.airRow = this.el('div', '', this.hud); this.airRow.id = 'air-row';
     this.bubbles = [];
@@ -1916,6 +1921,12 @@ export class UI {
     }
     const wintry = this.game && this.game.season && this.game.season.warmth < 0;
     this.tempEl.style.visibility = (!player.creative && (player.temperature < 20 || wintry)) ? 'visible' : 'hidden';
+
+    // fatigue glyph: opacity tracks fatigue/20; hidden below 1 fatigue and in creative
+    // (visible in bairns/free worlds — speed penalties are off there, the glyph isn't).
+    const showFatigue = !player.creative && player.fatigue >= 1;
+    this.fatigueEl.style.visibility = showFatigue ? 'visible' : 'hidden';
+    if (showFatigue) this.fatigueEl.style.opacity = String(Math.min(1, player.fatigue / 20));
 
     // air bubbles
     const showAir = survival && player.air < 10;

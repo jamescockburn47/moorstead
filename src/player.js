@@ -1,6 +1,7 @@
 // Player: movement, survival stats, inventory.
 import { B, BLOCKS, FOODS, TOOLS, maxStack, isLiquid } from './defs.js';
-import { HOT_FOODS } from './temperature.js';
+import { HOT_FOODS, skyTimeIsBefore, miseryOf } from './temperature.js';
+import { RATE_AWAKE, RATE_EXERT, FATIGUE_MAX, fatigueSpeedMul, bairnsScale } from './fatigue.js';
 import { STARTING_BRASS } from './economy.js';
 import { moveEntity, boxCollides, unstick, SWIM, submersion, swimWish, swimVerticalWish, swimVerticalStep, currentAt } from './physics.js';
 import { freezableWater, isFrozen, driftDepth } from './snow.js';
@@ -32,6 +33,13 @@ export class Player {
     this.hurtFlash = 0;
     this.hungerTick = 0; this.regenTick = 0; this.exhaustion = 0;
     this.wetness = 0; // soaked through in t' rain; dries under cover or by a fire
+    this.fatigue = 0; // 0..20, D5: time-awake + exertion; caps, never collapses
+    this.warmedUntil = null; // sky.day+sky.time expiry of a parlour "warmed through" buff, or null
+    // D5 Task 2: set ONCE per world-start by main.js's startWorld (isChildrensWorld(netRoom)) —
+    // NOT persisted (it's a per-session room fact, not player state; re-derived every startWorld
+    // so a warden hopping rooms or a save moving between rooms can never carry a stale value).
+    // Read by the movement formula above (bairnsScale) to gate chill/fatigue speed penalties.
+    this.childrensWorld = false;
     this.slots = new Array(36).fill(null); // {id, n, dur?}
     this.hotbar = 0;
     this.fuelBank = 0;
@@ -82,7 +90,13 @@ export class Player {
 
   heldItem() { return this.slots[this.hotbar]; }
 
-  update(dt, input, audio, season) {
+  // `skyTime01Plus` = the monotonic sky.day+sky.time axis (see temperature.js's
+  // warmedThroughUntil/skyTimeIsBefore) — optional (default 0, i.e. "always
+  // before any real warmedUntil" is FALSE at 0 unless warmedUntil is null, which
+  // is the safe no-buff default). main.js (Task 2) will pass the real
+  // `this.sky.day + this.sky.time`; until wired, `warmedUntil` simply never
+  // gets set by any caller, so this param being unused in practice is harmless.
+  update(dt, input, audio, season, skyTime01Plus = 0) {
     if (this.dead) return;
     // Hold physics until t' ground under us actually exists — ungenerated
     // chunks read as solid stone and used to wedge t' player fast.
@@ -147,7 +161,21 @@ export class Player {
         if (dd > 0) speed *= 1 - dd * (this.mounted ? 0.3 : 0.55);
       }
     }
-    if (!this.creative && !this.god && this.temperature < 6) speed *= 0.75; // cold stiffens t' limbs
+    if (!this.creative && !this.god) {
+      // D5 Task 2: chill stiffens t' limbs (miseryOf tiers replace the old bare
+      // <6 -> x0.75), weariness flags thi pace at the top end (fatigueSpeedMul).
+      // Bairns/free worlds (this.childrensWorld, set once at world start — see
+      // main.js's startWorld) get chill penalties HALVED and fatigue penalties
+      // OFF entirely, via bairnsScale's {chill, fatigue} multipliers — computed
+      // through the scale rather than hand-forking the two branches.
+      const scale = bairnsScale(!!this.childrensWorld);
+      const misery = miseryOf(this.temperature);
+      let chillMul = 1;
+      if (misery === 'stiff') chillMul = 1 - (1 - 0.75) * scale.chill;      // 0.75 adult, 0.875 bairns
+      else if (misery === 'perishing') chillMul = 1 - (1 - 0.6) * scale.chill; // 0.6 adult, 0.8 bairns
+      speed *= chillMul;
+      speed *= scale.fatigue ? fatigueSpeedMul(this.fatigue) : 1; // bairns: fatigue scale 0 -> no penalty
+    }
     this.sprinting = sprinting;
 
     let wishX, wishZ, lookY = 0;
@@ -313,11 +341,49 @@ export class Player {
           if (this.health > 1) this.damage(1, 'Tha clammed to deeath');
         }
       }
-      // freezing: t' cold itself starts to do for thee
-      if (this.temperature <= 0) {
-        this._freezeT = (this._freezeT || 0) + dt;
-        if (this._freezeT >= 4) { this._freezeT = 0; this.damage(1, "Froze to death on t’ moor"); }
-      } else this._freezeT = 0;
+      // Cold is misery, never death (James's later ruling, D5 spec — the old
+      // freeze-damage-at-<=0 block that lived here, and its "Froze to death on
+      // t' moor" deathCause, are REMOVED, not merely disabled: at <=0 the
+      // player is now 'perishing' per temperature.js's miseryOf — movement and
+      // tool-swing penalties (Task 2, main.js/player.js movement path) and
+      // frequent shiver toasts (Task 2, ui.js) carry the cold's bite instead.
+      // Hunger/drowning/regen/fall-damage rules above and below are unchanged.
+
+      // fatigue: climbs with time awake, faster while sprinting or mining. The
+      // honest exertion signal available HERE (inside Player.update) is
+      // `sprinting` (computed just above, this same tick) — mining's per-swing
+      // exertion is applied by main.js's updateMining OUTSIDE this method (it
+      // bumps `this.exhaustion` directly, e.g. main.js's `this.player.exhaustion
+      // += 0.03` on a finished break), so this loop can't see "mining this
+      // frame" as its own boolean without a main.js change (out of scope for
+      // Task 1 — main.js is Task 2/3). Per the plan's explicit fallback ("key
+      // fatigue's exert on `exhaustion` deltas instead"), fatigue also treats a
+      // JUMP in exhaustion beyond the tick's own idle hunger-creep baseline
+      // (line ~313's `dt*0.012*coldHungerMul`, which runs EVERY tick regardless
+      // of exertion — a naive "did exhaustion rise at all" check would read
+      // true on every single tick and silently apply RATE_EXERT to a standing-
+      // still player, which is not what "exertion" means) as exertion: mining's
+      // fixed +0.03 bump, a jump's +0.1 bump, and main.js's wetness/regen bumps
+      // all clear that baseline and correctly register. this.fatigue is
+      // additive/new; caps at FATIGUE_MAX, never forces a collapse (spec).
+      const idleHungerBaseline = dt * 0.012 * coldHungerMul; // what THIS tick would add if merely awake, not exerting
+      const exhaustionJump = this.exhaustion - (this._lastExhaustion ?? this.exhaustion);
+      this._lastExhaustion = this.exhaustion;
+      const exerting = sprinting || exhaustionJump > idleHungerBaseline * 1.5; // margin above baseline noise
+      this.fatigue = Math.min(FATIGUE_MAX, this.fatigue + dt * (RATE_AWAKE + (exerting ? RATE_EXERT : 0)));
+
+      // "warmed through": this method owns the FIELD's lifecycle (set by Task 2
+      // in main.js when the parlour warms the player to >=18; expired here).
+      // The actual temperature-target FLOOR of 14 while the buff holds is
+      // applied where temperatureTarget()/stepTemperature() are actually
+      // called — main.js:5634-5635 (out of scope for Task 1: main.js is Task
+      // 2) — by having that caller check `skyTimeIsBefore(now, player.warmedUntil)`
+      // (temperature.js) before accepting a lower target. Here, Task 1 only
+      // clears the field once it's genuinely past its stored expiry, using the
+      // same monotonic sky.day+sky.time axis skyTimeIsBefore expects.
+      if (this.warmedUntil != null && !skyTimeIsBefore(skyTime01Plus, this.warmedUntil)) {
+        this.warmedUntil = null; // expired — clears itself
+      }
       // regen when well fed — but not while tha's soaked through an' shiverin', nor chilled below 12
       if (this.hunger >= 16 && this.health < 20 && this.wetness < 0.6 && this.temperature >= 12) {
         this.regenTick += dt;
@@ -453,6 +519,8 @@ export class Player {
       promiseLog: this.promiseLog || { kept: 0, broken: 0 },
       gameRecord: this.gameRecord || { games: {}, biggestWin: 0 },
       look: this.look, // "Dress thissen" — additive; old saves lack it an' default to a rambler
+      fatigue: this.fatigue ?? 0, // D5: additive; old saves lack it an' default to fresh
+      warmedUntil: this.warmedUntil ?? null,
     };
   }
 
@@ -497,5 +565,7 @@ export class Player {
     this.gameRecord = d.gameRecord || { games: {}, biggestWin: 0 };
     // additive + untrusted-input safe: an absent/old/junk look coerces to a rambler
     this.look = validatePlayerLook(d.look);
+    this.fatigue = fin(d.fatigue) ? Math.max(0, Math.min(FATIGUE_MAX, d.fatigue)) : 0;
+    this.warmedUntil = fin(d.warmedUntil) ? d.warmedUntil : null;
   }
 }

@@ -272,6 +272,11 @@ input.seed {
 }
 #hearts, #hunger { display: flex; gap: 2px; }
 .pip { width: 18px; height: 18px; image-rendering: pixelated; }
+/* D5 Task 2: weariness glyph — a single moon next to the temp bar; opacity (set in
+   ui.js) carries the fatigue read, this just sizes/positions it like the other stats. */
+#fatigue {
+  align-self: center; font-size: 18px; line-height: 1; filter: drop-shadow(1px 1px 0 #000);
+}
 
 #air-row {
   position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%);
