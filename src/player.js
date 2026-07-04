@@ -1,7 +1,7 @@
 // Player: movement, survival stats, inventory.
 import { B, BLOCKS, FOODS, TOOLS, maxStack, isLiquid } from './defs.js';
-import { HOT_FOODS, skyTimeIsBefore } from './temperature.js';
-import { RATE_AWAKE, RATE_EXERT, FATIGUE_MAX } from './fatigue.js';
+import { HOT_FOODS, skyTimeIsBefore, miseryOf } from './temperature.js';
+import { RATE_AWAKE, RATE_EXERT, FATIGUE_MAX, fatigueSpeedMul, bairnsScale } from './fatigue.js';
 import { STARTING_BRASS } from './economy.js';
 import { moveEntity, boxCollides, unstick, SWIM, submersion, swimWish, swimVerticalWish, swimVerticalStep, currentAt } from './physics.js';
 import { freezableWater, isFrozen, driftDepth } from './snow.js';
@@ -35,6 +35,11 @@ export class Player {
     this.wetness = 0; // soaked through in t' rain; dries under cover or by a fire
     this.fatigue = 0; // 0..20, D5: time-awake + exertion; caps, never collapses
     this.warmedUntil = null; // sky.day+sky.time expiry of a parlour "warmed through" buff, or null
+    // D5 Task 2: set ONCE per world-start by main.js's startWorld (isChildrensWorld(netRoom)) —
+    // NOT persisted (it's a per-session room fact, not player state; re-derived every startWorld
+    // so a warden hopping rooms or a save moving between rooms can never carry a stale value).
+    // Read by the movement formula above (bairnsScale) to gate chill/fatigue speed penalties.
+    this.childrensWorld = false;
     this.slots = new Array(36).fill(null); // {id, n, dur?}
     this.hotbar = 0;
     this.fuelBank = 0;
@@ -156,7 +161,21 @@ export class Player {
         if (dd > 0) speed *= 1 - dd * (this.mounted ? 0.3 : 0.55);
       }
     }
-    if (!this.creative && !this.god && this.temperature < 6) speed *= 0.75; // cold stiffens t' limbs
+    if (!this.creative && !this.god) {
+      // D5 Task 2: chill stiffens t' limbs (miseryOf tiers replace the old bare
+      // <6 -> x0.75), weariness flags thi pace at the top end (fatigueSpeedMul).
+      // Bairns/free worlds (this.childrensWorld, set once at world start — see
+      // main.js's startWorld) get chill penalties HALVED and fatigue penalties
+      // OFF entirely, via bairnsScale's {chill, fatigue} multipliers — computed
+      // through the scale rather than hand-forking the two branches.
+      const scale = bairnsScale(!!this.childrensWorld);
+      const misery = miseryOf(this.temperature);
+      let chillMul = 1;
+      if (misery === 'stiff') chillMul = 1 - (1 - 0.75) * scale.chill;      // 0.75 adult, 0.875 bairns
+      else if (misery === 'perishing') chillMul = 1 - (1 - 0.6) * scale.chill; // 0.6 adult, 0.8 bairns
+      speed *= chillMul;
+      speed *= scale.fatigue ? fatigueSpeedMul(this.fatigue) : 1; // bairns: fatigue scale 0 -> no penalty
+    }
     this.sprinting = sprinting;
 
     let wishX, wishZ, lookY = 0;

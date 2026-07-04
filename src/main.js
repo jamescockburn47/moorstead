@@ -21,7 +21,7 @@ import * as npc from './npc.js';
 import { Quests, wantGiants, wantWreck, wantHound } from './quests.js';
 import { Economy, bestMarket, FREIGHT_ALLOWANCE, farmRegisterCheck, CHARTER_FEE, livestockPrice, droveValue, convertAt, marketTownName } from './economy.js';
 import { deedFee, weeklyUpkeep, isLapsed, DEED, findActiveDeed, findLapsedDeed, inDeed, makeDeed, lapsesUnderUpkeep } from './deeds.js';
-import { isFreeRoom, isBairnsRoom, baseRoom, FREE_STARTER } from './rooms.js';
+import { isFreeRoom, isBairnsRoom, isChildrensWorld, baseRoom, FREE_STARTER } from './rooms.js';
 import { boxKey, makeBox, normalizeBox, spillBox } from './save.js';
 import { gatherContext, submitFeedback, reportQuiet } from './feedback.js';
 import { miningDigGuide } from './mining-guide.js';
@@ -42,7 +42,7 @@ import { SeasonalLayer } from './seasonalLayer.js';
 import { FireLayer } from './fireLayer.js';
 import { MurmurationLayer } from './birds.js';
 import { HarbourLight } from './lighthouse.js';
-import { tickFires } from './fire.js';
+import { tickFires, makeSmoke, registerFxMat, unregisterFxMat } from './fire.js';
 import { Footprints } from './footprints.js';
 import { seasonState, seasonStateAtPhase } from './season.js';
 import { activeForageables, hostForageFor, fruitSpeciesAt, fruitTreeRipe } from './forage.js';
@@ -51,7 +51,9 @@ import { FESTIVALS, festivalState, festivalBands } from './festivals.js';
 import { DEFAULT_SNOWMAN, cycleSnowman } from './snowman.js';
 import { cellInstances } from './flora-placement.js';
 import { startLiveWeather } from './weather-live.js';
-import { temperatureTarget, stepTemperature } from './temperature.js';
+import { temperatureTarget, stepTemperature, miseryOf, warmedThroughUntil, skyTimeIsBefore } from './temperature.js';
+import { bairnsScale, swayAmpFor, applyDoze } from './fatigue.js';
+import { isFine } from './festivalKit.js';
 import { boardingFolk } from './trainfolk.js';
 import { innOpen, playerInParlour, MURMUR_LINES } from './parlour.js';
 import { tableAt, newSession, sessionMove, sessionNpcReply, sessionForfeit, settleWager, opponentSeed, gameLabel, npcToMove } from './gameTable.js';
@@ -814,6 +816,11 @@ class Game {
       };
     }
     this.player = new Player(this.world);
+    // D5 Task 2: this.netRoom/netActive are already set for shared worlds by the time
+    // joinShared() calls startWorld (it sets netRoom BEFORE calling in); solo worlds
+    // clear netActive first. So this is safe here, computed once per world-start —
+    // NOT re-derived per-frame, since a room never changes without a fresh startWorld.
+    this.player.childrensWorld = this.netActive && isChildrensWorld(this.netRoom);
     this.entities = new Entities(this.scene, this.world);
     if (this.world.gen.geo.realWorld) {
       this.rosterClient = new RosterClient(this);   // distinct from this.roster (the personas list)
@@ -921,6 +928,13 @@ class Game {
     if (this.footprints) { this.footprints.clear(); this.footprints = null; }
     if (this.murmuration) { this.murmuration.dispose(); this.murmuration = null; }
     if (this.harbourLight) { this.harbourLight.dispose(); this.harbourLight = null; }
+    if (this._breathFog) {
+      unregisterFxMat(this._breathFog.userData.smokeMat);
+      this.scene.remove(this._breathFog);
+      this._breathFog.geometry.dispose();
+      this._breathFog.material.dispose();
+      this._breathFog = null;
+    }
     if (this.carolBox) { this.carolBox.dispose(); this.carolBox = null; }
     if (this.seaRing) { this.scene.remove(this.seaRing); this.seaRing.geometry.dispose(); this.seaRing.material.dispose(); this.seaRing = null; }
     this.entities.clear();
@@ -4475,6 +4489,15 @@ class Game {
     let speed = 1;
     if (tool && def.tool && tool.type === def.tool) speed = tool.speed;
     if (def.needsPick && (!tool || tool.type !== 'pick')) speed = 0.3;
+    // D5 Task 2: stiff/cold fingers swing slower — misery ONLY (not fatigue; the plan is
+    // explicit t' tool-swing penalty rides chill alone). Bairns/free worlds get the same
+    // halved-chill scale as movement (bairnsScale.chill), via the shared misery lookup.
+    if (!this.player.creative && !this.player.god) {
+      const chillScale = bairnsScale(!!this.player.childrensWorld).chill;
+      const misery = miseryOf(this.player.temperature);
+      if (misery === 'stiff') speed *= 1 - (1 - 0.75) * chillScale;      // 0.75 adult, 0.875 bairns
+      else if (misery === 'perishing') speed *= 1 - (1 - 0.5) * chillScale; // 0.5 adult, 0.75 bairns
+    }
 
     this.breakProgress += (dt * speed) / Math.max(0.05, def.hard);
     this.digSoundTimer = (this.digSoundTimer || 0) - dt;
@@ -5357,13 +5380,16 @@ class Game {
         ? seasonStateAtPhase(this.seasonOverride)
         : seasonState();
       this.season = _season;
+      // D5 Task 2: the monotonic sky.day+sky.time axis Player.update needs to honour
+      // warmedUntil expiry (temperature.js's skyTimeIsBefore) — inert until passed.
+      const _skyTime01Plus = this.sky.day + this.sky.time;
       // player
       if (playing && !this.player.dead) {
         if (this.boat) this.updateBoat(dt);
-        else this.player.update(dt, this.input, this.audio, _season);
+        else this.player.update(dt, this.input, this.audio, _season, _skyTime01Plus);
       } else if (!playing && this.state !== 'riding') {
         // UI open: physics still ticks but wi' no input
-        this.player.update(dt, { keys: {}, jumpTapped: false }, this.audio, _season);
+        this.player.update(dt, { keys: {}, jumpTapped: false }, this.audio, _season, _skyTime01Plus);
       }
       // D4: seated at a pub-game table — hold the player at the snapshot taken
       // when they sat down (like updateRide, a per-frame override AFTER physics
@@ -5626,13 +5652,59 @@ class Game {
         else if (pl.wetness < 0.25 && pl._soaked) { pl._soaked = false; this.ui.toast('Tha&rsquo;s dried off. Grand.', 2500); }
       } else { this.player.wetness = 0; }
       // temperature: drives cold stat from season + environment each frame
+      // (this._playerInParlour below is set later this same frame by the ambience tick
+      // near the parlour-murmur code — one-frame-stale, same accepted idiom as the
+      // existing _nearInn ambience gate; harmless for a buff/doze check.)
       {
         const pl = this.player, pp = pl.pos;
         const altitude01 = Math.max(0, Math.min(1, (pp.y - 26) / 34));
         const nearFire = this.world.nearLight(pp.x, pp.z, 4);
         const coat = pl.slots.some(s => s && s.id === I.WOOL_COAT);
-        const target = temperatureTarget(this.season, { covered, nearFire, night: this.sky.isNight(), altitude01, wetness: pl.wetness, coat });
+        let target = temperatureTarget(this.season, { covered, nearFire, night: this.sky.isNight(), altitude01, wetness: pl.wetness, coat });
+        // D5 Task 2: "warmed through" — the parlour hearth buff floors the target at 14
+        // till t' next morning (skyTimeIsBefore, temperature.js), so chill can't bite
+        // while it holds. Player.update (Task 1) owns clearing the field past expiry;
+        // this is the actual floor the plan deferred to the caller that computes target.
+        if (skyTimeIsBefore(_skyTime01Plus, pl.warmedUntil)) target = Math.max(target, 14);
         pl.temperature = stepTemperature(pl.temperature, target, dt);
+
+        // Warmed-through buff: parlour-only (a home hearth range warms thee the ordinary
+        // way, but earns no buff — the spec's wording ties this to the tavern's parlour
+        // fire specifically), set once temperature actually reaches 18 while inside.
+        if (this._playerInParlour && pl.temperature >= 18 && !skyTimeIsBefore(_skyTime01Plus, pl.warmedUntil)) {
+          pl.warmedUntil = warmedThroughUntil(_skyTime01Plus);
+          this.ui.toast('Warmed through to thi bones — t’ cold’ll not touch thee till morn.', 5000);
+        }
+
+        // Hearth doze: parlour + warm + genuinely idle (no movement keys, not mining,
+        // held still 3s+) eases fatigue at DOZE_RATE. Idle timer resets on any wish-to-move
+        // key or an active mining swing (mouseDown[0] while a break target's tracked).
+        const moving = !!(this.input && (this.input.keys['KeyW'] || this.input.keys['KeyS'] ||
+          this.input.keys['KeyA'] || this.input.keys['KeyD'] || this.input.keys['Space']));
+        const mining = !!this.breakTarget;
+        if (this._playerInParlour && pl.temperature >= 18 && !moving && !mining && !pl.dead) {
+          this._dozeIdleT = (this._dozeIdleT || 0) + dt;
+          if (this._dozeIdleT >= 3) {
+            pl.fatigue = applyDoze(pl.fatigue, dt);
+            if (!pl._dozeToastShown) { pl._dozeToastShown = true; this.ui.toast('Tha dozes by t’ fire...', 4000); }
+          }
+        } else {
+          this._dozeIdleT = 0;
+        }
+
+        // Yawns (flagging+) and shivers (perishing): slow random-timer cosmetic toasts.
+        if (!pl.creative) {
+          this._yawnT = (this._yawnT == null) ? 20 + Math.random() * 25 : this._yawnT - dt;
+          if (pl.fatigue >= 15 && this._yawnT <= 0) {
+            this._yawnT = 20 + Math.random() * 25;
+            this.ui.toast('Tha stifles a yawn.', 2500);
+          }
+          this._shiverT = (this._shiverT == null) ? 15 + Math.random() * 20 : this._shiverT - dt;
+          if (miseryOf(pl.temperature) === 'perishing' && this._shiverT <= 0) {
+            this._shiverT = 15 + Math.random() * 20;
+            this.ui.toast('Tha shivers something fierce.', 2500);
+          }
+        }
       }
       if (msg) {
         if (msg.type === 'night') {
@@ -5710,7 +5782,22 @@ class Game {
       this.camera.rotation.set(p.pitch, p.yaw, 0);
     } else {
       this.camera.position.set(this.player.pos.x, this.player.pos.y + this.player.eye, this.player.pos.z);
-      this.camera.rotation.set(this.player.pitch, this.player.yaw, 0);
+      // D5 Task 2: weariness sways t' camera — a slow additive roll + a touch of pitch
+      // drift, scaled by swayAmpFor(fatigue) (0 while fresh, growing through weary,
+      // strongest at flagging/spent). This is the FIRST sway term the camera carries
+      // (no wind-driven sway exists yet in this codebase, despite the plan's ground-truth
+      // annex expecting one at this call site) — additive against the plain pitch/yaw
+      // follow, so it never fights player look input. Off in creative (no fatigue bite).
+      let swayZ = 0, swayX = 0;
+      if (!this.player.creative) {
+        const amp = swayAmpFor(this.player.fatigue);
+        if (amp > 0) {
+          const t = this.clock.elapsedTime;
+          swayZ = Math.sin(t * 0.6) * 0.05 * amp;   // slow head-roll
+          swayX = Math.sin(t * 0.37 + 1.3) * 0.02 * amp; // gentle pitch drift
+        }
+      }
+      this.camera.rotation.set(this.player.pitch + swayX, this.player.yaw, swayZ);
     }
     const targetFov = this.player.sprinting ? 82 : 75;
     if (Math.abs(this.camera.fov - targetFov) > 0.5) {
@@ -5996,6 +6083,42 @@ class Game {
         this._nearWater = water || this._onCoast;
       }
     }
+    // D5 Task 2: breath fog. Fine-quality only (isFine(), festivalKit.js), cold
+    // (stiff+ misery) + outdoors (not covered, not in a parlour) + (night or winter) —
+    // a subtle recurring puff at the camera. ONE reused mesh (lazy-built here, never
+    // rebuilt), following fire.js's makeSmoke/registerFxMat/dispose contract: uGate
+    // ramps it in/out so it never pops, uPhase desyncs it from every other plume.
+    // Plain quality: skip outright (never built, never ticked).
+    if (isFine()) {
+      const outdoors = !this._covered && !this._playerInParlour;
+      const cold = miseryOf(this.player.temperature) === 'stiff' || miseryOf(this.player.temperature) === 'perishing';
+      const wintry = this.season && this.season.warmth < 0;
+      const wantBreath = outdoors && cold && !this.player.dead && !this.player.creative && (this.sky.isNight() || wintry);
+      if (wantBreath && !this._breathFog) {
+        this._breathFog = makeSmoke(0.12);
+        this._breathFog.userData.smokeMat.uniforms.uPhase.value = 2.7; // desync from hearth/chimney plumes
+        this._breathFog.userData.smokeMat.uniforms.uGate.value = 0;
+        registerFxMat(this._breathFog.userData.smokeMat);
+        this.scene.add(this._breathFog);
+      }
+      if (this._breathFog) {
+        const gate = this._breathFog.userData.smokeMat.uniforms.uGate;
+        gate.value += ((wantBreath ? 1 : 0) - gate.value) * Math.min(1, dt * 2); // soft fade, no pop
+        if (wantBreath) {
+          const eye = this.player.eyePos();
+          const yaw = this.player.yaw;
+          this._breathFog.position.set(eye.x - Math.sin(yaw) * 0.4, eye.y - 0.1, eye.z - Math.cos(yaw) * 0.4);
+        }
+      }
+    } else if (this._breathFog) {
+      // quality dropped to Plain mid-session: tear the puff down rather than leave it ticking unseen
+      unregisterFxMat(this._breathFog.userData.smokeMat);
+      this.scene.remove(this._breathFog);
+      this._breathFog.geometry.dispose();
+      this._breathFog.material.dispose();
+      this._breathFog = null;
+    }
+
     // D3 parlour murmur + SFX: distinct from the exterior `_nearInn` proximity bed
     // above (which fires whether you're outside or in) — this only fires while the
     // player is actually INSIDE a parlour, on its own randomised timers, and stops
