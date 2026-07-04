@@ -39,6 +39,7 @@ the EVO (see [CLAUDE.md](../CLAUDE.md)). Everything is procedural — no asset f
 | Villager flavour | `src/villagerlife.js` | greet/nosy remark pools, `villagerRemark` | (by entities) | `verify-villagers` |
 | Brain client | `src/npc.js` | `/brain` calls: `talk`, `talkGeneric`, `rosterState`, `standing`, `gift`, `gazette` | — | (live) `verify-live` |
 | Player | `src/player.js` | inventory slots, brass, physics state, `serialize`/`deserialize`, home base, [D5] fatigue + warmedUntil fields, misery-tier movement | — | `verify-survival`, `verify-fatigue` |
+| Inn sleep + notes | `src/parlour.js` (`sleepWindow`,`wakeOutcome`,local-note helpers), `src/multiplayer.js` (sleep/notes messages), relay `worldsvc/server.py` (quorum, toff, notes persistence) | quorum sleep votes, shelter timer, night skip, wake relief/penalty, inn notes board (relay-persisted; localStorage solo) | main.js frame loop + interact dispatch | `verify-inn-notes` + two-bot relay proof |
 | Fatigue / weariness | `src/fatigue.js` | pure rates + tiers (fresh/weary/flagging/spent), `applyDoze`, `swayAmpFor`, `fatigueSpeedMul`, `bairnsScale` — misery-not-death, no collapse | — | `verify-fatigue` |
 | Physics | `src/physics.js` | AABB collision, DDA raycast, `moveEntity` | — | (via survival/mining) |
 | Sky / lighting | `src/sky.js` | sun/moon light curves, dome, clouds, stars, fog, `lanternFlicker`, quality light tiers | main.js:560 | `verify-season`, `verify-weather`, `verify-graphics` |

@@ -11,6 +11,7 @@ import { parishQuarries, drawMinimapMarker } from './mining-guide.js';
 import { gazette } from './npc.js';
 import { canCraft, skillFor, teacherFor, SKILLS, WAGER_MAX } from './ledgers.js';
 import { ENGINES, gameLabel, renderBoard } from './gameTable.js';
+import { NOTE_CAP_PER_PLAYER, NOTE_CAP_BOARD } from './parlour.js';
 import {
   PLAYER_OUTFITS, PLAYER_JACKETS, PLAYER_HATS, PLAYER_SKINS, PLAYER_HAIRS,
   validatePlayerLook,
@@ -607,6 +608,10 @@ export class UI {
     this.gameScreen = this.el('div', 'overlay hidden', body);
     this.gamePanel = this.el('div', 'panel game-panel', this.gameScreen);
 
+    // ---------- inn notes board (D6) ----------
+    this.notesScreen = this.el('div', 'overlay hidden', body);
+    this.notesPanel = this.el('div', 'panel board-panel', this.notesScreen);
+
     // ---------- HUD quest tracker ----------
     this.tracker = this.el('div', '', this.hud);
     this.tracker.id = 'quest-tracker';
@@ -1048,7 +1053,7 @@ export class UI {
 
   // ============ screens ============
   show(name) {
-    for (const s of [this.titleScreen, this.pauseScreen, this.howScreen, this.feedbackScreen, this.deathScreen, this.invScreen, this.rangeScreen, this.loadingScreen, this.chatScreen, this.boardScreen, this.museumScreen, this.wardrobeScreen, this.gameScreen]) {
+    for (const s of [this.titleScreen, this.pauseScreen, this.howScreen, this.feedbackScreen, this.deathScreen, this.invScreen, this.rangeScreen, this.loadingScreen, this.chatScreen, this.boardScreen, this.museumScreen, this.wardrobeScreen, this.gameScreen, this.notesScreen]) {
       s.classList.add('hidden');
     }
     if (name) this[name].classList.remove('hidden');
@@ -1522,6 +1527,65 @@ export class UI {
     const close = this.el('button', 'mc', this.boardPanel, 'Reet, Ta');
     close.addEventListener('click', () => this.game.closeScreens());
     this.show('boardScreen');
+  }
+
+  // ============ inn notes board (D6) ============
+  // Shared worlds read this.game.net.notes (relay-authoritative, kept live by
+  // the 'notes' broadcast); solo worlds read this.game.loadSoloNotes() (a local
+  // localStorage board, same shape). Both use the SAME cap numbers (parlour.js's
+  // NOTE_CAP_PER_PLAYER/NOTE_CAP_BOARD) so the two boards read identically.
+  openInnNotes() {
+    const g = this.game;
+    this.notesPanel.innerHTML = '';
+    this.el('div', 'inv-title', this.notesPanel, 'T&rsquo; Inn Notes Board');
+    this.el('div', 'r-needs', this.notesPanel,
+      'Pin a notice for t&rsquo; parish to see, or read what others have left.');
+
+    const myPid = g.netActive ? (g.net && g.net.diag && g.net.diag.pid) : g.devicePid();
+    const notes = g.netActive ? ((g.net && g.net.notes) || []) : g.loadSoloNotes();
+
+    const list = this.el('div', 'recipes board-list', this.notesPanel);
+    if (!notes.length) {
+      this.el('div', 'chat-msg sys', list, 'Nowt pinned up yet. Be t&rsquo; first.');
+    }
+    for (const n of notes) {
+      const row = this.el('div', 'recipe quest-row', list);
+      row.innerHTML = `<div class="r-name"><b>${escHtml(n.name || 'A rambler')}</b><br>` +
+        `<span class="r-needs">${escHtml(n.text)}</span></div>`;
+      if (n.pid === myPid) {
+        const pull = this.el('button', 'mc chat-btn', row, 'Pull Down');
+        pull.addEventListener('click', () => g.pullInnNote(n.id));
+      }
+    }
+
+    const mine = notes.filter(n => n.pid === myPid).length;
+    const postRow = this.el('div', 'brass-well', this.notesPanel);
+    if (mine >= NOTE_CAP_PER_PLAYER) {
+      this.el('div', 'r-needs', postRow, 'Tha&rsquo;s already got two notices up &mdash; pull one down to pin a fresh one.');
+    } else if (notes.length >= NOTE_CAP_BOARD) {
+      this.el('div', 'r-needs', postRow, 'T&rsquo; board&rsquo;s full up &mdash; nowt more&rsquo;ll fit till summat comes down.');
+    } else {
+      const ta = this.el('textarea', 'chat-input', postRow);
+      ta.maxLength = 160;
+      ta.rows = 2;
+      ta.placeholder = 'Pin a notice for t’ parish...';
+      const btn = this.el('button', 'mc chat-btn', postRow, 'Pin a Note');
+      btn.addEventListener('click', () => {
+        const text = ta.value.trim();
+        if (!text) return;
+        g.postInnNote(text);
+      });
+    }
+
+    const close = this.el('button', 'mc', this.notesPanel, 'Reet, Ta');
+    close.addEventListener('click', () => this.game.closeScreens());
+    this.show('notesScreen');
+  }
+
+  // Called by multiplayer.js when a 'notes' broadcast lands, so the panel stays
+  // live while open (same idiom openBoard uses for a live 'stalls'/'deeds' update).
+  onNotesUpdated() {
+    if (this.notesScreen.className.indexOf('hidden') === -1) this.openInnNotes();
   }
 
   // ============ pub games (D4) ============
