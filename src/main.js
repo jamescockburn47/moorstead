@@ -4822,7 +4822,7 @@ class Game {
         // to be standing in that same parlour (it's mounted on the interior
         // face of a wall the shell keeps solid from outside), so this._playerInParlour
         // (set every frame just before this hint/interact code runs) is a safe gate.
-        if (this._playerInParlour) { this.ui.openInnNotes(); return; }
+        if (this._playerInParlour) { this.openInnNotes(); return; }   // game method: sets state='notes' + frees the pointer so it's clickable/closable
         this.openBoard(true); return;
       }
       if (hit.id === B.INN_DOOR) {

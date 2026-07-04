@@ -70,6 +70,20 @@ const slab = (x0, x1, y0, y1, z0, z1) => { const s = new Set(); for (let x = x0;
   (m.pos.x === 5.5 && m.pos.y === 6 ? ok : bad)(`npcMove holds position in an unloaded chunk (no wedging in solid)`);
 }
 
+// 7b. haul out of a beck up a higher bank (water-exit hop, like the player's swimGrace)
+{
+  const water = new Set(); for (let x = 3; x <= 7; x++) for (let y = 1; y <= 2; y++) for (let z = 4; z <= 7; z++) water.add(x + ',' + y + ',' + z);
+  const bank = new Set(); for (let x = 8; x <= 70; x++) for (let y = 1; y <= 3; y++) for (let z = 4; z <= 7; z++) bank.add(x + ',' + y + ',' + z); // long bank, top y3 (stand y4)
+  const w = {
+    isLoaded: () => true,
+    getBlock: (x, y, z) => (y <= 0 ? B.STONEBRICK : (water.has(x + ',' + y + ',' + z) ? B.WATER : (bank.has(x + ',' + y + ',' + z) ? B.STONEBRICK : B.AIR))),
+    setBlock: () => {},
+  };
+  const m = mkMob(6.5, 3, 5.5); // wading in the beck
+  run(m, w, 3, 0, 400);
+  (m.pos.x > 8 && m.pos.y > 3.5 ? ok : bad)(`a mob hauls out of a beck up a higher bank (x=${m.pos.x.toFixed(2)}, y=${m.pos.y.toFixed(2)})`);
+}
+
 // 7. the stuck watchdog accrues time when a walker is wedged against an impassable wall
 // (so the roster's _unstickDriven can rescue it — no permanently-frozen bodies)
 {

@@ -314,23 +314,35 @@ export function npcMove(mob, vx, vz, world, dt) {
   if (mob.passGate === undefined) mob.passGate = true; // folk pass field gates, like the farmer
   const px = mob.pos.x, pz = mob.pos.z;
   mob.vel.x = vx; mob.vel.z = vz;
-  // auto-step: bumped a wall last frame, on the ground, and a body's height is clear one
-  // block up -> hop the 1-block rise (mirrors the player's mounted step-hop, player.js).
-  if (mob.hitWall && mob.onGround &&
-      !boxCollides(world, mob.pos.x, mob.pos.y + NPC_STEP_UP_CLEAR, mob.pos.z, mob.hw, 0.6, mob.passGate)) {
-    mob.vel.y = NPC_JUMP; mob.onGround = false;
+  // in a beck this frame? drives the haul-out hop; the grace persists a moment after exit
+  const inWater = world.getBlock(Math.round(mob.pos.x), Math.floor(mob.pos.y), Math.round(mob.pos.z)) === B.WATER;
+  if (inWater) mob._waterGrace = 0.35; else mob._waterGrace = Math.max(0, (mob._waterGrace || 0) - dt);
+  // HOP — with a small COOLDOWN so folk don't bounce every frame against uneven ground:
+  //  - hauling out of a beck up a bank -> a STRONG hop (mirrors the player's swimGrace,
+  //    player.js:272), so they climb out onto a HIGHER bank instead of stalling in the water;
+  //  - otherwise a plain 1-block auto-step over a rise (a person on foot steps up one, not two).
+  mob._hopCd = Math.max(0, (mob._hopCd || 0) - dt);
+  if ((vx || vz) && mob.hitWall) {
+    if (mob._waterGrace > 0) {
+      // haul out of a beck: hold a strong upward velocity EVERY frame while pressed to the
+      // bank (mirrors the player's swimGrace, player.js:272), so it rises out CONTINUOUSLY
+      // and clears a higher bank — not one ballistic hop that just falls back in.
+      mob.vel.y = Math.max(mob.vel.y, 7.8); mob.onGround = false;
+    } else if (mob._hopCd <= 0 && mob.onGround &&
+        !boxCollides(world, mob.pos.x, mob.pos.y + NPC_STEP_UP_CLEAR, mob.pos.z, mob.hw, 0.6, mob.passGate)) {
+      mob.vel.y = NPC_JUMP; mob.onGround = false; mob._hopCd = 0.45;   // 1-block step-up (cooled, to stop the bounce)
+    }
   }
   mob.vel.y -= NPC_GRAVITY * dt;
   mob.vel.y = Math.max(mob.vel.y, -50);
   moveEntity(world, mob, dt);
-  // wade on the surface, don't crawl the bed: the lanes are BRIDGELESS fords (roads.js),
-  // so float the feet to just below a beck/river surface rather than sinking through the
-  // non-solid water to the bed and walking along it submerged.
-  const fx = Math.round(mob.pos.x), fz = Math.round(mob.pos.z), fyc = Math.floor(mob.pos.y);
-  if (world.getBlock(fx, fyc, fz) === B.WATER) {
-    let top = fyc; while (world.getBlock(fx, top + 1, fz) === B.WATER) top++;
+  // wade on the surface, don't crawl the bed (lanes are bridgeless fords, roads.js) — but
+  // only while NOT hopping up (vel.y<=0), so the haul-out hop above isn't cancelled.
+  if (mob.vel.y <= 0 && world.getBlock(Math.round(mob.pos.x), Math.floor(mob.pos.y), Math.round(mob.pos.z)) === B.WATER) {
+    const rx = Math.round(mob.pos.x), rz = Math.round(mob.pos.z);
+    let top = Math.floor(mob.pos.y); while (world.getBlock(rx, top + 1, rz) === B.WATER) top++;
     const surf = top + 1;                                // world y of the water surface
-    if (mob.pos.y < surf - 0.35) { mob.pos.y = surf - 0.35; if (mob.vel.y < 0) mob.vel.y = 0; mob.onGround = true; }
+    if (mob.pos.y < surf - 0.35) { mob.pos.y = surf - 0.35; mob.vel.y = 0; mob.onGround = true; }
   }
   if (vx || vz) mob.yaw = Math.atan2(vx, vz);
   // stuck watchdog: with hard collision a walker can wedge against a collider with no

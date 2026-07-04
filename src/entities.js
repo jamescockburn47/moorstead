@@ -2568,11 +2568,13 @@ export class Entities {
       const preX = mob.pos.x, preZ = mob.pos.z;
       moveEntity(this.world, mob, dt);
       // hop up single blocks — but a penned beast won't hop a built barrier (wall/hurdle/gate),
-      // so walls and folds actually hold stock. Terrain still hops; people cross freely.
-      if (mob.hitWall && mob.onGround && (Math.abs(wishX) > 0.1 || Math.abs(wishZ) > 0.1)) {
+      // so walls and folds actually hold stock. Terrain still hops; people cross freely. A
+      // COOLDOWN keeps a beast from re-hopping every frame against uneven ground (the bouncing).
+      mob._hopCd = Math.max(0, (mob._hopCd || 0) - dt);
+      if (mob.hitWall && mob.onGround && mob._hopCd <= 0 && (Math.abs(wishX) > 0.1 || Math.abs(wishZ) > 0.1)) {
         const ax = Math.floor(mob.pos.x + wishX * 0.6), az = Math.floor(mob.pos.z + wishZ * 0.6);
         const ahead = this.world.getBlock(ax, Math.floor(mob.pos.y) + 1, az);
-        if (!(isAnimal(mob) && isBarrier(ahead))) mob.vel.y = 7.5;
+        if (!(isAnimal(mob) && isBarrier(ahead))) { mob.vel.y = 7.5; mob._hopCd = 0.5; }
       }
       // open water is a WALL for land beasts. The sea sits LOWER than the shore, so scan
       // the column below her feet for the first solid/liquid.
