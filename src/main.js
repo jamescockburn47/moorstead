@@ -11,6 +11,7 @@ import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { B, I, BLOCKS, TOOLS, FOODS, isSolid, isCutout, isPlaceable, itemName, HEIGHT, WATER_LEVEL, ADMIN_HASHES } from './defs.js';
 import { strSeed } from './noise.js';
 import { protectedAt } from './landmarks.js';
+import { runShowreel, stopShowreel } from './showreel.js';
 import { initMaterials, setSnowLevel, setFrozen, setGlintTime, setWaterTime, setRippleAmp, setFlowAmp, setGlitter, setFresnel, setCamPos, setSunAzim, setSunLow, setCloudTime, setCloudShadow, setWetness, setGroundWet, setSheen, setWetSky, setSwayAmp, setWindAmt, setGustPhase, setDew, setSparkle, getMaterials } from './mesher.js';
 import { stepGroundWet } from './wetness.js';
 import { stepAccumulation, accumulationTarget, isFrozen, overcastGrey } from './snow.js';
@@ -738,6 +739,13 @@ class Game {
         if (!f) return { error: 'unknown festival', known: FESTIVALS.map(f => f.id) };
         return this.phase(f.centre);
       },
+      // dev/marketing: play a cinematic season+location tour and record the canvas to a clean .webm
+      // (no HUD/crosshair). Fullscreen (F11) first for a true 16:9 shot. opts: {record,beats,beatSec,
+      // settleSec,fps,force1080}. Stop early with moorstead.debug.showreelStop().
+      //   moorstead.debug.showreel()               // record the default hero reel
+      //   moorstead.debug.showreel({record:false}) // dry-run preview, no file
+      showreel(opts) { return runShowreel(G, opts); },
+      showreelStop() { return stopShowreel(G); },
     };
   }
 
@@ -5924,7 +5932,10 @@ class Game {
     if (this._photoCam) {
       const p = this._photoCam;
       this.camera.position.set(p.x, p.y, p.z);
-      this.camera.rotation.set(p.pitch, p.yaw, 0);
+      // a lookAt target (the showreel's orbit) points the camera correctly regardless of the
+      // yaw/pitch Euler convention; a bare yaw/pitch pose (debug.photo) sets rotation directly.
+      if (p.lookAt) this.camera.lookAt(p.lookAt.x, p.lookAt.y, p.lookAt.z);
+      else this.camera.rotation.set(p.pitch, p.yaw, 0);
     } else {
       this.camera.position.set(this.player.pos.x, this.player.pos.y + this.player.eye, this.player.pos.z);
       // D5 Task 2: weariness sways t' camera — a slow additive roll + a touch of pitch
