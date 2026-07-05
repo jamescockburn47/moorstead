@@ -7,6 +7,12 @@
       "runtimeArgs": ["run", "dev"],
       "port": 5173,
       "autoPort": true
+    },
+    {
+      "name": "spire-demo",
+      "runtimeExecutable": "C:\\Users\\James\\spire-dev\\dev.cmd",
+      "runtimeArgs": [],
+      "port": 5174
     }
   ]
 }
