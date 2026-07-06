@@ -27,6 +27,12 @@ visually altered**: every current world keeps today's pipeline byte-identical.
    isolation.)
 4. **Delivery: opt-in world, not a tier or a cutover.** No `minClientVersion` bump
    for existing players.
+5. **Creatures: smooth silhouettes only; smooth-stylised people; shadowy myths.**
+   All species get silhouette-accurate smooth remodels, no fur/feather shells (a
+   possible later upgrade). Villagers/avatars smooth with period clothing and
+   deliberately simplified faces. Folklore mobs lean into unreality. (Rejected:
+   leaving them blocky — register clash; rejected: attempted photorealism —
+   uncanny valley, and the no-asset-files invariant caps the ceiling.)
 
 ## 3. Product shape
 
@@ -51,9 +57,10 @@ One client bundle, two render paths:
   Moor, so the blocky game's load cost is unchanged.
 - **Shared, unchanged:** voxel world data, worldgen, chunk streaming, save format,
   network protocol, edit ops, entities/NPC logic, audio, gameplay systems.
-- Entity/NPC meshes are `MeshLambertMaterial` primitives — auto-converted by
-  `WebGPURenderer`'s node system; no port required. Entity systems with custom
-  shader injections get TSL equivalents in the realism path only.
+- Entity/NPC materials (`MeshLambertMaterial`) auto-convert on `WebGPURenderer`,
+  so the path *boots* without an entity port — but entities get smooth builders
+  per §7; blocky builders never render in the Smooth Moor. Entity systems with
+  custom shader injections get TSL equivalents in the realism path only.
 - **The one global change:** three.js `0.166 → 0.184` (pinned, matching the Spire /
   LAAS THREE-NOTES pins). The classic path must survive this with the full verify
   gate green before anything else is built (Stage 0). Known breakage surface: the
@@ -99,7 +106,36 @@ no cross-world parity issue because they are different worlds. Block targeting
   (WebGPU renders `THREE.Points` at a fixed 1 px).
 - All content remains procedural — **no asset files** (INVARIANTS holds).
 
-## 7. Enforcement — LAAS v2 method, Moorstead register
+## 7. Creatures and people
+
+Every entity builder in `src/entities.js` returns a parts rig (`{group, legs, body,
+head, …}`) that the animation/behaviour code poses — so **behaviour, herding, gaits
+and AI stay shared**; only the builder swaps per world.
+
+- **Registry:** entity id → classic builder / smooth builder. Automatic fallback
+  (boxes → rounded capsules) so no raw box ever renders in the Smooth Moor, even
+  before a species gets its bespoke pass.
+- **Animals (~20 species):** silhouette-accurate smooth procedural bodies —
+  capsule/SDF composition meshed smooth at build time, TSL materials. No
+  fur/feather shells in this programme (explicit later upgrade path for hero
+  animals: sheep, Bess, ponies, grouse). Delta-looped against wildlife photo
+  references (Swaledale sheep, red grouse, fell pony, border collie, curlew).
+- **Motion outranks mesh:** the Spire koi lesson — gait, burst-and-coast, and
+  material sell life more than geometry. Feet get terrain-adaptive placement on
+  the smooth surface (the box world's flat-ground assumption no longer holds on
+  slopes).
+- **Villagers and player avatars:** smooth remodel, period clothing, deliberately
+  simplified faces — no realism attempt on faces (the worst uncanny trap).
+  Staffage register: figures that sit honestly in a painted landscape.
+- **Folklore mobs** (barghest, boggart, giant, bat, the wreck): lean INTO
+  unreality — a genuinely shadow-black barghest reads scarier against a realistic
+  moor than any detailed monster. Materials work (light-swallowing, wrong-fresnel),
+  not mesh detail.
+- **Banned outcomes** (into the visual bar doc): raw box primitives visible in the
+  Smooth Moor; attempted-photoreal animals or faces; feet floating on or sunk into
+  slopes.
+
+## 8. Enforcement — LAAS v2 method, Moorstead register
 
 - **References:** committed photographic set — North York Moors, Whitby, Goathland,
   ~1900-plausible landscape register. Live at `docs/reference/smooth-moor/`.
@@ -116,7 +152,7 @@ no cross-world parity issue because they are different worlds. Block targeting
   identical mesh hash), realism-path boot on both backends, classic-path
   byte-identity where testable.
 
-## 8. Staging
+## 9. Staging
 
 | Stage | Delivers | Gate |
 |---|---|---|
@@ -124,13 +160,13 @@ no cross-world parity issue because they are different worlds. Block targeting
 | 1 | Smooth Moor entry plumbing; realism path renders existing **blocky** meshes via WebGPURenderer/TSL; both backends | world enterable on both backends |
 | 2 | Post stack (CSM, GTAO, TRAA, ToD grade), tier-gated | delta round 1 |
 | 3 | Surface-nets terrain + LOD + collision + sculpt edits; rectilinear structure mesher | mesh verify scripts + delta round |
-| 4 | Terrain splats, LAAS veg, TSL water, TSL sky | delta rounds |
+| 4 | Terrain splats, LAAS veg, TSL water, TSL sky; creature/people smooth builders + capsule fallback + foot placement | delta rounds (incl. wildlife refs) |
 | 5 | Delta-loop rounds to the bar; open the world (title entry live) | self-score vs references |
 
 Each stage is independently shippable to main behind the entry flag (the Smooth Moor
 button can stay hidden until Stage 5).
 
-## 9. Risks
+## 10. Risks
 
 1. **The 0.184 upgrade under the classic path** is the only step that can hurt
    production. It is first, isolated, and gated on the full verify suite plus manual
@@ -146,7 +182,7 @@ button can stay hidden until Stage 5).
    locally-intuitive smooth change; if surface nets alone read poorly at edit sites,
    allow a per-edit density bias — still deterministic, still protocol-compatible.
 
-## 10. Invariants compliance
+## 11. Invariants compliance
 
 - Additive protocol: unchanged (edits remain voxel ops; the Smooth Moor is a room).
 - Append-only content, forward-refuse saves: save format untouched.
@@ -156,10 +192,12 @@ button can stay hidden until Stage 5).
 - Resource hygiene: realism path disposes fully on world exit.
 - Procedural-only identity: all new materials/veg are code, no asset files.
 
-## 11. Out of scope
+## 12. Out of scope
 
 - Replacing or restyling the blocky game.
 - Multiplayer opening of the Smooth Moor (plumbing designed for it, but launch is
   single-player; the relay room is a follow-on).
 - NPC brain, relay, dashboard changes.
 - Smoothing crafted structures.
+- Fur/feather shells on animals (explicit later upgrade for hero animals).
+- Realistic faces on villagers/avatars (deliberately excluded, not deferred).
