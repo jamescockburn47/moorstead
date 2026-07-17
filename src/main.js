@@ -89,7 +89,8 @@ import { Entities, MOB_TYPES, buildPlayerLookMesh, validatePlayerLook } from './
 import { auditMobs } from './invariants.js';
 import { PET_BENEFIT, PET_KINDS, TAME_GOAL } from './pets.js';
 import { EXTRA_FOLK, moodWord } from './villagerlife.js';
-import { Sky, resolveQuality, lanternFlicker, moonPhase } from './sky.js';
+import { Sky, lanternFlicker, moonPhase } from './sky.js';
+import { decideTier, fpsVerdict, median, SETTLE_S, WINDOW_S } from './gfxprobe.js';
 import { Storm } from './storm.js';
 import { AudioEngine } from './audio.js';
 import { UI, bearingLabel, shelterToast, stationChipHTML, stationChipUnknownHTML, composeSketch, sketchFilename, offerShapeOk, hasStacks, countsFromSlots, describeStacks, bigMapScreenToWorld } from './ui.js';
@@ -304,9 +305,43 @@ class Game {
 
     this.bindEvents();
     // graphics quality: 'fine' (ACES + shadows + post stack) or 'plain' (today's pipeline).
-    // Explicit choice persists in localStorage; else Fine on a computer, Plain on touch.
+    // T' GRAPHICS PROBE (gfxprobe.js — t' Spire's tier method): open at t' tier this
+    // machine can honestly carry. An explicit choice (t' Graphics button) allus wins;
+    // software GL (no GPU — t' owd-laptop lag case) floors it to Plain whatever else
+    // claims; t' watchdog's own downgrades remember as 'moorcraft-gfx-auto' so owd kit
+    // opens easy next time wi'out lockin' t' player out o' Fine.
     try { this.gfxStored = localStorage.getItem('moorcraft-gfx'); } catch { this.gfxStored = null; }
-    this.applyQuality(resolveQuality(this.gfxStored, !!(this.touch && this.touch.active)));
+    let gfxAuto = null;
+    try { gfxAuto = localStorage.getItem('moorcraft-gfx-auto'); } catch { /* storage blocked */ }
+    this.gfxWatch = { t: 0, frames: [], span: 0, manual: !!this.gfxStored, pixelDropped: false };
+    const gfxSig = {
+      stored: this.gfxStored === 'fine' || this.gfxStored === 'plain' ? this.gfxStored
+        : gfxAuto === 'plain' ? 'auto-plain' : null,
+      touchPrimary: !!(this.touch && this.touch.active),
+      webgpu: null,
+      rendererStr: (() => {
+        try {
+          const gl = this.renderer.getContext();
+          const ext = gl.getExtension('WEBGL_debug_renderer_info');
+          return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : null;
+        } catch { return null; }
+      })(),
+      deviceMemory: navigator.deviceMemory ?? null,
+      cores: navigator.hardwareConcurrency ?? null,
+    };
+    const gfxOpen = decideTier(gfxSig);
+    this.applyQuality(gfxOpen.tier);
+    // t' WebGPU adapter answers async — refine ONLY t' optimistic default (a
+    // stored choice or a hard signal already settled it)
+    if (gfxOpen.why === 'unprobed' && navigator.gpu?.requestAdapter) {
+      Promise.race([
+        navigator.gpu.requestAdapter(),
+        new Promise((r) => setTimeout(() => r(null), 1500)),
+      ]).then((adapter) => {
+        const v = decideTier({ ...gfxSig, webgpu: !!adapter });
+        if (v.tier !== this.gfxQuality) this.applyQuality(v.tier);
+      }).catch(() => { /* no adapter API — t' openin' tier stands */ });
+    }
     try { this.auth = JSON.parse(localStorage.getItem('moorcraft-auth') || 'null'); }
     catch (e) { this.auth = null; reportQuiet('auth-parse', e); /* storage blocked (Safari private mode / cookies off) — don't abort boot; worth counting, it silently logs an invited player out */ }
     this.refreshAdmin();
@@ -484,6 +519,42 @@ class Game {
       // CAS strength rides t' GOVERNOR step, not raw DPR — a 1x monitor at full
       // quality gets no sharpen; only a stepped-down rung does
       this.gradePass.uniforms.uSharp.value = Math.max(0, (1.5 - this._resScale) * 0.5);
+    }
+  }
+
+  // ---------------- t' fps watchdog (gfxprobe.js) ----------------
+  // T' governor above sheds rungs WITHIN Fine (MSAA -> FXAA -> pixel ratio);
+  // this watchdog is t' escalation past its floor: a Fine that's STILL
+  // stutterin' wi' every rung shed drops to Plain (remembered as
+  // moorcraft-gfx-auto so t' next boot opens easy), an' a strugglin' Plain
+  // sheds pixel ratio through t' house applyResolution path. Niver up:
+  // upgrades are t' player's (Graphics button, which stands this down).
+  // Only judges wi' a live world — t' title an' loadin' screens lie.
+  watchFrame(rawDt) {
+    if (!this.world || this.state === 'title' || this.state === 'loading') return;
+    const gw = this.gfxWatch;
+    gw.t += rawDt;
+    if (gw.t < SETTLE_S || rawDt <= 0 || rawDt > 0.5) return;
+    gw.frames.push(1 / rawDt);
+    gw.span += rawDt;
+    if (gw.span < WINDOW_S) return;
+    const verdict = fpsVerdict(this.gfxQuality, median(gw.frames));
+    gw.frames.length = 0; gw.span = 0;
+    if (verdict === 'drop-plain' && !gw.manual) {
+      // Plain is t' LAST resort: only once t' governor's shed every rung
+      const g = this._govState;
+      const floored = g && g.aa === 'fxaa' && g.level >= GOV_SCALES.length - 1;
+      if (!floored) return;
+      this.applyQuality('plain');
+      try { localStorage.setItem('moorcraft-gfx-auto', 'plain'); } catch { /* session only */ }
+      if (this.ui.btnGfx) this.ui.btnGfx.innerHTML = 'Graphics: Plain';
+      this.ui.toast('T&rsquo; moor&rsquo;s eased itself to <b>Plain</b> graphics for this kit &mdash; '
+        + 'smoother goin&rsquo;. T&rsquo; Graphics button brings Fine back if tha wants it.', 8000);
+    } else if (verdict === 'drop-pixels' && !gw.pixelDropped) {
+      gw.pixelDropped = true;
+      this._resScale = (window.devicePixelRatio || 1) > 1 ? 1.0 : 0.75;
+      this.applyResolution();
+      this.ui.toast('Fewer pixels, smoother moor &mdash; resolution eased for owd kit.', 6000);
     }
   }
 
@@ -1149,7 +1220,11 @@ class Game {
     ui.btnGfx.addEventListener('click', () => {
       const next = this.gfxQuality === 'fine' ? 'plain' : 'fine';
       try { localStorage.setItem('moorcraft-gfx', next); } catch { /* storage blocked — this session only */ }
+      try { localStorage.removeItem('moorcraft-gfx-auto'); } catch { /* ditto */ }
       this.gfxStored = next;
+      // a chosen tier is never second-guessed: t' watchdog stands down
+      this.gfxWatch.manual = true;
+      this.gfxWatch.frames.length = 0; this.gfxWatch.span = 0;
       this.applyQuality(next);
       ui.btnGfx.innerHTML = 'Graphics: ' + (next === 'fine' ? 'Fine' : 'Plain');
       ui.toast(next === 'fine'
@@ -5427,7 +5502,9 @@ class Game {
 
   // ---------------- per-frame ----------------
   frame() {
-    const dt = Math.min(0.05, this.clock.getDelta());
+    const rawDt = this.clock.getDelta(); // unclamped — t' watchdog's truth
+    const dt = Math.min(0.05, rawDt);
+    this.watchFrame(rawDt);
 
     if (this.state === 'title') {
       if (!this.world && !this.titlePreviewFailed) this.startTitlePreview();
