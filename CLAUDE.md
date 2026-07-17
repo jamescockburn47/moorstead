@@ -39,7 +39,16 @@ back up any file (`cp x x.bak-YYYYMMDD-tag`) before editing on the box.
 The brain is also mirrored under local git at `C:\Users\James\moorstead-evo-work`.
 
 Systemd units on the EVO: `moorstead-world` (relay), `moorstead-brain` (yorkshire_bot),
-`moorstead-dash` (dashboard), `llama-server-moorstead` (the model behind the brain).
+`moorstead-dash` (dashboard), `llama-server-moorstead` (the model behind the brain),
+`evo-admin` (the Admiralty Board).
+
+**Admin lives on the Admiralty Board: `http://evo:8099/`** (LAN/Tailscale only) —
+Moorstead + Saltstead on one page: EVO vitals, services, and mint/copy/revoke invite
+codes for both games (Moorstead per-room, incl. approving invite requests). It proxies
+to `moorstead-dash` (:8095, which gained LAN-only `/api/codes-full`, `/api/mint`,
+`/api/revoke` — kept OFF the Caddy `/dash/*` public allowlist) and `saltstead-dash`
+(:8097). Code `~/admin/app.py`; repo copy in Saltstead `tools/admin-app.py`; EVO
+backup `~/moorstead/dash/app.py.bak-20260717-admiralty`.
 
 ## Build & verify
 
