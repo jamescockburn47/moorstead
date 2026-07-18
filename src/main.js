@@ -6586,3 +6586,22 @@ window.game = new Game();
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 }
+
+// Silk on a Fire tablet never volunteers an install banner (no beforeinstallprompt),
+// so a first visit gets one quiet steer toward Silk's own menu. Silk-only, never in
+// the installed app (display-mode says which), shown once, tap or 20s dismisses it.
+try {
+  const installed = matchMedia('(display-mode: standalone)').matches
+    || matchMedia('(display-mode: fullscreen)').matches;
+  if (/\bSilk\b/.test(navigator.userAgent) && !installed && !localStorage.getItem('moorcraft-install-nudge')) {
+    localStorage.setItem('moorcraft-install-nudge', '1');
+    const n = document.createElement('div');
+    n.id = 'install-nudge';
+    n.innerHTML = 'Put Moorstead on t&rsquo; home screen: Silk menu (&#8942;) &rarr; <b>Add to Home Screen</b> &mdash; then it plays offline an&rsquo; all. <i>(tap to dismiss)</i>';
+    const bye = () => n.remove();
+    n.addEventListener('click', bye);
+    n.addEventListener('touchstart', bye);
+    document.body.appendChild(n);
+    setTimeout(bye, 20000);
+  }
+} catch { /* storage blocked — skip the nudge, never block boot */ }

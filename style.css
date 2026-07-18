@@ -629,6 +629,10 @@ html.touch .game { touch-action: none; }
 .touch-whistles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 html.touch #hotbar { bottom: calc(env(safe-area-inset-bottom) + 8px); }
 html.touch #stats { bottom: calc(env(safe-area-inset-bottom) + 68px); }
+
+/* Silk install steer: a one-time banner that must clear t' title screen (screens sit at z 20) */
+#install-nudge { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 80; max-width: min(92vw, 560px); background: rgba(13,27,38,.94); border: 1px solid var(--gold); border-radius: 10px; padding: 12px 18px; color: #efe8d2; font-size: 14px; line-height: 1.5; cursor: pointer; }
+#install-nudge i { opacity: .7; font-style: normal; font-size: 12px; }
 .inv-close { display: block; margin: 0 0 10px auto; padding: 6px 16px; }   /* top-right Done in the inventory */
 
 /* oak strongbox panel: 27-slot chest grid + brass well over thi pockets */
