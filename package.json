@@ -1,7 +1,7 @@
 {
   "name": "moorstead",
   "private": true,
-  "version": "1.1.62",
+  "version": "1.1.63",
   "minClientVersion": "1.1.15",
   "type": "module",
   "description": "A procedural sandbox game set on the North York Moors",
