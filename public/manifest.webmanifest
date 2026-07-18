@@ -1,0 +1,16 @@
+{
+  "name": "Moorstead 1900",
+  "short_name": "Moorstead",
+  "description": "A procedural sandbox on t' North York Moors, 1900. Build, farm, ride the railway, natter with the villagers.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0d1b26",
+  "theme_color": "#0d1b26",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

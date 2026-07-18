@@ -150,10 +150,17 @@ export class TouchControls {
     let id = null, ox = 0, oy = 0;
     const RADIUS = 56;   // px the knob can travel
     const setKeys = (k) => { const g = this.game; for (const key of ['KeyW','KeyA','KeyS','KeyD','KeyZ']) g.keys[key] = !!k[key]; };
-    const clear = () => { id = null; knob.style.transform = 'translate(0,0)'; setKeys({}); };
+    const clear = () => {
+      id = null; knob.style.transform = 'translate(0,0)'; setKeys({});
+      z.style.removeProperty('--jx'); z.style.removeProperty('--jy');   // stick drifts home
+    };
     z.addEventListener('touchstart', e => {
       if (id !== null || this.game.state !== 'playing') return;
       const t = e.changedTouches[0]; id = t.identifier; ox = t.clientX; oy = t.clientY;
+      // float the ring+knob to the thumb, so the stick is wherever the player grabbed
+      const rect = z.getBoundingClientRect();
+      z.style.setProperty('--jx', (t.clientX - rect.left) + 'px');
+      z.style.setProperty('--jy', (t.clientY - rect.top) + 'px');
       e.preventDefault();
     }, { passive: false });
     z.addEventListener('touchmove', e => {
@@ -211,7 +218,7 @@ export class TouchControls {
     // Jump (hold = jump/fly-up; each tap feeds jumpTapped so player.js can double-tap-toggle fly)
     hold(this._btn('jump', 'Jump', 'big'), () => { g.keys['Space'] = true; g.input.jumpTapped = true; }, () => { g.keys['Space'] = false; });
     // Crouch (hold = sneak / fly-down)
-    hold(this._btn('crouch', '<i class="ti ti-chevron-down"></i>'), () => { g.keys['ShiftLeft'] = true; }, () => { g.keys['ShiftLeft'] = false; });
+    hold(this._btn('crouch', '<i class="ti ti-chevron-down"></i><small>Crouch</small>'), () => { g.keys['ShiftLeft'] = true; }, () => { g.keys['ShiftLeft'] = false; });
     // Mine (hold = break centred block; updateMining polls mouseDown[0])
     hold(this._btn('mine', 'Mine', 'act'), () => { if (g.state !== 'playing') return; g.mouseDown[0] = true; g.breakProgress = 0; g.attackOrMine(true); }, () => { g.mouseDown[0] = false; });
     // Place (use item at crosshair; place-repeat polls mouseDown[2])
@@ -221,8 +228,9 @@ export class TouchControls {
   _buildTop() {
     const g = this.game;
     const tap = (b, fn) => b.addEventListener('touchstart', e => { e.preventDefault(); fn(); }, { passive: false });
-    tap(this._btn('pack', '<i class="ti ti-box"></i>', 'top'), () => g.openInventory());
-    tap(this._btn('more', '<i class="ti ti-menu-2"></i>', 'top'), () => this._toggleMore());
+    tap(this._btn('pack', '<i class="ti ti-box"></i><small>Pack</small>', 'top'), () => g.openInventory());
+    tap(this._btn('more', '<i class="ti ti-menu-2"></i><small>Menu</small>', 'top'), () => this._toggleMore());
+    tap(this._btn('pause', '<i class="ti ti-player-pause"></i><small>Pause</small>', 'top'), () => g.pause());
     // hotbar slot taps. #hotbar holds `.slot` divs, but ui.js rebuilds them via innerHTML each
     // render — so DELEGATE one listener on the container and derive the index from the touched child.
     const hb = document.getElementById('hotbar');
@@ -295,6 +303,10 @@ export class TouchControls {
     if (this.zones.move) this.zones.move.hidden = !playing;
     if (this.btns.ride) this.btns.ride.hidden = state !== 'riding';
     if (this.btns.drive) this.btns.drive.hidden = state !== 'driving';
+    // top bar only makes sense in the world — on the title/menus it just clutters
+    const inWorld = ['playing', 'riding', 'driving'].includes(state);
+    for (const n of ['pack', 'more', 'pause']) if (this.btns[n]) this.btns[n].hidden = !inWorld;
+    if (!inWorld && this._more) this._more.classList.remove('open');
   }
 
   // Contextual pills that depend on the world (cheap checks; called each tick).

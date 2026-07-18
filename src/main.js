@@ -6579,3 +6579,10 @@ class Game {
 }
 
 window.game = new Game();
+
+// PWA: register the offline shell (sw.js is emitted at build — dev has no sw.js and
+// must never cache, so this is prod-only). Failures are non-fatal: the game runs
+// exactly as before, just without offline install.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
