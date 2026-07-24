@@ -5,6 +5,10 @@ here (POST /ping, POST /auth/claim, POST /visit, POST /request-invite, POST /fee
 the house.
 """
 import hashlib
+import hmac
+import os
+import threading
+import urllib.request
 import json
 import re
 import secrets
@@ -30,12 +34,21 @@ REQUESTS_F = DASH / "token_requests.json"
 REQUEST_RATE_F = DASH / "request_rate.json"
 FEEDBACK_F = DASH / "feedback.json"
 FEEDBACK_RATE_F = DASH / "feedback_rate.json"
+INSIDERS_F = DASH / "insiders.json"   # pids James has tagged as his own devices
 MEM = ROOT / "brain_memory" / "players"
 CADDY_LOG = Path("/var/log/caddy/moorstead.log")
 BRAIN = "http://127.0.0.1:8010"
 LLM = "http://127.0.0.1:8086"
 RELAY = "http://127.0.0.1:8096"
 ROOM_CAP = 15
+
+# Mirrors src/defs.js's ADMIN_HASHES (sha256 of the raw warden key) — kept in sync by hand,
+# same list as the client checks client-side for the pause-menu warden login.
+ADMIN_HASHES = {
+    "29889b77f82b79d1585f514ac0e6489deed67ddb27b55a81109492a443b8e950",
+    "d3586a9e0a64041ad379c88e7e646866232700925b973f26297e7be1c5b62c14",
+    "5a19e539f87a5776ee01e7d8d603fcc7b63e810a14f23c471f94150437e854d8",
+}
 
 PID_RE = re.compile(r"^[a-z0-9-]{4,40}$")
 CODE_RE = re.compile(r"^[a-z]+-[a-z]+-\d{2}$")
@@ -98,13 +111,15 @@ def _record_visit(pid, ip, name="", event="landing"):
     log = _load(VISITS_F, [])
     log.append({"ts": now, "pid": pid, "name": name[:24], "event": event, "ip": ip})
     _save(VISITS_F, log[-2000:])
+    _maybe_ping_clint("visit", pid, ip, name)
 
 
 def _player_stats(players, now):
     today = _utc_day(now)
     week_cut = _utc_day(now - 7 * 86400)
     month_cut = _utc_day(now - 30 * 86400)
-    st = {"total": len(players), "today": 0, "week": 0, "month": 0, "returning": 0}
+    st = {"total": len(players), "today": 0, "week": 0, "month": 0, "returning": 0,
+          "playedToday": 0, "playedWeek": 0, "playedEver": 0}
     for p in players.values():
         days = p.get("visitDays") or []
         if today in days:
@@ -115,6 +130,104 @@ def _player_stats(players, now):
             st["month"] += 1
         if len(days) > 1 or p.get("visits", 0) > 1:
             st["returning"] += 1
+        # played = in-world heartbeats, not just the page opened. playDays is
+        # per-day and exact from 2026-07-17 on; minutes>0 backfills "ever".
+        pdays = p.get("playDays") or []
+        if today in pdays:
+            st["playedToday"] += 1
+        if any(d >= week_cut for d in pdays):
+            st["playedWeek"] += 1
+        if pdays or p.get("minutes", 0) > 0:
+            st["playedEver"] += 1
+    return st
+
+
+# ---- clean numbers: partition players real (pub) / house (James) / bot ----
+# Read-only classification from each player's stored lastIp + the insiders
+# file; the write path and all existing stats fields are untouched.
+_BOT_IP_PREFIXES = ("66.249.", "66.102.", "64.233.", "40.77.", "157.55.", "207.46.", "17.58.", "54.236.")
+
+
+def _is_local_ip(ip):
+    ip = (ip or "").strip()
+    if not ip:
+        return False
+    if ip == "::1" or ip.startswith("127."):
+        return True
+    if ip.startswith("10.") or ip.startswith("192.168."):
+        return True
+    m = re.match(r"^172\.(\d+)\.", ip)
+    if m and 16 <= int(m.group(1)) <= 31:
+        return True
+    t = re.match(r"^100\.(\d+)\.", ip)
+    if t and 64 <= int(t.group(1)) <= 127:
+        return True
+    return False
+
+
+def _classify_pid(pid, p, insiders):
+    if pid in insiders:
+        return "house"
+    ip = p.get("lastIp") or ""
+    if any(ip.startswith(x) for x in _BOT_IP_PREFIXES):
+        return "bot"
+    if _is_local_ip(ip):
+        return "house"
+    return "pub"
+
+
+_STEADS_SECRET = os.environ.get("STEADS_WEBHOOK_SECRET", "")
+_CLAWD_URL = os.environ.get("CLAWD_URL", "http://127.0.0.1:3000")
+_clint_seen = {}  # "kind:pid" -> utc day already pinged
+
+
+def _emit_clint(type_, extra=None):
+    """Fire-and-forget HMAC-signed event to Clawd (the WhatsApp agent)."""
+    if not _STEADS_SECRET:
+        return
+    body = json.dumps({"game": "moorstead", "type": type_, "ts": time.time(), **(extra or {})}).encode()
+    sig = hmac.new(_STEADS_SECRET.encode(), body, hashlib.sha256).hexdigest()
+
+    def _go():
+        try:
+            rq = urllib.request.Request(
+                _CLAWD_URL + "/api/steads-event", data=body,
+                headers={"Content-Type": "application/json", "x-steads-signature": sig})
+            urllib.request.urlopen(rq, timeout=2).read()
+        except Exception:
+            pass
+    threading.Thread(target=_go, daemon=True).start()
+
+
+def _maybe_ping_clint(kind, pid, ip, name=""):
+    """Ping James for a real stranger — once per browser per UTC day per kind."""
+    try:
+        if _classify_pid(pid, {"lastIp": ip}, set(_load(INSIDERS_F, []))) != "pub":
+            return
+        key = kind + ":" + pid
+        day = _utc_day()
+        if _clint_seen.get(key) == day:
+            return
+        _clint_seen[key] = day
+        if len(_clint_seen) > 4000:
+            _clint_seen.clear()
+        _emit_clint(kind, {"name": name} if name else None)
+    except Exception:
+        pass
+
+
+def _player_stats_all(players, now):
+    """The existing flat stats plus the same numbers split real/house/bot."""
+    st = _player_stats(players, now)
+    insiders = set(_load(INSIDERS_F, []))
+    split = {"pub": {}, "house": {}, "bot": {}}
+    for cls in split:
+        subset = {k: v for k, v in players.items()
+                  if _classify_pid(k, v, insiders) == cls}
+        split[cls] = _player_stats(subset, now)
+    st["real"] = split["pub"]
+    st["house"] = split["house"]
+    st["bot"] = split["bot"]
     return st
 
 
@@ -251,10 +364,20 @@ async def claim(req: Request):
     token = _mint_ws_token(code, acct_id, room, acct["name"])
     if pid and PID_RE.match(pid):
         _record_visit(pid, _client_ip(req), acct["name"], "login")
+    # the player's daemon (first pet) travels with the login token, so it shows in
+    # single-player worlds too, not just the shared moor. Read from the relay's store.
+    daemon = None
+    try:
+        _dd = json.loads(Path("/home/james/moorstead/world/daemons.json").read_text()).get("a" + acct_id)
+        if isinstance(_dd, dict) and _dd.get("kind") and _dd.get("name"):
+            daemon = {"kind": str(_dd["kind"])[:24], "name": str(_dd["name"])[:24]}
+    except Exception:
+        pass
     return {"ok": True, "name": acct["name"],
             "room": room,
             "acct": acct_id,
-            "token": token}
+            "token": token,
+            "daemon": daemon}
 
 
 @app.post("/api/setroom")
@@ -292,8 +415,9 @@ async def ping(req: Request):
         return {"ok": False}
     name = re.sub(r"[^\w \-']", "", str(d.get("name", "")))[:24]
     seed = re.sub(r"\D", "", str(d.get("seed", "")))[:12]
+    room = re.sub(r"[^a-z0-9-]", "", str(d.get("room", "")).lower())[:24]  # '' = solo world
     entry = {
-        "ts": time.time(), "pid": pid, "name": name, "seed": seed,
+        "ts": time.time(), "pid": pid, "name": name, "seed": seed, "room": room,
         "day": max(0, min(int(d.get("day", 0) or 0), 99999)),
         "standing": str(d.get("standing", ""))[:12],
         "croft": max(0, min(int(d.get("croft", 0) or 0), 4)),
@@ -310,6 +434,13 @@ async def ping(req: Request):
     p["last"] = time.time()
     p["minutes"] = p.get("minutes", 0) + 1
     p["lastIp"] = entry["ip"]
+    # playDays: a heartbeat means they actually PLAYED today (visitDays only
+    # says the page was opened) — this is what the Admiralty Board counts
+    pdays = list(p.get("playDays") or [])
+    today = _utc_day()
+    if today not in pdays:
+        pdays.append(today)
+        p["playDays"] = pdays[-120:]
     if name and name not in p["names"]:
         p["names"] = (p["names"] + [name])[-5:]
     if seed:
@@ -317,6 +448,7 @@ async def ping(req: Request):
                              "croft": entry["croft"], "quests": entry["quests"],
                              "loc": entry["loc"], "last": time.time()}
     _save(PLAYERS_F, players)
+    _maybe_ping_clint("play", pid, entry["ip"], name)
     return {"ok": True}
 
 
@@ -432,6 +564,7 @@ async def feedback(req: Request):
     log = _load(FEEDBACK_F, [])
     log.append(entry)
     _save(FEEDBACK_F, log[-1000:])
+    _emit_clint("bug" if kind == "bug" else "feedback", {"name": name, "message": message})
     if pid and PID_RE.match(pid):
         players = _load(PLAYERS_F, {})
         p = players.setdefault(pid, {"first": time.time(), "names": [], "minutes": 0, "worlds": {}})
@@ -635,7 +768,7 @@ async def overview():
         "now": now,
         "live": list(live.values()),
         "players": players,
-        "stats": _player_stats(players, now),
+        "stats": _player_stats_all(players, now),
         "recentVisits": recent_visits,
         "visitors": _visitors_from_caddy(),
         "conversations": _conversations(),
@@ -658,12 +791,121 @@ async def overview():
     }
 
 
+@app.get("/api/admin-summary")
+async def admin_summary(key: str = ""):
+    """Public (behind Caddy allowlist) — the Parish Ledger card in the warden's admin
+    panel. Auth is the same sha256(raw key) check as the client-side warden login
+    (ADMIN_HASHES above mirrors src/defs.js's ADMIN_HASHES). Redacted: no pid, no ip —
+    this is reachable from the public internet, unlike /api/overview.
+    """
+    if hashlib.sha256(key.encode()).hexdigest() not in ADMIN_HASHES:
+        return {"error": "unauthorized"}
+    now = time.time()
+    sessions = _load(SESSIONS_F, [])
+    live_by_pid = {}
+    for s in sessions[-500:]:
+        if now - s["ts"] < 180:
+            live_by_pid[s["pid"]] = s  # last-seen entry per pid, dedup across worlds
+    live = list(live_by_pid.values())
+    recent = [{"name": s.get("name") or "?", "loc": s.get("loc") or "?",
+               "room": s.get("room") or "solo"} for s in sorted(live, key=lambda s: -s["ts"])[:8]]
+    brain_status = "offline"
+    try:
+        async with httpx.AsyncClient(timeout=3) as c:
+            brain_status = (await c.get(BRAIN + "/status")).json().get("status", "ok")
+    except Exception:
+        pass
+    relay_status = "offline"
+    try:
+        r = httpx.get(f"{RELAY}/status", timeout=2)
+        if r.status_code == 200:
+            relay_status = "ok"
+    except Exception:
+        pass
+    return {
+        "online": len(live),
+        "live": len(live),
+        "recent": recent,
+        "brain": brain_status,
+        "relay": relay_status,
+    }
+
+
 @app.get("/api/codes")
 def list_codes():
     """Private: full invite list wi' claim status (for handing out)."""
     codes = _load(CODES_F, {})
     accounts = _load(ACCOUNTS_F, {})
     return {c: (accounts[c]["name"] if c in accounts else None) for c in sorted(codes)}
+
+
+# ---------------- LAN-only: the Admiralty Board's desk (:8099 admin app) ----------------
+@app.get("/api/codes-full")
+def list_codes_full():
+    """Private: the invite ledger wi' room, claimant an' last-seen — one row per code."""
+    codes = _load(CODES_F, {})
+    accounts = _load(ACCOUNTS_F, {})
+    out = []
+    for c in sorted(codes):
+        a = accounts.get(c)
+        entry = codes[c] if isinstance(codes[c], dict) else {}
+        out.append({
+            "code": c,
+            "room": _room_for_code(c, entry, a),
+            "name": a.get("name") if a else None,
+            "last": a.get("last") if a else None,
+        })
+    return {"codes": out}
+
+
+@app.post("/api/mint")
+async def mint_direct(req: Request):
+    """Private: mint an invite for ANY room (t' Admiralty Board's mint button)."""
+    try:
+        d = await req.json()
+    except Exception:
+        d = {}
+    room = str(d.get("room", "moor")).strip().lower()
+    if not ROOM_RE.match(room):
+        return {"ok": False, "err": "bad room"}
+    codes = _load(CODES_F, {})
+    for _ in range(80):
+        w1, w2 = secrets.choice(MINT_W1), secrets.choice(MINT_W2)
+        if w1 == w2:
+            continue
+        n = secrets.randbelow(80) + 10
+        code = f"{w1}-{w2}-{n:02d}"
+        if code in codes or not CODE_RE.match(code):
+            continue
+        codes[code] = {"room": room}
+        _save(CODES_F, codes)
+        return {"ok": True, "code": code, "room": room}
+    return {"ok": False, "err": "could not mint a unique code"}
+
+
+@app.post("/api/revoke")
+async def revoke_direct(req: Request):
+    """Private: revoke a code — its account an' any live ws tokens go wi' it."""
+    try:
+        d = await req.json()
+    except Exception:
+        return {"ok": False, "err": "bad request"}
+    code = str(d.get("code", "")).strip().lower()
+    codes = _load(CODES_F, {})
+    if code not in codes:
+        return {"ok": False, "err": "no such code"}
+    del codes[code]
+    _save(CODES_F, codes)
+    accounts = _load(ACCOUNTS_F, {})
+    if code in accounts:
+        del accounts[code]
+        _save(ACCOUNTS_F, accounts)
+    acct_id = hashlib.sha1(code.encode()).hexdigest()[:10]
+    tokens = _load(WS_TOKENS_F, {})
+    live = {t: v for t, v in tokens.items() if v.get("acct") != acct_id}
+    if len(live) != len(tokens):
+        _save(WS_TOKENS_F, live)
+    return {"ok": True, "code": code}
 
 
 PAGE = """<!doctype html><html><head><meta charset="utf-8">
