@@ -479,6 +479,14 @@ export class UI {
       '<div class="feat"><div class="ico">&#127754;</div><div class="ft">Coast, becks &amp; seasons</div><div class="fd">Swim the rivers, wade the fords, an&rsquo; watch the seasons an&rsquo; festivals turn</div></div>' +
       '<div class="feat"><div class="ico">&#128017;</div><div class="ft">Sheepdog &amp; fold</div><div class="fd">Whistle the dog round, drove an&rsquo; fold thi Swaledale flock across the moor</div></div>' +
       '<div class="feat"><div class="ico">&#127769;</div><div class="ft">Owd tales after dark</div><div class="fd">Folklore stirs at neet: the barghest, the giants, an&rsquo; the Count on the East Cliff</div></div>';
+    // the sibling strip — one homestead, three worlds (the family landing pattern)
+    const steadsStrip = this.el('div', 'steads-strip', this.titleScreen);
+    steadsStrip.innerHTML = 'part of THE STEADS &mdash; '
+      + '<a href="https://www.saltstead.app" rel="noopener">saltstead.app</a> &middot; '
+      + '<a href="https://www.marsstead.app" rel="noopener">marsstead.app</a> &middot; '
+      + '<a href="https://www.steadgames.com" rel="noopener">steadgames.com</a>';
+    steadsStrip.style.cssText = 'font-size:11px;letter-spacing:2px;opacity:.7;margin:10px 0 2px;text-align:center;';
+    for (const a of steadsStrip.querySelectorAll('a')) a.style.cssText = 'color:#e8c46a;text-decoration:none;';
     // login (invite code) — shown till tha's claimed thi place in t' village
     this.loginBox = this.el('div', 'login-box', this.titleScreen);
     this.el('div', 'login-title', this.loginBox, 'Tha&rsquo;ll need thi invite to settle in Moorstead');
