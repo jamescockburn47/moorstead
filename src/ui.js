@@ -491,9 +491,11 @@ export class UI {
     this.btnLogin = this.el('button', 'mc', this.loginBox, 'Come On In');
     this.loginErr = this.el('div', 'login-err', this.loginBox, '');
     this.loginGuest = this.el('div', 'muted-note login-guest', this.loginBox, 'no invite? <u>play as a passing rambler</u> (villagers won&rsquo;t remember thee proper)');
-    this.wardenKey = this.el('input', 'seed', this.loginBox);
+    // the warden pair stays wired but off the public landing — the Admin link
+    // (top-right) is the one warden door; visitors see only their own ways in
+    this.wardenKey = this.el('input', 'seed hidden', this.loginBox);
     this.wardenKey.placeholder = 'Warden key';
-    this.btnWarden = this.el('button', 'mc', this.loginBox, 'Enter as Warden');
+    this.btnWarden = this.el('button', 'mc hidden', this.loginBox, 'Enter as Warden');
     this.requestToggle = this.el('div', 'muted-note login-request-toggle', this.loginBox,
       'want a proper invite? <u>request one</u> (adult shared moor only)');
     this.requestBox = this.el('div', 'request-box hidden', this.loginBox);
@@ -524,9 +526,7 @@ export class UI {
     this.btnContinue = this.el('button', 'mc', this.titleScreen, '&#x1F3E1; Re-enter Single-Player');
     this.btnNew = this.el('button', 'mc', this.titleScreen, '&#x2728; New Single-Player World');
     this.btnHow = this.el('button', 'mc', this.titleScreen, 'Ow Ter Play');
-    this.el('div', 'moors-note', this.titleScreen, 'No levels to clear, no timer running: Moorstead is a <b>place to live in</b>, not a game to win. Make a name for thissen, or a living, or just wander the moor an&rsquo; see who tha meets.');
-    this.el('div', 'muted-note', this.titleScreen, 'New to t&rsquo; moor? <b>Give &lsquo;Ow Ter Play&rsquo; a read</b>: learn how to build, ride, drive, and stay alive.');
-    this.el('div', 'muted-note', this.titleScreen, 'Watch thissen at neet: t&rsquo; barghest walks when t&rsquo; sun goes down.');
+    this.el('div', 'moors-note', this.titleScreen, 'No levels to clear, no timer running: Moorstead is a <b>place to live in</b>, not a game to win &mdash; an&rsquo; watch thissen at neet, t&rsquo; barghest walks.');
     this.el('div', 'title-foot', this.titleScreen, 'Created purely with AI by a non-coder &middot; procedurally generated, not a single asset file &middot; villagers, jobs an&rsquo; adventures run on large local AI models &middot; <a href="/about.html?tab=security" style="color:#d8b95a">Security &amp; privacy</a>');
 
     // ---------- pause ----------
