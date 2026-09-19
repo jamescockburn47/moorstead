@@ -7,7 +7,7 @@ import time
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-from freeplay_rules import (MAX_PACKET, MAX_PLAYERS, PROTOCOL, ROOM, Refused,
+from freeplay_rules import (CONTENT_VERSION, MAX_PACKET, MAX_PLAYERS, PROTOCOL, ROOM, Refused,
                             validate_position)
 from freeplay_store import Store
 from freeplay_stream import Peer, bounded_delivery, send_operation, send_snapshot
@@ -117,7 +117,8 @@ class Hub:
                 hello = json.loads(text)
             except (ValueError, RecursionError):
                 hello = None
-            if hello != {"type": "hello", "protocol": PROTOCOL} or type(hello["protocol"]) is not int:
+            if (hello != {"type": "hello", "protocol": PROTOCOL, "contentVersion": CONTENT_VERSION}
+                    or type(hello["protocol"]) is not int or type(hello["contentVersion"]) is not int):
                 raise Refused("protocol", "Reconnect with the current Free Play client.")
             async with self.lock:
                 self.session(pid, token)

@@ -6,8 +6,9 @@ import re
 ROOM = "family-freeplay"
 SEED = 419947177  # strSeed('t-moors-1900'), the client generator's MOORS_SEED.
 PROTOCOL = 1
+CONTENT_VERSION = 2
 LIMIT = 8192
-MAX_CELLS = 1_000_000
+MAX_CELLS = 2_000_000
 MAX_CHUNKS = 1024
 MAX_EDIT = 64
 BATCH_SIZE = 512
@@ -23,6 +24,7 @@ BOMBS = {
     "mega": (24, 13, 24),
     "atom": (40, 18, 30),
 }
+WEAPONS = {"plasma": (2, 2, 3), "rocket": (7, 5, 10), "gravity": None}
 REQUEST_ID = re.compile(r"[A-Za-z0-9_-]{8,80}\Z")
 
 
@@ -43,17 +45,24 @@ def coordinate(value):
             and integer(value[2], -LIMIT, LIMIT))
 
 
+def block_id(value, air=True):
+    return integer(value, 0 if air else 1, 62) or integer(value, 200, 205)
+
+
 def validate_command(value):
     if not isinstance(value, dict):
         raise Refused("shape", "Expected an object.")
     kind = value.get("type")
     extra = {
         "edit": {"edits"}, "blast": {"bomb", "center"},
+        "weapon": {"weapon", "center"}, "build": {"shape", "origin", "rotation", "block"},
         "undo": set(), "reset": {"confirm"}, "restore": {"confirm"},
     }
     if not isinstance(kind, str) or kind not in extra:
         raise Refused("command", "Unknown Free Play command.")
     allowed = {"type", "requestId", "epoch", "baseRevision"} | extra[kind]
+    if kind == "build" and value.get("shape") in ("line", "wall", "floor", "box"):
+        allowed.add("size")
     if set(value) != allowed:
         raise Refused("shape", "Unexpected or missing command fields.")
     rid = value.get("requestId")
@@ -63,11 +72,15 @@ def validate_command(value):
         raise Refused("epoch", "Invalid epoch.")
     if not integer(value.get("baseRevision"), 0, 2**53 - 1):
         raise Refused("revision", "Invalid revision.")
-    if kind == "blast":
-        if not isinstance(value["bomb"], str) or value["bomb"] not in BOMBS:
-            raise Refused("bomb", "Unknown bomb.")
+    if kind in {"blast", "weapon"}:
+        key, choices = ("bomb", BOMBS) if kind == "blast" else ("weapon", WEAPONS)
+        if not isinstance(value[key], str) or value[key] not in choices:
+            raise Refused(key, "Unknown " + key + ".")
         if not coordinate(value["center"]):
             raise Refused("coordinate", "Blast is outside the playable world.")
+    elif kind == "build":
+        from freeplay_builds import validate_build
+        validate_build(value)
     elif kind == "edit":
         edits = value["edits"]
         if not isinstance(edits, list) or not 1 <= len(edits) <= MAX_EDIT:
@@ -75,7 +88,7 @@ def validate_command(value):
         positions = set()
         for cell in edits:
             if (not isinstance(cell, list) or len(cell) != 4
-                    or not coordinate(cell[:3]) or not integer(cell[3], 0, 62)):
+                    or not coordinate(cell[:3]) or not block_id(cell[3])):
                 raise Refused("cell", "Invalid block or coordinate.")
             key = tuple(cell[:3])
             if key in positions:
@@ -88,7 +101,16 @@ def validate_command(value):
 
 def blast_cells(bomb, center):
     """Bowl plus ellipsoid/canopy clearance; the y=0 floor survives."""
-    radius, depth, above = BOMBS[bomb]
+    yield from damage_cells(BOMBS[bomb], center, bomb in {"mega", "atom"})
+
+
+def weapon_cells(weapon, center):
+    if WEAPONS[weapon] is not None:
+        yield from damage_cells(WEAPONS[weapon], center)
+
+
+def damage_cells(dimensions, center, canopy=False):
+    radius, depth, above = dimensions
     cx, cy, cz = center
     for x in range(max(-LIMIT, cx - radius), min(LIMIT, cx + radius) + 1):
         for z in range(max(-LIMIT, cz - radius), min(LIMIT, cz + radius) + 1):
@@ -97,7 +119,7 @@ def blast_cells(bomb, center):
                 continue
             fraction = math.sqrt(1 - radial)
             bottom = max(1, math.ceil(cy - depth * fraction))
-            top = 63 if bomb in {"mega", "atom"} else min(63, math.floor(cy + above * fraction))
+            top = 63 if canopy else min(63, math.floor(cy + above * fraction))
             for y in range(bottom, top + 1):
                 yield [x, y, z, 0]
 

@@ -13,6 +13,21 @@ levels. Fly toggles flight. WASD moves, dragging looks around, Space rises/jumps
 Shift descends and Z speeds up. Touch users have movement, look, up/down and
 Place/Break controls. Health and supplies remain unlimited.
 
+Map (or M) shows both players by name. The direction/distance arrow remains on
+screen while playing; tap it to open the map. Find each other fits both players,
+while Nearby keeps the local village in view. Offline or reset positions clear.
+
+Weapons (G) adds a plasma blaster, rocket launcher and gravity gun. Plasma and
+rockets make persistent craters; gravity flings local cartoon villagers, animals
+and debris without changing terrain. All have unlimited ammunition.
+
+Build adds six futuristic materials plus line, wall, floor and hollow-box brushes
+in sizes 3, 5 and 7. Choose a brush, then its material. Space base, neon tower and
+sky bridge are fixed prefabs. Aim the preview, rotate with R or Rotate, and Place.
+Each build is one shared undo action; hollow interiors clear existing blocks.
+Energy windows are solid decorative panels. Futuristic content is private to this
+edition. Content-version negotiation refuses older clients before they receive it.
+
 Undo removes the latest shared terrain action, whichever player made it. Menu
 offers reset with a confirmation for both players, and recovery of the pre-reset
 world. Builds and craters persist across reconnects and server restarts. Either
@@ -24,6 +39,12 @@ using damaged lines. Villagers and animals are cartoon local populations which
 fling and recover; free play does not require the live NPC brain.
 
 ## Ownership
+
+`npm run verify:freeplay` covers protocol, persistence, geometry, previews and
+bounded effects. `npm run test:freeplay` runs the owned two-player map/pack journeys
+and touch-control overlap regression against an isolated loopback server. Install
+the pinned Playwright browser with `npx playwright install chromium` first. These
+checks never use the boys' production accounts or modify their live world.
 
 | Files in `src/freeplay/` | Responsibility |
 |---|---|
@@ -39,7 +60,7 @@ radii. Replacement snapshots supersede pending client work, and a backgrounded
 tab resynchronises instead of accumulating unlimited typed arrays. Ordinary save
 storage and global warden powers are not used.
 
-Limits bound processing and storage: one million edited cells, 1,024 touched
+Limits bound processing and storage: two million edited cells, 1,024 touched
 chunks, up to 20 undo entries bounded by 400,000 inverse cells, and three live
 effect slots. A refusal preserves saved state and leaves undo/reset available.
 Unlimited supplies do not remove these world-capacity limits.

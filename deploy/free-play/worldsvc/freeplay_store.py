@@ -6,8 +6,9 @@ import zlib
 from contextlib import contextmanager
 from pathlib import Path
 
+from freeplay_builds import build_cells
 from freeplay_rules import (MAX_CELLS, MAX_CHUNKS, MAX_HISTORY, MAX_INVERSE_CELLS, MAX_RECEIPTS,
-                            ROOM, SEED, Refused, blast_cells, packed, validate_command)
+                            ROOM, SEED, Refused, blast_cells, packed, validate_command, weapon_cells)
 
 
 class Store:
@@ -15,7 +16,7 @@ class Store:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
-            if db.execute("PRAGMA user_version").fetchone()[0] not in {0, 1}:
+            if db.execute("PRAGMA user_version").fetchone()[0] not in {0, 1, 2}:
                 raise ValueError("Free Play database uses a newer unsupported schema")
             db.executescript("""
               PRAGMA journal_mode=WAL;
@@ -44,7 +45,8 @@ class Store:
             meta = db.execute("SELECT room,seed FROM meta").fetchone()
             if tuple(meta) != (ROOM, str(SEED)):
                 raise ValueError("Free Play database belongs to another room or seed")
-            db.execute("PRAGMA user_version=1")
+            # Content 2 uses new block IDs: older adapters must refuse this store.
+            db.execute("PRAGMA user_version=2")
 
     @contextmanager
     def connect(self):
@@ -101,7 +103,14 @@ class Store:
             elif kind == "undo":
                 changes = self.undo(db)
             else:
-                edits = command["edits"] if kind == "edit" else blast_cells(command["bomb"], command["center"])
+                if kind == "edit":
+                    edits = command["edits"]
+                elif kind == "build":
+                    edits = build_cells(command)
+                elif kind == "weapon":
+                    edits = weapon_cells(command["weapon"], command["center"])
+                else:
+                    edits = blast_cells(command["bomb"], command["center"])
                 changes, inverse = self.edit(db, edits, state["count"])
                 if inverse:
                     db.execute("INSERT INTO history VALUES (?,?,?,?,?,?)", (
@@ -118,6 +127,11 @@ class Store:
                       "changes": changes, **self.state(db)}
             if kind == "blast":
                 result.update(bomb=command["bomb"], center=command["center"])
+            elif kind == "weapon":
+                result.update(weapon=command["weapon"], center=command["center"])
+            elif kind == "build":
+                result.update({key: command[key] for key in ("shape", "origin", "rotation", "block", "size")
+                               if key in command})
             return result
 
     @staticmethod

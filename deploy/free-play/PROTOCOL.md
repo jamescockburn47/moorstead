@@ -1,13 +1,15 @@
-# Free Play WebSocket protocol 1
+# Free Play WebSocket protocol 1, content 2
 
 Only `/freeplay/ws?room=family-freeplay&pid=a<account-id>&token=<session-token>`.
 The route verifies existing server sessions; ordinary `/ws` rejects this room.
 `POST /dash/auth/freeplay-claim` uses the dedicated account/room precondition and
 returns the usual account fields plus `edition: "freeplay"`.
 
-1. Client sends `{type:"hello",protocol:1}` within ten seconds.
+1. Client sends `{type:"hello",protocol:1,contentVersion:2}` within ten seconds.
+   Older/newer content versions are refused before any snapshot or mutation.
 2. Server sends `init` with `protocol`, `freeplay:true`, `room`, numeric `seed`,
-   `epoch`, `revision`, `count`, `history`, `checkpoint`, `players`, `limits`.
+   `contentVersion:2`, `minContentVersion:2`, `epoch`, `revision`, `count`, `history`,
+   `checkpoint`, `players`, `limits` (including `maxBuild:1024`).
 3. Zero or more `{type:"snapshot",edits:[[x,y,z,id],...]}` frames, ≤512 cells each.
 4. `{type:"ready",epoch,revision}` commits the complete snapshot. No partial
    snapshot is authoritative. `count` counts unique override cells.
@@ -19,8 +21,10 @@ fields are refused, including room/radius/damage/privilege fields.
 
 | type | Required extra fields |
 |---|---|
-| `edit` | `edits`: 1–64 unique `[x,y,z,id]`, id 0–62; no null |
+| `edit` | `edits`: 1–64 unique `[x,y,z,id]`, id 0–62 or 200–205; no null |
 | `blast` | `bomb`: grenade/dynamite/demolition/mega/atom; `center:[x,y,z]` |
+| `weapon` | `weapon`: plasma/rocket/gravity; `center:[x,y,z]` |
+| `build` | `shape`: line/wall/floor/box/base/tower/bridge; `origin:[x,y,z]`; `rotation`: 0–3; `block`: 1–62 or 200–205; `size`: 3/5/7 required only for line/wall/floor/box, forbidden for prefabs |
 | `undo` | none; latest retained shared terrain action |
 | `reset` | `confirm:true`; pristine baseline with pre-reset checkpoint |
 | `restore` | `confirm:true`; swap current world and recovery checkpoint |
@@ -28,10 +32,22 @@ fields are refused, including room/radius/damage/privilege fields.
 All coordinates are integers with x,z ∈ [-8192,8192], y ∈ [1,63]. Every successful
 new command increments revision once. Reset/restore also increment epoch. A command
 that changes no cells still receives an ordered commit but creates no undo entry.
+Gravity always has zero terrain changes: it broadcasts one ordered effect without
+consuming the latest undo action. Plasma/rocket use fixed (radius, depth, upper)
+ellipsoids of (2,2,3) and (7,5,10), respectively. Clients cannot supply damage.
+
+Build shapes are generated entirely by the server, at most 1,024 unique cells.
+Every resulting coordinate must fit the world; a partial shape is refused. Rotation
+maps local (x,z) to (x,z), (-z,x), (-x,-z), (z,-x) about the origin. Hollow boxes and
+fixed prefabs include explicit air to clear their interiors. Prefabs use the fixed
+palette 200 alloy, 201 cyan, 202 magenta, 203 glass, 204 circuit, 205 landing pad;
+the validated block selection applies only to brushes. One build is one undo action.
 
 Committed changes broadcast, in order, to every joined player:
 
-1. `{type:"begin",epoch,revision,requestId,actor,kind,replace,count,bomb?,center?}`.
+1. `{type:"begin",epoch,revision,requestId,actor,kind,replace,count,...}`.
+   Blasts include `bomb,center`; weapons include `weapon,center`; builds include
+   `shape,origin,rotation,block` and brush-only `size`.
    `actor` is the server-validated display name. `replace:true` requires discarding
    all previous overrides and applying the streamed replacement atomically.
 2. Zero or more `{type:"delta",epoch,revision,edits:[[x,y,z,id|null],...]}`.
@@ -42,7 +58,7 @@ Committed changes broadcast, in order, to every joined player:
    effects. Reset/restore must also rehome players and discard old queued actions.
 
 History is newest-first, up to twenty `{revision,actor,kind,bomb}` entries; bomb
-is null for building. `checkpoint` reports whether restore is possible. The full
+is null for building and weapon actions. `checkpoint` reports whether restore is possible. The full
 history is trimmed by the inverse-cell budget too, so a large blast can leave fewer
 than twenty entries. Undo removes one latest action; it is not itself undoable.
 

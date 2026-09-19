@@ -42,7 +42,7 @@ class ServiceTests(unittest.TestCase):
                 return frames
 
     def start(self, ws):
-        ws.send_json({"type": "hello", "protocol": 1})
+        ws.send_json({"type": "hello", "protocol": 1, "contentVersion": 2})
         return self.collect(ws, "ready")
 
     def command(self, kind="edit", **fields):
@@ -61,6 +61,49 @@ class ServiceTests(unittest.TestCase):
         with self.socket(self.henry) as ws:
             self.assertEqual(ws.receive_json()["code"], "access")
         self.assertEqual(self.app.state.freeplay_hub.store.state()["revision"], 0)
+
+    def test_content_negotiation_refuses_legacy_before_snapshot_or_mutation(self):
+        invalid = [{"type": "hello", "protocol": 1},
+                   {"type": "hello", "protocol": 1, "contentVersion": 1},
+                   {"type": "hello", "protocol": 1, "contentVersion": 3},
+                   {"type": "hello", "protocol": True, "contentVersion": 2},
+                   {"type": "hello", "protocol": 1, "contentVersion": 2.0}]
+        for hello in invalid:
+            with self.subTest(hello=hello), self.socket(self.henry) as ws:
+                ws.send_json(hello)
+                self.assertEqual(ws.receive_json()["code"], "protocol")
+                with self.assertRaises(WebSocketDisconnect):
+                    ws.receive_json()
+        self.assertEqual(self.app.state.freeplay_hub.store.state()["revision"], 0)
+
+    def test_two_players_build_then_gravity_share_committed_metadata(self):
+        with self.socket(self.henry) as henry, self.socket(self.james) as james:
+            init = self.start(henry)[0]
+            self.assertEqual((init["contentVersion"], init["minContentVersion"]), (2, 2))
+            self.assertEqual(init["limits"]["maxBuild"], 1024)
+            self.assertEqual((init["limits"]["maxCells"], init["limits"]["maxChunks"]), (2_000_000, 1024))
+            self.start(james)
+            henry.send_json(self.command("build", shape="base", origin=[0, 10, 0], rotation=1, block=200))
+            first = self.collect(henry, "commit")
+            second = self.collect(james, "commit")
+            first = [frame for frame in first if frame["type"] != "join"]
+            self.assertEqual(first, second)
+            self.assertEqual(first[0]["shape"], "base")
+            self.assertEqual(first[0]["count"], 125)
+            self.assertTrue(any(cell[3] >= 200 for frame in first if frame["type"] == "delta"
+                                for cell in frame["edits"]))
+            gravity = self.command("weapon", weapon="gravity", center=[2, 12, 2])
+            james.send_json(gravity)
+            pulse = self.collect(henry, "commit")
+            self.assertEqual(pulse, self.collect(james, "commit"))
+            self.assertEqual([frame["type"] for frame in pulse], ["begin", "commit"])
+            self.assertEqual((pulse[0]["kind"], pulse[0]["weapon"], pulse[0]["count"]), ("weapon", "gravity", 0))
+            self.assertEqual(pulse[-1]["history"], first[-1]["history"])
+            time.sleep(0.11)
+            james.send_json(gravity)
+            self.assertTrue(james.receive_json()["duplicate"])
+            henry.send_json({"type": "ping"})
+            self.assertEqual(henry.receive_json(), {"type": "pong"})
 
     def test_two_players_real_atom_batched_reconnect_undo(self):
         with self.socket(self.henry) as henry, self.socket(self.james) as james:

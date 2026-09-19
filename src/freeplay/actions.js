@@ -2,11 +2,15 @@ import * as THREE from 'three';
 import { B, isSolid, isCutout } from '../defs.js';
 import { raycast } from '../physics.js';
 import { bombById, DEFAULT_BLOCK } from './catalogue.js';
+import { BuildPreview } from './build-preview.js';
+import { WeaponController } from './weapon-effects.js';
+import { weaponById } from './weapons.js';
 
 export class FreeplayActions {
   constructor(game) {
     this.game = game; this.selected = { type: 'block', id: DEFAULT_BLOCK }; this.fuse = null;
     this.direction = new THREE.Vector3();
+    this.builder=new BuildPreview(game);this.weapons=new WeaponController(game);
     const outline = new THREE.BoxGeometry(1.015,1.015,1.015);
     this.box = new THREE.LineSegments(new THREE.EdgesGeometry(outline),
       new THREE.LineBasicMaterial({color:0xffe6a0,depthTest:false,transparent:true,opacity:.8}));
@@ -20,12 +24,13 @@ export class FreeplayActions {
   target() {
     const g=this.game,p=g.player;g.camera.getWorldDirection(this.direction);
     const hit=raycast(g.world,p.pos.x,p.pos.y+p.eye,p.pos.z,this.direction.x,this.direction.y,this.direction.z,
-      this.selected.type==='bomb'?80:10,id=>!!(isSolid(id)||isCutout(id)));
+      this.selected.type==='bomb'?80:this.selected.type==='weapon'?weaponById(this.selected.id)?.range||50:this.selected.type==='build'?35:10,id=>!!(isSolid(id)||isCutout(id)));
     return hit&&g.world.isLoaded(hit.x,hit.z)?hit:null;
   }
   choose(value){this.selected=value;}
   update(dt) {
     const g=this.game,hit=this.target(),bomb=bombById(this.selected.id);
+    this.builder.update(this.selected,hit);this.weapons.update(dt,this.selected);
     this.hit=hit;this.box.visible=!!hit&&!g.paused;this.ring.visible=!!hit&&!!bomb&&this.selected.type==='bomb'&&!g.paused;
     if(hit){this.box.position.set(hit.x+.5,hit.y+.5,hit.z+.5);this.ring.position.set(hit.x+.5,hit.y+1.04,hit.z+.5);if(bomb)this.ring.scale.setScalar(bomb.radius);}
     if(!this.fuse)return;
@@ -43,6 +48,8 @@ export class FreeplayActions {
   }
   use() {
     const g=this.game,hit=this.target();if(!g.canEdit()||!hit)return;
+    if(this.selected.type==='build'){this.builder.use(this.selected,hit);return;}
+    if(this.selected.type==='weapon'){this.weapons.fire(weaponById(this.selected.id),hit);return;}
     if(this.selected.type==='bomb'){
       const bomb=bombById(this.selected.id);if(!bomb||this.fuse)return;
       this.fuse={bomb,elapsed:0,epoch:g.connection.epoch,socket:g.connection.socket,origin:g.camera.position.clone(),target:new THREE.Vector3(hit.x,Math.min(63,hit.y+1),hit.z)};
@@ -55,7 +62,7 @@ export class FreeplayActions {
     g.send('edit',{edits:[[x,y,z,this.selected.id]]});
   }
   break(){const hit=this.target();if(this.game.canEdit()&&hit&&hit.y>=1)this.game.send('edit',{edits:[[hit.x,hit.y,hit.z,B.AIR]]});}
-  primary(){if(this.selected.type==='bomb')this.use();else this.break();}
-  cancel(){this.fuse=null;this.projectile.visible=false;}
-  dispose(){for(const object of [this.box,this.ring,this.projectile]){object.removeFromParent();object.geometry.dispose();object.material.dispose();}}
+  primary(){if(this.selected.type!=='block')this.use();else this.break();}
+  cancel(){this.fuse=null;this.projectile.visible=false;this.weapons.cancel();}
+  dispose(){this.builder.dispose();this.weapons.dispose();for(const object of [this.box,this.ring,this.projectile]){object.removeFromParent();object.geometry.dispose();object.material.dispose();}}
 }

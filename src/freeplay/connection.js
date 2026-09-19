@@ -18,7 +18,7 @@ export class FreeplayConnection {
     this.connected = false; this.stage = null; this.lastSeen = Date.now();
     this.callbacks.state('connecting');
     const current = () => this.active && this.socket === ws;
-    ws.onopen = () => { if (current()) ws.send(JSON.stringify({ type: 'hello', protocol: FREEPLAY.protocol })); };
+    ws.onopen = () => { if (current()) ws.send(JSON.stringify({ type: 'hello', protocol: FREEPLAY.protocol, contentVersion: FREEPLAY.contentVersion })); };
     ws.onmessage = event => {
       if (!current()) return;
       try {
@@ -62,7 +62,7 @@ export class FreeplayConnection {
     if (!m || typeof m !== 'object') throw new Error('Invalid world message');
     switch (m.type) {
       case 'init': {
-        if (m.protocol !== FREEPLAY.protocol || m.freeplay !== true || m.room !== FREEPLAY.room || m.seed !== FREEPLAY.seed
+        if (m.protocol !== FREEPLAY.protocol || m.contentVersion !== FREEPLAY.contentVersion || m.minContentVersion !== FREEPLAY.contentVersion || m.freeplay !== true || m.room !== FREEPLAY.room || m.seed !== FREEPLAY.seed
           || !validHistory(m.history) || !Array.isArray(m.players) || m.players.length > 16) throw new Error('Wrong world');
         this.epoch = m.epoch; this.revision = m.revision;
         this.startStage(m, true); this.history = m.history; this.checkpoint = m.checkpoint === true;

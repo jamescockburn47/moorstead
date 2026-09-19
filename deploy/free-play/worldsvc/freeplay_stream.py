@@ -5,7 +5,9 @@ import logging
 
 from fastapi import WebSocketDisconnect
 
-from freeplay_rules import BATCH_SIZE, MAX_CELLS, MAX_CHUNKS, MAX_EDIT, PROTOCOL, ROOM, SEED, packed
+from freeplay_builds import MAX_BUILD
+from freeplay_rules import (BATCH_SIZE, CONTENT_VERSION, MAX_CELLS, MAX_CHUNKS, MAX_EDIT,
+                            PROTOCOL, ROOM, SEED, packed)
 
 log = logging.getLogger("moorstead.freeplay")
 
@@ -34,8 +36,10 @@ class Peer:
 async def send_snapshot(peer, store, players):
     state = store.state()
     await peer.send({"type": "init", "protocol": PROTOCOL, "freeplay": True,
+                     "contentVersion": CONTENT_VERSION, "minContentVersion": CONTENT_VERSION,
                      "room": ROOM, "seed": SEED, **state, "players": players,
-                     "limits": {"maxCells": MAX_CELLS, "maxChunks": MAX_CHUNKS, "maxEdit": MAX_EDIT}})
+                     "limits": {"maxCells": MAX_CELLS, "maxChunks": MAX_CHUNKS,
+                                "maxEdit": MAX_EDIT, "maxBuild": MAX_BUILD}})
     batches = store.snapshot(BATCH_SIZE)
     try:
         for edits in batches:
@@ -48,7 +52,7 @@ async def send_snapshot(peer, store, players):
 
 async def send_operation(peer, result, store):
     begin = {key: result[key] for key in ("epoch", "revision", "requestId", "actor", "kind", "replace")}
-    for key in ("bomb", "center"):
+    for key in ("bomb", "center", "weapon", "shape", "origin", "rotation", "block", "size"):
         if key in result:
             begin[key] = result[key]
     begin.update(type="begin", count=result["count"] if result["replace"] else len(result["changes"]))

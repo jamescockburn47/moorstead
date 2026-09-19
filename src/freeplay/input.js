@@ -17,6 +17,8 @@ export class FreeplayInput {
         if (e.code==='KeyF') game.fly();
         if (e.code==='KeyB') game.ui.open('build');
         if (e.code==='KeyX') game.ui.open('bombs');
+        if (e.code==='KeyG') game.ui.open('weapons');
+        if (e.code==='KeyR') game.ui.rotateBuild();
         if (e.code==='Escape') game.ui.open('menu');
       }
     });

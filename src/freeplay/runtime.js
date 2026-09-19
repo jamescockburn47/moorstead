@@ -13,6 +13,7 @@ import { FreeplayPeers } from './peers.js';
 import { FREEPLAY } from './config.js';
 import { bombById } from './catalogue.js';
 import { FreeplayMap } from './map.js';
+import { paintFutureAtlas } from './future-blocks.js';
 
 export class FreeplayGame {
   constructor(ui,connection,settings) {
@@ -22,6 +23,7 @@ export class FreeplayGame {
     this.renderer=new THREE.WebGLRenderer({canvas:ui.canvas,antialias:!settings.plain,powerPreference:'high-performance'});
     this.renderer.outputColorSpace=THREE.SRGBColorSpace;this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.05;
     this.atlas=getMaterials()?.opaque.map||initMaterials();
+    paintFutureAtlas(this.atlas);
     this.world=new FreeplayWorld(this.scene,FREEPLAY.seed);this.world.renderDist=settings.plain?4:6;
     this.player=new Player(this.world);this.player.creative=true;this.player.god=true;this.player.fatigue=0;
     this.player.name=connection.auth.name;this.player.pitch=-.22;this.home();
@@ -80,6 +82,7 @@ export class FreeplayGame {
   }
   complete(transfer){
     this.ready=true;
+    if(!transfer.snapshot&&transfer.kind==='weapon')this.actions.weapons.impact(transfer);
     if(!transfer.snapshot&&transfer.kind==='blast'){
       const bomb=bombById(transfer.bomb),[x,y,z]=transfer.center;
       if(bomb){const event={x,y,z,kind:bomb.id,radius:bomb.radius,depth:bomb.depth,id:String(transfer.revision)};this.effects.detonate(event);this.population.blast(event);}

@@ -1,9 +1,9 @@
 // One boundary for this edition's fixed routes and client resource budgets.
 export const FREEPLAY = Object.freeze({
-  room: 'family-freeplay', protocol: 1, seed: 419947177, worldLimit: 8192,
+  room: 'family-freeplay', protocol: 1, contentVersion: 2, seed: 419947177, worldLimit: 8192,
   socket: 'wss://moorstead.sovren.xyz/freeplay/ws', claim: '/dash/auth/freeplay-claim',
   authKey: 'moorstead-freeplay-auth-v1', preferencesKey: 'moorstead-freeplay-preferences-v1',
-  packetCells: 512, maxCells: 1000000, maxChunks: 1024, applyCellsPerFrame: 4096,
+  packetCells: 512, maxCells: 2000000, maxChunks: 1024, applyCellsPerFrame: 4096,
   maxPendingTransactions: 32,
   connectTimeout: 20000, transferTimeout: 120000, heartbeat: 15000,
 });

@@ -75,6 +75,7 @@ if(PLAYTEST){
     snapshot:()=>game?.snapshot()||null,
     cell:(x,y,z)=>game?.world.getBlock(x,y,z),
     surface:(x,z)=>game?.world.surfaceY(x,z),
+    rendered:(x,z)=>{const chunk=game?.world.chunkAt(Math.floor(x/16),Math.floor(z/16));return !!chunk?.meshes&&!chunk.dirty;},
     prepareView:(x,y,z,yaw,pitch)=>{
       if(!game)throw new Error('Enter the world first');
       Object.assign(game.player.pos,{x,y,z});game.player.yaw=yaw;game.player.pitch=pitch;game.player.flying=true;

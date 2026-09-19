@@ -1,8 +1,8 @@
-# Private Free Play — staged backend
+# Private Free Play — server and release tools
 
-Prepared 19 September 2026. **Not deployed.** No real invites, sessions, player
-records or production database are included. The approved plan authorises building
-and testing; its release step requires separate approval of the tested result.
+Updated 19 September 2026 for the **content 2 release**. No real
+invites, sessions, player records or production database are included. The upgrade
+adds private sci-fi materials, brushes, prefabs and three fictional weapons.
 
 This package serves exactly `family-freeplay` at `/freeplay/ws`, using the existing
 relay's token-ledger authentication. A dedicated dashboard claim route refuses an
@@ -14,6 +14,7 @@ route refuses this room before reading or creating ordinary room state.
 | Source | Destination / purpose |
 |---|---|
 | `worldsvc/freeplay_rules.py` | Relay directory; protocol limits, validators and deterministic blast cells |
+| `worldsvc/freeplay_builds.py` | Relay directory; bounded brushes and fixed sci-fi prefab cells |
 | `worldsvc/freeplay_store.py` | Relay directory; transactional SQLite persistence/history/recovery |
 | `worldsvc/freeplay_stream.py` | Relay directory; bounded snapshot and operation frames |
 | `worldsvc/freeplay_service.py` | Relay directory; session validation and exact-room WebSocket endpoint |
@@ -21,6 +22,7 @@ route refuses this room before reading or creating ordinary room state.
 | `backup.py` | Consistent, integrity-checked SQLite backup into a new file |
 | `fixture.py` | Loopback-only synthetic login/server for browser tests; never install in production |
 | `verify.py` | Canonical offline backend check |
+| `upgrade_pack.py` | Explicit content-1 → content-2 release, after backup and migration rehearsal |
 
 Live sources were read over `evo-tailscale`, without writes or service changes.
 `integrate.py` refuses sources whose SHA-256 differs from these inspected baselines:
@@ -43,7 +45,9 @@ inspected dashboard, used to execute the actual transformed login function.
 The only world store is `DATA/freeplay/world.sqlite3`; it is outside ordinary room
 JSON, pockets, companion records and pruning. SQLite transactions atomically commit
 overrides, revision, inverse history and idempotency receipts with synchronous FULL
-and WAL journalling. `user_version=1` refuses future schemas. The fixed seed is
+and WAL journalling. Content 2 migrates `user_version=1` to `2` without changing
+saved rows; the old adapter refuses version 2, preventing unsafe rollback against
+new materials. Versions above 2 are refused. The fixed seed is
 `419947177`, the existing Moorstead `strSeed('t-moors-1900')` value.
 
 An absent override means procedural baseline. A stored `0` means air. Undo sends
@@ -53,9 +57,10 @@ advances epoch and clears peer positions. Resetting pristine terrain again retai
 the useful previous checkpoint. Restore swaps the active world and checkpoint,
 advances epoch and clears history; the replaced world remains recoverable.
 
-Limits are explicit: 1,000,000 override cells; 1,024 touched 16×16 chunks;
+Limits are explicit: 2,000,000 override cells; 1,024 touched 16×16 chunks;
 20 recent actions and at most 400,000 inverse cells; 4,096 idempotency receipts;
-8 simultaneous identities; 64 blocks per building stroke; 512 rows per outgoing
+8 simultaneous identities; 64 blocks per direct stroke; 1,024 generated cells per
+brush/prefab command; 512 rows per outgoing
 batch; 16 KiB incoming command; one command per peer per 100 ms. Each peer may have
 one command awaiting the room lock, so there is no unbounded operation queue.
 World-limit refusals roll back completely and leave undo/reset/restore available.
@@ -76,6 +81,7 @@ No player pockets are read or saved. Positions are ephemeral, bounded and checke
 against the exact epoch. Token expiry/revocation is rechecked on operations and
 approximately every second when idle. Authentication comes only from the existing
 server callback and the exact room-bound session, never a client capability flag.
+The hello handshake additionally requires content version 2 before any snapshot.
 
 ## Stylised damage rules
 
@@ -130,7 +136,38 @@ Browser interception may redirect only those fixture requests; the shipped clien
 has no bypass or test login. The fixture authenticates synthetic in-memory sessions
 through the same production adapter. It does not establish live invite validity.
 
-## Release and recovery — after explicit release approval
+## Content-2 upgrade — after the matching client is verified
+
+The existing relay/dashboard/Caddy integration stays unchanged. Do not re-run the
+initial integration transformer, mint replacement codes or start disabled services.
+The four current live adapter hashes were read and matched the content-1 baseline
+in `upgrade_pack.py`. A changed hash must be inspected before release.
+
+Create a new private staging directory outside `worldsvc` (mode 0700). Copy
+`upgrade_pack.py`, `backup.py`, and all **five** `worldsvc/freeplay_*.py` candidate
+modules into that directory. Run with the relay's existing Python:
+
+```sh
+/home/james/moorstead/venv/bin/python /path/to/private-stage/upgrade_pack.py --install
+```
+
+The helper stops only `moorstead-world`, retains the original adapter modules and
+a consistent SQLite backup, rehearses migration on a separate restored copy, and
+checks count/hash equality for every saved table. It also executes the actual old
+adapter to prove it refuses the upgraded rehearsal database. It then installs the
+five modules, migrates the live database, verifies identical table hashes before
+restart and waits for relay health. The fresh restart closes legacy sockets.
+The parent release still checks the real live login → build/weapon → undo journey;
+relay health alone does not establish product readiness.
+
+Before database migration, failure restores the original adapter. After migration,
+the helper preserves the upgraded database and reports that roll-forward is needed.
+Do not run old code against version 2, lower the version marker, or silently replace
+the world from the pre-upgrade backup. Emergency restoration would discard later
+play and requires an explicit decision with the current database retained first.
+No dashboard, Caddy, invite, account, ordinary world or NPC/model changes are needed.
+
+## Initial installation record — already performed for content 1
 
 1. Run the canonical client/backend checks and browser journeys, inspect actual
    output, and resolve material findings from fresh independent review. Retain
@@ -145,7 +182,7 @@ through the same production adapter. It does not establish live invite validity.
    `backup.py <live-world.sqlite3> <new-dated-backup.sqlite3>` and test opening a
    separate restored copy. Do not copy a running SQLite main file without its WAL;
    the backup API includes committed WAL state. Never replace invite/account stores.
-4. Install the four `worldsvc` modules next to the relay, and the staged relay,
+4. Install the `worldsvc` modules next to the relay, and the staged relay,
    dashboard and Caddy sources. Validate Caddy configuration before reload. Changes
    add only `/freeplay/ws` and public `/dash/auth/freeplay-claim`; mint, revoke,
    administration and reset administration endpoints remain outside the public
@@ -173,5 +210,5 @@ through the same production adapter. It does not establish live invite validity.
    codes or worlds. Restoring a database disconnects all sessions before its older
    epoch can return; clients must begin with a fresh snapshot.
 
-No live release, real credential provisioning, production rollback or physical
-tablet performance is proved by this staged backend test suite.
+The offline suite proves neither live release readiness nor physical tablet
+performance; those need their corresponding live/device evidence.

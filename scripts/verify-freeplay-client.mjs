@@ -33,8 +33,9 @@ class Socket{
 const transfers=[],errors=[],states=[],positions=[],rosters=[];
 const net=new FreeplayConnection(auth,{state:s=>states.push(s),error:e=>errors.push(e),transaction:t=>transfers.push(t),peer:p=>positions.push(p),peers:p=>rosters.push(p)},Socket);
 try{
-  net.connect();const socket=Socket.last;socket.onopen();assert.deepEqual(socket.sent[0],{type:'hello',protocol:1});
-  const init={type:'init',protocol:1,freeplay:true,room:FREEPLAY.room,seed:FREEPLAY.seed,epoch:1,revision:0,history:[],checkpoint:false,players:[],count:1};
+  net.connect();const socket=Socket.last;socket.onopen();assert.deepEqual(socket.sent[0],{type:'hello',protocol:1,contentVersion:2});
+  const init={type:'init',protocol:1,contentVersion:2,minContentVersion:2,freeplay:true,room:FREEPLAY.room,seed:FREEPLAY.seed,epoch:1,revision:0,history:[],checkpoint:false,players:[],count:1};
+  assert.throws(()=>net.receive({...init,contentVersion:1}),/Wrong world/,'old content must refuse before rendering new blocks');
   net.receive(init);net.receive({type:'snapshot',edits:[[3,4,5,8]]});assert.equal(transfers.length,0,'partial snapshot not published');
   net.receive({type:'ready',epoch:1,revision:0});assert(net.connected);assert.equal(transfers[0].edits.getCell(3,4,5),8);
   const rid=net.command('edit',{edits:[[3,4,5,0]]});assert.equal(net.pending,rid);
@@ -87,3 +88,6 @@ for(const file of readdirSync(new URL('../src/freeplay/',import.meta.url)).filte
 console.log('PASS freeplay client: scoped auth, transactional transfer, epochs, invulnerability, real blast shape, isolated worker cache, module bounds');
 import './verify-freeplay-runtime.mjs';
 import './verify-freeplay-map.mjs';
+import './verify-freeplay-blocks.mjs';
+import './verify-freeplay-build.mjs';
+import './verify-freeplay-weapons.mjs';

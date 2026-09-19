@@ -45,11 +45,11 @@ class StoreTests(unittest.TestCase):
 
     def test_forward_schema_refusal(self):
         with self.store.connect() as db:
-            db.execute("PRAGMA user_version=2")
+            db.execute("PRAGMA user_version=3")
         with self.assertRaisesRegex(ValueError, "newer unsupported"):
             Store(self.path)
         with self.store.connect() as db:
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 3)
 
     def test_backup_restores_persistent_world_and_checkpoint(self):
         sys.path.insert(0, str(Path(__file__).resolve().parents[1]))

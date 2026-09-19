@@ -31,7 +31,7 @@ function transfer(revision, rows, extra = {}) {
   const net = new FreeplayConnection({ acct: 'test', token: 'synthetic-token', name: 'Henry', room: FREEPLAY.room }, {
     state() {}, error() {}, transaction: value => game.transaction(value),
   });
-  net.receive({ type: 'init', protocol: 1, freeplay: true, room: FREEPLAY.room, seed: FREEPLAY.seed,
+  net.receive({ type: 'init', protocol: 1, contentVersion: 2, minContentVersion: 2, freeplay: true, room: FREEPLAY.room, seed: FREEPLAY.seed,
     epoch: 1, revision: 0, history: [], players: [], count: 0 });
   net.receive({ type: 'ready', epoch: 1, revision: 0 });
   for (let revision = 1; revision <= 1000; revision++) {

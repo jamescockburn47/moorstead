@@ -3,6 +3,7 @@ import { World } from '../world.js';
 import { B, BLOCKS, CHUNK, HEIGHT, isSolid } from '../defs.js';
 import { disposeChunkMeshes } from '../mesher.js';
 import { OverrideStore, voxelIndex as index } from './terrain-overrides.js';
+import { registerFutureBlocks } from './future-blocks.js';
 
 const chunkKey = (x, z) => `${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}`;
 const light = id => id === B.LANTERN || id === B.TORCH || id === B.SAFETY_LAMP;
@@ -11,6 +12,7 @@ const clock = () => performance.now();
 export class FreeplayWorld extends World {
   constructor(scene, seed, overrides = new Map()) {
     super(scene, seed);
+    registerFutureBlocks();
     this.overrides = new OverrideStore();
     this.baselines = new Map();
     this.editQueue = [];

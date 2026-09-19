@@ -1,5 +1,8 @@
 import { BLOCK_CATALOGUE, BOMBS, DEFAULT_BLOCK } from './catalogue.js';
 import { getIconURL } from '../textures.js';
+import { FUTURE_BLOCKS, getFutureIconURL } from './future-blocks.js';
+import { WEAPONS } from './weapons.js';
+import { BUILD_SHAPES, BRUSH_SIZES } from './build-shapes.js';
 
 export function element(tag, className, text, parent) {
   const el = document.createElement(tag); el.className = className || '';
@@ -47,6 +50,7 @@ export class FreeplayUI {
     const tools = element('nav', 'fp-tools', null, bottom); tools.setAttribute('aria-label', 'Free-play tools');
     button(tools, 'Build', () => this.open('build'));
     button(tools, 'Bombs', () => this.open('bombs'));
+    button(tools, 'Weapons', () => this.open('weapons'));
     this.fly = button(tools, 'Fly', () => actions.fly());
     this.undo = button(tools, 'Undo', () => actions.undo());
     this.touch = element('div', 'fp-touch', null, this.hud);
@@ -56,6 +60,7 @@ export class FreeplayUI {
     }
     const touchActions = element('div', 'fp-touch-actions', null, this.touch);
     this.place = button(touchActions, 'Place', () => actions.use());
+    this.rotate = button(touchActions, 'Rotate', () => this.rotateBuild()); this.rotate.hidden = true;
     button(touchActions, 'Break', () => actions.break());
     for (const [label, key] of [['Up / jump', 'Space'], ['Down', 'ShiftLeft']]) { const el = button(touchActions, label, () => {}); el.dataset.key = key; }
     this.notice = element('p', 'fp-notice', '', this.hud); this.notice.setAttribute('role', 'status');
@@ -75,30 +80,54 @@ export class FreeplayUI {
   status(text) { this.connection.textContent = text; }
   select(value) {
     this.selected = value;
-    const name = value.type === 'block' ? BLOCK_CATALOGUE.find(row => row.id === value.id)?.name : BOMBS.find(row => row.id === value.id)?.name;
-    this.selection.textContent = (name || 'Choose a block') + ' · ∞'; this.place.textContent = value.type === 'bomb' ? 'Throw / place' : 'Place';
+    const blocks=[...FUTURE_BLOCKS,...BLOCK_CATALOGUE];
+    const name = value.type === 'build' ? BUILD_SHAPES.find(row=>row.id===value.shape)?.name + (value.size?' '+value.size:'')+' · '+(value.rotation||0)*90+'°'
+      : value.type === 'weapon' ? WEAPONS.find(row=>row.id===value.id)?.name
+      : value.type === 'block' ? blocks.find(row => row.id === value.id)?.name : BOMBS.find(row => row.id === value.id)?.name;
+    this.selection.textContent = (name || 'Choose a block') + ' · ∞';
+    this.place.textContent = value.type === 'bomb' ? 'Throw / place' : value.type === 'weapon' ? 'Fire' : 'Place';
+    this.rotate.hidden=value.type!=='build';
     this.actions.select(value); this.panel.close();
   }
+  rotateBuild(){if(this.selected.type==='build')this.select({...this.selected,rotation:((this.selected.rotation||0)+1)%4});}
   open(kind) {
     this.actions.pause(true); document.exitPointerLock?.(); this.panelContent.replaceChildren();
-    this.panelTitle.textContent = {build:'Build anything',bombs:'The bomb cupboard',menu:'Our shared moor',map:'Find each other'}[kind];
+    this.panelTitle.textContent = {build:'Build anything',bombs:'The bomb cupboard',weapons:'The sci-fi armoury',menu:'Our shared moor',map:'Find each other'}[kind];
     if (kind === 'map') this.actions.map(this.panelContent);
     if (kind === 'build') this.buildCatalogue();
     if (kind === 'bombs') for (const bomb of BOMBS) {
       const el = button(this.panelContent, '', () => this.select({type:'bomb',id:bomb.id}), 'fp-bomb');
       el.style.setProperty('--bomb-colour', bomb.colour); element('strong', '', bomb.name + ' · ∞', el); element('span', '', bomb.description, el);
     }
+    if(kind==='weapons')for(const weapon of WEAPONS){
+      const el=button(this.panelContent,'',()=>this.select({type:'weapon',id:weapon.id}),'fp-bomb');
+      el.style.setProperty('--bomb-colour',weapon.colour);element('strong','',weapon.name+' · ∞',el);element('span','',weapon.description,el);
+    }
     if (kind === 'menu') this.menu();
     this.panel.showModal();
   }
   buildCatalogue() {
+    let shape='single',size=5;
+    element('p','','Choose a brush, then tap a block. Aim the blue preview and Place. R or Rotate turns it; Undo removes the whole build.',this.panelContent);
+    const brushes=element('div','fp-build-choices',null,this.panelContent);
+    const options=[{id:'single',name:'One block'},...BUILD_SHAPES.filter(row=>!row.prefab)];
+    for(const row of options){const el=button(brushes,row.name,()=>{shape=row.id;for(const b of brushes.children)b.setAttribute('aria-pressed',String(b===el));});el.setAttribute('aria-pressed',String(row.id===shape));}
+    const sizeLabel=element('label','fp-build-size','Brush size ',this.panelContent),sizes=element('select','',null,sizeLabel);
+    sizes.setAttribute('aria-label','Brush size');
+    for(const n of BRUSH_SIZES){const option=element('option','',String(n)+' blocks',sizes);option.value=n;option.selected=n===size;}
+    sizes.onchange=()=>{size=Number(sizes.value);};
+    element('h3','','Ready-made builds',this.panelContent);
+    const prefabs=element('div','fp-build-choices',null,this.panelContent);
+    for(const row of BUILD_SHAPES.filter(row=>row.prefab))button(prefabs,row.name,()=>this.select({type:'build',shape:row.id,block:200,rotation:0}));
+    element('h3','','Materials · unlimited',this.panelContent);
     const label = element('label', '', 'Find a block', this.panelContent), search = element('input', '', null, label); search.type = 'search';
     const grid = element('div', 'fp-catalogue', null, this.panelContent);
     const draw = () => {
       grid.replaceChildren();
-      for (const block of BLOCK_CATALOGUE.filter(row => row.name.toLowerCase().includes(search.value.toLowerCase()))) {
-        const el = button(grid, '', () => this.select({type:'block',id:block.id}));
-        const image = element('img', '', null, el); image.src = getIconURL(block.id); image.alt = ''; image.width = image.height = 40;
+      for (const block of [...FUTURE_BLOCKS,...BLOCK_CATALOGUE].filter(row => row.name.toLowerCase().includes(search.value.toLowerCase()))) {
+        const el = button(grid, '', () => this.select(shape==='single'?{type:'block',id:block.id}:{type:'build',shape,block:block.id,size,rotation:0}));
+        const image = element('img', '', null, el); image.src = getFutureIconURL(block.id)||getIconURL(block.id); image.alt = ''; image.width = image.height = 40;
+        if(block.description)el.title=block.description;
         element('span', '', block.name, el);
       }
     };
@@ -106,7 +135,7 @@ export class FreeplayUI {
   }
   menu() {
     element('p', '', 'Infinite supplies and health. No chores. Everything here belongs to this separate free-play world.', this.panelContent);
-    element('p', '', 'WASD: walk · drag/mouse: look · F: fly · Space: up/jump · Shift: down · Z: faster · left click: break/throw · right click: place · B: build · X: bombs · M: map', this.panelContent);
+    element('p', '', 'WASD: walk · drag/mouse: look · F: fly · Space: up/jump · Shift: down · Z: faster · left click: break/fire/build · right click: place · B: build · X: bombs · G: weapons · R: rotate build · M: map', this.panelContent);
     button(this.panelContent, 'Back to village', () => { this.actions.home(); this.panel.close(); });
     button(this.panelContent, 'Reconnect', () => { this.actions.reconnect(); this.panel.close(); });
     const settings = this.actions.settings();
