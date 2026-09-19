@@ -96,12 +96,21 @@ test('freeplay touch controls remain reachable with the three-row build actions'
   }));
   for (const [width, height] of [[360, 800], [600, 960], [640, 360], [1024, 600]]) {
     await page.setViewportSize({ width, height });
-    for (const driving of [false, true]) {
-      await page.evaluate(driving => { const ui = window.layoutUI; ui.tools.hidden = driving; ui.vehicleDrive.hidden = !driving; }, driving);
-      expect(await blockedButtons(), `All ${driving ? 'driving' : 'building'} controls and the locator must receive their own tap at ${width}×${height}`).toEqual([]);
+    for (const mode of ['building', 'driving', 'battle']) {
+      await page.evaluate(mode => {
+        const ui = window.layoutUI, battle = mode === 'battle';
+        ui.tools.hidden = mode === 'driving'; ui.vehicleDrive.hidden = mode !== 'driving';
+        ui.army.hidden = ui.shield.hidden = !battle; ui.fly.hidden = ui.undo.hidden = battle;
+        ui.shield.textContent = 'Shield 25';
+        ui.selection.textContent = battle ? 'Blue army · HP 100 · Shield 100 · Machine gun' : 'Space base · ∞';
+      }, mode);
+      expect(await blockedButtons(), `All ${mode} controls and the locator must receive their own tap at ${width}×${height}`).toEqual([]);
     }
   }
-  await page.evaluate(() => { window.layoutUI.vehicleDrive.hidden = true; window.layoutUI.tools.hidden = false; });
+  await page.evaluate(() => {
+    const ui = window.layoutUI; ui.vehicleDrive.hidden = true; ui.tools.hidden = false;
+    ui.army.hidden = ui.shield.hidden = true; ui.fly.hidden = ui.undo.hidden = false;
+  });
   // Counterexample: the former two-row spacing must be caught by this assertion.
   await page.setViewportSize({ width: 360, height: 800 });
   await page.addStyleTag({ content: '@media(max-width:700px){.fp-bottom{bottom:136px}}' });

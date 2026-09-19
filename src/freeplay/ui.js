@@ -53,6 +53,8 @@ export class FreeplayUI {
     button(tools, 'Weapons', () => this.open('weapons'));
     this.fly = button(tools, 'Fly', () => actions.fly());
     this.undo = button(tools, 'Undo', () => actions.undo());
+    this.army=button(tools,'Army',()=>this.open('battle'));this.army.hidden=true;
+    this.shield=button(tools,'Shield',()=>actions.shield());this.shield.hidden=true;
     this.touch = element('div', 'fp-touch', null, this.hud);
     const move = element('div', 'fp-move', null, this.touch);
     for (const [label, key] of [['↑', 'KeyW'], ['←', 'KeyA'], ['↓', 'KeyS'], ['→', 'KeyD']]) {
@@ -79,7 +81,7 @@ export class FreeplayUI {
   playing(name) { this.login.hidden = true; this.hud.hidden = false; this.people.textContent = name; this.canvas.focus(); }
   report(message) { this.error.textContent = message; this.error.hidden = false; }
   message(text) { this.notice.textContent = text; }
-  status(text) { this.connection.textContent = text; }
+  status(text) { if(this.connection.textContent!==text)this.connection.textContent = text; }
   select(value) {
     this.selected = value;
     const blocks=[...FUTURE_BLOCKS,...BLOCK_CATALOGUE];
@@ -94,7 +96,8 @@ export class FreeplayUI {
   rotateBuild(){if(this.selected.type==='build')this.select({...this.selected,rotation:((this.selected.rotation||0)+1)%4});}
   open(kind) {
     this.actions.pause(true); document.exitPointerLock?.(); this.panelContent.replaceChildren();
-    this.panelTitle.textContent = {build:'Build anything',bombs:'The bomb cupboard',weapons:'The sci-fi armoury',menu:'Our shared moor',map:'Find each other',vehicles:'Build and drive'}[kind];
+    this.panelTitle.textContent = {build:'Build anything',bombs:'The bomb cupboard',weapons:'The sci-fi armoury',menu:'Our shared moor',map:'Find each other',vehicles:'Build and drive',battle:'The battlefield'}[kind];
+    if(kind==='battle')this.actions.battle(this.panelContent);
     if(kind==='vehicles')this.actions.vehicles(this.panelContent);
     if (kind === 'map') this.actions.map(this.panelContent);
     if (kind === 'build') this.buildCatalogue();
@@ -141,6 +144,7 @@ export class FreeplayUI {
     element('p', '', 'WASD: walk · drag/mouse: look · F: fly · Space: up/jump · Shift: down · Z: faster · left click: break/fire/build · right click: place · B: build · X: bombs · G: weapons · R: rotate build · M: map', this.panelContent);
     button(this.panelContent, 'Back to village', () => { this.actions.home(); this.panel.close(); });
     button(this.panelContent, 'Our vehicles', () => this.open('vehicles'));
+    button(this.panelContent, 'Battlefield / armies', () => this.open('battle'));
     button(this.panelContent, 'Reconnect', () => { this.actions.reconnect(); this.panel.close(); });
     const settings = this.actions.settings();
     for (const [key,label] of [['plain','Plain graphics (best for tablets)'],['reducedFlash','Gentle flashes'],['reducedMotion','Gentle effects'],['muted','Mute sound']]) {

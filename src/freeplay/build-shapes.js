@@ -11,10 +11,14 @@ export const BUILD_SHAPES = Object.freeze([
   { id: 'base', name: 'Space base', prefab: true, dimensions: [5, 5, 5] },
   { id: 'tower', name: 'Neon tower', prefab: true, dimensions: [5, 9, 5] },
   { id: 'bridge', name: 'Sky bridge', prefab: true, dimensions: [3, 3, 13] },
+  { id: 'trench', name: 'Trench', prefab: true, dimensions: [5, 5, 9], offsetY: -4 },
+  { id: 'bunker', name: 'Bunker', prefab: true, dimensions: [7, 5, 7] },
+  { id: 'barricade', name: 'Sandbag barricade', prefab: true, dimensions: [7, 3, 2] },
+  { id: 'watchpost', name: 'Watchpost', prefab: true, dimensions: [5, 7, 5] },
 ].map(row => Object.freeze({ ...row, ...(row.dimensions ? { dimensions: Object.freeze(row.dimensions) } : {}) })));
 
 const STAIR = Object.freeze([[2, 1], [3, 1], [3, 2], [3, 3], [2, 3], [1, 3], [1, 2], [1, 1]]);
-const validBlock = id => Number.isInteger(id) && ((id >= 1 && id <= 62) || (id >= 200 && id <= 206));
+const validBlock = id => Number.isInteger(id) && ((id >= 1 && id <= 62) || (id >= 200 && id <= 208));
 const coordinate = (value, min, max) => Number.isSafeInteger(value) && value >= min && value <= max;
 
 export function buildDimensions(shape, size) {
@@ -30,6 +34,27 @@ export function buildDimensions(shape, size) {
 }
 
 function prefabBlock(shape, x, y, z) {
+  if (shape === 'trench') {
+    if (y === 0) return 208;
+    if (x === 0 || x === 4) return 207;
+    return z >= 6 && y <= z - 5 ? 207 : 0;
+  }
+  if (shape === 'bunker') {
+    if (y === 0 || y === 4) return y === 4 && x === 3 && z === 3 ? 201 : 208;
+    if (x === 3 && z === 0 && y <= 2) return 0;
+    const wall = x === 0 || x === 6 || z === 0 || z === 6;
+    const port = (x === 0 || x === 6) && (z === 2 || z === 4)
+      || z === 6 && (x === 2 || x === 4) || z === 0 && (x === 1 || x === 5);
+    return wall && !(y === 2 && port) ? 208 : 0;
+  }
+  if (shape === 'barricade') return y === 0 || z === 0 && (y === 1 || x % 3 === 0) ? 207 : 0;
+  if (shape === 'watchpost') {
+    if (y === 0) return 208;
+    if (y <= 4 && STAIR[y - 1][0] === x && STAIR[y - 1][1] === z) return 208;
+    if (y === 4) return x === 3 && (z === 1 || z === 2) ? 0 : 208;
+    if (y === 5) return x === 0 || x === 4 || z === 0 || z === 4 ? 207 : 0;
+    return y < 4 && (x === 0 || x === 4) && (z === 0 || z === 4) ? 208 : 0;
+  }
   if (shape === 'bridge') {
     if (y === 0) return z % 6 === 0 ? 205 : 200;
     if (x !== 0 && x !== 2) return 0;
@@ -56,7 +81,8 @@ function prefabBlock(shape, x, y, z) {
   return [2, 3, 6, 7].includes(y) && flatWall ? 203 : edge ? 200 : 0;
 }
 
-// Origin is the local bottom/front/left corner. Rotate around that voxel, not the
+// Origin is the local bottom/front/left corner (trench anchors at ground surface).
+// Rotate around that voxel, not the
 // bounding-box centre: +90° sends local +x towards world +z and +z towards -x.
 export function buildShape(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid building command.');
@@ -78,7 +104,7 @@ export function buildShape(value) {
   if (width * height * length > MAX_BUILD_CELLS) throw new Error('That building is too large.');
   for (let y = 0; y < height; y++) for (let z = 0; z < length; z++) for (let x = 0; x < width; x++) {
     const [rx, rz] = rotation === 0 ? [x, z] : rotation === 1 ? [-z, x] : rotation === 2 ? [-x, -z] : [z, -x];
-    const px = origin[0] + rx, py = origin[1] + y, pz = origin[2] + rz;
+    const px = origin[0] + rx, py = origin[1] + y + (info.offsetY || 0), pz = origin[2] + rz;
     if (!coordinate(px, -FREEPLAY.worldLimit, FREEPLAY.worldLimit) || !coordinate(py, 1, 63)
       || !coordinate(pz, -FREEPLAY.worldLimit, FREEPLAY.worldLimit)) throw new Error('The whole building must fit inside the world.');
     const shell = x === 0 || x === width - 1 || y === 0 || y === height - 1 || z === 0 || z === length - 1;

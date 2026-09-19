@@ -24,6 +24,7 @@ const ui=new FreeplayUI(root,{
   continue:()=>start(),pause:value=>game?.pause(value),
   map:parent=>game?.map.open(parent),
   vehicles:parent=>game?.vehicles.panel(parent),park:()=>game?.vehicles.park(),vehicleView:()=>game?.vehicles.toggleView(),
+  battle:parent=>game?.battle.panel(parent),shield:()=>game?.battle.shield(),
   fly:()=>game?.fly(),use:()=>game?.use(),break:()=>game?.break(),
   select:value=>game?.actions.choose(value),
   undo:()=>game?.send('undo'),reset:()=>game?.send('reset',{confirm:true}),restore:()=>game?.send('restore',{confirm:true}),
@@ -50,8 +51,8 @@ function start(){
     state:state=>{
       if(!current())return;
       const text={connecting:'Joining…',syncing:'Receiving world…',saving:'Saving…',ready:'Shared · ∞ health · ∞ supplies',offline:'Offline · reconnecting',denied:'Login required',replaced:'Playing on another device'}[state]||state;
-      ui.status(text);
-      if(['connecting','offline','denied','replaced'].includes(state)){peerCache=[];game?.peers.replace([]);game?.vehicles.disconnected();}
+      ui.connectionState=state;ui.status(text);
+      if(['connecting','offline','denied','replaced'].includes(state)){peerCache=[];game?.peers.replace([]);game?.vehicles.disconnected();game?.battle.disconnected();}
       if(state==='offline')ui.message('Connection lost. Changes wait until the saved world reconnects.');
       if(state==='denied'){ui.login.hidden=false;ui.hud.hidden=true;ui.loginError('Enter thi free-play code again.');}
     },
@@ -60,6 +61,7 @@ function start(){
     peers:values=>{peerCache=values;if(current())game?.peers.replace(values);},
     peer:value=>{if(current())game?.peers.put(value);},leave:id=>{if(current())game?.peers.remove(id);},
     vehicle:value=>{if(current())game?.vehicles.event(value);},
+    battle:value=>{if(current())game?.battle.receive(value);},
     transaction:transfer=>{
       if(!current())return;
       if(!game){game=new FreeplayGame(ui,connection,settings);game.peers.replace(peerCache);ui.playing(auth.name);}

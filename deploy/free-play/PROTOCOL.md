@@ -1,14 +1,14 @@
-# Free Play WebSocket protocol 1, content 3
+# Free Play WebSocket protocol 1, content 4
 
 Only `/freeplay/ws?room=family-freeplay&pid=a<account-id>&token=<session-token>`.
 The route verifies existing server sessions; ordinary `/ws` rejects this room.
 `POST /dash/auth/freeplay-claim` uses the dedicated account/room precondition and
 returns the usual account fields plus `edition: "freeplay"`.
 
-1. Client sends `{type:"hello",protocol:1,contentVersion:3}` within ten seconds.
+1. Client sends `{type:"hello",protocol:1,contentVersion:4}` within ten seconds.
    Older/newer content versions are refused before any snapshot or mutation.
 2. Server sends `init` with `protocol`, `freeplay:true`, `room`, numeric `seed`,
-   `contentVersion:3`, `minContentVersion:3`, `epoch`, `revision`, `count`, `history`,
+   `contentVersion:4`, `minContentVersion:4`, `epoch`, `revision`, `count`, `history`,
    `checkpoint`, `players`, `vehicleCount`, `limits` (including `maxCells:8000000`,
    `maxChunks:1024`, `maxBuild:1024`, `maxVehicles:16`, `maxVehicleCells:512`).
 3. Zero or more `{type:"snapshot",edits:[[x,y,z,id],...]}` frames, ≤512 cells each.
@@ -24,10 +24,10 @@ fields are refused, including room/radius/damage/privilege fields.
 
 | type | Required extra fields |
 |---|---|
-| `edit` | `edits`: 1–64 unique `[x,y,z,id]`, id 0–62 or 200–206; no null |
+| `edit` | `edits`: 1–64 unique `[x,y,z,id]`, id 0–62 or 200–208; no null |
 | `blast` | `bomb`: grenade/dynamite/demolition/mega/atom; `center:[x,y,z]` |
 | `weapon` | `weapon`: plasma/rocket/gravity/machinegun/sheep; `center:[x,y,z]`; sheep also requires `origin:[x,y,z]` |
-| `build` | `shape`: line/wall/floor/box/base/tower/bridge; `origin:[x,y,z]`; `rotation`: 0–3; `block`: 1–62 or 200–206; `size`: 3/5/7 required only for line/wall/floor/box, forbidden for prefabs |
+| `build` | `shape`: line/wall/floor/box/base/tower/bridge/trench/bunker/barricade/watchpost; `origin:[x,y,z]`; `rotation`: 0–3; `block`: 1–62 or 200–208; `size`: 3/5/7 required only for line/wall/floor/box, forbidden for prefabs |
 | `vehicle-convert` | `core:[x,y,z]`, `from:[x,y,z]`, `to:[x,y,z]`, `mode`: car/plane/submarine |
 | `vehicle-edit` | `vehicleId`: the 32-character server-issued lowercase hex id |
 | `undo` | none; latest retained shared terrain action |
@@ -136,3 +136,54 @@ pending terrain request. Reset/restore/affected undo operations invalidate lease
 
 Snapshots and replacement transfers have a 120-second overall delivery deadline;
 ordinary actions retain 30 seconds, with three seconds per individual socket send.
+
+## Battlefield
+
+Battle commands require `type,epoch` but no terrain request ID or revision. Unknown
+fields, stale epochs and expired/revoked sessions are refused. Errors include the
+originating `command`, so they do not clear a pending terrain operation.
+
+| Type | Additional fields |
+|---|---|
+| `battle-join` | `team`: blue/red |
+| `battle-leave` | none |
+| `battle-recruit` | `count`: integer 1–6; at most 24 soldiers per team |
+| `battle-order` | `order`: follow/hold/attack; `rally:[x,y,z]` inside arena |
+| `battle-shot` | `weapon`: machinegun/plasma; finite `direction:[dx,dy,dz]` with length 0.5–1.5, normalized by server |
+| `battle-shield` | none; radius 6, lasts 12 seconds, cooldown 25 seconds |
+| `battle-rally` | none; return to camp preserving health, cooldown 10 seconds |
+| `battle-reset` | none; reset match state, preserving terrain |
+
+The server sends `battle-state` after `ready` when the configured arena is available,
+then at five Hz while anyone participates. Its envelope is `{type,epoch,battle}`;
+`battle` contains `available:true,revision,bounds:{minX,minZ,maxX,maxZ},camps,scores,
+players,soldiers,shields`. Player/soldier records have `id,team,x,y,z,yaw,hp,shield,
+respawn,spawnSeq`; player records add `name,correctionSeq,shieldCooldown`, soldiers
+add `owner,order`. Respawn and cooldown values are seconds remaining. Shield records
+are `{id,team,x,y,z,radius,remaining}`. Soldier yaw zero faces positive Z.
+
+Participants use the existing `pos` channel; arena bounds, swept terrain cover,
+body clearance and speed 30 units/second plus two units jitter are enforced.
+Rejected movement increments `correctionSeq` and promptly returns authoritative
+state, bounded to five corrections/second. Apply a changed correction sequence by
+snapping position; preserve view direction. A changed `spawnSeq` means join,
+respawn or return to camp. Battle participation and vehicle piloting are mutually
+exclusive on the server. Other Free Play players are immune to match damage.
+
+Player health/shield are 100/100; shields regenerate after three seconds without a
+hit. Soldiers have 50 health. Knockouts respawn players after five seconds and
+soldiers after eight. Enemy knockouts score three points for players, one for
+soldiers. Leaving or disconnecting dismisses that player's army. Match state,
+including scores, is ephemeral and resets with world reset/recovery or a restart.
+
+Shots originate at the server's accepted player position and stop at actual solid
+terrain. Direct battle shots damage entities only. Existing bomb/weapon commands
+still apply terrain damage; participating actors must be alive and target inside
+the arena within 96 units. Victims and cover are resolved before terrain damage,
+and health changes only follow a successful, nonduplicate world commit. Friendly
+dome shields protect allies inside; friendly fire is disabled.
+
+Effects are `{type:"battle-event",epoch,event}`. Shot events contain
+`type:"shot",from,to,team,weapon`; hit events contain
+`type:"hit",targetId,x,y,z,shield,team`. State and effects are bounded by eight
+players, 48 soldiers, eight domes and at most 128 events per flush.

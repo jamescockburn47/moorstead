@@ -8,22 +8,24 @@ import time
 from fastapi import WebSocket, WebSocketDisconnect
 
 from freeplay_rules import (CONTENT_VERSION, MAX_PACKET, MAX_PLAYERS, PROTOCOL, ROOM, Refused,
-                            validate_position)
+                            validate_command, validate_position)
 from freeplay_store import Store
 from freeplay_stream import Peer, bounded_delivery, send_operation, send_snapshot
 from freeplay_vehicle_control import COMMANDS, VehicleControl
+from freeplay_battle_service import COMMANDS as BATTLE_COMMANDS, BattleService
 
 log = logging.getLogger("moorstead.freeplay")
 IDENTITY = re.compile(r"a[a-z0-9-]{1,39}\Z")
 
 
 class Hub:
-    def __init__(self, store, authenticate, banned):
+    def __init__(self, store, authenticate, banned, battlefield=None):
         self.store, self.authenticate, self.banned = store, authenticate, banned
         self.lock = asyncio.Lock()
         self.peers = {}
         self.epoch = store.state()["epoch"]
         self.control = VehicleControl(self)
+        self.battle = BattleService(self, battlefield or store.path.with_name("battlefield.json"))
 
     def session(self, pid, token):
         ok, session, _ = self.authenticate(ROOM, pid, "", token)
@@ -45,10 +47,12 @@ class Hub:
             if self.peers.get(peer.pid) is not peer:
                 raise Refused("session", "This account connected somewhere else.")
             peer.name = self.session(peer.pid, peer.token)
+            validate_command(value)
             self.control.check_edit(value)
             machinegun = value.get("type") == "weapon" and value.get("weapon") == "machinegun"
             if machinegun and time.monotonic() - peer.last_machinegun < 0.249:
                 raise Refused("weapon-rate", "The machinegun is ready four times a second.")
+            damage = self.battle.plan_damage(peer, value)
             result = await asyncio.to_thread(self.store.apply, peer.pid, value, peer.name)
             if result["type"] == "ack":
                 await peer.send(result)
@@ -64,6 +68,7 @@ class Hub:
             await asyncio.gather(*(
                 bounded_delivery(other, lambda other=other: send_operation(other, result, self.store, self.control.pilots()),
                                  timeout=120 if result["replace"] else 30) for other in targets))
+            await self.battle.committed(result, damage)
 
     async def error(self, peer, error, value=None):
         state = self.store.state()
@@ -71,7 +76,7 @@ class Hub:
                     "epoch": state["epoch"], "revision": state["revision"]}
         if isinstance(value, dict) and isinstance(value.get("requestId"), str):
             response["requestId"] = value["requestId"][:80]
-        if isinstance(value, dict) and isinstance(value.get("type"), str) and value["type"] in COMMANDS:
+        if isinstance(value, dict) and isinstance(value.get("type"), str) and value["type"] in COMMANDS | BATTLE_COMMANDS:
             response["command"] = value["type"]
             if isinstance(value.get("vehicleId"), str):
                 response["vehicleId"] = value["vehicleId"][:32]
@@ -102,11 +107,16 @@ class Hub:
                     position = validate_position(value, self.epoch)
                     if now - peer.last_position < 0.08:
                         continue
-                    peer.last_position, peer.position = now, position
+                    peer.last_position = now
+                    if not await self.battle.move(peer, position):
+                        continue
+                    peer.position = position
                     await self.notice({"type": "pos", "pid": peer.pid, "name": peer.name,
                                        "epoch": value["epoch"], **position}, skip=peer)
                 elif isinstance(value.get("type"), str) and value["type"] in COMMANDS:
                     await self.control.handle(peer, value)
+                elif isinstance(value.get("type"), str) and value["type"] in BATTLE_COMMANDS:
+                    await self.battle.handle(peer, value)
                 else:
                     if now - peer.last_command < 0.10:
                         raise Refused("busy", "Wait a moment before the next shared action.")
@@ -148,6 +158,7 @@ class Hub:
                            for other in self.peers.values() if other is not peer and other.position]
                 if not await bounded_delivery(peer, lambda: send_snapshot(peer, self.store, players, self.control.pilots()), timeout=120):
                     return
+                await self.battle.initial(peer)
                 await self.notice({"type": "join", "pid": peer.pid, "name": peer.name}, skip=peer)
             await self.receive(peer)
         except Refused as error:
@@ -164,10 +175,13 @@ class Hub:
             await self.control.disconnect(peer)
             if self.peers.get(peer.pid) is peer:
                 self.peers.pop(peer.pid, None)
+                await self.battle.disconnect(peer)
                 await self.notice({"type": "leave", "pid": peer.pid})
 
 
-def mount_freeplay(app, authenticate, banned, data):
-    hub = Hub(Store(data / "freeplay" / "world.sqlite3"), authenticate, banned)
+def mount_freeplay(app, authenticate, banned, data, battlefield=None):
+    hub = Hub(Store(data / "freeplay" / "world.sqlite3"), authenticate, banned, battlefield)
     app.add_api_websocket_route("/freeplay/ws", hub.endpoint)
+    app.add_event_handler("startup", hub.battle.start)
+    app.add_event_handler("shutdown", hub.battle.stop)
     return hub

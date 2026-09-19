@@ -9,6 +9,8 @@ export const FUTURE_BLOCKS = Object.freeze([
   { id: 204, tile: 124, name: 'Circuit panel', description: 'Green circuit traces, copper contacts and a central chip.' },
   { id: 205, tile: 125, name: 'Landing pad', description: 'A marked landing deck with yellow hazard edges.' },
   { id: 206, tile: 126, name: 'Vehicle control', description: 'Place on your build, press E or Use core, highlight it, then choose Car, Plane or Submarine.' },
+  { id: 207, tile: 127, name: 'Sandbags', description: 'Stacked canvas bags for trenches, firing steps and cover.' },
+  { id: 208, tile: 128, name: 'Bunker armour', description: 'Thick riveted armour panels for battlefield structures.' },
 ].map(Object.freeze));
 
 const byId = new Map(FUTURE_BLOCKS.map(row => [row.id, row]));
@@ -85,6 +87,18 @@ export function futureTilePixels(id) {
     rect(1,1,14,14,0x386276);frame(2,0xe5bb54);rect(4,4,8,8,0x092638);
     frame(5,0x56f4df);rect(7,3,2,10,0x7cffe1);rect(3,7,10,2,0x7cffe1);
     rect(6,6,4,4,0xffffff);for(const x of [1,14])for(const y of [1,14])dot(x,y,0xe5bb54);
+  } else if (id === 207) {
+    rect(0, 0, 16, 16, 0x534735);
+    for (let row = 0; row < 4; row++) for (let bag = -1; bag < 3; bag++) {
+      const x = bag * 8 + (row % 2 ? 4 : 0), y = row * 4;
+      rect(x + 1, y, 6, 3, 0xa49468); rect(x + 2, y, 4, 1, 0xc5b783);
+      rect(x + 1, y + 2, 6, 1, 0x827146); dot(x + 3, y + 1, 0xb3a476);
+    }
+  } else if (id === 208) {
+    rect(1, 1, 14, 14, 0x4b5854); frame(1, 0x829187); frame(3, 0x2c3838);
+    rect(5, 5, 6, 6, 0x64746a); rect(5, 5, 6, 1, 0x91a191);
+    for (const x of [2, 13]) for (const y of [2, 13]) { dot(x, y, 0xc5cbaa); dot(x, y + 1, 0x263434); }
+    for (let i = 0; i < 4; i++) { dot(6 + i, 12, 0xc6ab56); dot(6 + i, 13, 0x5f6147); }
   } else {
     rect(0, 0, 16, 16, 0x303f51); frame(2, 0x73818a);
     for (let i = 0; i < 16; i++) {

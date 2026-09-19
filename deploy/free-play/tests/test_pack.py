@@ -45,11 +45,14 @@ class PackTests(unittest.TestCase):
         self.apply(edits=[[0, 10, 0, 8]])
         before = self.store.state(), self.cells()
         invalid = [self.build(size=4), self.build(block=0), self.build(block=True),
-                   self.build(block=199), self.build(block=207), self.build(rotation=4),
+                   self.build(block=199), self.build(block=209), self.build(rotation=4),
                    self.build(rotation=False), self.build(shape="unknown"),
                    self.build(origin=[0, 60, 0]), self.build(origin=[8191, 10, 0]),
                    self.build(origin=[-8191, 10, 0], rotation=2), self.build("base", size=5),
-                   self.build("tower", origin=[0, 56, 0])]
+                   self.build("tower", origin=[0, 56, 0]),
+                   self.build("trench", origin=[0, 4, 0]),
+                   self.build("trench", origin=[8190, 10, 0]),
+                   self.build("bunker", origin=[0, 60, 0])]
         for command in invalid:
             with self.subTest(command=command), self.assertRaises(Refused):
                 self.store.apply("ahenry", command)
@@ -58,7 +61,7 @@ class PackTests(unittest.TestCase):
         self.assertEqual(build_cells(exact)[-1], [8192, 63, 8192, 200])
 
     def test_future_blocks_persist_in_cells_checkpoint_and_inverse(self):
-        self.apply(edits=[[index, 20, 0, 200 + index] for index in range(6)])
+        self.apply(edits=[[index, 20, 0, 200 + index] for index in range(9)])
         before = self.cells()
         self.apply("reset", confirm=True)
         self.store = Store(self.path)
@@ -69,6 +72,21 @@ class PackTests(unittest.TestCase):
         self.apply("undo")
         self.assertEqual(self.cells(), before)
 
+    def test_battlefield_construction_excavates_and_undo_restores_exact_prior_cells(self):
+        for shape in ("trench", "bunker", "barricade", "watchpost"):
+            with self.subTest(shape=shape):
+                self.apply(edits=[[2, 7, 2, 8], [0, 10, 0, 207], [2, 12, 2, 208]])
+                before = self.cells()
+                command = self.build(shape)
+                result = self.store.apply("ahenry", command)
+                rows = build_cells(command)
+                current = {tuple(row[:3]): row[3] for row in self.cells()}
+                self.assertTrue(all(current[tuple(row[:3])] == row[3] for row in rows))
+                self.assertEqual(result["shape"], shape)
+                self.assertTrue(self.store.apply("ahenry", command)["duplicate"])
+                self.store = Store(self.path)
+                self.apply("undo")
+                self.assertEqual(self.cells(), before)
     def test_gravity_is_ordered_idempotent_event_preserving_undo(self):
         self.apply(edits=[[0, 20, 0, 205]])
         before = self.store.state(), self.cells()
@@ -124,7 +142,7 @@ class PackTests(unittest.TestCase):
         self.assertEqual((migrated.state(), self.cells()), before)
         self.assertTrue(migrated.apply("ahenry", command)["duplicate"])
         with migrated.connect() as db:
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 3)
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 4)
             self.assertEqual(list(db.execute("SELECT * FROM checkpoint")), checkpoint)
         self.apply("undo")
         self.assertEqual(self.cells(), [])

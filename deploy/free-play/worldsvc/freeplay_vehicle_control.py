@@ -48,6 +48,8 @@ class VehicleControl:
             vehicle = self.hub.store.vehicle(vehicle_id)
             lease = self.leases.get(vehicle_id)
             if kind == "vehicle-claim":
+                if self.hub.battle.core and peer.pid in self.hub.battle.core.players:
+                    raise Refused("battle-vehicle", "Leave the battlefield before driving a vehicle.")
                 if lease and lease["peer"] is not peer:
                     raise Refused("vehicle-pilot", "The other player is driving this vehicle.")
                 if not lease:

@@ -18,7 +18,7 @@ class Store:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
-            if db.execute("PRAGMA user_version").fetchone()[0] not in {0, 1, 2, 3}:
+            if db.execute("PRAGMA user_version").fetchone()[0] not in {0, 1, 2, 3, 4}:
                 raise ValueError("Free Play database uses a newer unsupported schema")
             db.executescript("""
               PRAGMA journal_mode=WAL;
@@ -52,8 +52,8 @@ class Store:
             if tuple(meta) != (ROOM, str(SEED)):
                 raise ValueError("Free Play database belongs to another room or seed")
             chunks.rebuild(db)
-            # Content 3 adds vehicles and compound history; older adapters refuse it.
-            db.execute("PRAGMA user_version=3")
+            # Content 4 adds battle cover block IDs; older adapters must refuse it.
+            db.execute("PRAGMA user_version=4")
 
     @contextmanager
     def connect(self):

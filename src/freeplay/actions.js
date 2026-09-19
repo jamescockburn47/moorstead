@@ -54,6 +54,7 @@ export class FreeplayActions {
   }
   use() {
     const g=this.game,hit=this.target();
+    if(this.selected.type==='weapon'&&g.battle?.fire(weaponById(this.selected.id)))return;
     if((g.vehicles?.driving||g.vehicles?.selection||this.selected.type==='block')&&g.vehicles?.interact(hit))return;
     if(!g.canEdit()||!hit)return;
     if(this.selected.type==='build'){this.builder.use(this.selected,hit);return;}

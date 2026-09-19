@@ -46,7 +46,7 @@ export default defineConfig({
     stdout: 'pipe',
     stderr: 'pipe',
   }, {
-    command: `python deploy/free-play/fixture.py --port ${freeplay.port}`,
+    command: `node scripts/export-freeplay-battlefield.mjs tests/.artifacts/battlefield && python deploy/free-play/fixture.py --port ${freeplay.port} --battlefield tests/.artifacts/battlefield/battlefield.json`,
     url: `${freeplay.origin}/openapi.json`,
     reuseExistingServer: false,
     timeout: 30000,

@@ -1,9 +1,10 @@
 # Private Free Play — server and release tools
 
-Updated 19 September 2026. **Content 3 release.** No real
+Updated 19 September 2026. **Content 4 release.** No real
 invites, sessions, player records or production database are included. The upgrade
-adds movable authored builds, three vehicle modes, a machinegun and live cartoon
-sheep projectiles. It increases the bounded override capacity to eight million.
+adds an opt-in battlefield with two teams, grounded armies, real terrain cover,
+energy shields and cartoon knockouts/respawns. Existing movable builds and the
+eight-million-cell editing capacity remain supported.
 
 This package serves exactly `family-freeplay` at `/freeplay/ws`, using the existing
 relay's token-ledger authentication. A dedicated dashboard claim route refuses an
@@ -22,12 +23,17 @@ route refuses this room before reading or creating ordinary room state.
 | `worldsvc/freeplay_store.py` | Relay directory; transactional SQLite persistence/history/recovery |
 | `worldsvc/freeplay_stream.py` | Relay directory; bounded snapshot and operation frames |
 | `worldsvc/freeplay_service.py` | Relay directory; session validation and exact-room WebSocket endpoint |
+| `worldsvc/freeplay_battle.py` | Bounded match state, hit detection, shields and respawns |
+| `worldsvc/freeplay_battle_ai.py` | Grounded squad movement and line-of-sight shooting |
+| `worldsvc/freeplay_battle_terrain.py` | Verified procedural arena baseline plus saved overrides |
+| `worldsvc/freeplay_battle_service.py` | Authenticated match commands and five-Hz state delivery |
 | `integrate.py` | Locally prepares the minimal relay/dashboard/Caddy modifications |
 | `backup.py` | Consistent, integrity-checked SQLite backup into a new file |
 | `fixture.py` | Loopback-only synthetic login/server for browser tests; never install in production |
 | `verify.py` | Canonical offline backend check |
 | `upgrade_pack.py` | Explicit content-1 → content-2 release, after backup and migration rehearsal |
 | `upgrade_vehicles.py` | Explicit content-2 → content-3 release, preserving all old rows |
+| `upgrade_battle.py` | Explicit content-3 → content-4 release, preserving all nine saved tables |
 
 Live sources were read over `evo-tailscale`, without writes or service changes.
 `integrate.py` refuses sources whose SHA-256 differs from these inspected baselines:
@@ -50,9 +56,9 @@ inspected dashboard, used to execute the actual transformed login function.
 The only world store is `DATA/freeplay/world.sqlite3`; it is outside ordinary room
 JSON, pockets, companion records and pruning. SQLite transactions atomically commit
 overrides, revision, inverse history and idempotency receipts with synchronous FULL
-and WAL journalling. Content 3 migrates older `user_version` values to `3` while
-preserving existing rows, adds parked vehicle/checkpoint tables and derives chunk
-counts. Older adapters refuse version 3. Versions above 3 are refused. The fixed seed is
+and WAL journalling. Content 4 advances `user_version` to `4`, preserving every
+existing row. Its marker prevents older adapters from accepting new cover block
+IDs 207–208; it adds no tables. Versions above 4 are refused. The fixed seed is
 `419947177`, the existing Moorstead `strSeed('t-moors-1900')` value.
 
 An absent override means procedural baseline. A stored `0` means air. Undo sends
@@ -87,7 +93,7 @@ No player pockets are read or saved. Positions are ephemeral, bounded and checke
 against the exact epoch. Token expiry/revocation is rechecked on operations and
 approximately every second when idle. Authentication comes only from the existing
 server callback and the exact room-bound session, never a client capability flag.
-The hello handshake additionally requires content version 3 before any snapshot.
+The hello handshake additionally requires content version 4 before any snapshot.
 
 Vehicle conversion selects only authored non-air overrides and exactly one control
 block 206. Conversion, explicit block editing, undo and checkpoint recovery include
@@ -96,6 +102,17 @@ the player explicitly edits it. One authenticated socket holds a vehicle's pilot
 lease; either child can take unpiloted controls. Validated poses persist at about
 4 Hz without changing terrain revision; disconnect retains the last accepted pose.
 See `PROTOCOL.md` for exact frames, movement bounds and baseline-collision limits.
+
+Battlefield participants explicitly choose a team. There are at most 24 soldiers
+per team, with six recruited per command, and eight players. Match state is
+ephemeral; terrain and fortifications use the existing durable world operations.
+The server loads a hash-checked 128×128×64 baseline exported from the actual client
+generator, then applies saved overrides. Bullet rays, movement and explosion cover
+use that combined terrain. Explosion victims are planned before cover destruction;
+health changes occur only after the corresponding terrain transaction commits.
+The real exported arena trial ran 48 opposing soldiers for 60 simulated seconds:
+first hit at 7.4 seconds, 438 hit events and 86 score points, with a maximum tick
+of 4.732 ms. These measurements establish server behaviour, not tablet frame rate.
 
 ## Stylised damage rules
 
@@ -142,6 +159,10 @@ and occupancy, then run:
 python deploy/free-play/fixture.py --port <checked-port> --data <disposable-test-directory>
 ```
 
+Add `--battlefield <generated-header-path>` for battlefield journeys. The adjacent
+`battlefield.u16.zlib` must match the header's raw SHA-256. Without these optional
+files the fixture keeps ordinary Free Play available and refuses battle commands.
+
 It binds **127.0.0.1 only**. Without `--data`, it creates and cleans a temporary
 store. Its synthetic codes are `henry-test-only` and `james-test-only`. POST
 `/auth/freeplay-claim` with `{code: ...}` returns synthetic acct/token/name/room and
@@ -150,7 +171,32 @@ Browser interception may redirect only those fixture requests; the shipped clien
 has no bypass or test login. The fixture authenticates synthetic in-memory sessions
 through the same production adapter. It does not establish live invite validity.
 
-## Content-3 upgrade — after the matching client is verified
+## Content-4 upgrade — after the matching client is verified
+
+Stage all **twelve** adapter modules beside `backup.py`, `upgrade_pack.py`,
+`upgrade_battle.py`, and the generated `battlefield.json`/`battlefield.u16.zlib`
+in a new private directory outside `worldsvc`. The helper pins all eight live
+content-3 source hashes and refuses existing battle modules or baseline files.
+The baseline comes from the release client's generator, origin `[-2048,1024]`,
+seed `419947177`, with raw SHA-256
+`1e931025f7a060c0b75dc720965b1aa0c278db1ea9bfd42d99e8efb711bf2ec2`.
+
+```sh
+/home/james/moorstead/venv/bin/python /path/to/private-stage/upgrade_battle.py --install
+```
+
+Only the relay stops. The helper backs up its eight modules and the complete
+SQLite database, rehearses schema-marker 3→4 on a restored copy, proves the actual
+old adapter refuses version 4, and compares counts and SHA-256 for all nine saved
+tables: cells, checkpoint, history, receipts, meta, SQLite sequences, vehicles,
+checkpoint vehicles and chunk counts. It repeats preservation checks on the
+stopped live database before restart. Baseline files go into `DATA/freeplay`.
+After migration, failures retain the upgraded world and require roll-forward;
+never silently replace it with the older backup or downgrade its version marker.
+The private stage retains `before/world.sqlite3` and `manifest.json` for recovery.
+No dashboard, Caddy, account, ordinary world, brain or model changes are needed.
+
+## Content-3 upgrade record — already performed
 
 Stage all **eight** adapter modules alongside `backup.py`, `upgrade_pack.py` and
 `upgrade_vehicles.py` in a new private directory outside `worldsvc`. The executable

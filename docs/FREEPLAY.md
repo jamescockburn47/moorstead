@@ -111,9 +111,41 @@ Conversion, materialisation and undo are atomic server transactions. Vehicles
 survive reconnects and restart; reset recovery includes them. Driving uses an
 exclusive pilot lease and its own bounded pose stream so it does not interrupt
 the other boy's terrain edits. Disconnect releases the pilot and retains the last
-accepted pose. The backend schema is now3 and content negotiation is version3;
+accepted pose. The backend schema and content negotiation are version 4;
 old clients must refresh. This does not alter ordinary Moorstead's protocol.
 
 Hold Fire (or left mouse with pointer lock) for machine-gun bursts. Sheep are
 shared cartoon projectiles which land alive and amble before leaving; a bounded
 pool of eight avoids filling tablet memory. Sheep shots do not carve terrain.
+
+## Battlefield and armies
+
+Menu → Battlefield / armies → choose Blue or Red. Joining moves the player to
+that army's camp and equips the machine gun; leaving returns to the previous
+Free Play position. Battlefield participants use health, shields and quick
+cartoon respawns. Ordinary Free Play retains unlimited health. Park vehicles
+before joining; leave the battle before driving again.
+
+Army recruits six soldiers at a time, up to 24 per team. Follow, Hold, Attack and
+Move squad to aimed point control the player's soldiers. Both players can fight
+with machine gun, plasma, rockets and bombs. Solid voxel terrain blocks bullets
+and shields against a blast before that blast removes the cover. Shield deploys
+a six-metre dome for 12 seconds, with a 25-second cooldown. Personal shields
+regenerate after three quiet seconds. Players respawn after five seconds;
+soldiers return after eight. The scoreboard counts enemy knockouts.
+
+Build includes excavating trenches with steps, bunkers with doors and firing
+ports, sandbag barricades and watchposts. Their terrain changes persist and use
+the existing shared undo. Armies, scores, shields and orders are session state;
+leaving or disconnecting dismisses that player's soldiers.
+
+Combat runs deterministically in the relay at 5 Hz, with no model/NPC brain.
+The 128×128 battlefield is on fresh ground at [-2048,1024]; authoritative collision
+starts from the exact client generator and overlays saved edits. Generate its
+header and compressed voxels with
+`node scripts/export-freeplay-battlefield.mjs tests/.artifacts/battlefield`.
+The fixture uses these files explicitly; production stores them alongside the
+Free Play database. Client and backend guards cover terrain parity, cover,
+shield damage, squad orders, caps, respawn and transactional save failure.
+The browser journey is `tests/game/freeplay-battle.spec.mjs`; synthetic accounts
+exercise the actual adapter without entering the boys' production sessions.

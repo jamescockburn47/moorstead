@@ -23,6 +23,8 @@ class Peer:
     last_position: float = 0
     last_command: float = 0
     last_machinegun: float = 0
+    last_battle: float = 0
+    last_correction: float = 0
 
     async def send(self, value):
         await asyncio.wait_for(self.ws.send_text(packed(value)), timeout=3)

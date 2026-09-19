@@ -3,7 +3,9 @@ from freeplay_rules import Refused, block_id, coordinate, integer
 
 MAX_BUILD = 1024
 BRUSHES = {"line", "wall", "floor", "box"}
-PREFABS = {"base": (5, 5, 5), "tower": (5, 9, 5), "bridge": (3, 3, 13)}
+PREFABS = {"base": (5, 5, 5), "tower": (5, 9, 5), "bridge": (3, 3, 13),
+           "trench": (5, 5, 9), "bunker": (7, 5, 7),
+           "barricade": (7, 3, 2), "watchpost": (5, 7, 5)}
 STAIRS = [(2, 1), (3, 1), (3, 2), (3, 3), (2, 3), (1, 3), (1, 2), (1, 1)]
 
 
@@ -23,6 +25,33 @@ def validate_build(command):
 
 
 def prefab_block(shape, x, y, z):
+    if shape == "trench":
+        if y == 0:
+            return 208
+        if x in {0, 4}:
+            return 207
+        return 207 if z >= 6 and y <= z - 5 else 0
+    if shape == "bunker":
+        if y in {0, 4}:
+            return 201 if y == 4 and (x, z) == (3, 3) else 208
+        if x == 3 and z == 0 and y <= 2:
+            return 0
+        wall = x in {0, 6} or z in {0, 6}
+        port = (x in {0, 6} and z in {2, 4}
+                or z == 6 and x in {2, 4} or z == 0 and x in {1, 5})
+        return 208 if wall and not (y == 2 and port) else 0
+    if shape == "barricade":
+        return 207 if y == 0 or z == 0 and (y == 1 or x % 3 == 0) else 0
+    if shape == "watchpost":
+        if y == 0:
+            return 208
+        if y <= 4 and (x, z) == STAIRS[y - 1]:
+            return 208
+        if y == 4:
+            return 0 if x == 3 and z in {1, 2} else 208
+        if y == 5:
+            return 207 if x in {0, 4} or z in {0, 4} else 0
+        return 208 if y < 4 and x in {0, 4} and z in {0, 4} else 0
     if shape == "bridge":
         if y == 0:
             return 205 if z in {0, 6, 12} else 200
@@ -80,7 +109,7 @@ def build_cells(command):
                     inside = 0 < x < width - 1 and 0 < y < height - 1 and 0 < z < length - 1
                     block = 0 if shape == "box" and inside else command["block"]
                 rx, rz = ((x, z), (-z, x), (-x, -z), (z, -x))[command["rotation"]]
-                position = [origin[0] + rx, origin[1] + y, origin[2] + rz]
+                position = [origin[0] + rx, origin[1] + y - (4 if shape == "trench" else 0), origin[2] + rz]
                 if not coordinate(position):
                     raise Refused("coordinate", "The whole building must fit inside the playable world.")
                 rows.append([*position, block])

@@ -73,6 +73,7 @@ export class FreeplayVehicles{
   }
   enter(id){
     const g=this.game,v=this.vehicles.get(id);if(!v||!g.canEdit())return;
+    if(g.battle?.me)return g.ui.message('Leave the battlefield before driving a vehicle.');
     if(v.pilot)return g.ui.message('That vehicle already has a driver.');
     if(this.driving)return g.ui.message('Park your current vehicle first.');
     g.connection.vehicle('vehicle-claim',{vehicleId:id});

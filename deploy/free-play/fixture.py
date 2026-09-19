@@ -14,7 +14,7 @@ from freeplay_service import mount_freeplay
 IDENTITIES = {"henry-test-only": "Henry", "james-test-only": "James"}
 
 
-def fixture_app(data):
+def fixture_app(data, battlefield=None):
     app = FastAPI()
     sessions = {}
 
@@ -36,7 +36,7 @@ def fixture_app(data):
         sessions[token] = session
         return {"ok": True, "edition": "freeplay", "token": token, **session}
 
-    hub = mount_freeplay(app, authenticate, lambda pid, name: False, Path(data))
+    hub = mount_freeplay(app, authenticate, lambda pid, name: False, Path(data), battlefield)
     app.state.freeplay_hub = hub
     app.state.sessions = sessions
     return app
@@ -47,7 +47,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--data", type=Path, help="Optional disposable fixture directory, never live world data")
+    parser.add_argument("--battlefield", type=Path, help="Verified generated battlefield header")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="moorstead-freeplay-") as temporary:
-        uvicorn.run(fixture_app(args.data or temporary), host="127.0.0.1", port=args.port,
+        uvicorn.run(fixture_app(args.data or temporary, args.battlefield), host="127.0.0.1", port=args.port,
                     ws_max_size=16384, log_level="warning", access_log=False)

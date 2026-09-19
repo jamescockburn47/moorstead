@@ -2,6 +2,7 @@ import { FREEPLAY, freeplayCredentials } from './config.js';
 import { integer, validCells, validHistory, validPosition, versioned } from './protocol.js';
 import { OverrideStore } from './terrain-overrides.js';
 import { validVehicle, validPose, MAX_VEHICLES } from './vehicle-data.js';
+import { validBattleState, validBattleEvent } from './battle-protocol.js';
 
 export class FreeplayConnection {
   constructor(auth, callbacks, Socket = WebSocket) {
@@ -109,6 +110,9 @@ export class FreeplayConnection {
         this.history = m.history; this.checkpoint = m.checkpoint === true; this.finish(m); break;
       }
       case 'error': {
+        if(typeof m.command==='string'&&m.command.startsWith('battle-')){
+          this.callbacks.error(typeof m.message==='string'?m.message.slice(0,240):'Battle action refused.');break;
+        }
         if(['vehicle-claim','vehicle-release','vehicle-drive'].includes(m.command)){
           this.callbacks.vehicle?.({...m,type:'vehicle-error'});
           this.callbacks.error(typeof m.message==='string'?m.message.slice(0,240):'Vehicle action could not be saved.');break;
@@ -123,6 +127,10 @@ export class FreeplayConnection {
         if (m.duplicate && m.requestId === this.pending) { this.pending = null; this.socket.close(4001, 'resync'); }
         break;
       case 'pos': if (m.epoch === this.epoch && validPosition(m)) this.callbacks.peer?.(m); break;
+      case 'battle-state':
+        if(m.epoch===this.epoch){if(!validBattleState(m.battle))throw Error('Invalid battlefield state');this.callbacks.battle?.(m);}break;
+      case 'battle-event':
+        if(m.epoch===this.epoch&&validBattleEvent(m.event))this.callbacks.battle?.(m);break;
       case 'leave': if (typeof m.pid === 'string') this.callbacks.leave?.(m.pid); break;
       case 'join': if (m.epoch === this.epoch && validPosition(m)) this.callbacks.peer?.(m); break;
       case 'pong': break;
@@ -164,6 +172,7 @@ export class FreeplayConnection {
     if(!this.connected||this.stage||this.socket?.readyState!==1)return false;
     this.socket.send(JSON.stringify({...fields,type,epoch:this.epoch}));return true;
   }
+  battle(type,fields={}){return this.vehicle(type,fields);}
   reconnect() { this.attempt = 0; this.socket?.close(); this.connect(); }
   dispose() {
     this.active = false; this.connected = false; clearTimeout(this.retryTimer); clearInterval(this.watchdog);
