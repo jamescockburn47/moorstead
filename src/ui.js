@@ -441,6 +441,8 @@ export class UI {
     // ---------- title ----------
     this.titleScreen = this.el('div', 'overlay', body); this.titleScreen.id = 'title-screen';
     this.el('h1', 'title', this.titleScreen, 'Moorstead 1900');
+    const freeplayEntry = this.el('a', 'freeplay-entry', this.titleScreen, 'Free Play &mdash; Henry &amp; James');
+    freeplayEntry.href = '/freeplay';
     // the family landing pattern (shared with Saltstead & Marsstead):
     // tagline, one concise summary, the doors — single screen, no scrolling
     this.el('div', 'subtitle', this.titleScreen, 't&rsquo; moor knows thy name');

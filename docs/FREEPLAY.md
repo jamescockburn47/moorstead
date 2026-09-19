@@ -1,8 +1,9 @@
 # Moorstead Free Play
 
 Private `/freeplay` entrance for Henry and James, with separate fresh invite codes
-and one persistent world. The code is staged locally; real access is provisioned
-only after release approval. Backend release and recovery steps are in
+and one persistent world. Released on 19 September 2026 with fresh room-bound
+accounts. The main title page links directly to Free Play before ordinary login.
+Backend release and recovery steps are in
 [`deploy/free-play/README.md`](../deploy/free-play/README.md).
 
 ## Playing
