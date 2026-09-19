@@ -12,6 +12,7 @@ import { FreeplayActions } from './actions.js';
 import { FreeplayPeers } from './peers.js';
 import { FREEPLAY } from './config.js';
 import { bombById } from './catalogue.js';
+import { FreeplayMap } from './map.js';
 
 export class FreeplayGame {
   constructor(ui,connection,settings) {
@@ -29,6 +30,7 @@ export class FreeplayGame {
     this.scenery=new FreeplayScenery(this);this.effects=new ExplosionEffects(this.scene,settings);
     this.population=new FreeplayPopulation(this.scene,this.world,FREEPLAY.seed);
     this.peers=new FreeplayPeers(this.scene,'a'+connection.auth.acct);
+    this.map=new FreeplayMap(this);
     this.input=new FreeplayInput(this,ui.canvas,ui.root);this.actions=new FreeplayActions(this);
     this.resize=()=>{this.renderer.setPixelRatio(Math.min(devicePixelRatio,settings.plain?1:1.5));this.renderer.setSize(innerWidth,innerHeight,false);this.camera.aspect=innerWidth/innerHeight;this.camera.updateProjectionMatrix();};
     window.addEventListener('resize',this.resize);this.resize();
@@ -122,7 +124,7 @@ export class FreeplayGame {
       // Keep the generation edge hidden while letting the atom cloud rise beyond it.
       if(this.scene.fog){this.scene.fog.near=25;this.scene.fog.far=this.world.renderDist*16-5;}
       if(!this.applying){this.scenery.update(dt);this.population.update(dt,p.pos);}
-      this.effects.update(dt,p.pos);this.peers.update(dt,p.pos);this.actions.update(dt);
+      this.effects.update(dt,p.pos);this.peers.update(dt,p.pos);this.actions.update(dt);this.map.update(dt);
       setWaterTime(this.elapsed);setCamPos(p.pos.x,p.pos.y+p.eye,p.pos.z);
       this.renderer.render(this.scene,this.camera);
       if(this.elapsed-this.lastPos>.25){this.lastPos=this.elapsed;this.connection.position({...p.pos,yaw:p.yaw});}
@@ -136,6 +138,6 @@ export class FreeplayGame {
   dispose(){
     this.active=false;cancelAnimationFrame(this.frameId);window.removeEventListener('resize',this.resize);this.ui.canvas.removeEventListener('webglcontextlost',this.onLost);
     this.transactions.length=0;this.applying=null;this.resyncPending=false;
-    this.input.dispose();this.actions.dispose();this.peers.dispose();this.population.dispose();this.effects.dispose();this.scenery.dispose();this.world.dispose();this.sky.dispose();this.renderer.dispose();
+    this.map.dispose();this.input.dispose();this.actions.dispose();this.peers.dispose();this.population.dispose();this.effects.dispose();this.scenery.dispose();this.world.dispose();this.sky.dispose();this.renderer.dispose();
   }
 }

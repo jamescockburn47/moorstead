@@ -22,6 +22,7 @@ const ui=new FreeplayUI(root,{
     catch(error){ui.loginError(error instanceof TypeError?'Cannot reach the parish clerk. Try again.':error.message);}
   },
   continue:()=>start(),pause:value=>game?.pause(value),
+  map:parent=>game?.map.open(parent),
   fly:()=>game?.fly(),use:()=>game?.use(),break:()=>game?.break(),
   select:value=>game?.actions.choose(value),
   undo:()=>game?.send('undo'),reset:()=>game?.send('reset',{confirm:true}),restore:()=>game?.send('restore',{confirm:true}),
@@ -49,6 +50,7 @@ function start(){
       if(!current())return;
       const text={connecting:'Joining…',syncing:'Receiving world…',saving:'Saving…',ready:'Shared · ∞ health · ∞ supplies',offline:'Offline · reconnecting',denied:'Login required',replaced:'Playing on another device'}[state]||state;
       ui.status(text);
+      if(['connecting','offline','denied','replaced'].includes(state)){peerCache=[];game?.peers.replace([]);}
       if(state==='offline')ui.message('Connection lost. Changes wait until the saved world reconnects.');
       if(state==='denied'){ui.login.hidden=false;ui.hud.hidden=true;ui.loginError('Enter thi free-play code again.');}
     },

@@ -6,6 +6,9 @@ export class FreeplayInput {
     this.controller=new AbortController(); const options={signal:this.controller.signal};
     const listen=(target,type,fn,extra={})=>target.addEventListener(type,fn,{...options,...extra});
     listen(window,'keydown',e=>{
+      if(e.code==='KeyM'&&!e.repeat&&!/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)){
+        e.preventDefault();if(game.ui.panel.open)game.ui.panel.close();else game.ui.open('map');return;
+      }
       if (this.paused || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
       if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
       this.keys[e.code]=true;

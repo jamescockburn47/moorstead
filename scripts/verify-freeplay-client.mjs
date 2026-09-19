@@ -30,8 +30,8 @@ class Socket{
   constructor(){this.readyState=1;this.sent=[];this.closed=[];Socket.last=this;}
   send(text){this.sent.push(JSON.parse(text));}close(code){this.closed.push(code);}
 }
-const transfers=[],errors=[],states=[];
-const net=new FreeplayConnection(auth,{state:s=>states.push(s),error:e=>errors.push(e),transaction:t=>transfers.push(t)},Socket);
+const transfers=[],errors=[],states=[],positions=[],rosters=[];
+const net=new FreeplayConnection(auth,{state:s=>states.push(s),error:e=>errors.push(e),transaction:t=>transfers.push(t),peer:p=>positions.push(p),peers:p=>rosters.push(p)},Socket);
 try{
   net.connect();const socket=Socket.last;socket.onopen();assert.deepEqual(socket.sent[0],{type:'hello',protocol:1});
   const init={type:'init',protocol:1,freeplay:true,room:FREEPLAY.room,seed:FREEPLAY.seed,epoch:1,revision:0,history:[],checkpoint:false,players:[],count:1};
@@ -46,6 +46,10 @@ try{
   net.receive({type:'begin',epoch:2,revision:2,requestId:'reset-test',kind:'reset',actor:'James',replace:true,count:0});
   net.receive({type:'commit',epoch:2,revision:2,requestId:'reset-test',history:[],checkpoint:true});
   assert.equal(net.epoch,2);assert(net.checkpoint);
+  assert.deepEqual(rosters.at(-1),[],'reset must clear pre-reset map positions');
+  const position={type:'pos',pid:'other',name:'James',x:10,y:45,z:20,yaw:0};
+  net.receive({...position,epoch:1});assert.equal(positions.length,0,'old epoch must not resurrect a map marker');
+  net.receive({...position,epoch:2});assert.equal(positions.length,1,'fresh positions should reach the map');
   assert.throws(()=>net.receive({type:'begin',epoch:1,revision:3,count:0,replace:false}),/sequence/);
   net.position({x:0,y:40,z:0,yaw:0});assert.equal(socket.sent.at(-1).epoch,2);
   socket.onclose({code:4004});assert.equal(states.at(-1),'replaced');assert(!net.retryTimer,'device handoff must not reconnect-loop');
@@ -82,3 +86,4 @@ for(const file of readdirSync(new URL('../src/freeplay/',import.meta.url)).filte
 }
 console.log('PASS freeplay client: scoped auth, transactional transfer, epochs, invulnerability, real blast shape, isolated worker cache, module bounds');
 import './verify-freeplay-runtime.mjs';
+import './verify-freeplay-map.mjs';

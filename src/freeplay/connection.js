@@ -97,9 +97,9 @@ export class FreeplayConnection {
       case 'ack':
         if (m.duplicate && m.requestId === this.pending) { this.pending = null; this.socket.close(4001, 'resync'); }
         break;
-      case 'pos': if (validPosition(m)) this.callbacks.peer?.(m); break;
+      case 'pos': if (m.epoch === this.epoch && validPosition(m)) this.callbacks.peer?.(m); break;
       case 'leave': if (typeof m.pid === 'string') this.callbacks.leave?.(m.pid); break;
-      case 'join': if (validPosition(m)) this.callbacks.peer?.(m); break;
+      case 'join': if (m.epoch === this.epoch && validPosition(m)) this.callbacks.peer?.(m); break;
       case 'pong': break;
       default: throw new Error('Unknown free-play protocol message');
     }
@@ -117,6 +117,7 @@ export class FreeplayConnection {
     const stage = this.stage;
     if (stage.received !== stage.meta.count || stage.store.size !== stage.received) throw new Error('Incomplete or duplicate cells');
     this.stage = null; this.epoch = commit.epoch; this.revision = commit.revision; this.connected = true;
+    if (stage.meta.replace) this.callbacks.peers?.([]);
     if (commit.requestId === this.pending || stage.snapshot) this.pending = null;
     this.callbacks.transaction({ ...stage.meta, ...commit, snapshot: stage.snapshot, edits: stage.store });
     this.callbacks.state('ready');

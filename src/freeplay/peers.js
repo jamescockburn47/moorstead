@@ -20,10 +20,11 @@ export class FreeplayPeers {
       const canvas=document.createElement('canvas');canvas.width=256;canvas.height=64;const context=canvas.getContext('2d');
       context.fillStyle='rgba(10,30,30,.8)';context.fillRect(0,0,256,64);context.fillStyle='#fff4d4';context.font='bold 26px sans-serif';context.textAlign='center';context.fillText(value.name,128,41,240);
       const texture=new THREE.CanvasTexture(canvas),label=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:false}));label.position.y=2.5;label.scale.set(3,.75,1);mesh.add(label);
-      record={mesh,label,texture,target:new THREE.Vector3(value.x,value.y,value.z)};this.players.set(value.pid,record);this.scene.add(mesh);mesh.position.copy(record.target);
+      record={mesh,label,texture,name:value.name,target:new THREE.Vector3(value.x,value.y,value.z)};this.players.set(value.pid,record);this.scene.add(mesh);mesh.position.copy(record.target);
     }
-    record.target.set(value.x,value.y,value.z);record.mesh.rotation.y=value.yaw;
+    record.name=value.name;record.target.set(value.x,value.y,value.z);record.mesh.rotation.y=value.yaw;
   }
+  locations(){return [...this.players].map(([pid,p])=>({pid,name:p.name,x:p.target.x,y:p.target.y,z:p.target.z}));}
   remove(id){const p=this.players.get(id);if(!p)return;p.mesh.removeFromParent();p.label.material.dispose();p.texture.dispose();this.players.delete(id);}
   replace(values){for(const id of this.players.keys())this.remove(id);for(const value of values)this.put(value);}
   update(dt,viewerPosition=null){for(const p of this.players.values()){

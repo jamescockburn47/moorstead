@@ -39,6 +39,7 @@ export class FreeplayUI {
     const brand = element('div', 'fp-brand', null, top); element('strong', '', 'Moorstead', brand); element('span', '', 'FREE PLAY', brand);
     this.connection = element('span', 'fp-connection', 'Joining…', top);
     this.people = element('span', 'fp-people', '', top);
+    button(top, 'Map', () => this.open('map'));
     button(top, 'Menu', () => this.open('menu'));
     this.crosshair = element('div', 'fp-crosshair', '+', this.hud);
     const bottom = element('div', 'fp-bottom', null, this.hud);
@@ -80,7 +81,8 @@ export class FreeplayUI {
   }
   open(kind) {
     this.actions.pause(true); document.exitPointerLock?.(); this.panelContent.replaceChildren();
-    this.panelTitle.textContent = {build:'Build anything',bombs:'The bomb cupboard',menu:'Our shared moor'}[kind];
+    this.panelTitle.textContent = {build:'Build anything',bombs:'The bomb cupboard',menu:'Our shared moor',map:'Find each other'}[kind];
+    if (kind === 'map') this.actions.map(this.panelContent);
     if (kind === 'build') this.buildCatalogue();
     if (kind === 'bombs') for (const bomb of BOMBS) {
       const el = button(this.panelContent, '', () => this.select({type:'bomb',id:bomb.id}), 'fp-bomb');
@@ -104,7 +106,7 @@ export class FreeplayUI {
   }
   menu() {
     element('p', '', 'Infinite supplies and health. No chores. Everything here belongs to this separate free-play world.', this.panelContent);
-    element('p', '', 'WASD: walk · drag/mouse: look · F: fly · Space: up/jump · Shift: down · Z: faster · left click: break/throw · right click: place · B: build · X: bombs', this.panelContent);
+    element('p', '', 'WASD: walk · drag/mouse: look · F: fly · Space: up/jump · Shift: down · Z: faster · left click: break/throw · right click: place · B: build · X: bombs · M: map', this.panelContent);
     button(this.panelContent, 'Back to village', () => { this.actions.home(); this.panel.close(); });
     button(this.panelContent, 'Reconnect', () => { this.actions.reconnect(); this.panel.close(); });
     const settings = this.actions.settings();
