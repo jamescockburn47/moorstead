@@ -111,6 +111,9 @@ export class FreeplayConnection {
       }
       case 'error': {
         if(typeof m.command==='string'&&m.command.startsWith('battle-')){
+          // Ordinary packet jitter can bunch automatic-fire requests. The server
+          // keeps the cooldown authoritative; a discarded repeat is not a broken world.
+          if(m.command==='battle-shot'&&m.code==='battle-rate')break;
           this.callbacks.error(typeof m.message==='string'?m.message.slice(0,240):'Battle action refused.');break;
         }
         if(['vehicle-claim','vehicle-release','vehicle-drive'].includes(m.command)){

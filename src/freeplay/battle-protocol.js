@@ -7,6 +7,9 @@ const point=row=>row&&finite(row.x,-8192,8192)&&finite(row.z,-8192,8192)&&finite
 export function validCaptureState(ctf){
   if(!ctf||!['setup','active','won'].includes(ctf.phase)||!(ctf.winner===null||team(ctf.winner))||!ctf.bases||!ctf.flags)return false;
   if((ctf.phase==='won')!==(ctf.winner!==null))return false;
+  if(ctf.ready!==undefined&&(!ctf.ready||!['blue','red'].every(key=>typeof ctf.ready[key]==='boolean')))return false;
+  if(ctf.paused!==undefined&&typeof ctf.paused!=='boolean')return false;
+  if(ctf.reason!==undefined&&![null,'capture','forfeit'].includes(ctf.reason))return false;
   for(const key of ['blue','red']){
     const base=ctf.bases[key],flag=ctf.flags[key];
     if(!(base===null||Array.isArray(base)&&base.length===3&&point({x:base[0],y:base[1],z:base[2]})))return false;
@@ -31,11 +34,13 @@ export function validBattleState(s){
       ||!finite(row.shield,0,100)||!finite(row.respawn,0,8)||!Number.isSafeInteger(row.spawnSeq)||row.spawnSeq<1)return false;
     seen.add(row.id);
   }
-  if(!s.players.every(row=>finite(row.shieldCooldown,0,25)&&(row.correctionSeq===undefined||Number.isSafeInteger(row.correctionSeq)&&row.correctionSeq>=0))
+  if(!s.players.every(row=>finite(row.shieldCooldown,0,25)&&(row.correctionSeq===undefined||Number.isSafeInteger(row.correctionSeq)&&row.correctionSeq>=0)
+    &&(row.connected===undefined||typeof row.connected==='boolean')&&(row.reconnectIn===undefined||finite(row.reconnectIn,0,60)))
     ||!s.soldiers.every(row=>id(row.owner)))return false;
   return s.shields.every(row=>id(row.id)&&team(row.team)&&point(row)&&finite(row.radius,0,12)&&finite(row.remaining,0,12));
 }
 export function validBattleEvent(e){
   if(!e||!['shot','hit','knockout','shield'].includes(e.type))return false;
+  if(e.sourceId!==undefined&&!id(e.sourceId))return false;
   return ['from','to'].every(key=>e[key]===undefined||Array.isArray(e[key])&&e[key].length===3&&e[key].every(Number.isFinite));
 }

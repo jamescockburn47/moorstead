@@ -30,6 +30,7 @@ export function selectVehicleCells(world,a,b,core){
     }
   }
   if(!cells.some(r=>r[3]===VEHICLE_CORE&&core.every((n,i)=>n===r[i])))throw Error('Place a Vehicle control block on your build first.');
+  if(cells.filter(r=>r[3]===VEHICLE_CORE).length!==1)throw Error('A vehicle needs exactly one Vehicle control block. Remove the extra controls.');
   if(cells.length>MAX_VEHICLE_CELLS)throw Error('Highlight up to 512 placed blocks for one vehicle.');
   return{from,to,core,cells};
 }

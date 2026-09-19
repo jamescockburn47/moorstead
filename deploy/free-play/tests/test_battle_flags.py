@@ -19,6 +19,8 @@ class FlagTests(unittest.TestCase):
         self.battle.flags.base("ablue")
         self.red.update(x=50, y=1, z=10)
         self.battle.flags.base("ared")
+        self.battle.flags.set_ready("ablue")
+        self.battle.flags.set_ready("ared")
         self.assertEqual(self.battle.flags.phase, "active")
 
     def pickup(self):
@@ -41,6 +43,9 @@ class FlagTests(unittest.TestCase):
             self.battle.flags.base("ared")  # Flag needs clear space around it.
         self.battle.arena.changes([[51, y, 10, 0] for y in (1, 2, 3)])
         self.battle.flags.base("ared")
+        self.assertEqual(self.battle.flags.phase, "setup")
+        self.battle.flags.set_ready("ablue")
+        self.battle.flags.set_ready("ared")
         with self.assertRaises(Refused):
             self.battle.flags.base("ablue")
         self.assertEqual(self.battle.arena.camps["red"], [50, 1, 10])
@@ -114,7 +119,8 @@ class FlagTests(unittest.TestCase):
         self.battle.leave("ablue")
         state = self.battle.state()
         self.assertEqual(state["ctf"], {"phase": "setup", "winner": None,
-                                       "bases": {"blue": None, "red": None}, "flags": {}})
+                                       "bases": {"blue": None, "red": None}, "flags": {},
+                                       "ready": {"blue": False, "red": False}, "reason": None, "paused": False})
         self.assertEqual(state["scores"], {"blue": 0, "red": 0})
         self.assertEqual(state["camps"]["red"], [16, 1, 10])
         self.assertTrue(self.battle.arena.solid(30, 1, 30))

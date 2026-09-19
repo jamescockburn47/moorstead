@@ -33,8 +33,8 @@ class Socket{
 const transfers=[],errors=[],states=[],positions=[],rosters=[];
 const net=new FreeplayConnection(auth,{state:s=>states.push(s),error:e=>errors.push(e),transaction:t=>transfers.push(t),peer:p=>positions.push(p),peers:p=>rosters.push(p)},Socket);
 try{
-  net.connect();const socket=Socket.last;socket.onopen();assert.deepEqual(socket.sent[0],{type:'hello',protocol:1,contentVersion:5});
-  const init={type:'init',protocol:1,contentVersion:5,minContentVersion:5,freeplay:true,room:FREEPLAY.room,seed:FREEPLAY.seed,epoch:1,revision:0,history:[],checkpoint:false,players:[],vehicleCount:0,count:1};
+  net.connect();const socket=Socket.last;socket.onopen();assert.deepEqual(socket.sent[0],{type:'hello',protocol:1,contentVersion:6});
+  const init={type:'init',protocol:1,contentVersion:6,minContentVersion:6,freeplay:true,room:FREEPLAY.room,seed:FREEPLAY.seed,epoch:1,revision:0,history:[],checkpoint:false,players:[],vehicleCount:0,count:1};
   assert.throws(()=>net.receive({...init,contentVersion:1}),/Wrong world/,'old content must refuse before rendering new blocks');
   net.receive(init);net.receive({type:'snapshot',edits:[[3,4,5,8]]});assert.equal(transfers.length,0,'partial snapshot not published');
   net.receive({type:'ready',epoch:1,revision:0});assert(net.connected);assert.equal(transfers[0].edits.getCell(3,4,5),8);
@@ -100,3 +100,6 @@ await import('./verify-freeplay-battle.mjs');
 await import('./verify-freeplay-battle-renderer.mjs');
 await import('./verify-freeplay-ctf-renderer.mjs');
 await import('./verify-freeplay-ctf.mjs');
+await import('./verify-freeplay-battle-flow.mjs');
+await import('./verify-freeplay-vehicle-selection.mjs');
+await import('./verify-freeplay-vehicle-kits.mjs');

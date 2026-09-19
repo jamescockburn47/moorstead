@@ -67,7 +67,7 @@ test('battlefield: two-team flag bases, recruit, shared shots, shield, bunker an
   await expect(page.getByRole('button', { name: /Grenade · ∞/ })).toBeVisible();
   await page.getByRole('button', { name: 'Back to play', exact: true }).click();
   await page.getByRole('button', { name: 'Army', exact: true }).click();
-  await page.getByRole('button', { name: 'Set home base here', exact: true }).click();
+  await page.getByRole('button', { name: 'Place flag & ready', exact: true }).click();
   await expect.poll(async () => (await state(page)).battle.ctf.bases.blue).not.toBeNull();
   expect((await state(page)).battle.ctf.phase).toBe('setup');
   james = await joinFixtureOpponent(page);
@@ -75,7 +75,7 @@ test('battlefield: two-team flag bases, recruit, shared shots, shield, bunker an
   james.send('battle-join', { team: 'red' });
   await expect.poll(() => james.battle?.players.some(row => row.team === 'red')).toBe(true);
   await page.waitForTimeout(100); // Respect the adapter's per-account 80ms command gate.
-  james.send('battle-base');
+  james.send('battle-ready');
   await expect.poll(async () => (await state(page)).battle.ctf.phase).toBe('active');
   await expect.poll(() => james.battle?.ctf.phase).toBe('active');
   const bases = (await state(page)).battle.ctf.bases;
@@ -88,7 +88,7 @@ test('battlefield: two-team flag bases, recruit, shared shots, shield, bunker an
   await expect.poll(async () => (await state(page)).battle.soldiers.length).toBe(6);
   for (const [label, order] of [['Hold this position', 'hold'], ['Attack the enemy', 'attack'], ['Follow me', 'follow']]) {
     await page.getByRole('button', { name: 'Army', exact: true }).click();
-    await page.getByRole('button', { name: label, exact: true }).click();
+    await page.getByRole('button', { name: new RegExp('^' + label) }).click();
     await expect.poll(async () => (await state(page)).battle.soldiers.every(row => row.order === order)).toBe(true);
   }
 
@@ -130,6 +130,8 @@ test('battlefield: two-team flag bases, recruit, shared shots, shield, bunker an
   await page.getByRole('button', { name: /Plasma blaster · ∞/ }).click();
   await page.screenshot({ path: testInfo.outputPath('battle-bunker.png') });
 
+  james.send('battle-forfeit');
+  await expect.poll(async () => (await state(page)).battle.ctf.phase).toBe('won');
   await page.getByRole('button', { name: 'Army', exact: true }).click();
   await page.getByRole('button', { name: 'Leave battlefield', exact: true }).click();
   await expect.poll(async () => (await state(page)).battlePlayer).toBeNull();

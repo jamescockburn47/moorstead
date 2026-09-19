@@ -11,37 +11,60 @@ class Flags:
         self.reset()
 
     def reset(self):
-        self.phase, self.winner = "setup", None
+        self.phase, self.winner, self.reason = "setup", None, None
+        self.ready = {"blue": False, "red": False}
         self.bases = {"blue": None, "red": None}
         self.flags = {}
         self.battle.arena.camps = {team: point[:] for team, point in self.defaults.items()}
 
     def combat(self):
+        if self.battle.paused():
+            raise Refused("battle-paused", "Waiting for the other player to reconnect.")
         if self.phase != "active":
-            raise Refused("battle-round", "Choose both bases before fighting." if self.phase == "setup" else "The flag is captured. Start a new round.")
+            raise Refused("battle-round", "Both teams must place their flag and press Ready." if self.phase == "setup" else "The round is over. Start a new round.")
 
     def base(self, pid):
         player = self.battle.alive(pid)
         if self.phase != "setup":
             raise Refused("battle-base", "Bases are locked until the next round.")
-        x, z = player["x"], player["z"]
-        y = self.battle.arena.ground(x, z, player["y"])
-        if y is None or abs(y - player["y"]) > 0.35:
-            raise Refused("battle-base", "Stand on solid ground to choose a base.")
-        for dx in (-1, 0, 1):
-            for dz in (-1, 0, 1):
-                ground = self.battle.arena.ground(x + dx, z + dz, y)
-                if ground is None or abs(ground - y) > 1:
-                    raise Refused("battle-base", "Choose clear, supported ground with room around the flag.")
+        x, y, z = self.support([player[k] for k in ("x", "y", "z")])
         team = player["team"]
         enemy = "red" if team == "blue" else "blue"
         other = self.bases[enemy]
         if other and math.hypot(other[0] - x, other[2] - z) < 32:
             raise Refused("battle-base", "Choose bases at least 32 blocks apart.")
         self.bases[team] = [x, y, z]
+        self.ready[team] = False
         self.battle.arena.camps[team] = [x, y, z]
         self.home(team)
-        if all(self.bases.values()):
+
+    def support(self, point):
+        x, old_y, z = point
+        y = self.battle.arena.ground(x, z, old_y)
+        if y is None or abs(y - old_y) > 0.35:
+            raise Refused("battle-base", "Stand on solid ground to choose a base.")
+        for dx in (-1, 0, 1):
+            for dz in (-1, 0, 1):
+                ground = self.battle.arena.ground(x + dx, z + dz, y)
+                if ground is None or abs(ground - y) > 1:
+                    raise Refused("battle-base", "Choose clear, supported ground with room around the flag.")
+        return [x, y, z]
+
+    def set_ready(self, pid):
+        player = self.battle.alive(pid)
+        if self.phase != "setup":
+            raise Refused("battle-ready", "This round has already started.")
+        team = player["team"]
+        if self.bases[team] is None:
+            self.base(pid)
+        else:
+            self.support(self.bases[team])
+        self.ready[team] = True
+        self.try_start()
+
+    def try_start(self):
+        present = {p["team"] for p in self.battle.players.values() if p["connected"]}
+        if self.phase == "setup" and all(self.ready.values()) and len(present) == 2:
             self.phase = "active"
 
     def home(self, team):
@@ -71,7 +94,7 @@ class Flags:
             [origin[0], origin[1] + 1, origin[2]], [point[0], point[1] + 1, point[2]])
 
     def tick(self):
-        if self.phase != "active" or not all(self.bases.values()):
+        if self.phase != "active" or self.battle.paused() or not all(self.bases.values()):
             return
         for team, flag in list(self.flags.items()):
             if flag["status"] == "dropped" and flag["until"] <= self.battle.now:
@@ -102,11 +125,12 @@ class Flags:
                              **{key: player[key] for key in ("x", "y", "z")})
             if (enemy["carrier"] == player["id"] and own["status"] == "home"
                     and self.touch(player, self.bases[team])):
-                self.phase, self.winner = "won", team
+                self.phase, self.winner, self.reason = "won", team, "capture"
                 return
 
     def state(self):
-        return {"phase": self.phase, "winner": self.winner,
+        return {"phase": self.phase, "winner": self.winner, "ready": self.ready.copy(),
+                "reason": self.reason, "paused": self.battle.paused(),
                 "bases": {team: point[:] if point else None for team, point in self.bases.items()},
                 "flags": {team: {**{k: v for k, v in flag.items() if k != "until"},
                                   "returnIn": min(20, max(0, flag["until"] - self.battle.now))}

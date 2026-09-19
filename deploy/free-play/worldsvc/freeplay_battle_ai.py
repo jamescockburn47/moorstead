@@ -3,9 +3,13 @@ import math
 
 
 def step(battle, delta):
+    battle.wall += max(delta, 0)
+    battle.expire_connections()
     delta = min(max(delta, 0), 0.5)
-    battle.now += delta
     battle.revision += 1
+    if battle.paused() or battle.flags.phase == "won":
+        return
+    battle.now += delta
     battle.shields = {key: shield for key, shield in battle.shields.items() if shield["until"] > battle.now}
     for entity in battle.entities():
         if entity["hp"] <= 0:
@@ -35,7 +39,10 @@ def step(battle, delta):
         slot = unit["slot"]
         offset_x, offset_z = (slot % 6 - 2.5) * 1.3, (slot // 6 - 1.5) * 1.3
         goal = [unit["rally"][0] + offset_x, unit["rally"][1], unit["rally"][2] + offset_z]
-        if unit["order"] == "follow" and owner and owner["hp"] > 0:
+        if unit["order"] == "defend" or (unit["order"] == "attack" and battle.flags.phase != "active"):
+            camp = battle.arena.camps[unit["team"]]
+            goal = [camp[0] + offset_x, camp[1], camp[2] + offset_z]
+        elif unit["order"] == "follow" and owner and owner["hp"] > 0:
             goal = [owner["x"] + offset_x, owner["y"], owner["z"] + 5 + offset_z]
         elif unit["order"] == "attack" and enemy:
             goal = [enemy[k] for k in ("x", "y", "z")]

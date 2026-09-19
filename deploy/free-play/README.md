@@ -1,6 +1,6 @@
 # Private Free Play — server and release tools
 
-Updated 19 September 2026. **Content 5 release; SQLite schema 4.** No real
+Updated 19 September 2026. **Content 6 release; SQLite schema 4.** No real
 invites, sessions, player records or production database are included. The upgrade
 adds capture the flag with player-designated bases, grounded armies, real terrain
 cover, energy shields and cartoon knockouts/respawns. Existing movable builds and
@@ -36,6 +36,7 @@ route refuses this room before reading or creating ordinary room state.
 | `upgrade_vehicles.py` | Explicit content-2 → content-3 release, preserving all old rows |
 | `upgrade_battle.py` | Explicit content-3 → content-4 release, preserving all nine saved tables |
 | `upgrade_ctf.py` | Content-5 release plus explicitly authorised reset with recovery checkpoint |
+| `upgrade_war.py` | Content-6 update preserving all saved rows; no world reset |
 
 Live sources were read over `evo-tailscale`, without writes or service changes.
 `integrate.py` refuses sources whose SHA-256 differs from these inspected baselines:
@@ -95,7 +96,7 @@ No player pockets are read or saved. Positions are ephemeral, bounded and checke
 against the exact epoch. Token expiry/revocation is rechecked on operations and
 approximately every second when idle. Authentication comes only from the existing
 server callback and the exact room-bound session, never a client capability flag.
-The hello handshake additionally requires content version 5 before any snapshot.
+The hello handshake additionally requires content version 6 before any snapshot.
 
 Vehicle conversion selects only authored non-air overrides and exactly one control
 block 206. Conversion, explicit block editing, undo and checkpoint recovery include
@@ -115,6 +116,21 @@ health changes occur only after the corresponding terrain transaction commits.
 The real exported arena trial ran 48 opposing soldiers for 60 simulated seconds:
 first hit at 7.4 seconds, 438 hit events and 86 score points, with a maximum tick
 of 4.732 ms. These measurements establish server behaviour, not tablet frame rate.
+
+Content 6 makes recruitment default to Attack. Squads wait around their base
+during setup, then advance and shoot when both teams press Ready; Defend guards
+the selected home base. The canonical Python gate freshly exports the actual
+client terrain and rejects armies that merely stand still: 48 default recruits
+must cause hits and knockouts without an extra Attack command. Another test fires
+from the actual client eye direction at 20 metres and proves exact cover blocks
+the same shot. Human gun cooldowns use monotonic receipt time; AI uses the match
+simulation clock, so five-Hz updates cannot reject normal quarter-second fire.
+
+An active round requires explicit forfeiture to leave. Disconnects keep armies
+for 60 seconds and pause combat, movement and respawn timers; the independent
+grace clock continues. The same authenticated account resumes without rejoining.
+Expiry forfeits. Player capacity includes reconnecting identities, and socket
+replacement is checked atomically before cleanup can touch a participant.
 
 ## Stylised damage rules
 
@@ -178,7 +194,24 @@ Browser interception may redirect only those fixture requests; the shipped clien
 has no bypass or test login. The fixture authenticates synthetic in-memory sessions
 through the same production adapter. It does not establish live invite validity.
 
-## Content-5 release and authorised fresh-world reset
+## Content-6 update — preserve the current world
+
+Stage the thirteen adapter modules with `backup.py`, `upgrade_pack.py`,
+`upgrade_battle.py`, `upgrade_ctf.py` and `upgrade_war.py` in a new private directory.
+The new helper pins all thirteen hashes read from the actual content-5 relay and
+both existing arena files. It proves lifecycle compatibility with the installed
+FastAPI, stops only the relay, backs up the complete SQLite store and old source,
+then opens a restored rehearsal database with the candidate. Every row in all
+nine tables, including vehicle/checkpoint data and epoch/revision, must retain its
+count and hash. The live store is checked again before restart. There is no reset
+and no schema migration. A failed update restores only prior code, preserving the
+current live database; matching client recovery or roll-forward may still be needed.
+
+```sh
+/home/james/moorstead/venv/bin/python /path/to/private-stage/upgrade_war.py --install
+```
+
+## Content-5 reset record — already performed
 
 Stage all **thirteen** adapter modules with `backup.py`, `upgrade_pack.py`,
 `upgrade_battle.py` and `upgrade_ctf.py` in a new private directory. The existing
@@ -200,7 +233,7 @@ once; active cells, vehicles and history clear. The previous world remains both
 in the in-game recovery checkpoint and `before/world.sqlite3`. Failure after the
 reset preserves that state and requires roll-forward. Accounts/codes stay valid.
 
-Both teams must select supported clear bases at least 32 blocks apart before
+Both teams must ready supported clear bases at least 32 blocks apart before
 combat starts. Players carry enemy flags home, with their own flag home to win;
 cover blocks pickup through walls. Knockout drops a flag, teammates return it,
 and dropped flags return after 20 seconds. Leaving returns carried flags. Capture

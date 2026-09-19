@@ -92,6 +92,7 @@ class BattleServiceTests(unittest.TestCase):
             self.assertEqual(self.hub.store.state()["count"], 0)
 
     def test_reset_world_rehomes_battle_after_world_commit(self):
+        self.hub.battle.core.flags.phase = "setup"
         with self.socket(self.henry) as henry:
             self.start(henry)
             self.send(henry, self.henry, "join", team="blue")
@@ -116,6 +117,7 @@ class BattleServiceTests(unittest.TestCase):
             self.assertGreater(self.hub.peers["a" + self.henry["acct"]].last_position, 0)
 
     def test_vehicle_and_battle_membership_are_exclusive_in_both_directions(self):
+        self.hub.battle.core.flags.phase = "setup"
         self.hub.store.apply("aseed", self.command(edits=[[40, 1, 40, 206]]))
         self.hub.store.apply("aseed", self.command("vehicle-convert", core=[40, 1, 40],
                                                   **{"from": [40, 1, 40], "to": [40, 1, 40]}, mode="car"))
@@ -134,8 +136,67 @@ class BattleServiceTests(unittest.TestCase):
             self.send(henry, self.henry, "join", team="blue")
             self.assertEqual(henry.receive_json()["code"], "battle-vehicle")
 
+    def test_socket_reconnect_restores_participation_and_army_without_rejoining(self):
+        with self.socket(self.james) as james:
+            self.start(james)
+            self.send(james, self.james, "join", team="red")
+            self.collect(james, "battle-state")
+            with self.socket(self.henry) as henry:
+                self.start(henry)
+                self.send(henry, self.henry, "join", team="blue")
+                self.collect(henry, "battle-state")
+                self.collect(james, "battle-state")
+                self.send(henry, self.henry, "recruit", count=6)
+                self.collect(henry, "battle-state")
+                self.collect(james, "battle-state")
+                self.send(henry, self.henry, "leave")
+                self.assertEqual(henry.receive_json()["code"], "battle-locked")
+                henry.close()
+                frames = self.collect(james, "leave")
+            paused = next(frame["battle"] for frame in frames if frame["type"] == "battle-state")
+            self.assertTrue(paused["ctf"]["paused"])
+            self.assertEqual(len(paused["soldiers"]), 6)
+            with self.socket(self.henry) as returned:
+                resumed = self.start(returned)["battle"]
+                self.assertFalse(resumed["ctf"]["paused"])
+                self.assertEqual(len(resumed["soldiers"]), 6)
+                self.send(returned, self.henry, "forfeit")
+                won = self.collect(returned, "battle-state")[-1]["battle"]
+                self.assertEqual((won["ctf"]["winner"], won["ctf"]["reason"]), ("red", "forfeit"))
+
 
 class LifecycleTests(unittest.TestCase):
+    def test_old_socket_cleanup_cannot_disconnect_or_remove_queued_replacement(self):
+        async def run():
+            with tempfile.TemporaryDirectory() as directory:
+                app = FastAPI()
+                hub = mount_freeplay(app, lambda *args: None, lambda *args: False, Path(directory))
+                hub.battle.core = Battle(flat_arena())
+                hub.battle.core.join("ablue", "Blue", "blue")
+                hub.battle.core.recruit("ablue", 6)
+                old, new = SimpleNamespace(pid="ablue"), SimpleNamespace(pid="ablue")
+                hub.peers[old.pid] = old
+                notices = []
+                async def notice(value, skip=None):
+                    notices.append(value)
+                hub.notice = notice
+                await hub.lock.acquire()
+                cleanup = asyncio.create_task(hub.disconnect(old))
+                await asyncio.sleep(0)
+                async def reconnect():
+                    async with hub.lock:
+                        hub.peers[new.pid] = new
+                        hub.battle.reconnect(new)
+                replacement = asyncio.create_task(reconnect())
+                await asyncio.sleep(0)
+                hub.lock.release()
+                await asyncio.gather(cleanup, replacement)
+                self.assertIs(hub.peers["ablue"], new)
+                self.assertTrue(hub.battle.core.players["ablue"]["connected"])
+                self.assertEqual(len(hub.battle.core.soldiers), 6)
+                self.assertEqual(notices, [])
+        asyncio.run(run())
+
     def test_router_lifecycle_starts_and_stops_without_app_event_helper(self):
         async def run():
             with tempfile.TemporaryDirectory() as directory:

@@ -3,6 +3,7 @@ import { getIconURL } from '../textures.js';
 import { FUTURE_BLOCKS, getFutureIconURL } from './future-blocks.js';
 import { WEAPONS } from './weapons.js';
 import { BUILD_SHAPES, BRUSH_SIZES } from './build-shapes.js';
+import { playGuide } from './help-ui.js';
 
 export function element(tag, className, text, parent) {
   const el = document.createElement(tag); el.className = className || '';
@@ -51,6 +52,7 @@ export class FreeplayUI {
     button(tools, 'Build', () => this.open('build'));
     button(tools, 'Bombs', () => this.open('bombs'));
     button(tools, 'Weapons', () => this.open('weapons'));
+    this.garage=button(tools,'Vehicles',()=>this.open('vehicles'));
     this.fly = button(tools, 'Fly', () => actions.fly());
     this.undo = button(tools, 'Undo', () => actions.undo());
     this.army=button(tools,'Army',()=>this.open('battle'));this.army.hidden=true;
@@ -79,8 +81,11 @@ export class FreeplayUI {
   loading(message) { this.loginMessage.textContent = message; this.submit.disabled = true; this.continueButton.disabled = true; }
   loginError(message) { this.loginMessage.textContent = message; this.submit.disabled = false; this.continueButton.disabled = false; }
   playing(name) { this.login.hidden = true; this.hud.hidden = false; this.people.textContent = name; this.canvas.focus(); }
-  report(message) { this.error.textContent = message; this.error.hidden = false; }
-  message(text) { this.notice.textContent = text; }
+  report(message) { this.error.textContent = message; const dismiss=button(this.error,'×',()=>{this.error.hidden=true;},'fp-dismiss');dismiss.setAttribute('aria-label','Dismiss message');this.error.hidden = false; }
+  message(text) {
+    this.notice.textContent=text;clearTimeout(this.noticeTimer);
+    if(text)this.noticeTimer=setTimeout(()=>{this.notice.textContent='';},4500);
+  }
   status(text) { if(this.connection.textContent!==text)this.connection.textContent = text; }
   select(value) {
     this.selected = value;
@@ -96,7 +101,8 @@ export class FreeplayUI {
   rotateBuild(){if(this.selected.type==='build')this.select({...this.selected,rotation:((this.selected.rotation||0)+1)%4});}
   open(kind) {
     this.actions.pause(true); document.exitPointerLock?.(); this.panelContent.replaceChildren();
-    this.panelTitle.textContent = {build:'Build anything',bombs:'The bomb cupboard',weapons:'The sci-fi armoury',menu:'Our shared moor',map:'Find each other',vehicles:'Build and drive',battle:'The battlefield'}[kind];
+    this.panelTitle.textContent = {build:'Build anything',bombs:'The bomb cupboard',weapons:'The sci-fi armoury',menu:'Our shared moor',map:'Find each other',vehicles:'Build and drive',battle:'The battlefield',help:'How to play'}[kind];
+    if(kind==='help')playGuide(this.panelContent);
     if(kind==='battle')this.actions.battle(this.panelContent);
     if(kind==='vehicles')this.actions.vehicles(this.panelContent);
     if (kind === 'map') this.actions.map(this.panelContent);
@@ -123,6 +129,7 @@ export class FreeplayUI {
     for(const n of BRUSH_SIZES){const option=element('option','',String(n)+' blocks',sizes);option.value=n;option.selected=n===size;}
     sizes.onchange=()=>{size=Number(sizes.value);};
     element('h3','','Ready-made builds',this.panelContent);
+    if(this.actions.inBattle?.())element('p','fp-build-strategy','Trenches and sandbags block bullets. Bunkers protect your flag; watchposts shoot over low cover. Leave doors and steps for your soldiers.',this.panelContent);
     const prefabs=element('div','fp-build-choices',null,this.panelContent);
     for(const row of BUILD_SHAPES.filter(row=>row.prefab))button(prefabs,row.name,()=>this.select({type:'build',shape:row.id,block:200,rotation:0}));
     element('h3','','Materials · unlimited',this.panelContent);
@@ -141,8 +148,10 @@ export class FreeplayUI {
   }
   menu() {
     element('p', '', 'Infinite supplies and health. No chores. Everything here belongs to this separate free-play world.', this.panelContent);
+    button(this.panelContent,'How to play',()=>this.open('help'),'fp-primary');
     element('p', '', 'WASD: walk · drag/mouse: look · F: fly · Space: up/jump · Shift: down · Z: faster · left click: break/fire/build · right click: place · B: build · X: bombs · G: weapons · R: rotate build · M: map', this.panelContent);
-    button(this.panelContent, 'Back to village', () => { this.actions.home(); this.panel.close(); });
+    if(!this.actions.battleLocked?.())button(this.panelContent, 'Back to village', () => { this.actions.home(); this.panel.close(); });
+    else element('p','','Battle in progress: capture the flag or choose Army → Forfeit battle to leave the warzone.',this.panelContent);
     button(this.panelContent, 'Our vehicles', () => this.open('vehicles'));
     button(this.panelContent, 'Battlefield / armies', () => this.open('battle'));
     button(this.panelContent, 'Reconnect', () => { this.actions.reconnect(); this.panel.close(); });
@@ -156,8 +165,10 @@ export class FreeplayUI {
     element('p', '', history.length ? 'Undo removes the newest change first, whichever of thee made it.' : 'No recent changes to undo.', this.panelContent);
     for (const row of history.slice(0,5)) element('p','fp-history',row.actor + ' · ' + (row.bomb || row.kind),this.panelContent);
     button(this.panelContent, 'Undo latest shared action', () => { this.actions.undo(); this.panel.close(); });
-    button(this.panelContent, 'Reset world…', () => this.confirm('reset'), 'fp-danger');
-    const restore = button(this.panelContent, 'Restore before last reset…', () => this.confirm('restore')); restore.disabled = !this.actions.checkpoint();
+    if(!this.actions.worldLocked?.()){
+      button(this.panelContent, 'Reset world…', () => this.confirm('reset'), 'fp-danger');
+      const restore = button(this.panelContent, 'Restore before last reset…', () => this.confirm('restore')); restore.disabled = !this.actions.checkpoint();
+    }
     button(this.panelContent, 'Sign out', () => this.actions.logout());
   }
   confirm(kind) {

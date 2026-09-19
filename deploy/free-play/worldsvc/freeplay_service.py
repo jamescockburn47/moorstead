@@ -42,6 +42,15 @@ class Hub:
         await asyncio.gather(*(bounded_delivery(peer, lambda peer=peer: peer.send(value)) for peer in targets))
         # Endpoint cleanup owns removal and its leave notice, including failed sends.
 
+    async def disconnect(self, peer):
+        await self.control.disconnect(peer)
+        async with self.lock:
+            if self.peers.get(peer.pid) is not peer:
+                return
+            self.peers.pop(peer.pid)
+            await self.battle.disconnect(peer)
+            await self.notice({"type": "leave", "pid": peer.pid})
+
     async def command(self, peer, value):
         async with self.lock:
             if self.peers.get(peer.pid) is not peer:
@@ -154,6 +163,7 @@ class Hub:
                 elif len(self.peers) >= MAX_PLAYERS:
                     raise Refused("full", "This world is full. Try again shortly.")
                 self.peers[pid] = peer
+                self.battle.reconnect(peer)
                 players = [{"pid": other.pid, "name": other.name, **other.position}
                            for other in self.peers.values() if other is not peer and other.position]
                 if not await bounded_delivery(peer, lambda: send_snapshot(peer, self.store, players, self.control.pilots()), timeout=120):
@@ -172,11 +182,7 @@ class Hub:
             await peer.close(1011)
             raise
         finally:
-            await self.control.disconnect(peer)
-            if self.peers.get(peer.pid) is peer:
-                self.peers.pop(peer.pid, None)
-                await self.battle.disconnect(peer)
-                await self.notice({"type": "leave", "pid": peer.pid})
+            await self.disconnect(peer)
 
 
 def mount_freeplay(app, authenticate, banned, data, battlefield=None):

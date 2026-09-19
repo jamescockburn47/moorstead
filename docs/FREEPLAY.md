@@ -93,11 +93,16 @@ listening on the actual device remains a live-test check.
 
 ## Build and drive
 
-Place one Vehicle control block on a build, aim at it and press E or Use core.
-Mark two opposite corners enclosing the build. Green outlines show exactly which
-placed blocks move; natural terrain and air stay behind. Choose Car, Plane or
-Submarine. Up to 512 blocks inside 16 × 12 × 16 can form one vehicle, with sixteen
-saved vehicles shared by both boys. Menu → Our vehicles reopens the controls.
+Open Vehicles for a starter car, plane, submarine or tank body. Aim its preview
+at clear ground and place it. The tank body uses car controls and a decorative
+turret; it has no separate working cannon. Alternatively, place one Vehicle control
+block on a custom build, aim at it and press E or Use core. Connected placed blocks
+are highlighted automatically. A block-count preview and Car/Plane/Submarine
+choice lead to an explicit Convert button, then Enter to drive. Manual corner
+selection remains an advanced option. Natural terrain and air stay behind;
+disconnected extras inside the selection are refused until explicitly reviewed.
+Up to 512 blocks inside 16 × 12 × 16 form one vehicle, with sixteen shared saved
+vehicles. Vehicles or Menu → Our vehicles reopens the controls.
 
 Enter a vehicle to drive with WASD or the touch arrows. Plane/submarine use
 Space/Up and Shift/Down for altitude/depth. V or Change view switches between the
@@ -111,7 +116,7 @@ Conversion, materialisation and undo are atomic server transactions. Vehicles
 survive reconnects and restart; reset recovery includes them. Driving uses an
 exclusive pilot lease and its own bounded pose stream so it does not interrupt
 the other boy's terrain edits. Disconnect releases the pilot and retains the last
-accepted pose. The backend schema is 4 and content negotiation is version 5;
+accepted pose. The backend schema is 4 and content negotiation is version 6;
 old clients must refresh. This does not alter ordinary Moorstead's protocol.
 
 Hold Fire (or left mouse with pointer lock) for machine-gun bursts. Sheep are
@@ -126,29 +131,36 @@ Free Play position. Battlefield participants use health, shields and quick
 cartoon respawns. Ordinary Free Play retains unlimited health. Park vehicles
 before joining; leave the battle before driving again.
 
-Army recruits six soldiers at a time, up to 24 per team. Follow, Hold, Attack and
-Move squad to aimed point control the player's soldiers. Both players can fight
+Army recruits six soldiers at a time, up to 24 per team. They automatically attack
+when the round starts. Attack, Defend our flag, Follow, Hold and Move squad to aimed
+point control the player's soldiers. Both players can fight
 with machine gun, plasma, rockets and bombs. Solid voxel terrain blocks bullets
 and shields against a blast before that blast removes the cover. Shield deploys
 a six-metre dome for 12 seconds, with a 25-second cooldown. Personal shields
 regenerate after three quiet seconds. Players respawn after five seconds;
 soldiers return after eight. The scoreboard counts enemy knockouts.
 
-War mode uses capture the flag. During setup, walk to clear ground and choose
-Army → Set home base here. Bases must be at least 32 blocks apart. Both sides
-choosing a base starts the round and locks the base locations. Players pick up
+War mode uses capture the flag in a marked 128×128 warzone. During setup, build a
+base, stand inside it on clear ground, and choose Army → Place flag & ready.
+Bases must be at least 32 blocks apart. Both sides ready starts the round and
+locks the base locations. The HUD shows each side's readiness, troop counts,
+reconnection pauses and the winner; a confirmed personal hit has visual feedback.
+Players pick up
 the enemy flag by approaching it, then carry it to their own base while their
 own flag is home. That capture wins; knockouts alone do not decide the winner.
 Knockouts drop a carried flag, defenders can touch it to return it, and dropped
 flags return automatically after 20 seconds. A flag carrier cannot teleport to
-base. The Map shows both flags. New round resets armies and base choices while
+base. The Map shows both flags, soldiers and the boundary. Play another round resets armies and base choices while
 preserving fortifications. Mega and atom bombs are hidden and refused in war
 mode; spectator blasts of those types cannot overlap an occupied battlefield.
 
 Build includes excavating trenches with steps, bunkers with doors and firing
 ports, sandbag barricades and watchposts. Their terrain changes persist and use
 the existing shared undo. Armies, scores, shields and orders are session state;
-leaving or disconnecting dismisses that player's soldiers.
+leaving after a round dismisses that player's soldiers. Active rounds require
+capture or explicit Forfeit to leave; world reset/restore cannot bypass the match.
+A dropped connection keeps the army for 60 seconds and pauses combat. Reconnecting
+resumes the round; expiry forfeits. No persistence format changes are needed.
 
 Combat runs deterministically in the relay at 5 Hz, with no model/NPC brain.
 The 128×128 battlefield is on fresh ground at [-2048,1024]; authoritative collision
@@ -158,5 +170,9 @@ header and compressed voxels with
 The fixture uses these files explicitly; production stores them alongside the
 Free Play database. Client and backend guards cover terrain parity, cover,
 shield damage, squad orders, caps, respawn and transactional save failure.
-The browser journey is `tests/game/freeplay-battle.spec.mjs`; synthetic accounts
-exercise the actual adapter without entering the boys' production sessions.
+The browser journeys include `tests/game/freeplay-battle.spec.mjs` and
+`freeplay-battle-combat.spec.mjs`. The latter verifies opponent health loss,
+protection from the identical shot behind a built wall, and damaging default-army
+combat. A synthetic opponent walks accepted supported steps; exact camera aim is
+disclosed preparation, not a claim of natural touch accuracy. Synthetic accounts
+exercise the real adapter without entering the boys' production sessions.

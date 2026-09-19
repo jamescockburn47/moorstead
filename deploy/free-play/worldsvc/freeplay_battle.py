@@ -1,7 +1,7 @@
 """Deterministic ephemeral teams, cartoon combat, shields and respawning armies."""
 import math
 
-from freeplay_rules import Refused
+from freeplay_rules import MAX_PLAYERS, Refused
 from freeplay_battle_flags import Flags
 
 TEAMS = {"blue", "red"}
@@ -14,6 +14,7 @@ class Battle:
         self.players, self.soldiers, self.shields = {}, {}, {}
         self.scores = {team: 0 for team in TEAMS}
         self.now, self.revision, self.serial = 0.0, 0, 0
+        self.wall = 0.0
         self.events = []
         self.flags = Flags(self)
 
@@ -34,16 +35,51 @@ class Battle:
             if self.players[pid]["team"] != team:
                 raise Refused("battle-team", "Leave the battle before changing teams.")
             return
-        entity = {"id": pid, "name": name, "team": team, "yaw": 0, "shotAt": -999, "shieldAt": -999, "correctionSeq": 0}
+        if len(self.players) >= MAX_PLAYERS:
+            raise Refused("battle-full", "The battlefield is full, including players reconnecting.")
+        entity = {"id": pid, "name": name, "team": team, "yaw": 0, "shotAt": -999, "shieldAt": -999,
+                  "correctionSeq": 0, "connected": True, "reconnectUntil": None}
         self.players[pid] = entity
         self.spawn(entity)
+        self.flags.try_start()
+
+    def reconnect(self, pid):
+        if pid in self.players:
+            self.players[pid].update(connected=True, reconnectUntil=None)
+            self.flags.try_start()
+
+    def disconnect(self, pid):
+        if pid in self.players and self.players[pid]["connected"]:
+            self.players[pid].update(connected=False, reconnectUntil=self.wall + 60)
+
+    def paused(self):
+        return self.flags.phase == "active" and any(not p["connected"] for p in self.players.values())
+
+    def expire_connections(self):
+        for pid, player in list(self.players.items()):
+            if not player["connected"] and player["reconnectUntil"] <= self.wall:
+                if self.flags.phase == "active":
+                    self.forfeit(pid)
+                else:
+                    self.leave(pid)
+
+    def forfeit(self, pid):
+        player = self.players.get(pid)
+        if player is None:
+            raise Refused("battle-player", "Join a team first.")
+        if self.flags.phase == "active":
+            self.flags.phase, self.flags.reason = "won", "forfeit"
+            self.flags.winner = "red" if player["team"] == "blue" else "blue"
+        self.leave(pid)
 
     def leave(self, pid):
         participated = pid in self.players
         self.flags.release(pid)
-        self.players.pop(pid, None)
+        removed = self.players.pop(pid, None)
         self.shields.pop(pid, None)
         self.soldiers = {key: unit for key, unit in self.soldiers.items() if unit["owner"] != pid}
+        if removed and not any(p["team"] == removed["team"] for p in self.players.values()):
+            self.flags.ready[removed["team"]] = False
         if participated and not self.players:
             self.reset()
 
@@ -70,7 +106,7 @@ class Battle:
         for offset in range(count):
             self.serial += 1
             unit = {"id": f"soldier-{self.serial}", "owner": pid, "team": player["team"], "yaw": 0,
-                    "order": "follow", "rally": [player[key] for key in ("x", "y", "z")],
+                    "order": "attack", "rally": [player[key] for key in ("x", "y", "z")],
                     "shotAt": -999, "slot": slots[offset]}
             self.spawn(unit)
             self.soldiers[unit["id"]] = unit
@@ -105,7 +141,7 @@ class Battle:
             return True
         distance = math.dist([player[key] for key in ("x", "y", "z")], [position[key] for key in ("x", "y", "z")])
         elapsed = min(max(self.now - player["lastMove"], 0.08), 1)
-        if player["hp"] <= 0 or not self.arena.inside(position["x"], position["z"]) or distance > 30 * elapsed + 2:
+        if self.paused() or player["hp"] <= 0 or not self.arena.inside(position["x"], position["z"]) or distance > 30 * elapsed + 2:
             player["correctionSeq"] += 1
             return False
         start = [player["x"], player["y"] + 1, player["z"]]
@@ -127,8 +163,8 @@ class Battle:
                    and math.dist([shield[k] for k in ("x", "y", "z")], [target[k] for k in ("x", "y", "z")]) <= 6
                    for shield in self.shields.values())
 
-    def damage(self, target, amount, team):
-        if self.flags.phase != "active" or target["hp"] <= 0 or target["team"] == team or self.protected(target):
+    def damage(self, target, amount, team, source_id=None):
+        if self.flags.phase != "active" or self.paused() or target["hp"] <= 0 or target["team"] == team or self.protected(target):
             return
         shielded = target["shield"] > 0
         absorbed = min(target["shield"], amount)
@@ -137,18 +173,22 @@ class Battle:
         target["lastHit"] = self.now
         self.events.append({"type": "hit", "targetId": target["id"], "x": target["x"], "y": target["y"] + 1,
                             "z": target["z"], "shield": shielded, "team": team})
+        if source_id is not None:
+            self.events[-1]["sourceId"] = source_id
         if target["hp"] == 0:
             if target["id"] in self.players:
                 self.flags.release(target["id"], dropped=True)
             target["respawn"] = 5 if target["id"] in self.players else 8
             self.scores[team] += 3 if target["id"] in self.players else 1
 
-    def shoot(self, source, direction, weapon, ai=False):
+    def shoot(self, source, direction, weapon, ai=False, shot_time=None):
         self.flags.combat()
         damage, cooldown = WEAPONS[weapon]
-        if self.now - source["shotAt"] < (1.5 if ai else cooldown):
+        clock = self.now if ai or shot_time is None else shot_time
+        key = "shotAt" if ai or shot_time is None else "shotAtReal"
+        if clock - source.get(key, -999) < (1.5 if ai else cooldown) - 1e-9:
             raise Refused("battle-rate", "That weapon is cooling down.")
-        source["shotAt"] = self.now
+        source[key] = clock
         origin = [source["x"], source["y"] + 1.4, source["z"]]
         distance = self.arena.ray(origin, direction, 96)
         nearest, hit = distance, None
@@ -161,9 +201,9 @@ class Battle:
             if 0 <= along < nearest and perpendicular <= 0.65**2:
                 nearest, hit = max(0, along - math.sqrt(max(0, 0.65**2 - perpendicular))), target
         endpoint = [origin[i] + direction[i] * nearest for i in range(3)]
-        self.events.append({"type": "shot", "from": origin, "to": endpoint, "team": source["team"], "weapon": weapon})
+        self.events.append({"type": "shot", "from": origin, "to": endpoint, "team": source["team"], "weapon": weapon, "sourceId": source["id"]})
         if hit:
-            self.damage(hit, damage, source["team"])
+            self.damage(hit, damage, source["team"], source["id"])
 
     def explosion_targets(self, center, radius, team):
         origin = [center[0], center[1] + 1.2, center[2]]
@@ -178,6 +218,8 @@ class Battle:
             result = {key: entity[key] for key in keys if key in entity}
             if entity["id"] in self.players:
                 result["shieldCooldown"] = min(25, max(0, 25 - self.now + entity["shieldAt"]))
+                result["connected"] = entity["connected"]
+                result["reconnectIn"] = 0 if entity["connected"] else min(60, max(0, entity["reconnectUntil"] - self.wall))
             return result
         x, z = self.arena.origin
         return {"available": True, "revision": self.revision,

@@ -94,7 +94,7 @@ test('freeplay touch controls remain reachable with the three-row build actions'
       const hit = document.elementFromPoint(x, y);
       return hit && button.contains(hit) ? [] : [{ button: button.textContent, hit: hit?.textContent, x, y }];
   }));
-  for (const [width, height] of [[360, 800], [600, 960], [640, 360], [1024, 600]]) {
+  for (const [width, height] of [[360, 800], [600, 960], [640, 360], [800, 600], [1024, 600]]) {
     await page.setViewportSize({ width, height });
     for (const mode of ['building', 'driving', 'battle']) {
       await page.evaluate(mode => {

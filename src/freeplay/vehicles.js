@@ -4,23 +4,29 @@ import { VEHICLE_CORE, selectVehicleCells, parkedCells } from './vehicle-data.js
 import { createVehicleBody, stepVehicle, vehiclePoint } from './vehicle-motion.js';
 import { VehicleRenderer } from './vehicle-renderer.js';
 import { vehiclePanel } from './vehicle-ui.js';
+import { connectedVehicleCells } from './vehicle-selection.js';
+import { VehicleKitPlacement } from './vehicle-kit-placement.js';
+import { vehicleKit } from './vehicle-kits.js';
 
 export class FreeplayVehicles{
   constructor(game){
     this.game=game;this.vehicles=new Map();this.bodies=new Map();this.events=new Map();
     this.renderer=new VehicleRenderer(game.scene,game.atlas);this.ray=new THREE.Ray();
-    this.driving=null;this.selection=null;this.seq=0;this.clock=0;this.sent=0;this.chase=false;
+    this.driving=null;this.selection=null;this.seq=0;this.clock=0;this.sent=0;this.chase=true;
     this.pid='a'+game.connection.auth.acct;
+    this.kits=new VehicleKitPlacement(this);
   }
   panel(parent){vehiclePanel(this,parent);}
   apply(transfer){
-    if(transfer.snapshot||transfer.replace){this.afterPark=null;this.stop();this.cancelSelection();this.vehicles.clear();this.bodies.clear();this.renderer.clear();}
+    if(transfer.snapshot||transfer.replace){this.afterPark=null;this.awaitConversion=null;this.justCreated=null;this.stop();this.cancelSelection();this.vehicles.clear();this.bodies.clear();this.renderer.clear();}
     for(const [id,vehicle] of transfer.vehicles||[]){
       if(this.driving===id)this.stop();
       if(vehicle){this.vehicles.set(id,{...vehicle,pose:{...vehicle.pose}});this.bodies.set(id,createVehicleBody(vehicle.cells,vehicle.core));this.renderer.upsert(vehicle);}
       else{this.vehicles.delete(id);this.bodies.delete(id);this.renderer.remove(id);}
     }
     if(!this.game.transactions.length){const events=[...this.events.values()];this.events.clear();for(const m of events)if(m.epoch===transfer.epoch)this.event(m);}
+    this.kits?.committed(transfer);
+    if(this.awaitConversion&&this.awaitConversion===transfer.requestId){this.awaitConversion=null;this.cancelSelection();this.justCreated=[...transfer.vehicles.keys()][0];this.game.ui.open('vehicles');}
   }
   event(m){
     if(m.type==='vehicle-error'){
@@ -40,7 +46,8 @@ export class FreeplayVehicles{
       v.pilot=m.pilot;
       if(m.pose){v.pose={...m.pose};v.savedPose={...m.pose};delete v.target;}
       if(m.pilot===this.pid&&m.lease){
-        this.driving=v.id;this.lease=m.lease;this.seq=0;this.sent=-1;this.parking=false;this.game.actions.cancel();
+        this.driveLabel=this.game.ui.selection?.textContent;
+        this.justCreated=null;this.driving=v.id;this.lease=m.lease;this.seq=0;this.sent=-1;this.parking=false;this.game.actions.cancel();
         this.game.player.yaw=-v.pose.yaw;this.game.player.pitch=-.12;this.game.ui.panel.close();
         this.game.ui.message('Driving '+v.mode+' · E or Park to get out · V changes view');
       }else if(this.driving===v.id){this.stop();const after=this.afterPark;this.afterPark=null;after?.();}
@@ -49,27 +56,47 @@ export class FreeplayVehicles{
       if(this.driving!==v.id)v.target={...m.pose};
     }
   }
-  disconnected(){this.afterPark=null;this.stop();this.events.clear();this.cancelSelection();}
+  disconnected(){this.afterPark=null;this.awaitConversion=null;this.stop();this.events.clear();this.cancelSelection();}
   interact(hit){
     if(this.driving){this.park();return true;}
-    if(this.selection){this.mark(hit);return true;}
+    if(this.selection){if(this.selection.kit)return this.kits.place(hit);if(this.selection.manual)this.mark(hit);else this.game.ui.open('vehicles');return true;}
     if(hit&&this.game.world.getBlock(hit.x,hit.y,hit.z)===VEHICLE_CORE){
-      this.selection={core:[hit.x,hit.y,hit.z],first:null};this.game.ui.open('vehicles');return true;
+      this.selectCore([hit.x,hit.y,hit.z]);return true;
     }
     const id=this.aimed();if(id){this.enter(id);return true;}return false;
   }
   aimed(){const g=this.game;g.camera.getWorldDirection(this.ray.direction);this.ray.origin.copy(g.camera.position);return this.renderer.pick(this.ray,14);}
+  selectCore(core,mode='car'){
+    if(!this.selection)this.idleLabel=this.game.ui.selection?.textContent;
+    this.selection={core,first:null,mode,automatic:true};
+    try{Object.assign(this.selection,connectedVehicleCells(this.game.world,core));this.renderer.setSelection(this.selection.cells);}
+    catch(error){this.selection.error=error.message;this.renderer.setSelection([[...core,VEHICLE_CORE]]);}
+    this.game.ui.open('vehicles');
+  }
+  manualSelection(){
+    const s=this.selection;s.manual=true;s.automatic=false;s.first=null;delete s.cells;delete s.error;this.renderer.setSelection(null);
+    this.game.ui.message('Step 1 of 2: aim at the first corner and press Mark first corner.');this.game.ui.panel.close();
+  }
   mark(hit){
     if(!hit)return this.game.ui.message('Aim at a block on the corner of your build.');
     const point=[hit.x,hit.y,hit.z],s=this.selection;
-    if(!s.first){s.first=point;this.renderer.setSelection([[...point,VEHICLE_CORE]]);this.game.ui.message('First corner marked. Aim at the opposite corner and press Mark corner.');return;}
-    try{Object.assign(s,selectVehicleCells(this.game.world,s.first,point,s.core));this.renderer.setSelection(s.cells);this.game.ui.open('vehicles');}
+    if(!s.first){s.first=point;this.renderer.setSelection([[...point,VEHICLE_CORE]]);this.game.ui.message('Step 2 of 2: aim at the opposite corner and press Mark opposite corner.');return;}
+    try{Object.assign(s,selectVehicleCells(this.game.world,s.first,point,s.core));s.manual=false;this.renderer.setSelection(s.cells);this.game.ui.open('vehicles');}
     catch(error){this.game.ui.message(error.message);}
   }
-  cancelSelection(){this.selection=null;this.renderer.setSelection(null);}
+  cancelSelection(){
+    this.kits?.cancel();this.selection=null;this.renderer.setSelection(null);
+    if(this.idleLabel&&this.game.ui.selection)this.game.ui.selection.textContent=this.idleLabel;this.idleLabel=null;
+  }
   convert(mode){
-    const s=this.selection;if(!s?.cells)return;
-    if(this.game.send('vehicle-convert',{core:s.core,from:s.from,to:s.to,mode})){this.cancelSelection();this.game.ui.panel.close();}
+    const s=this.selection;if(!s?.cells||this.awaitConversion)return;
+    try{
+      const fresh=s.automatic?connectedVehicleCells(this.game.world,s.core):selectVehicleCells(this.game.world,s.from,s.to,s.core);
+      if(JSON.stringify(fresh.cells)!==JSON.stringify(s.cells)){
+        Object.assign(s,fresh);this.renderer.setSelection(s.cells);this.game.ui.open('vehicles');this.game.ui.message('The build changed. Review the new preview, then Convert.');return;
+      }
+    }catch(error){s.error=error.message;delete s.cells;this.game.ui.open('vehicles');return;}
+    if(this.game.send('vehicle-convert',{core:s.core,from:s.from,to:s.to,mode})){this.awaitConversion=this.game.connection.pending;this.game.ui.panel.close();}
   }
   enter(id){
     const g=this.game,v=this.vehicles.get(id);if(!v||!g.canEdit())return;
@@ -90,6 +117,7 @@ export class FreeplayVehicles{
       g.player.flying=true;g.player.vel={x:0,y:0,z:0};
     }
     this.driving=null;this.lease=null;this.parking=false;this.releaseSent=false;
+    if(this.driveLabel&&this.game.ui.selection)this.game.ui.selection.textContent=this.driveLabel;this.driveLabel=null;
   }
   edit(id){
     const g=this.game,v=this.vehicles.get(id);if(!v||v.pilot||!g.canEdit())return;
@@ -100,11 +128,14 @@ export class FreeplayVehicles{
       const block=g.world.getBlock(x,y,z);
       if(block!==B.AIR&&block!==B.WATER)return g.ui.message('Move to a clear space before turning this vehicle back into blocks.');
     }
-    if(g.send('vehicle-edit',{vehicleId:id}))g.ui.panel.close();
+    if(g.send('vehicle-edit',{vehicleId:id})){this.justCreated=null;g.ui.panel.close();}
   }
   toggleView(){this.chase=!this.chase;}
   update(dt){
     this.clock+=dt;const g=this.game;
+    if(this.kits.pending&&g.connection.connected&&!g.connection.pending&&!g.applying&&!g.transactions.length)this.kits.pending=null;
+    if(this.selection?.kit)this.kits.update(g.actions.hit);
+    if(this.awaitConversion&&g.connection.connected&&!g.connection.pending&&!g.applying&&!g.transactions.length){this.awaitConversion=null;g.ui.open('vehicles');}
     for(const v of this.vehicles.values()){
       if(v.id===this.driving){
         const oldYaw=v.pose.yaw,keys=g.input.keys,body=this.bodies.get(v.id);
@@ -128,8 +159,8 @@ export class FreeplayVehicles{
     const ui=g.ui;
     ui.vehicleDrive.hidden=!this.driving;
     ui.tools.hidden=!!this.driving;
-    if(this.driving)ui.place.textContent='Park';
-    else if(this.selection)ui.place.textContent='Mark corner';
+    if(this.driving){ui.place.textContent='Park';ui.selection.textContent='Driving '+this.vehicles.get(this.driving).mode+' · Arrows move'+(this.vehicles.get(this.driving).mode==='car'?'':' · Up / Down rise or dive');}
+    else if(this.selection)ui.place.textContent=this.selection.kit?'Place '+vehicleKit(this.selection.kit).name.toLowerCase():this.selection.manual?(this.selection.first?'Mark opposite corner':'Mark first corner'):'Review vehicle';
     else if(g.actions.selected.type==='block'){
       const hit=g.actions.hit;ui.place.textContent=hit&&g.world.getBlock(hit.x,hit.y,hit.z)===VEHICLE_CORE?'Use core':this.aimed()?'Enter':'Place';
     }else ui.place.textContent=g.actions.selected.type==='weapon'?'Fire':g.actions.selected.type==='bomb'?'Throw / place':'Place';

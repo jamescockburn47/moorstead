@@ -52,6 +52,7 @@ const controller = Object.assign(Object.create(FreeplayBattle.prototype), {
 });
 assert(controller.fire({ id: 'machinegun' })); assert.equal(sent.length, 0, 'setup cannot fire');
 controller.setBase(); assert.deepEqual(sent.pop(), ['battle-base', {}], 'base uses server-accepted position');
+controller.ready(); assert.deepEqual(sent.pop(), ['battle-ready', {}], 'ready is one explicit server-owned step');
 controller.state.ctf = active;
 assert(controller.fire({ id: 'machinegun' })); assert.equal(sent.pop()[0], 'battle-shot');
 controller.cooldown = 0; controller.state.ctf = { ...active, phase: 'won', winner: 'blue' };
@@ -68,8 +69,8 @@ arena.camps={'blue':[x+10,1,z+10],'red':[x+16,1,z+10]}
 b=Battle(arena); b.join('ablue','Blue','blue');b.join('ared','Red','red')
 states=[]
 def save(label): states.append([label,json.loads(json.dumps(b.state()))])
-save('setup');b.flags.base('ablue');save('one base')
-red=b.players['ared'];red.update(x=x+50,y=1,z=z+10);b.flags.base('ared');save('active')
+save('setup');b.flags.set_ready('ablue');save('one base')
+red=b.players['ared'];red.update(x=x+50,y=1,z=z+10);b.flags.set_ready('ared');save('active')
 blue=b.players['ablue'];blue.update(x=x+49,y=1,z=z+10);b.flags.tick();save('carried')
 b.damage(blue,999,'red');save('dropped');b.flags.tick();save('returned')
 b.spawn(blue);blue.update(x=x+49,y=1,z=z+10);b.flags.tick()

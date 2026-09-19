@@ -1,14 +1,14 @@
-# Free Play WebSocket protocol 1, content 5 (SQLite schema 4)
+# Free Play WebSocket protocol 1, content 6 (SQLite schema 4)
 
 Only `/freeplay/ws?room=family-freeplay&pid=a<account-id>&token=<session-token>`.
 The route verifies existing server sessions; ordinary `/ws` rejects this room.
 `POST /dash/auth/freeplay-claim` uses the dedicated account/room precondition and
 returns the usual account fields plus `edition: "freeplay"`.
 
-1. Client sends `{type:"hello",protocol:1,contentVersion:5}` within ten seconds.
+1. Client sends `{type:"hello",protocol:1,contentVersion:6}` within ten seconds.
    Older/newer content versions are refused before any snapshot or mutation.
 2. Server sends `init` with `protocol`, `freeplay:true`, `room`, numeric `seed`,
-   `contentVersion:5`, `minContentVersion:5`, `epoch`, `revision`, `count`, `history`,
+   `contentVersion:6`, `minContentVersion:6`, `epoch`, `revision`, `count`, `history`,
    `checkpoint`, `players`, `vehicleCount`, `limits` (including `maxCells:8000000`,
    `maxChunks:1024`, `maxBuild:1024`, `maxVehicles:16`, `maxVehicleCells:512`).
 3. Zero or more `{type:"snapshot",edits:[[x,y,z,id],...]}` frames, ≤512 cells each.
@@ -146,21 +146,24 @@ originating `command`, so they do not clear a pending terrain operation.
 | Type | Additional fields |
 |---|---|
 | `battle-join` | `team`: blue/red |
-| `battle-leave` | none |
+| `battle-leave` | none; refused during active rounds |
+| `battle-forfeit` | none; opposing team wins an active round and actor leaves |
 | `battle-recruit` | `count`: integer 1–6; at most 24 soldiers per team |
-| `battle-order` | `order`: follow/hold/attack; `rally:[x,y,z]` inside arena |
+| `battle-order` | `order`: follow/hold/attack/defend; `rally:[x,y,z]` inside arena |
 | `battle-shot` | `weapon`: machinegun/plasma; finite `direction:[dx,dy,dz]` with length 0.5–1.5, normalized by server |
 | `battle-shield` | none; radius 6, lasts 12 seconds, cooldown 25 seconds |
 | `battle-rally` | none; return to camp preserving health, cooldown 10 seconds |
 | `battle-base` | none; designate own base using current server-accepted foot position |
-| `battle-reset` | none; reset match state, preserving terrain |
+| `battle-ready` | none; place a base if missing, otherwise validate own existing base, then ready own team |
+| `battle-reset` | none; reset match state, preserving terrain; refused during active rounds |
 
 The server sends `battle-state` after `ready` when the configured arena is available,
 then at five Hz while anyone participates. Its envelope is `{type,epoch,battle}`;
 `battle` contains `available:true,revision,bounds:{minX,minZ,maxX,maxZ},camps,scores,
 players,soldiers,shields`. Player/soldier records have `id,team,x,y,z,yaw,hp,shield,
 respawn,spawnSeq`; player records add `name,correctionSeq,shieldCooldown`, soldiers
-add `owner,order`. Respawn and cooldown values are seconds remaining. Shield records
+add `owner,order`. Players also expose `connected` and `reconnectIn` (0–60 seconds).
+Respawn and cooldown values are seconds remaining. Shield records
 are `{id,team,x,y,z,radius,remaining}`. Soldier yaw zero faces positive Z.
 
 Participants use the existing `pos` channel; arena bounds, swept terrain cover,
@@ -174,7 +177,7 @@ exclusive on the server. Other Free Play players are immune to match damage.
 Player health/shield are 100/100; shields regenerate after three seconds without a
 hit. Soldiers have 50 health. Knockouts respawn players after five seconds and
 soldiers after eight. Enemy knockouts score three points for players, one for
-soldiers. Leaving or disconnecting dismisses that player's army. Match state,
+soldiers. Explicit allowed departure dismisses that player's army. Match state,
 including scores, is ephemeral and resets with world reset/recovery or a restart.
 
 Shots originate at the server's accepted player position and stop at actual solid
@@ -185,11 +188,15 @@ and health changes only follow a successful, nonduplicate world commit. Friendly
 dome shields protect allies inside; friendly fire is disabled.
 
 Effects are `{type:"battle-event",epoch,event}`. Shot events contain
-`type:"shot",from,to,team,weapon`; hit events contain
-`type:"hit",targetId,x,y,z,shield,team`. State and effects are bounded by eight
+`type:"shot",from,to,team,weapon,sourceId`; hit events contain
+`type:"hit",targetId,x,y,z,shield,team` and optional `sourceId`. Only the matching
+player source ID warrants personal hit feedback; army fire has soldier source IDs.
+State and effects are bounded by eight
 players, 48 soldiers, eight domes and at most 128 events per flush.
 
-`battle.ctf` contains `{phase,winner,bases,flags}`. Phase is `setup`, `active` or
+`battle.ctf` contains `{phase,winner,bases,flags,ready,reason,paused}`. Ready maps
+blue/red to booleans; reason is null/capture/forfeit; paused is boolean.
+Phase is `setup`, `active` or
 `won`; winner is null or a team. Bases map each team to null or a foot-position
 `[x,y,z]`. Flags contain entries only for selected bases, keyed by team. Each
 entry is `{team,x,y,z,status,carrier,returnIn}`: status home/carried/dropped,
@@ -197,11 +204,14 @@ carrier null or a player pid, and returnIn seconds in [0,20]. Flag coordinates
 are ground/foot anchors, following the carrier's accepted position.
 
 Base selection requires supported ground, clear surrounding headroom and at least
-32 horizontal blocks between bases. Both selections lock bases and enable combat.
+32 horizontal blocks between bases. Moving a base clears that team's ready flag.
+Only both teams ready and connected locks bases and enables combat. Default
+recruits Attack automatically when active; they wait at base during setup. Defend
+retains a base formation while firing at nearby visible enemies.
 Only living players can take an enemy flag within two blocks with unobstructed
 line of sight. Returning to one's own base wins only while one's own flag is home
 and both teams still have a participant. Knockout drops the flag; a friendly
-touch or 20-second timeout returns it. Leaving/disconnecting returns any carried
+touch or 20-second timeout returns it. Explicit departure returns any carried
 flag. Rally is refused while carrying. Winning freezes damage and shots; a new
 round resets bases/flags/armies/scores and restores default camps, preserving terrain.
 
@@ -209,3 +219,17 @@ Mega and atom commands are refused for participants. While any participant
 remains, a spectator's mega/atom is also refused if its horizontal blast circle
 touches the arena rectangle, including blasts originating outside. Enforcement
 occurs on receipt, so a previously armed bomb cannot bypass the restriction.
+
+Disconnect preserves the participant, flag and army for 60 seconds. During an
+active round any disconnected participant pauses combat, movement and respawn
+timers. A separate elapsed-time clock advances the grace deadline; it cannot be
+extended by freezing simulation time. Reconnecting with the same authenticated
+account resumes the retained state automatically. Grace expiry forfeits an active
+round. Active participants cannot leave without `battle-forfeit`; match reset and
+global terrain reset/restore are refused while a round remains active, including
+for spectators. Normal departure is available during setup or after victory.
+
+Human direct-shot cooldowns use trusted monotonic receipt times, with a separate
+per-player timestamp. AI cooldowns use simulation time. Neither timestamp can be
+supplied over the wire. This avoids rejecting valid 250-ms shots merely because
+the five-Hz simulation advanced only 200 ms.

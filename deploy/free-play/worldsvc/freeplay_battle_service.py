@@ -10,7 +10,7 @@ from freeplay_battle_terrain import Arena
 from freeplay_rules import BOMBS, Refused, integer
 
 COMMANDS = {"battle-join", "battle-leave", "battle-recruit", "battle-order", "battle-shot",
-            "battle-shield", "battle-rally", "battle-reset", "battle-base"}
+            "battle-shield", "battle-rally", "battle-reset", "battle-base", "battle-ready", "battle-forfeit"}
 FIELDS = {"battle-join": {"team"}, "battle-recruit": {"count"},
           "battle-order": {"order", "rally"}, "battle-shot": {"weapon", "direction"}}
 
@@ -80,10 +80,10 @@ class BattleService:
             if now - peer.last_battle < 0.08:
                 raise Refused("battle-rate", "Wait a moment before the next battlefield action.")
             peer.last_battle = now
-            self.execute(peer, command)
+            self.execute(peer, command, shot_time=now)
             await self.flush(state=kind != "battle-shot")
 
-    def execute(self, peer, command):
+    def execute(self, peer, command, shot_time=None):
         kind = command["type"]
         if kind == "battle-join":
             if any(lease["peer"].pid == peer.pid for lease in self.hub.control.leases.values()):
@@ -92,16 +92,20 @@ class BattleService:
                 raise Refused("battle-team", "Choose blue or red.")
             self.core.join(peer.pid, peer.name, command["team"])
         elif kind == "battle-leave":
+            if peer.pid in self.core.players and self.core.flags.phase == "active":
+                raise Refused("battle-locked", "Finish the round or choose Forfeit before leaving the warzone.")
             self.core.leave(peer.pid)
+        elif kind == "battle-forfeit":
+            self.core.forfeit(peer.pid)
         elif kind == "battle-recruit":
             if not integer(command["count"], 1, 6):
                 raise Refused("battle-army", "Recruit one to six soldiers at a time.")
             self.core.recruit(peer.pid, command["count"])
         elif kind == "battle-order":
             order, rally = command["order"], command["rally"]
-            if (not isinstance(order, str) or order not in {"follow", "hold", "attack"} or not vector(rally)
+            if (not isinstance(order, str) or order not in {"follow", "hold", "attack", "defend"} or not vector(rally)
                     or not self.core.arena.inside(rally[0], rally[2]) or not 1 <= rally[1] <= 192):
-                raise Refused("battle-order", "Choose follow, hold or attack inside the battlefield.")
+                raise Refused("battle-order", "Choose attack, defend, follow or hold inside the battlefield.")
             self.core.order(peer.pid, order, rally)
         elif kind == "battle-shot":
             weapon, direction = command["weapon"], command["direction"]
@@ -110,16 +114,25 @@ class BattleService:
             length = math.sqrt(sum(value * value for value in direction))
             if not 0.5 <= length <= 1.5:
                 raise Refused("battle-shot", "Aim with a unit direction.")
-            self.core.shoot(self.core.alive(peer.pid), [value / length for value in direction], weapon)
+            self.core.shoot(self.core.alive(peer.pid), [value / length for value in direction], weapon, shot_time=shot_time)
         elif kind == "battle-shield":
             self.core.shield(peer.pid)
         elif kind == "battle-base":
             self.core.flags.base(peer.pid)
+        elif kind == "battle-ready":
+            self.core.flags.set_ready(peer.pid)
         elif kind == "battle-rally":
             self.core.rally(peer.pid)
         elif kind == "battle-reset":
-            self.core.alive(peer.pid)
+            if peer.pid not in self.core.players:
+                raise Refused("battle-player", "Join a team first.")
+            if self.core.flags.phase == "active":
+                raise Refused("battle-locked", "Finish or forfeit the current round first.")
             self.core.reset()
+
+    def reconnect(self, peer):
+        if self.core:
+            self.core.reconnect(peer.pid)
 
     async def move(self, peer, position):
         if not self.core or peer.pid not in self.core.players:
@@ -132,6 +145,8 @@ class BattleService:
             return accepted
 
     def plan_damage(self, peer, command):
+        if self.core and self.core.players and self.core.flags.phase == "active" and command.get("type") in {"reset", "restore"}:
+            raise Refused("battle-locked", "Finish or forfeit the active round before resetting the world.")
         self.block_large_bombs(peer, command)
         if not self.core or peer.pid not in self.core.players:
             return []
@@ -152,7 +167,7 @@ class BattleService:
         origin = [actor["x"], actor["y"] + 1.4, actor["z"]]
         if command["type"] == "weapon" and not self.core.arena.visible(origin, [center[0], center[1] + 1, center[2]]):
             raise Refused("battle-cover", "Cover blocks that shot. Aim at its visible surface.")
-        return [(target, amount, actor["team"]) for target, amount in self.core.explosion_targets(center, radius, actor["team"])]
+        return [(target, amount, actor["team"], peer.pid) for target, amount in self.core.explosion_targets(center, radius, actor["team"])]
 
     def block_large_bombs(self, peer, command):
         if not self.core or not self.core.players or command.get("type") != "blast" or command.get("bomb") not in {"mega", "atom"}:
@@ -171,13 +186,13 @@ class BattleService:
             self.core.arena.reload(self.hub.store)
             self.core.reset()
         else:
-            for target, amount, team in damage:
-                self.core.damage(target, amount, team)
+            for target, amount, team, source_id in damage:
+                self.core.damage(target, amount, team, source_id)
             self.core.arena.changes(result["changes"])
         await self.flush(state=bool(damage) or result["replace"])
 
     async def disconnect(self, peer):
+        # Hub owns the room lock across identity check, removal and leave notice.
         if self.core:
-            async with self.hub.lock:
-                self.core.leave(peer.pid)
-                await self.flush(state=True)
+            self.core.disconnect(peer.pid)
+            await self.flush(state=True)

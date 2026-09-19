@@ -47,6 +47,8 @@ battle.receive({type:'battle-state',battle:{...state,players:[{...actor,spawnSeq
 assert.equal(game.player.pos.x,target,'rejected movement reconciles the visible player with the server hitbox');
 assert(battle.fire({id:'machinegun',cooldown:.25}));assert.equal(sent.at(-1)[0],'battle-shot');
 const count=sent.length;battle.fire({id:'machinegun',cooldown:.25});assert.equal(sent.length,count,'automatic fire is rate bounded');
+let cleared=0;game.input.clear=()=>cleared++;battle.state.ctf={phase:'active',paused:true};game.player.pos.x+=2;
+battle.update(.01);assert.equal(game.player.pos.x,actor.x);assert(cleared>0,'reconnect pause freezes local movement rather than repeatedly snapping it');delete battle.state.ctf;
 FreeplayGame.prototype.fly.call(game);assert.equal(game.player.flying,false,'F cannot bypass battlefield movement');
 let claimed=false;FreeplayVehicles.prototype.enter.call({game:{...game,canEdit:()=>true,connection:{vehicle:()=>{claimed=true;}}},vehicles:new Map([['v',{id:'v'}]])},'v');
 assert.equal(claimed,false,'battle participants cannot acquire a vehicle');
@@ -58,5 +60,10 @@ const notices=[],net=new FreeplayConnection({acct:'test',token:'synthetic-token'
 net.epoch=1;net.pending='terrain-in-flight';
 net.receive({type:'error',command:'battle-shot',message:'Cooldown'});
 assert.equal(net.pending,'terrain-in-flight','combat errors cannot abandon a pending saved terrain change');
+const noticeCount=notices.length;
+net.receive({type:'error',command:'battle-shot',code:'battle-rate',message:'That weapon is cooling down.'});
+assert.equal(notices.length,noticeCount,'a refused automatic-fire repeat does not leave a persistent world-error toast');
+net.receive({type:'error',command:'battle-shot',code:'battle-round',message:'Place both flags first.'});
+assert.equal(notices.at(-1),'Place both flags first.','real combat refusals remain visible');
 net.receive({type:'battle-state',epoch:1,battle:{available:false}});
 console.log('Free-play battlefield: PASS (real terrain parity, protocol bounds, join/respawn/leave, shooting cooldown, vehicle/fly isolation).');

@@ -24,7 +24,7 @@ export class FreeplayActions {
   target() {
     const g=this.game,p=g.player;g.camera.getWorldDirection(this.direction);
     const hit=raycast(g.world,p.pos.x,p.pos.y+p.eye,p.pos.z,this.direction.x,this.direction.y,this.direction.z,
-      this.selected.type==='bomb'?80:this.selected.type==='weapon'?weaponById(this.selected.id)?.range||50:this.selected.type==='build'?35:10,id=>!!(isSolid(id)||isCutout(id)));
+      g.vehicles?.selection?.kit?35:this.selected.type==='bomb'?80:this.selected.type==='weapon'?weaponById(this.selected.id)?.range||50:this.selected.type==='build'?35:10,id=>!!(isSolid(id)||(!g.vehicles?.selection?.kit&&isCutout(id))));
     if(hit&&g.world.isLoaded(hit.x,hit.z))return hit;
     if(this.selected.type==='weapon'&&this.selected.id==='sheep'){
       const end=g.camera.position.clone().addScaledVector(this.direction,36);

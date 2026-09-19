@@ -45,6 +45,7 @@ export class FreeplayGame {
     this.previous=performance.now();this.frameId=requestAnimationFrame(now=>this.frame(now));
   }
   home(){
+    if(this.battle?.locked()){this.ui.message('Finish the battle or forfeit in Army before returning to the village.');this.ui.open('battle');return;}
     if(this.battle?.me){this.battle.wantHome=true;this.battle.leave();return;}
     if(this.vehicles?.driving){this.vehicles.afterPark=()=>this.home();this.vehicles.park();return;}
     const spawn=this.world.gen.findSpawn();Object.assign(this.player.pos,spawn);this.player.pos.y=Math.max(spawn.y,45);

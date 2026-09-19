@@ -47,19 +47,21 @@ test('freeplay vehicle: real build, flight, parking, account handoff, edit and u
 
     await aimAt(page, core);
     await page.getByRole('button', { name: 'Use core', exact: true }).click();
-    await page.getByRole('button', { name: 'Back to play', exact: true }).click();
-    await aimAt(page, rows[2].slice(0, 3));
-    await page.getByRole('button', { name: 'Mark corner', exact: true }).click();
-    await aimAt(page, core);
-    await page.getByRole('button', { name: 'Mark corner', exact: true }).click();
-    await expect(page.getByText('4 blocks selected. Choose how it moves.', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Make plane', exact: true }).click();
+    await expect(page.getByText('4 blocks selected. Yellow is the control block.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('img', { name: '4 selected vehicle blocks; yellow marks the control' })).toBeVisible();
+    await page.getByLabel('Vehicle movement', { exact: true }).selectOption('plane');
+    await page.screenshot({ path: testInfo.outputPath('automatic-vehicle-review.png') });
+    await page.getByRole('button', { name: 'Convert to plane', exact: true }).click();
     await settled(page, initial.revision + 3);
     const original = (await vehicles(page))[0]; expect(original.cells).toHaveLength(4);
     expect(original.cells.filter(row => row[3] === 206)).toHaveLength(1);
     expect(await page.evaluate(rows => rows.every(([x, y, z]) => window.moorsteadTest.cell(x, y, z) === 0), rows)).toBe(true);
 
-    await vehicleMenu(page); await page.getByRole('button', { name: 'Enter plane', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Ready to drive', exact: true })).toBeVisible();
+    const enterBox=await page.getByRole('button', { name: 'Enter plane', exact: true }).boundingBox();
+    expect(enterBox.y+enterBox.height).toBeLessThan(480);
+    await page.screenshot({ path: testInfo.outputPath('ready-to-drive.png') });
+    await page.getByRole('button', { name: 'Enter plane', exact: true }).click();
     await expect.poll(async () => (await state(page)).driving).toBe(original.id);
     // The native dialog close event unpauses input and then returns canvas focus.
     // Lease receipt happens first, so driving alone does not establish readiness.

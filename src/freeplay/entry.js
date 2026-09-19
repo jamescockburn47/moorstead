@@ -25,6 +25,7 @@ const ui=new FreeplayUI(root,{
   map:parent=>game?.map.open(parent),
   vehicles:parent=>game?.vehicles.panel(parent),park:()=>game?.vehicles.park(),vehicleView:()=>game?.vehicles.toggleView(),
   battle:parent=>game?.battle.panel(parent),shield:()=>game?.battle.shield(),
+  inBattle:()=>!!game?.battle.me,battleLocked:()=>game?.battle.locked(),worldLocked:()=>game?.battle.state?.ctf?.phase==='active',
   bombAllowed:id=>game?.battle.bombAllowed(id)!==false,
   fly:()=>game?.fly(),use:()=>game?.use(),break:()=>game?.break(),
   select:value=>game?.actions.choose(value),

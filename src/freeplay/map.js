@@ -21,6 +21,7 @@ export class FreeplayMap {
   }
   positions() {
     const g = this.game;
+    if(g.battle?.me&&g.battle.state)return g.battle.state.players.filter(p=>p.id!==g.battle.pid).map(p=>({...p,pid:p.id}));
     return g.connection.connected ? g.peers.locations() : [];
   }
   open(parent) {
@@ -36,7 +37,7 @@ export class FreeplayMap {
     this.canvas.setAttribute('role', 'img');
     this.canvas.setAttribute('aria-label', 'Map: north is up. Your marker is gold; the other player is blue.');
     this.roster = textNode('div', parent, '', 'fp-map-roster');
-    textNode('p', parent, 'North ↑ · Gold: you · Blue: the other player. Close the map and follow the arrow to meet up.', 'fp-map-help');
+    textNode('p', parent, this.game.battle?.me?'North ↑ · Gold: you and the warzone edge · Blue/red dots: soldiers · Flags: bases. Solid cover blocks bullets; move around hills for a clear shot.':'North ↑ · Gold: you · Blue: the other player. Close the map and follow the arrow to meet up.', 'fp-map-help');
     this.baseKey = ''; this.draw();
   }
   update(dt) {
@@ -71,6 +72,12 @@ export class FreeplayMap {
     const key = [Math.round(frame.cx), Math.round(frame.cz), Math.round(frame.scale * 100), g.world.revision].join(':');
     if (key !== this.baseKey) { this.background(frame); this.baseKey = key; }
     const ctx = this.canvas.getContext('2d'); ctx.drawImage(this.base, 0, 0);
+    const battle=g.battle?.me&&g.battle.state;
+    if(battle){
+      const {minX,minZ,maxX,maxZ}=battle.bounds,a=projectMap({x:minX,z:minZ},frame),b=projectMap({x:maxX,z:maxZ},frame);
+      ctx.strokeStyle='#ffdc89';ctx.lineWidth=2;ctx.strokeRect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(b.x-a.x),Math.abs(b.y-a.y));
+      for(const soldier of battle.soldiers){const p=projectMap(soldier,frame);ctx.fillStyle=soldier.hp<=0?'#b2b8af':soldier.team==='blue'?'#58baff':'#ff826c';ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();}
+    }
     for(const flag of flags){
       const colour=flag.team==='blue'?'#58baff':'#ff826c';
       this.marker(ctx,projectMap(flag,frame),colour,flag.team==='blue'?'Blue flag':'Red flag',null,30);
