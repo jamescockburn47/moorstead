@@ -10,7 +10,7 @@ from freeplay_battle_terrain import Arena
 from freeplay_rules import BOMBS, Refused, integer
 
 COMMANDS = {"battle-join", "battle-leave", "battle-recruit", "battle-order", "battle-shot",
-            "battle-shield", "battle-rally", "battle-reset"}
+            "battle-shield", "battle-rally", "battle-reset", "battle-base"}
 FIELDS = {"battle-join": {"team"}, "battle-recruit": {"count"},
           "battle-order": {"order", "rally"}, "battle-shot": {"weapon", "direction"}}
 
@@ -113,6 +113,8 @@ class BattleService:
             self.core.shoot(self.core.alive(peer.pid), [value / length for value in direction], weapon)
         elif kind == "battle-shield":
             self.core.shield(peer.pid)
+        elif kind == "battle-base":
+            self.core.flags.base(peer.pid)
         elif kind == "battle-rally":
             self.core.rally(peer.pid)
         elif kind == "battle-reset":
@@ -130,11 +132,13 @@ class BattleService:
             return accepted
 
     def plan_damage(self, peer, command):
+        self.block_large_bombs(peer, command)
         if not self.core or peer.pid not in self.core.players:
             return []
         actor = self.core.alive(peer.pid)
         if command.get("type") not in {"weapon", "blast"}:
             return []
+        self.core.flags.combat()
         center = command.get("center")
         if (not vector(center) or not self.core.arena.inside(center[0], center[2])
                 or math.dist(center, [actor[key] for key in ("x", "y", "z")]) > 96):
@@ -149,6 +153,16 @@ class BattleService:
         if command["type"] == "weapon" and not self.core.arena.visible(origin, [center[0], center[1] + 1, center[2]]):
             raise Refused("battle-cover", "Cover blocks that shot. Aim at its visible surface.")
         return [(target, amount, actor["team"]) for target, amount in self.core.explosion_targets(center, radius, actor["team"])]
+
+    def block_large_bombs(self, peer, command):
+        if not self.core or not self.core.players or command.get("type") != "blast" or command.get("bomb") not in {"mega", "atom"}:
+            return
+        x, _, z = command["center"]
+        ox, oz = self.core.arena.origin
+        edge = self.core.arena.width - 1
+        nearest_x, nearest_z = min(max(x, ox), ox + edge), min(max(z, oz), oz + edge)
+        if peer.pid in self.core.players or math.hypot(x - nearest_x, z - nearest_z) <= BOMBS[command["bomb"]][0]:
+            raise Refused("battle-bomb", "Mega and atom bombs cannot be used in or across an occupied battlefield.")
 
     async def committed(self, result, damage):
         if not self.core:

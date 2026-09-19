@@ -6,7 +6,7 @@ import re
 ROOM = "family-freeplay"
 SEED = 419947177  # strSeed('t-moors-1900'), the client generator's MOORS_SEED.
 PROTOCOL = 1
-CONTENT_VERSION = 4
+CONTENT_VERSION = 5
 LIMIT = 8192
 MAX_CELLS = 8_000_000
 MAX_CHUNKS = 1024

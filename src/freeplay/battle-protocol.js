@@ -4,8 +4,21 @@ const id=value=>typeof value==='string'&&value.length>0&&value.length<=80;
 const finite=(value,min,max)=>Number.isFinite(value)&&value>=min&&value<=max;
 const team=value=>value==='blue'||value==='red';
 const point=row=>row&&finite(row.x,-8192,8192)&&finite(row.z,-8192,8192)&&finite(row.y,0,192);
+export function validCaptureState(ctf){
+  if(!ctf||!['setup','active','won'].includes(ctf.phase)||!(ctf.winner===null||team(ctf.winner))||!ctf.bases||!ctf.flags)return false;
+  if((ctf.phase==='won')!==(ctf.winner!==null))return false;
+  for(const key of ['blue','red']){
+    const base=ctf.bases[key],flag=ctf.flags[key];
+    if(!(base===null||Array.isArray(base)&&base.length===3&&point({x:base[0],y:base[1],z:base[2]})))return false;
+    if(ctf.phase!=='setup'&&!base)return false;
+    if(flag&&(!point(flag)||!['home','carried','dropped'].includes(flag.status)||!(flag.carrier===null||id(flag.carrier))||!finite(flag.returnIn,0,20)))return false;
+    if(ctf.phase!=='setup'&&!flag)return false;
+  }
+  return true;
+}
 export function validBattleState(s){
   if(s?.available===false)return Object.keys(s).length===1;
+  if(s?.ctf!==undefined&&!validCaptureState(s.ctf))return false;
   if(!s||!Array.isArray(s.players)||s.players.length>8||!Array.isArray(s.soldiers)||s.soldiers.length>48
     ||!Array.isArray(s.shields)||s.shields.length>8||!s.camps||!s.bounds)return false;
   const {origin,width}=BATTLE_REGION;

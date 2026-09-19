@@ -1,14 +1,14 @@
-# Free Play WebSocket protocol 1, content 4
+# Free Play WebSocket protocol 1, content 5 (SQLite schema 4)
 
 Only `/freeplay/ws?room=family-freeplay&pid=a<account-id>&token=<session-token>`.
 The route verifies existing server sessions; ordinary `/ws` rejects this room.
 `POST /dash/auth/freeplay-claim` uses the dedicated account/room precondition and
 returns the usual account fields plus `edition: "freeplay"`.
 
-1. Client sends `{type:"hello",protocol:1,contentVersion:4}` within ten seconds.
+1. Client sends `{type:"hello",protocol:1,contentVersion:5}` within ten seconds.
    Older/newer content versions are refused before any snapshot or mutation.
 2. Server sends `init` with `protocol`, `freeplay:true`, `room`, numeric `seed`,
-   `contentVersion:4`, `minContentVersion:4`, `epoch`, `revision`, `count`, `history`,
+   `contentVersion:5`, `minContentVersion:5`, `epoch`, `revision`, `count`, `history`,
    `checkpoint`, `players`, `vehicleCount`, `limits` (including `maxCells:8000000`,
    `maxChunks:1024`, `maxBuild:1024`, `maxVehicles:16`, `maxVehicleCells:512`).
 3. Zero or more `{type:"snapshot",edits:[[x,y,z,id],...]}` frames, ≤512 cells each.
@@ -152,6 +152,7 @@ originating `command`, so they do not clear a pending terrain operation.
 | `battle-shot` | `weapon`: machinegun/plasma; finite `direction:[dx,dy,dz]` with length 0.5–1.5, normalized by server |
 | `battle-shield` | none; radius 6, lasts 12 seconds, cooldown 25 seconds |
 | `battle-rally` | none; return to camp preserving health, cooldown 10 seconds |
+| `battle-base` | none; designate own base using current server-accepted foot position |
 | `battle-reset` | none; reset match state, preserving terrain |
 
 The server sends `battle-state` after `ready` when the configured arena is available,
@@ -187,3 +188,24 @@ Effects are `{type:"battle-event",epoch,event}`. Shot events contain
 `type:"shot",from,to,team,weapon`; hit events contain
 `type:"hit",targetId,x,y,z,shield,team`. State and effects are bounded by eight
 players, 48 soldiers, eight domes and at most 128 events per flush.
+
+`battle.ctf` contains `{phase,winner,bases,flags}`. Phase is `setup`, `active` or
+`won`; winner is null or a team. Bases map each team to null or a foot-position
+`[x,y,z]`. Flags contain entries only for selected bases, keyed by team. Each
+entry is `{team,x,y,z,status,carrier,returnIn}`: status home/carried/dropped,
+carrier null or a player pid, and returnIn seconds in [0,20]. Flag coordinates
+are ground/foot anchors, following the carrier's accepted position.
+
+Base selection requires supported ground, clear surrounding headroom and at least
+32 horizontal blocks between bases. Both selections lock bases and enable combat.
+Only living players can take an enemy flag within two blocks with unobstructed
+line of sight. Returning to one's own base wins only while one's own flag is home
+and both teams still have a participant. Knockout drops the flag; a friendly
+touch or 20-second timeout returns it. Leaving/disconnecting returns any carried
+flag. Rally is refused while carrying. Winning freezes damage and shots; a new
+round resets bases/flags/armies/scores and restores default camps, preserving terrain.
+
+Mega and atom commands are refused for participants. While any participant
+remains, a spectator's mega/atom is also refused if its horizontal blast circle
+touches the arena rectangle, including blasts originating outside. Enforcement
+occurs on receipt, so a previously armed bomb cannot bypass the restriction.

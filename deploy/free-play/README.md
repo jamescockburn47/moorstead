@@ -1,10 +1,10 @@
 # Private Free Play — server and release tools
 
-Updated 19 September 2026. **Content 4 release.** No real
+Updated 19 September 2026. **Content 5 release; SQLite schema 4.** No real
 invites, sessions, player records or production database are included. The upgrade
-adds an opt-in battlefield with two teams, grounded armies, real terrain cover,
-energy shields and cartoon knockouts/respawns. Existing movable builds and the
-eight-million-cell editing capacity remain supported.
+adds capture the flag with player-designated bases, grounded armies, real terrain
+cover, energy shields and cartoon knockouts/respawns. Existing movable builds and
+the eight-million-cell editing capacity remain supported.
 
 This package serves exactly `family-freeplay` at `/freeplay/ws`, using the existing
 relay's token-ledger authentication. A dedicated dashboard claim route refuses an
@@ -27,6 +27,7 @@ route refuses this room before reading or creating ordinary room state.
 | `worldsvc/freeplay_battle_ai.py` | Grounded squad movement and line-of-sight shooting |
 | `worldsvc/freeplay_battle_terrain.py` | Verified procedural arena baseline plus saved overrides |
 | `worldsvc/freeplay_battle_service.py` | Authenticated match commands and five-Hz state delivery |
+| `worldsvc/freeplay_battle_flags.py` | Validated bases, flag carrying/return and round victory |
 | `integrate.py` | Locally prepares the minimal relay/dashboard/Caddy modifications |
 | `backup.py` | Consistent, integrity-checked SQLite backup into a new file |
 | `fixture.py` | Loopback-only synthetic login/server for browser tests; never install in production |
@@ -34,6 +35,7 @@ route refuses this room before reading or creating ordinary room state.
 | `upgrade_pack.py` | Explicit content-1 → content-2 release, after backup and migration rehearsal |
 | `upgrade_vehicles.py` | Explicit content-2 → content-3 release, preserving all old rows |
 | `upgrade_battle.py` | Explicit content-3 → content-4 release, preserving all nine saved tables |
+| `upgrade_ctf.py` | Content-5 release plus explicitly authorised reset with recovery checkpoint |
 
 Live sources were read over `evo-tailscale`, without writes or service changes.
 `integrate.py` refuses sources whose SHA-256 differs from these inspected baselines:
@@ -93,7 +95,7 @@ No player pockets are read or saved. Positions are ephemeral, bounded and checke
 against the exact epoch. Token expiry/revocation is rechecked on operations and
 approximately every second when idle. Authentication comes only from the existing
 server callback and the exact room-bound session, never a client capability flag.
-The hello handshake additionally requires content version 4 before any snapshot.
+The hello handshake additionally requires content version 5 before any snapshot.
 
 Vehicle conversion selects only authored non-air overrides and exactly one control
 block 206. Conversion, explicit block editing, undo and checkpoint recovery include
@@ -176,7 +178,37 @@ Browser interception may redirect only those fixture requests; the shipped clien
 has no bypass or test login. The fixture authenticates synthetic in-memory sessions
 through the same production adapter. It does not establish live invite validity.
 
-## Content-4 upgrade — after the matching client is verified
+## Content-5 release and authorised fresh-world reset
+
+Stage all **thirteen** adapter modules with `backup.py`, `upgrade_pack.py`,
+`upgrade_battle.py` and `upgrade_ctf.py` in a new private directory. The existing
+arena files remain unchanged. Content 5 requires a matching client but retains
+SQLite schema 4; flags, bases and round results are ephemeral.
+
+```sh
+/home/james/moorstead/venv/bin/python /path/to/private-stage/upgrade_ctf.py --install-and-reset
+```
+
+This command requires explicit authorisation for the fresh-world reset. It pins
+all twelve previous module hashes and both arena hashes, proves task lifecycle
+with the actual installed FastAPI, stops only the relay, and saves a consistent
+database backup. A restored rehearsal copy must reset to pristine active state,
+retain exact previous cells/vehicles in its checkpoint and restore those cells
+and vehicles with identical hashes. Only then does installation reset the real
+world through the existing transactional Store operation. Epoch/revision advance
+once; active cells, vehicles and history clear. The previous world remains both
+in the in-game recovery checkpoint and `before/world.sqlite3`. Failure after the
+reset preserves that state and requires roll-forward. Accounts/codes stay valid.
+
+Both teams must select supported clear bases at least 32 blocks apart before
+combat starts. Players carry enemy flags home, with their own flag home to win;
+cover blocks pickup through walls. Knockout drops a flag, teammates return it,
+and dropped flags return after 20 seconds. Leaving returns carried flags. Capture
+ends combat until a new round. Mega/atom blasts by any player are refused where
+they overlap the arena while a participant remains; participants cannot use them
+anywhere. New rounds preserve terrain; the one-time deployment reset is separate.
+
+## Content-4 upgrade record — already performed
 
 Stage all **twelve** adapter modules beside `backup.py`, `upgrade_pack.py`,
 `upgrade_battle.py`, and the generated `battlefield.json`/`battlefield.u16.zlib`

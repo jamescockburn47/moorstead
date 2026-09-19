@@ -40,6 +40,9 @@ export class FreeplayActions {
     this.hit=hit;this.box.visible=!!hit&&!g.paused;this.ring.visible=!!hit&&!!bomb&&this.selected.type==='bomb'&&!g.paused;
     if(hit){this.box.position.set(hit.x+.5,hit.y+.5,hit.z+.5);this.ring.position.set(hit.x+.5,hit.y+1.04,hit.z+.5);if(bomb)this.ring.scale.setScalar(bomb.radius);}
     if(!this.fuse)return;
+    if(g.battle&&!g.battle.bombAllowed(this.fuse.bomb.id)){
+      this.cancel();g.ui.message('Mega and atom bombs are unavailable in war mode.');return;
+    }
     if(!g.connection.connected||g.connection.epoch!==this.fuse.epoch||g.connection.socket!==this.fuse.socket){
       this.cancel();g.ui.message('Throw cancelled while the shared world changed or reconnected.');return;
     }
@@ -54,6 +57,8 @@ export class FreeplayActions {
   }
   use() {
     const g=this.game,hit=this.target();
+    if(this.selected.type==='bomb'&&g.battle&&!g.battle.bombAllowed(this.selected.id))return g.ui.message('Mega and atom bombs are unavailable in war mode.');
+    if(['weapon','bomb'].includes(this.selected.type)&&g.battle&&!g.battle.combatReady())return;
     if(this.selected.type==='weapon'&&g.battle?.fire(weaponById(this.selected.id)))return;
     if((g.vehicles?.driving||g.vehicles?.selection||this.selected.type==='block')&&g.vehicles?.interact(hit))return;
     if(!g.canEdit()||!hit)return;

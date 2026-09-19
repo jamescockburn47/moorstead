@@ -61,7 +61,8 @@ export class FreeplayMap {
   draw() {
     if (!this.canvas?.isConnected) return;
     const g = this.game, peers = this.positions(), player = g.player.pos;
-    const frame = fitMap(this.mode === 'together' ? [player, ...peers] : [player], {width:640,height:420,padding:48,minSpan:192});
+    const flags=Object.entries(g.battle?.state?.ctf?.flags||{}).filter(([,flag])=>flag).map(([team,flag])=>({...flag,team}));
+    const frame = fitMap(this.mode === 'together' ? [player, ...peers,...flags] : [player], {width:640,height:420,padding:48,minSpan:192});
     if (!frame) return;
     for (const button of this.canvas.parentNode.querySelectorAll('[data-map-mode]')) {
       button.setAttribute('aria-pressed', String(button.dataset.mapMode === this.mode));
@@ -70,6 +71,10 @@ export class FreeplayMap {
     const key = [Math.round(frame.cx), Math.round(frame.cz), Math.round(frame.scale * 100), g.world.revision].join(':');
     if (key !== this.baseKey) { this.background(frame); this.baseKey = key; }
     const ctx = this.canvas.getContext('2d'); ctx.drawImage(this.base, 0, 0);
+    for(const flag of flags){
+      const colour=flag.team==='blue'?'#58baff':'#ff826c';
+      this.marker(ctx,projectMap(flag,frame),colour,flag.team==='blue'?'Blue flag':'Red flag',null,30);
+    }
     for (const peer of peers) {
       const pos = projectMap(peer, frame);
       ctx.strokeStyle = '#a0e5ed'; ctx.setLineDash([5, 6]);
@@ -83,6 +88,7 @@ export class FreeplayMap {
     ctx.fillText(distanceText(100 / frame.scale), 18, 400);ctx.fillRect(130, 396, 100, 3);
     this.roster.replaceChildren();
     textNode('p', this.roster, g.player.name + ' (you) · N ' + Math.round(player.x) + ' · E ' + Math.round(player.z));
+    for(const flag of flags)textNode('p',this.roster,(flag.team==='blue'?'Blue':'Red')+' flag · '+flag.status);
     if (!g.connection.connected) textNode('p', this.roster, 'Connection lost. Other positions are unavailable until you reconnect.');
     else if (!peers.length) textNode('p', this.roster, 'No other player is broadcasting a position yet. Both of you need to be in the world.');
     for (const peer of peers) {

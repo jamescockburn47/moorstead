@@ -42,7 +42,7 @@ class ServiceTests(unittest.TestCase):
                 return frames
 
     def start(self, ws):
-        ws.send_json({"type": "hello", "protocol": 1, "contentVersion": 4})
+        ws.send_json({"type": "hello", "protocol": 1, "contentVersion": 5})
         return self.collect(ws, "ready")
 
     def command(self, kind="edit", **fields):
@@ -67,6 +67,7 @@ class ServiceTests(unittest.TestCase):
                    {"type": "hello", "protocol": 1, "contentVersion": 1},
                    {"type": "hello", "protocol": 1, "contentVersion": 2},
                    {"type": "hello", "protocol": 1, "contentVersion": 3},
+                   {"type": "hello", "protocol": 1, "contentVersion": 4},
                    {"type": "hello", "protocol": True, "contentVersion": 2},
                    {"type": "hello", "protocol": 1, "contentVersion": 2.0}]
         for hello in invalid:
@@ -80,7 +81,7 @@ class ServiceTests(unittest.TestCase):
     def test_two_players_build_then_gravity_share_committed_metadata(self):
         with self.socket(self.henry) as henry, self.socket(self.james) as james:
             init = self.start(henry)[0]
-            self.assertEqual((init["contentVersion"], init["minContentVersion"]), (4, 4))
+            self.assertEqual((init["contentVersion"], init["minContentVersion"]), (5, 5))
             self.assertEqual(init["limits"]["maxBuild"], 1024)
             self.assertEqual((init["limits"]["maxCells"], init["limits"]["maxChunks"]), (8_000_000, 1024))
             self.start(james)

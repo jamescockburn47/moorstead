@@ -15,7 +15,7 @@ const inputCopy = JSON.stringify(state);
 assert.equal(renderer.apply(state), true); renderer.update(.016, viewer);
 assert.equal(JSON.stringify(state), inputCopy, 'render state remains an immutable authoritative input');
 assert.deepEqual([renderer.stats().soldiers, renderer.stats().players], [48, 2]);
-assert.equal(renderer.stats().batches, 17, 'draw object count stays fixed independent of army size');
+assert.equal(renderer.stats().batches, 18, 'draw object count stays fixed independent of army size');
 assert.equal(renderer.campMesh.count, 10, 'two teams receive five-metre flags in one fixed batch');
 renderer.campMesh.getMatrixAt(1, matrix); assert.equal(matrix.elements[12], -20); assert.equal(matrix.elements[13], 32.5);
 const campBlue = new THREE.Color(), campRed = new THREE.Color();
@@ -77,13 +77,13 @@ renderer.settings = { reducedMotion: true, reducedFlash: true }; renderer.update
 assert.equal(renderer.effects.geometry.drawRange.count, 96); assert.equal(renderer.effects.mesh.count, 32);
 assert.equal(renderer.effects.material.opacity, .4); assert.equal(renderer.effects.hitMaterial.opacity, .22);
 renderer.effects.update(.5); assert.equal(renderer.effects.geometry.drawRange.count, 0); assert.equal(renderer.effects.mesh.count, 0);
-assert.equal(renderer.root.children.length, 17, 'bursts do not allocate extra meshes');
+assert.equal(renderer.root.children.length, 18, 'bursts do not allocate extra meshes');
 
 let sharedDisposed = 0, ownDisposed = 0;
 renderer.models.rig.group.traverse(node => { node.geometry?.addEventListener('dispose', () => sharedDisposed++); });
 renderer.models.teams.get('blue').geometries[0].addEventListener('dispose', () => ownDisposed++);
 renderer.clear(); assert.equal(renderer.actors.size, 0); assert.equal(renderer.health.count, 0); assert.equal(renderer.labels.geometry.drawRange.count, 0);
-assert.equal(renderer.root.children.length, 17, 'clear reuses pools');
+assert.equal(renderer.root.children.length, 18, 'clear reuses pools');
 renderer.dispose(); renderer.dispose(); assert.equal(scene.children.length, 0); assert.equal(ownDisposed, 1);
 assert.equal(sharedDisposed, 0, 'battlefield disposal must preserve shared Moorstead villager assets');
 

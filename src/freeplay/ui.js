@@ -101,7 +101,7 @@ export class FreeplayUI {
     if(kind==='vehicles')this.actions.vehicles(this.panelContent);
     if (kind === 'map') this.actions.map(this.panelContent);
     if (kind === 'build') this.buildCatalogue();
-    if (kind === 'bombs') for (const bomb of BOMBS) {
+    if (kind === 'bombs') for (const bomb of BOMBS.filter(bomb=>this.actions.bombAllowed?.(bomb.id)!==false)) {
       const el = button(this.panelContent, '', () => this.select({type:'bomb',id:bomb.id}), 'fp-bomb');
       el.style.setProperty('--bomb-colour', bomb.colour); element('strong', '', bomb.name + ' · ∞', el); element('span', '', bomb.description, el);
     }

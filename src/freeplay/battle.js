@@ -2,6 +2,7 @@ import { BattleRenderer } from './battle-renderer.js';
 import { battlePanel } from './battle-ui.js';
 import { BATTLE_TEAMS } from './battle-config.js';
 import { weaponById } from './weapons.js';
+import { captureHint, warBombAllowed } from './capture-ui.js';
 
 export class FreeplayBattle{
   constructor(game){
@@ -12,12 +13,14 @@ export class FreeplayBattle{
   panel(parent){battlePanel(this,parent);}
   receive(message){
     if(message.type==='battle-event'){this.renderer.event(message.event);return;}
-    const state=message.battle;this.state=state;
+    const state=message.battle,previous=this.state;this.state=state;
+    if(state.ctf&&this.game.ui.error&&(state.ctf.phase!==previous?.ctf?.phase
+      ||JSON.stringify(state.ctf.bases)!==JSON.stringify(previous?.ctf?.bases)))this.game.ui.error.hidden=true;
     if(state.available===false){this.disconnected();return;}
     const me=state.players.find(row=>row.id===this.pid)||null,was=this.me;
     this.me=me;this.renderer.apply(state);
     if(me){
-      if(!was)this.game.ui.select?.({type:'weapon',id:'machinegun'});
+      if(!was){this.game.actions.cancel?.();this.game.ui.select?.({type:'weapon',id:'machinegun'});}
       if(me.correctionSeq!==undefined&&me.correctionSeq!==this.correctionSeq){
         this.correctionSeq=me.correctionSeq;Object.assign(this.game.player.pos,{x:me.x,y:me.y,z:me.z});
         this.game.player.vel={x:0,y:0,z:0};
@@ -45,6 +48,12 @@ export class FreeplayBattle{
     this.savedPosition={...this.game.player.pos};this.command('battle-join',{team});
   }
   leave(){if(this.command('battle-leave'))this.game.ui.panel.close();}
+  setBase(){if(this.command('battle-base'))this.game.ui.panel.close();}
+  bombAllowed(id){return warBombAllowed(id,!!this.me);}
+  combatReady(){
+    if(!this.me||!this.state?.ctf||this.state.ctf.phase==='active')return true;
+    this.game.ui.message(captureHint(this.state,this.me));return false;
+  }
   order(order,aim=false){
     if(!this.me)return;const p=this.game.player.pos,hit=aim?this.game.actions.target():null;
     if(aim&&!hit)return this.game.ui.message('Aim at a loaded patch of ground first.');
@@ -53,6 +62,7 @@ export class FreeplayBattle{
   shield(){if(this.me)this.command('battle-shield');else this.game.ui.open('battle');}
   fire(weapon){
     if(!this.me||!['machinegun','plasma'].includes(weapon?.id))return false;
+    if(!this.combatReady())return true;
     if(this.me.hp<=0||this.cooldown>0)return true;
     const g=this.game;g.camera.getWorldDirection(g.actions.direction);
     if(this.command('battle-shot',{weapon:weapon.id,direction:g.actions.direction.toArray()})){
@@ -75,6 +85,7 @@ export class FreeplayBattle{
     ui.shield.disabled=(me.shieldCooldown||0)>0||me.hp<=0;
     ui.shield.textContent=me.shieldCooldown>0?'Shield '+Math.ceil(me.shieldCooldown):'Shield';
     if(me.hp<=0)ui.message('Knocked out! Returning to camp in '+Math.ceil(me.respawn||0)+'…');
+    else if(this.state.ctf&&!g.actions.fuse)ui.message(captureHint(this.state,me));
   }
   disconnected(){this.me=null;this.state=null;this.spawnSeq=null;this.correctionSeq=0;this.renderer.clear();}
   dispose(){this.renderer.dispose();}

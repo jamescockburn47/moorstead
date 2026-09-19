@@ -17,7 +17,7 @@ assert.deepEqual(parkedCells({...v,pose:{x:-2.5,y:21.5,z:1.5,yaw:Math.PI/2}}),[[
 const published=[],events=[];
 const net=new FreeplayConnection({acct:'fixture',name:'Henry',token:'test-fixture-token',room:FREEPLAY.room},
   {state(){},error(){},transaction:m=>published.push(m),vehicle:m=>events.push(m)});
-const init={type:'init',protocol:1,contentVersion:4,minContentVersion:4,freeplay:true,room:FREEPLAY.room,seed:FREEPLAY.seed,
+const init={type:'init',protocol:1,contentVersion:5,minContentVersion:5,freeplay:true,room:FREEPLAY.room,seed:FREEPLAY.seed,
   epoch:1,revision:0,history:[],players:[],count:0,vehicleCount:1};
 net.receive(init);assert.throws(()=>net.receive({type:'ready',epoch:1,revision:0}),/Incomplete vehicles/);
 net.receive({type:'vehicle-snapshot',vehicle:v});assert.equal(published.length,0);

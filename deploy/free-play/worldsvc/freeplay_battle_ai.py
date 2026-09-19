@@ -21,7 +21,7 @@ def step(battle, delta):
         enemy = min(enemies, key=lambda other: math.dist([unit[k] for k in ("x", "y", "z")],
                                                         [other[k] for k in ("x", "y", "z")]), default=None)
         origin = [unit["x"], unit["y"] + 1.4, unit["z"]]
-        if enemy:
+        if enemy and battle.flags.phase == "active":
             target = [enemy["x"], enemy["y"] + 1, enemy["z"]]
             distance = math.dist(origin, target)
             if distance <= 42 and battle.arena.visible(origin, target):
@@ -40,6 +40,7 @@ def step(battle, delta):
         elif unit["order"] == "attack" and enemy:
             goal = [enemy[k] for k in ("x", "y", "z")]
         move(battle.arena, unit, goal, 3.2 * delta)
+    battle.flags.tick()
 
 
 def move(arena, unit, goal, distance):

@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { BattleModels, BattleLabels, BATTLE_TEAMS } from './battle-models.js';
 import { BattleEffects } from './battle-effects.js';
+import { BattleFlags } from './battle-flags.js';
 
 const ACTORS = 56, SHIELDS = 8;
 const validActor = row => row && typeof row.id === 'string' && row.id.length > 0 && row.id.length <= 96
@@ -14,6 +15,7 @@ export class BattleRenderer {
     this.world = world; this.disposed = false; this.actors = new Map(); this.shields = []; this.camps = []; this.clock = 0;
     this.settings = {}; this.root = new THREE.Group(); this.root.name = 'freeplay-battle'; scene.add(this.root);
     this.models = new BattleModels(this.root); this.labels = new BattleLabels(this.root); this.effects = new BattleEffects(this.root);
+    this.flags = new BattleFlags(this.root);
     this.plane = new THREE.PlaneGeometry(1, 1); this.dummy = new THREE.Object3D(); this.colour = new THREE.Color();
     this.healthMaterial = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, depthWrite: false, toneMapped: false });
     this.health = new THREE.InstancedMesh(this.plane, this.healthMaterial, ACTORS * 4); this.health.frustumCulled = false; this.health.count = 0; this.root.add(this.health);
@@ -47,8 +49,9 @@ export class BattleRenderer {
     state.soldiers.slice(0, 96).forEach((row, i) => add(row, false, i));
     state.players.slice(0, 8).forEach((row, i) => add(row, true, i)); this.actors = next;
     this.shields = (Array.isArray(state.shields) ? state.shields : []).filter(validShield).slice(0, SHIELDS).map(row => ({ ...row, age: 0 }));
+    this.flags.apply(state.ctf);
     this.camps = Object.keys(BATTLE_TEAMS).flatMap(team => {
-      const pos = state.camps?.[team];
+      const pos = this.flags.enabled ? state.ctf.bases?.[team] : state.camps?.[team];
       return Array.isArray(pos) && pos.length === 3 && pos.every(Number.isFinite) ? [{ team, pos: [...pos] }] : [];
     });
     return true;
@@ -93,6 +96,7 @@ export class BattleRenderer {
     }
     for (const mesh of [this.domes, this.rings]) { mesh.count = shieldCount; mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; }
     this.updateCamps();
+    this.flags.update(this.actors, this.world, playerPos);
     this.effects.update(dt, this.settings);
   }
 
@@ -104,6 +108,7 @@ export class BattleRenderer {
       // Tall team flags and a small camp plinth remain legible above fortifications.
       const parts = [[0, .06, 0, 2.4, .12, 2.4, colour], [0, 2.5, 0, .13, 5, .13, 0xe0e7df],
         [1.2, 4.12, 0, 2.4, 1.5, .12, colour], [1.2, 4.12, 0, .16, .85, .14, 0xffffff], [1.2, 4.12, 0, .85, .16, .14, 0xffffff]];
+      if (this.flags.enabled) parts.length = 1; // Empty base plinth persists when the actual objective flag moves.
       for (const [dx, dy, dz, sx, sy, sz, tint] of parts) {
         this.dummy.position.set(x + dx, y + dy, z + dz); this.dummy.rotation.set(0, 0, 0); this.dummy.scale.set(sx, sy, sz); this.dummy.updateMatrix();
         this.campMesh.setMatrixAt(count, this.dummy.matrix); this.campMesh.setColorAt(count++, this.colour.set(tint));
@@ -132,12 +137,12 @@ export class BattleRenderer {
 
   clear() {
     this.actors.clear(); this.shields = []; this.camps = []; this.models.begin(); this.models.end(); this.labels.begin(); this.labels.end();
-    this.health.count = this.domes.count = this.rings.count = this.campMesh.count = 0; this.effects.clear();
+    this.health.count = this.domes.count = this.rings.count = this.campMesh.count = 0; this.effects.clear(); this.flags.clear();
   }
   stats() { return { soldiers: [...this.actors.values()].filter(actor => !actor.player).length, players: [...this.actors.values()].filter(actor => actor.player).length,
     knocked: [...this.actors.values()].filter(actor => actor.knocked).length, shields: this.domes.count, batches: this.root.children.length, effects: this.effects.stats() }; }
   dispose() {
-    if (this.disposed) return; this.clear(); this.disposed = true; this.root.removeFromParent(); this.models.dispose(); this.labels.dispose(); this.effects.dispose();
+    if (this.disposed) return; this.clear(); this.disposed = true; this.root.removeFromParent(); this.models.dispose(); this.labels.dispose(); this.effects.dispose(); this.flags.dispose();
     for (const mesh of [this.health, this.domes, this.rings, this.campMesh]) mesh.dispose();
     for (const geometry of [this.plane, this.domeGeometry, this.ringGeometry, this.campGeometry]) geometry.dispose();
     for (const material of [this.healthMaterial, this.domeMaterial, this.ringMaterial, this.campMaterial]) material.dispose();

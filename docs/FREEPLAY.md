@@ -111,7 +111,7 @@ Conversion, materialisation and undo are atomic server transactions. Vehicles
 survive reconnects and restart; reset recovery includes them. Driving uses an
 exclusive pilot lease and its own bounded pose stream so it does not interrupt
 the other boy's terrain edits. Disconnect releases the pilot and retains the last
-accepted pose. The backend schema and content negotiation are version 4;
+accepted pose. The backend schema is 4 and content negotiation is version 5;
 old clients must refresh. This does not alter ordinary Moorstead's protocol.
 
 Hold Fire (or left mouse with pointer lock) for machine-gun bursts. Sheep are
@@ -133,6 +133,17 @@ and shields against a blast before that blast removes the cover. Shield deploys
 a six-metre dome for 12 seconds, with a 25-second cooldown. Personal shields
 regenerate after three quiet seconds. Players respawn after five seconds;
 soldiers return after eight. The scoreboard counts enemy knockouts.
+
+War mode uses capture the flag. During setup, walk to clear ground and choose
+Army → Set home base here. Bases must be at least 32 blocks apart. Both sides
+choosing a base starts the round and locks the base locations. Players pick up
+the enemy flag by approaching it, then carry it to their own base while their
+own flag is home. That capture wins; knockouts alone do not decide the winner.
+Knockouts drop a carried flag, defenders can touch it to return it, and dropped
+flags return automatically after 20 seconds. A flag carrier cannot teleport to
+base. The Map shows both flags. New round resets armies and base choices while
+preserving fortifications. Mega and atom bombs are hidden and refused in war
+mode; spectator blasts of those types cannot overlap an occupied battlefield.
 
 Build includes excavating trenches with steps, bunkers with doors and firing
 ports, sandbag barricades and watchposts. Their terrain changes persist and use

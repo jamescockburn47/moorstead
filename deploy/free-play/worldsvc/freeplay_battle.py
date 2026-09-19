@@ -2,6 +2,7 @@
 import math
 
 from freeplay_rules import Refused
+from freeplay_battle_flags import Flags
 
 TEAMS = {"blue", "red"}
 WEAPONS = {"machinegun": (12, 0.25), "plasma": (25, 0.5)}
@@ -14,13 +15,15 @@ class Battle:
         self.scores = {team: 0 for team in TEAMS}
         self.now, self.revision, self.serial = 0.0, 0, 0
         self.events = []
+        self.flags = Flags(self)
 
     def spawn(self, entity):
         camp = self.arena.camps[entity["team"]]
         slot = entity.get("slot")
         x = camp[0] if slot is None else camp[0] + (slot % 6 - 2.5)
         z = camp[2] if slot is None else camp[2] + (slot // 6 - 1.5) * 1.2
-        entity.update(x=x, y=self.arena.ground(x, z) or camp[1], z=z,
+        ground = self.arena.ground(x, z, camp[1])
+        entity.update(x=x, y=ground if ground is not None else (self.arena.ground(x, z) or camp[1]), z=z,
                       hp=100 if entity["id"] in self.players else 50, shield=100 if entity["id"] in self.players else 0,
                       respawn=0, spawnSeq=entity.get("spawnSeq", 0) + 1, lastMove=self.now, lastHit=self.now)
 
@@ -36,6 +39,7 @@ class Battle:
         self.spawn(entity)
 
     def leave(self, pid):
+        self.flags.release(pid)
         self.players.pop(pid, None)
         self.shields.pop(pid, None)
         self.soldiers = {key: unit for key, unit in self.soldiers.items() if unit["owner"] != pid}
@@ -47,6 +51,7 @@ class Battle:
         return player
 
     def reset(self):
+        self.flags.reset()
         self.soldiers.clear()
         self.shields.clear()
         self.scores = {team: 0 for team in TEAMS}
@@ -83,6 +88,8 @@ class Battle:
 
     def rally(self, pid):
         player = self.alive(pid)
+        if self.flags.carrying(pid):
+            raise Refused("battle-flag", "Bring the flag home on foot.")
         if self.now - player.get("rallyAt", -999) < 10:
             raise Refused("battle-rally", "Return to camp is recharging.")
         hp, shield = player["hp"], player["shield"]
@@ -106,6 +113,7 @@ class Battle:
             player["correctionSeq"] += 1
             return False
         player.update(position, lastMove=self.now)
+        self.flags.tick()
         return True
 
     def entities(self):
@@ -117,7 +125,7 @@ class Battle:
                    for shield in self.shields.values())
 
     def damage(self, target, amount, team):
-        if target["hp"] <= 0 or target["team"] == team or self.protected(target):
+        if self.flags.phase != "active" or target["hp"] <= 0 or target["team"] == team or self.protected(target):
             return
         shielded = target["shield"] > 0
         absorbed = min(target["shield"], amount)
@@ -127,10 +135,13 @@ class Battle:
         self.events.append({"type": "hit", "targetId": target["id"], "x": target["x"], "y": target["y"] + 1,
                             "z": target["z"], "shield": shielded, "team": team})
         if target["hp"] == 0:
+            if target["id"] in self.players:
+                self.flags.release(target["id"], dropped=True)
             target["respawn"] = 5 if target["id"] in self.players else 8
             self.scores[team] += 3 if target["id"] in self.players else 1
 
     def shoot(self, source, direction, weapon, ai=False):
+        self.flags.combat()
         damage, cooldown = WEAPONS[weapon]
         if self.now - source["shotAt"] < (1.5 if ai else cooldown):
             raise Refused("battle-rate", "That weapon is cooling down.")
@@ -167,6 +178,7 @@ class Battle:
             return result
         x, z = self.arena.origin
         return {"available": True, "revision": self.revision,
+                "ctf": self.flags.state(),
                 "bounds": {"minX": x, "minZ": z, "maxX": x + self.arena.width - 1, "maxZ": z + self.arena.width - 1},
                 "camps": self.arena.camps, "scores": self.scores.copy(),
                 "players": [public(entity) for entity in self.players.values()],

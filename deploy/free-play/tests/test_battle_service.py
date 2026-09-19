@@ -23,6 +23,7 @@ class BattleServiceTests(unittest.TestCase):
         original.ServiceTests.setUp(self)
         self.hub = self.app.state.freeplay_hub
         self.hub.battle.core = Battle(flat_arena())
+        self.hub.battle.core.flags.phase = "active"  # These tests exercise the active-round service.
 
     def start(self, ws):
         original.ServiceTests.start(self, ws)

@@ -28,6 +28,7 @@ class BattleTests(unittest.TestCase):
     def setUp(self):
         self.arena = flat_arena()
         self.battle = Battle(self.arena)
+        self.battle.flags.phase = "active"  # Isolate the existing combat mechanism from round setup.
         self.battle.join("ablue", "Blue", "blue")
         self.battle.join("ared", "Red", "red")
 
