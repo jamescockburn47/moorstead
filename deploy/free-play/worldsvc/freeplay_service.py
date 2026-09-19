@@ -182,6 +182,6 @@ class Hub:
 def mount_freeplay(app, authenticate, banned, data, battlefield=None):
     hub = Hub(Store(data / "freeplay" / "world.sqlite3"), authenticate, banned, battlefield)
     app.add_api_websocket_route("/freeplay/ws", hub.endpoint)
-    app.add_event_handler("startup", hub.battle.start)
-    app.add_event_handler("shutdown", hub.battle.stop)
+    app.router.add_event_handler("startup", hub.battle.start)
+    app.router.add_event_handler("shutdown", hub.battle.stop)
     return hub
