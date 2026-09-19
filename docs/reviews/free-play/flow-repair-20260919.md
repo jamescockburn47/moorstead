@@ -87,7 +87,36 @@ The screenshot shows the battle status, troops, gun and unobstructed controls.
 Evidence is retained in `tests/.artifacts/battle-flow-final/` and
 `tests/.artifacts/vehicle-ux-evidence/` (ignored local artifacts).
 
-The canonical release gate and production probe remain pending.
 Physical Fire hardware and the children's independent comprehension still require
 their own play session. Starter tanks have a decorative turret; driving remains
 outside battle mode, and this release does not introduce a firing tank cannon.
+
+## Release result
+
+Production **1.1.75 / content 6** shipped on 19 September 2026 through
+`npm run deploy`: full canonical verify (including 82 backend tests) and build
+passed. Implementation commit `47ce970`, release commit `77202e1`, deployment
+`moorcraft-im11jb85y-james-cockburns-projects.vercel.app`.
+The general post-deploy probe stopped at the deliberately disabled NPC brain's
+HTTP 502; the separate live Free Play journey below passed. Brain/model services
+were not started.
+
+The guarded backend install at
+`/home/james/moorstead/freeplay-war-20260919T144900Z` backed up and preserved all
+nine saved tables exactly, including 76,572 active cells and the 5,366,012-cell,
+two-vehicle recovery checkpoint. Epoch 3 / revision 4784 stayed unchanged. Schema
+remains 4. All 13 installed module hashes match the release source. EVO commit
+`3880785`; the stage contains the backup and manifest. No world reset was run.
+
+The public browser probe passed actual login → Vehicles choices → empty arena
+join → strategic help → Place flag & ready → six automatic-Attack soldiers →
+leave → sign out. Mega/atom choices were absent, grenade present. No page or
+protocol errors, no terrain writes, and revision 4784 stayed unchanged. Departure
+cleared the temporary army, flags and readiness. Its invite, account and sessions
+were revoked and the local credential file removed. Evidence is in the root
+workspace's ignored `tests/.artifacts/freeplay-warflow-live-result.json` and
+`warflow-probe-cleanup.json`.
+
+Both existing Free Play tabs must refresh to load content 6. Live combat damage
+and vehicle driving were verified through the real adapter's isolated browser
+journeys; the production smoke deliberately did not damage the boys' world.
