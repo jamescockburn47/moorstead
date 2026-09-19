@@ -39,10 +39,13 @@ class Battle:
         self.spawn(entity)
 
     def leave(self, pid):
+        participated = pid in self.players
         self.flags.release(pid)
         self.players.pop(pid, None)
         self.shields.pop(pid, None)
         self.soldiers = {key: unit for key, unit in self.soldiers.items() if unit["owner"] != pid}
+        if participated and not self.players:
+            self.reset()
 
     def alive(self, pid):
         player = self.players.get(pid)

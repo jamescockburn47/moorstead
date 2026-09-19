@@ -99,7 +99,25 @@ class FlagTests(unittest.TestCase):
         self.battle.flags.tick()
         self.assertIsNone(self.battle.flags.winner)  # No red participant remains.
         self.battle.leave("ablue")
-        self.assertEqual(self.battle.flags.flags["red"]["status"], "home")
+        self.assertEqual(self.battle.flags.phase, "setup")
+        self.assertEqual(self.battle.flags.flags, {})
+
+    def test_only_last_participant_leaving_resets_bases_and_round(self):
+        self.activate()
+        self.battle.scores["blue"] = 8
+        self.battle.leave("aspectator")
+        self.assertEqual(self.battle.flags.phase, "active")
+        self.battle.leave("ared")
+        self.assertEqual(self.battle.flags.bases["red"], [50, 1, 10])
+        self.assertEqual(self.battle.flags.phase, "active")
+        self.battle.arena.changes([[30, 1, 30, 208]])
+        self.battle.leave("ablue")
+        state = self.battle.state()
+        self.assertEqual(state["ctf"], {"phase": "setup", "winner": None,
+                                       "bases": {"blue": None, "red": None}, "flags": {}})
+        self.assertEqual(state["scores"], {"blue": 0, "red": 0})
+        self.assertEqual(state["camps"]["red"], [16, 1, 10])
+        self.assertTrue(self.battle.arena.solid(30, 1, 30))
 
     def test_new_round_restores_default_camps_without_touching_terrain(self):
         self.activate()
