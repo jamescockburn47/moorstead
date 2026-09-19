@@ -45,7 +45,7 @@ class PackTests(unittest.TestCase):
         self.apply(edits=[[0, 10, 0, 8]])
         before = self.store.state(), self.cells()
         invalid = [self.build(size=4), self.build(block=0), self.build(block=True),
-                   self.build(block=199), self.build(block=206), self.build(rotation=4),
+                   self.build(block=199), self.build(block=207), self.build(rotation=4),
                    self.build(rotation=False), self.build(shape="unknown"),
                    self.build(origin=[0, 60, 0]), self.build(origin=[8191, 10, 0]),
                    self.build(origin=[-8191, 10, 0], rotation=2), self.build("base", size=5),
@@ -102,8 +102,8 @@ class PackTests(unittest.TestCase):
             with self.assertRaises(Refused):
                 validate_command(command)
 
-    def test_two_million_cell_capacity_preserves_other_resource_bounds(self):
-        self.assertEqual((MAX_CELLS, MAX_CHUNKS, MAX_INVERSE_CELLS), (2_000_000, 1024, 400_000))
+    def test_eight_million_cell_capacity_preserves_other_resource_bounds(self):
+        self.assertEqual((MAX_CELLS, MAX_CHUNKS, MAX_INVERSE_CELLS), (8_000_000, 1024, 400_000))
         with self.store.connect() as db:
             changes, _ = self.store.edit(db, [[0, 20, 0, 200]], MAX_CELLS - 1)
             self.assertEqual(changes, [[0, 20, 0, 200]])
@@ -124,7 +124,7 @@ class PackTests(unittest.TestCase):
         self.assertEqual((migrated.state(), self.cells()), before)
         self.assertTrue(migrated.apply("ahenry", command)["duplicate"])
         with migrated.connect() as db:
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 3)
             self.assertEqual(list(db.execute("SELECT * FROM checkpoint")), checkpoint)
         self.apply("undo")
         self.assertEqual(self.cells(), [])

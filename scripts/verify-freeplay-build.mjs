@@ -27,7 +27,7 @@ assert.deepEqual(buildShape(command('line', { origin: [10, 3, 20], rotation: 3 }
 const hollow = buildShape(command('box', { size: 7 }));
 assert.equal(hollow.filter(row => row[3] === 0).length, 125, 'hollow brush clears the interior');
 assert.equal(hollow.filter(row => row[3] === 8).length, 218);
-for (const id of [1, 62, 200, 201, 202, 203, 204, 205]) {
+for (const id of [1, 62, 200, 201, 202, 203, 204, 205, 206]) {
   assert(buildShape(command('line', { block: id })).every(row => row[3] === id));
 }
 const base = buildShape(command('base'));
@@ -52,7 +52,7 @@ for (const shape of ['base', 'tower', 'bridge']) {
   assert.throws(() => buildShape(command(shape, { size: 5 })), /fields/);
 }
 for (const value of [null, [], {}, command('unknown'), command('line', { size: 9 }), command('line', { rotation: 4 }),
-  command('line', { block: 0 }), command('line', { block: 199 }), command('line', { block: 206 }),
+  command('line', { block: 0 }), command('line', { block: 199 }), command('line', { block: 207 }),
   command('line', { block: true }), command('line', { origin: [0, 0, 0] }), command('line', { origin: [NaN, 1, 0] }),
   command('line', { origin: [8191, 1, 0] }), command('wall', { origin: [0, 62, 0] }),
   command('bridge', { origin: [-8191, 1, 0], rotation: 1 }), command('base', { unexpected: true })]) {

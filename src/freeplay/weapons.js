@@ -6,5 +6,9 @@ export const WEAPONS = Object.freeze([
     description:'A fiery rocket with a trail of smoke and a proper crater.'}),
   Object.freeze({id:'gravity',name:'Gravity gun',colour:'#ce8aff',radius:14,depth:0,range:50,flight:.35,
     description:'A purple pulse flings nearby villagers, animals and loose debris. Everyone recovers; buildings stay intact.'}),
+  Object.freeze({id:'machinegun',name:'Machine gun',colour:'#ffd16b',radius:1,depth:1,range:55,flight:.08,automatic:true,cooldown:.25,
+    description:'Hold Fire for a rattling stream of bright tracers and small chips in the landscape.'}),
+  Object.freeze({id:'sheep',name:'Sheep launcher',colour:'#b7f4d1',radius:0,depth:0,range:48,flight:0,cooldown:.7,
+    description:'Launch a live sheep with a cheerful baa. It lands safely and ambles around for a little while.'}),
 ]);
 export const weaponById=id=>WEAPONS.find(weapon=>weapon.id===id);

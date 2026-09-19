@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from freeplay_builds import build_cells
+import freeplay_chunks as chunks
+import freeplay_vehicles as vehicles
 from freeplay_rules import (MAX_CELLS, MAX_CHUNKS, MAX_HISTORY, MAX_INVERSE_CELLS, MAX_RECEIPTS,
                             ROOM, SEED, Refused, blast_cells, packed, validate_command, weapon_cells)
 
@@ -16,7 +18,7 @@ class Store:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
-            if db.execute("PRAGMA user_version").fetchone()[0] not in {0, 1, 2}:
+            if db.execute("PRAGMA user_version").fetchone()[0] not in {0, 1, 2, 3}:
                 raise ValueError("Free Play database uses a newer unsupported schema")
             db.executescript("""
               PRAGMA journal_mode=WAL;
@@ -31,6 +33,10 @@ class Store:
               CREATE TABLE IF NOT EXISTS checkpoint (
                 x INTEGER, y INTEGER, z INTEGER, id INTEGER NOT NULL,
                 PRIMARY KEY(x,y,z)) WITHOUT ROWID;
+              CREATE TABLE IF NOT EXISTS chunk_counts (
+                x INTEGER, z INTEGER, count INTEGER NOT NULL, PRIMARY KEY(x,z)) WITHOUT ROWID;
+              CREATE TABLE IF NOT EXISTS vehicles (id TEXT PRIMARY KEY, body TEXT NOT NULL);
+              CREATE TABLE IF NOT EXISTS checkpoint_vehicles (id TEXT PRIMARY KEY, body TEXT NOT NULL);
               CREATE TABLE IF NOT EXISTS history (
                 revision INTEGER PRIMARY KEY, actor TEXT NOT NULL,
                 kind TEXT NOT NULL, bomb TEXT, count INTEGER NOT NULL,
@@ -45,8 +51,9 @@ class Store:
             meta = db.execute("SELECT room,seed FROM meta").fetchone()
             if tuple(meta) != (ROOM, str(SEED)):
                 raise ValueError("Free Play database belongs to another room or seed")
-            # Content 2 uses new block IDs: older adapters must refuse this store.
-            db.execute("PRAGMA user_version=2")
+            chunks.rebuild(db)
+            # Content 3 adds vehicles and compound history; older adapters refuse it.
+            db.execute("PRAGMA user_version=3")
 
     @contextmanager
     def connect(self):
@@ -69,7 +76,23 @@ class Store:
             "SELECT revision,actor,kind,bomb FROM history ORDER BY revision DESC")]
         return {"epoch": meta["epoch"], "revision": meta["revision"],
                 "checkpoint": bool(meta["has_checkpoint"]), "history": history,
-                "count": db.execute("SELECT COUNT(*) FROM cells").fetchone()[0]}
+                "count": chunks.count(db),
+                "vehicleCount": db.execute("SELECT COUNT(*) FROM vehicles").fetchone()[0]}
+
+    def vehicles(self):
+        with self.connect() as db:
+            return vehicles.all_vehicles(db)
+
+    def vehicle(self, vehicle_id):
+        with self.connect() as db:
+            return vehicles.get(db, vehicle_id)
+
+    def move_vehicle(self, vehicle_id, pose):
+        with self.connect() as db:
+            vehicle = vehicles.get(db, vehicle_id)
+            vehicle["pose"] = pose
+            vehicles.save(db, vehicle)
+            return vehicle
 
     def snapshot(self, batch=512):
         with self.connect() as db:
@@ -95,16 +118,22 @@ class Store:
                 raise Refused("stale", "The world changed. Reconnect before trying again.")
             revision, epoch = state["revision"] + 1, state["epoch"]
             kind = command["type"]
+            vehicle_changes = {}
             replace = kind in {"reset", "restore"}
             if replace:
                 self.replace(db, kind, state)
                 epoch += 1
                 changes = None  # Stream the replacement from disk, never load all cells.
             elif kind == "undo":
-                changes = self.undo(db)
+                changes, vehicle_changes = self.undo(db)
             else:
+                vehicle_inverse = {}
                 if kind == "edit":
                     edits = command["edits"]
+                elif kind == "vehicle-convert":
+                    edits, vehicle_inverse, vehicle_changes = vehicles.convert(db, command)
+                elif kind == "vehicle-edit":
+                    edits, vehicle_inverse, vehicle_changes = vehicles.materialise(db, command["vehicleId"])
                 elif kind == "build":
                     edits = build_cells(command)
                 elif kind == "weapon":
@@ -112,10 +141,12 @@ class Store:
                 else:
                     edits = blast_cells(command["bomb"], command["center"])
                 changes, inverse = self.edit(db, edits, state["count"])
-                if inverse:
+                if inverse or vehicle_inverse:
+                    payload = {"cells": inverse, "vehicles": vehicle_inverse} if vehicle_inverse else inverse
+                    cost = len(inverse) + sum(len(body["cells"]) for body in vehicle_inverse.values() if body)
                     db.execute("INSERT INTO history VALUES (?,?,?,?,?,?)", (
-                        revision, display or actor, kind, command.get("bomb"), len(inverse),
-                        zlib.compress(packed(inverse).encode(), 1)))
+                        revision, display or actor, kind, command.get("bomb"), cost,
+                        zlib.compress(packed(payload).encode(), 1)))
                     self.trim_history(db)
             db.execute("UPDATE meta SET epoch=?,revision=?", (epoch, revision))
             db.execute("INSERT INTO receipts(actor,request_id,digest,epoch,revision) VALUES(?,?,?,?,?)",
@@ -124,11 +155,13 @@ class Store:
                        "(SELECT serial FROM receipts ORDER BY serial DESC LIMIT ?)", (MAX_RECEIPTS,))
             result = {"type": "operation", "kind": kind, "actor": display or actor,
                       "requestId": command["requestId"], "replace": replace,
-                      "changes": changes, **self.state(db)}
+                      "changes": changes, "vehicleChanges": vehicle_changes, **self.state(db)}
             if kind == "blast":
                 result.update(bomb=command["bomb"], center=command["center"])
             elif kind == "weapon":
                 result.update(weapon=command["weapon"], center=command["center"])
+                if "origin" in command:
+                    result["origin"] = command["origin"]
             elif kind == "build":
                 result.update({key: command[key] for key in ("shape", "origin", "rotation", "block", "size")
                                if key in command})
@@ -137,7 +170,8 @@ class Store:
     @staticmethod
     def edit(db, edits, count):
         changes, inverse = [], []
-        chunks = {tuple(row) for row in db.execute("SELECT DISTINCT x >> 4, z >> 4 FROM cells")}
+        occupied_chunks = {tuple(row) for row in db.execute("SELECT x,z FROM chunk_counts")}
+        added = {}
         for x, y, z, block in edits:
             row = db.execute("SELECT id FROM cells WHERE x=? AND y=? AND z=?", (x, y, z)).fetchone()
             previous = row[0] if row else None
@@ -147,12 +181,15 @@ class Store:
                 count += 1
                 if count > MAX_CELLS:
                     raise Refused("world-limit", "This world is full. Undo or reset to keep building.")
-                chunks.add((x >> 4, z >> 4))
-                if len(chunks) > MAX_CHUNKS:
+                key = (x >> 4, z >> 4)
+                occupied_chunks.add(key)
+                added[key] = added.get(key, 0) + 1
+                if len(occupied_chunks) > MAX_CHUNKS:
                     raise Refused("world-limit", "This world covers its limit. Undo or reset to explore farther.")
             inverse.append([x, y, z, previous])
             changes.append([x, y, z, block])
         db.executemany("INSERT OR REPLACE INTO cells VALUES(?,?,?,?)", changes)
+        chunks.adjust(db, added)
         return changes, inverse
 
     @staticmethod
@@ -169,13 +206,13 @@ class Store:
         row = db.execute("SELECT revision,inverse FROM history ORDER BY revision DESC LIMIT 1").fetchone()
         if not row:
             raise Refused("empty-history", "There is no earlier shared action to undo.")
-        changes = json.loads(zlib.decompress(row["inverse"]))
-        db.executemany("DELETE FROM cells WHERE x=? AND y=? AND z=?",
-                       (cell[:3] for cell in changes if cell[3] is None))
-        db.executemany("INSERT OR REPLACE INTO cells VALUES(?,?,?,?)",
-                       (cell for cell in changes if cell[3] is not None))
+        payload = json.loads(zlib.decompress(row["inverse"]))
+        changes = payload if isinstance(payload, list) else payload["cells"]
+        vehicle_changes = {} if isinstance(payload, list) else payload["vehicles"]
+        chunks.restore_cells(db, changes)
+        vehicles.restore(db, vehicle_changes)
         db.execute("DELETE FROM history WHERE revision=?", (row["revision"],))
-        return changes
+        return changes, vehicle_changes
 
     @staticmethod
     def replace(db, kind, state):
@@ -187,11 +224,20 @@ class Store:
             db.execute("INSERT INTO cells SELECT * FROM checkpoint")
             db.execute("DELETE FROM checkpoint")
             db.execute("INSERT INTO checkpoint SELECT * FROM swap")
+            db.execute("CREATE TEMP TABLE swap_vehicles AS SELECT * FROM vehicles")
+            db.execute("DELETE FROM vehicles")
+            db.execute("INSERT INTO vehicles SELECT * FROM checkpoint_vehicles")
+            db.execute("DELETE FROM checkpoint_vehicles")
+            db.execute("INSERT INTO checkpoint_vehicles SELECT * FROM swap_vehicles")
         else:
             # A second reset of pristine terrain must not erase the useful checkpoint.
-            if state["count"]:
+            if state["count"] or state["vehicleCount"]:
                 db.execute("DELETE FROM checkpoint")
                 db.execute("INSERT INTO checkpoint SELECT * FROM cells")
+                db.execute("DELETE FROM checkpoint_vehicles")
+                db.execute("INSERT INTO checkpoint_vehicles SELECT * FROM vehicles")
                 db.execute("UPDATE meta SET has_checkpoint=1")
             db.execute("DELETE FROM cells")
+            db.execute("DELETE FROM vehicles")
         db.execute("DELETE FROM history")
+        chunks.rebuild(db)

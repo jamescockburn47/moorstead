@@ -17,11 +17,11 @@ Map (or M) shows both players by name. The direction/distance arrow remains on
 screen while playing; tap it to open the map. Find each other fits both players,
 while Nearby keeps the local village in view. Offline or reset positions clear.
 
-Weapons (G) adds a plasma blaster, rocket launcher and gravity gun. Plasma and
+Weapons (G) adds a plasma blaster, rocket launcher, gravity gun, automatic machine gun and live sheep launcher. Plasma and
 rockets make persistent craters; gravity flings local cartoon villagers, animals
 and debris without changing terrain. All have unlimited ammunition.
 
-Build adds six futuristic materials plus line, wall, floor and hollow-box brushes
+Build adds six futuristic materials and a Vehicle control block plus line, wall, floor and hollow-box brushes
 in sizes 3, 5 and 7. Choose a brush, then its material. Space base, neon tower and
 sky bridge are fixed prefabs. Aim the preview, rotate with R or Rotate, and Place.
 Each build is one shared undo action; hollow interiors clear existing blocks.
@@ -60,7 +60,7 @@ radii. Replacement snapshots supersede pending client work, and a backgrounded
 tab resynchronises instead of accumulating unlimited typed arrays. Ordinary save
 storage and global warden powers are not used.
 
-Limits bound processing and storage: two million edited cells, 1,024 touched
+Limits bound processing and storage: eight million edited cells, 1,024 touched
 chunks, up to 20 undo entries bounded by 400,000 inverse cells, and three live
 effect slots. A refusal preserves saved state and leaves undo/reset available.
 Unlimited supplies do not remove these world-capacity limits.
@@ -90,3 +90,30 @@ Chromium uses software rendering, so its timing does not certify tablet frame
 rate. Physical Fire/Silk performance and the boys' judgement of control feel are
 explicit live-test checks. Audio synthesis is checked for bounded nonzero output;
 listening on the actual device remains a live-test check.
+
+## Build and drive
+
+Place one Vehicle control block on a build, aim at it and press E or Use core.
+Mark two opposite corners enclosing the build. Green outlines show exactly which
+placed blocks move; natural terrain and air stay behind. Choose Car, Plane or
+Submarine. Up to 512 blocks inside 16 × 12 × 16 can form one vehicle, with sixteen
+saved vehicles shared by both boys. Menu → Our vehicles reopens the controls.
+
+Enter a vehicle to drive with WASD or the touch arrows. Plane/submarine use
+Space/Up and Shift/Down for altitude/depth. V or Change view switches between the
+control seat and an outside camera. Cars follow terrain and stop at walls;
+submarines crawl on land and move freely underwater. Park gets out and saves the
+vehicle. Either boy can enter an unoccupied vehicle or choose Edit build to snap
+it to the nearest block position and quarter turn, provided the space is clear.
+Buildings above the terrain ceiling must descend before becoming editable blocks.
+
+Conversion, materialisation and undo are atomic server transactions. Vehicles
+survive reconnects and restart; reset recovery includes them. Driving uses an
+exclusive pilot lease and its own bounded pose stream so it does not interrupt
+the other boy's terrain edits. Disconnect releases the pilot and retains the last
+accepted pose. The backend schema is now3 and content negotiation is version3;
+old clients must refresh. This does not alter ordinary Moorstead's protocol.
+
+Hold Fire (or left mouse with pointer lock) for machine-gun bursts. Sheep are
+shared cartoon projectiles which land alive and amble before leaving; a bounded
+pool of eight avoids filling tablet memory. Sheep shots do not carve terrain.

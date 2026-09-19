@@ -14,7 +14,7 @@ export const BUILD_SHAPES = Object.freeze([
 ].map(row => Object.freeze({ ...row, ...(row.dimensions ? { dimensions: Object.freeze(row.dimensions) } : {}) })));
 
 const STAIR = Object.freeze([[2, 1], [3, 1], [3, 2], [3, 3], [2, 3], [1, 3], [1, 2], [1, 1]]);
-const validBlock = id => Number.isInteger(id) && ((id >= 1 && id <= 62) || (id >= 200 && id <= 205));
+const validBlock = id => Number.isInteger(id) && ((id >= 1 && id <= 62) || (id >= 200 && id <= 206));
 const coordinate = (value, min, max) => Number.isSafeInteger(value) && value >= min && value <= max;
 
 export function buildDimensions(shape, size) {

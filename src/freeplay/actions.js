@@ -25,12 +25,18 @@ export class FreeplayActions {
     const g=this.game,p=g.player;g.camera.getWorldDirection(this.direction);
     const hit=raycast(g.world,p.pos.x,p.pos.y+p.eye,p.pos.z,this.direction.x,this.direction.y,this.direction.z,
       this.selected.type==='bomb'?80:this.selected.type==='weapon'?weaponById(this.selected.id)?.range||50:this.selected.type==='build'?35:10,id=>!!(isSolid(id)||isCutout(id)));
-    return hit&&g.world.isLoaded(hit.x,hit.z)?hit:null;
+    if(hit&&g.world.isLoaded(hit.x,hit.z))return hit;
+    if(this.selected.type==='weapon'&&this.selected.id==='sheep'){
+      const end=g.camera.position.clone().addScaledVector(this.direction,36);
+      if(g.world.isLoaded(end.x,end.z))return{x:Math.floor(end.x),y:Math.max(1,Math.min(63,Math.floor(end.y))),z:Math.floor(end.z),face:[0,1,0]};
+    }
+    return null;
   }
   choose(value){this.selected=value;}
   update(dt) {
     const g=this.game,hit=this.target(),bomb=bombById(this.selected.id);
     this.builder.update(this.selected,hit);this.weapons.update(dt,this.selected);
+    if(!g.paused&&!g.vehicles?.driving&&g.input?.firing&&weaponById(this.selected.id)?.automatic)this.use();
     this.hit=hit;this.box.visible=!!hit&&!g.paused;this.ring.visible=!!hit&&!!bomb&&this.selected.type==='bomb'&&!g.paused;
     if(hit){this.box.position.set(hit.x+.5,hit.y+.5,hit.z+.5);this.ring.position.set(hit.x+.5,hit.y+1.04,hit.z+.5);if(bomb)this.ring.scale.setScalar(bomb.radius);}
     if(!this.fuse)return;
@@ -47,7 +53,9 @@ export class FreeplayActions {
     }
   }
   use() {
-    const g=this.game,hit=this.target();if(!g.canEdit()||!hit)return;
+    const g=this.game,hit=this.target();
+    if((g.vehicles?.driving||g.vehicles?.selection||this.selected.type==='block')&&g.vehicles?.interact(hit))return;
+    if(!g.canEdit()||!hit)return;
     if(this.selected.type==='build'){this.builder.use(this.selected,hit);return;}
     if(this.selected.type==='weapon'){this.weapons.fire(weaponById(this.selected.id),hit);return;}
     if(this.selected.type==='bomb'){
@@ -61,8 +69,8 @@ export class FreeplayActions {
     if(Math.abs(x+.5-p.x)<.8&&Math.abs(z+.5-p.z)<.8&&y+1>p.y&&y<p.y+1.8)return g.ui.message('Take a step back to place that block.');
     g.send('edit',{edits:[[x,y,z,this.selected.id]]});
   }
-  break(){const hit=this.target();if(this.game.canEdit()&&hit&&hit.y>=1)this.game.send('edit',{edits:[[hit.x,hit.y,hit.z,B.AIR]]});}
-  primary(){if(this.selected.type!=='block')this.use();else this.break();}
+  break(){if(this.game.vehicles?.driving)return;const hit=this.target();if(this.game.canEdit()&&hit&&hit.y>=1)this.game.send('edit',{edits:[[hit.x,hit.y,hit.z,B.AIR]]});}
+  primary(){if(this.game.vehicles?.selection){this.use();return;}if(this.selected.type!=='block')this.use();else if(!this.game.vehicles?.interact(this.target()))this.break();}
   cancel(){this.fuse=null;this.projectile.visible=false;this.weapons.cancel();}
   dispose(){this.builder.dispose();this.weapons.dispose();for(const object of [this.box,this.ring,this.projectile]){object.removeFromParent();object.geometry.dispose();object.material.dispose();}}
 }

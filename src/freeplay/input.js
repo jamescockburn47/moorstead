@@ -1,4 +1,5 @@
 import { captureMouse } from '../preferences.js';
+import { weaponById } from './weapons.js';
 
 export class FreeplayInput {
   constructor(game, canvas, root) {
@@ -19,6 +20,8 @@ export class FreeplayInput {
         if (e.code==='KeyX') game.ui.open('bombs');
         if (e.code==='KeyG') game.ui.open('weapons');
         if (e.code==='KeyR') game.ui.rotateBuild();
+        if (e.code==='KeyE') game.vehicles?.interact(game.actions.target());
+        if (e.code==='KeyV') game.vehicles?.toggleView();
         if (e.code==='Escape') game.ui.open('menu');
       }
     });
@@ -30,7 +33,7 @@ export class FreeplayInput {
       if(this.paused)return;
       game.unlockAudio();
       if(e.pointerType==='mouse' && document.pointerLockElement===canvas){
-        if(e.button===2)game.use(); else if(e.button===0)game.primary(); return;
+        if(e.button===2)game.use(); else if(e.button===0){this.firing=true;game.primary();} return;
       }
       this.drag={id:e.pointerId,x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY,button:e.button,type:e.pointerType};
       canvas.setPointerCapture(e.pointerId);
@@ -42,13 +45,26 @@ export class FreeplayInput {
       this.look(e.clientX-this.drag.x,e.clientY-this.drag.y); this.drag.x=e.clientX;this.drag.y=e.clientY;
     });
     listen(canvas,'pointerup',e=>{
+      this.firing=false;
       const drag=this.drag;if(!drag||drag.id!==e.pointerId)return;this.drag=null;
       if(drag.type==='mouse'&&Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)<5){
         if(drag.button===2)game.use();
         else captureMouse(canvas,()=>game.ui.message('Drag to look. Use Place or Break to build.'));
       }
     });
-    listen(canvas,'pointercancel',()=>{this.drag=null;});
+    listen(canvas,'pointercancel',()=>{this.drag=null;this.firing=false;});
+    listen(window,'pointerup',()=>{this.firing=false;});
+    listen(document,'pointerlockchange',()=>{if(document.pointerLockElement!==canvas)this.firing=false;});
+    const fire=game.ui.place;
+    listen(fire,'pointerdown',e=>{
+      this.pointerShot=false;
+      if(!this.paused&&game.actions.selected.type==='weapon'){
+        e.preventDefault();this.pointerShot=true;this.firing=!!weaponById(game.actions.selected.id)?.automatic;
+        fire.setPointerCapture(e.pointerId);game.use();
+      }
+    });
+    listen(fire,'click',e=>{if(this.pointerShot&&e.detail>0){this.pointerShot=false;e.stopImmediatePropagation();}},{capture:true});
+    for(const event of ['pointerup','pointercancel','lostpointercapture'])listen(fire,event,()=>{this.firing=false;});
     for(const button of root.querySelectorAll('[data-key]')){
       listen(button,'pointerdown',e=>{e.preventDefault();button.setPointerCapture(e.pointerId);this.keys[button.dataset.key]=true;});
       const release=()=>{delete this.keys[button.dataset.key];};
@@ -60,11 +76,11 @@ export class FreeplayInput {
     this.game.player.pitch=Math.max(-1.5,Math.min(1.5,this.game.player.pitch-dy*.003));
   }
   update(dt){
-    if(this.paused)return;
+    if(this.paused||this.game.vehicles?.driving)return;
     this.look(((this.keys.ArrowRight?1:0)-(this.keys.ArrowLeft?1:0))*dt*350,
       ((this.keys.ArrowDown?1:0)-(this.keys.ArrowUp?1:0))*dt*350);
   }
-  clear(){this.keys={};this.jumpTapped=false;this.drag=null;}
+  clear(){this.keys={};this.jumpTapped=false;this.drag=null;this.firing=false;}
   pause(value){this.paused=value;this.clear();}
   dispose(){this.controller.abort();this.clear();document.exitPointerLock?.();}
 }

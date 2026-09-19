@@ -33,8 +33,8 @@ class Socket{
 const transfers=[],errors=[],states=[],positions=[],rosters=[];
 const net=new FreeplayConnection(auth,{state:s=>states.push(s),error:e=>errors.push(e),transaction:t=>transfers.push(t),peer:p=>positions.push(p),peers:p=>rosters.push(p)},Socket);
 try{
-  net.connect();const socket=Socket.last;socket.onopen();assert.deepEqual(socket.sent[0],{type:'hello',protocol:1,contentVersion:2});
-  const init={type:'init',protocol:1,contentVersion:2,minContentVersion:2,freeplay:true,room:FREEPLAY.room,seed:FREEPLAY.seed,epoch:1,revision:0,history:[],checkpoint:false,players:[],count:1};
+  net.connect();const socket=Socket.last;socket.onopen();assert.deepEqual(socket.sent[0],{type:'hello',protocol:1,contentVersion:3});
+  const init={type:'init',protocol:1,contentVersion:3,minContentVersion:3,freeplay:true,room:FREEPLAY.room,seed:FREEPLAY.seed,epoch:1,revision:0,history:[],checkpoint:false,players:[],vehicleCount:0,count:1};
   assert.throws(()=>net.receive({...init,contentVersion:1}),/Wrong world/,'old content must refuse before rendering new blocks');
   net.receive(init);net.receive({type:'snapshot',edits:[[3,4,5,8]]});assert.equal(transfers.length,0,'partial snapshot not published');
   net.receive({type:'ready',epoch:1,revision:0});assert(net.connected);assert.equal(transfers[0].edits.getCell(3,4,5),8);
@@ -44,7 +44,7 @@ try{
   net.receive({type:'delta',epoch:1,revision:1,edits:[[3,4,5,0]]});assert.equal(transfers.length,1,'partial operation not published');
   net.receive({type:'commit',epoch:1,revision:1,requestId:rid,history:[{kind:'edit',actor:'Henry',revision:1}],checkpoint:false});
   assert.equal(transfers[1].edits.getCell(3,4,5),0);assert.equal(net.pending,null);
-  net.receive({type:'begin',epoch:2,revision:2,requestId:'reset-test',kind:'reset',actor:'James',replace:true,count:0});
+  net.receive({type:'begin',epoch:2,revision:2,requestId:'reset-test',kind:'reset',actor:'James',replace:true,vehicleCount:0,count:0});
   net.receive({type:'commit',epoch:2,revision:2,requestId:'reset-test',history:[],checkpoint:true});
   assert.equal(net.epoch,2);assert(net.checkpoint);
   assert.deepEqual(rosters.at(-1),[],'reset must clear pre-reset map positions');
@@ -91,3 +91,8 @@ import './verify-freeplay-map.mjs';
 import './verify-freeplay-blocks.mjs';
 import './verify-freeplay-build.mjs';
 import './verify-freeplay-weapons.mjs';
+
+await import('./verify-freeplay-vehicle-motion.mjs');
+await import('./verify-freeplay-vehicle-renderer.mjs');
+
+await import('./verify-freeplay-vehicles.mjs');

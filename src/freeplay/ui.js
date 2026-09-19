@@ -47,7 +47,7 @@ export class FreeplayUI {
     this.crosshair = element('div', 'fp-crosshair', '+', this.hud);
     const bottom = element('div', 'fp-bottom', null, this.hud);
     this.selection = element('div', 'fp-selection', 'Planks · ∞', bottom);
-    const tools = element('nav', 'fp-tools', null, bottom); tools.setAttribute('aria-label', 'Free-play tools');
+    const tools = this.tools = element('nav', 'fp-tools', null, bottom); tools.setAttribute('aria-label', 'Free-play tools');
     button(tools, 'Build', () => this.open('build'));
     button(tools, 'Bombs', () => this.open('bombs'));
     button(tools, 'Weapons', () => this.open('weapons'));
@@ -64,6 +64,8 @@ export class FreeplayUI {
     button(touchActions, 'Break', () => actions.break());
     for (const [label, key] of [['Up / jump', 'Space'], ['Down', 'ShiftLeft']]) { const el = button(touchActions, label, () => {}); el.dataset.key = key; }
     this.notice = element('p', 'fp-notice', '', this.hud); this.notice.setAttribute('role', 'status');
+    this.vehicleDrive=element('div','fp-vehicle-drive',null,bottom);this.vehicleDrive.hidden=true;
+    button(this.vehicleDrive,'Park',()=>actions.park());button(this.vehicleDrive,'Change view',()=>actions.vehicleView());
     this.panel = element('dialog', 'fp-panel', null, root);
     this.panel.addEventListener('close', () => { this.actions.pause(false); this.canvas.focus(); });
     this.panelTitle = element('h2', '', '', this.panel);
@@ -92,7 +94,8 @@ export class FreeplayUI {
   rotateBuild(){if(this.selected.type==='build')this.select({...this.selected,rotation:((this.selected.rotation||0)+1)%4});}
   open(kind) {
     this.actions.pause(true); document.exitPointerLock?.(); this.panelContent.replaceChildren();
-    this.panelTitle.textContent = {build:'Build anything',bombs:'The bomb cupboard',weapons:'The sci-fi armoury',menu:'Our shared moor',map:'Find each other'}[kind];
+    this.panelTitle.textContent = {build:'Build anything',bombs:'The bomb cupboard',weapons:'The sci-fi armoury',menu:'Our shared moor',map:'Find each other',vehicles:'Build and drive'}[kind];
+    if(kind==='vehicles')this.actions.vehicles(this.panelContent);
     if (kind === 'map') this.actions.map(this.panelContent);
     if (kind === 'build') this.buildCatalogue();
     if (kind === 'bombs') for (const bomb of BOMBS) {
@@ -137,6 +140,7 @@ export class FreeplayUI {
     element('p', '', 'Infinite supplies and health. No chores. Everything here belongs to this separate free-play world.', this.panelContent);
     element('p', '', 'WASD: walk · drag/mouse: look · F: fly · Space: up/jump · Shift: down · Z: faster · left click: break/fire/build · right click: place · B: build · X: bombs · G: weapons · R: rotate build · M: map', this.panelContent);
     button(this.panelContent, 'Back to village', () => { this.actions.home(); this.panel.close(); });
+    button(this.panelContent, 'Our vehicles', () => this.open('vehicles'));
     button(this.panelContent, 'Reconnect', () => { this.actions.reconnect(); this.panel.close(); });
     const settings = this.actions.settings();
     for (const [key,label] of [['plain','Plain graphics (best for tablets)'],['reducedFlash','Gentle flashes'],['reducedMotion','Gentle effects'],['muted','Mute sound']]) {

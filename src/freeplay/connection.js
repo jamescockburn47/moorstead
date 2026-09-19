@@ -1,6 +1,7 @@
 import { FREEPLAY, freeplayCredentials } from './config.js';
 import { integer, validCells, validHistory, validPosition, versioned } from './protocol.js';
 import { OverrideStore } from './terrain-overrides.js';
+import { validVehicle, validPose, MAX_VEHICLES } from './vehicle-data.js';
 
 export class FreeplayConnection {
   constructor(auth, callbacks, Socket = WebSocket) {
@@ -55,7 +56,7 @@ export class FreeplayConnection {
   }
   startStage(meta, snapshot = false) {
     if (this.stage || !versioned(meta) || !integer(meta.count, 0, FREEPLAY.maxCells)) throw new Error('Invalid world transfer');
-    this.stage = { meta, snapshot, store: new OverrideStore(), received: 0 };
+    this.stage = { meta, snapshot, store: new OverrideStore(), received: 0, vehicles: new Map() };
     this.callbacks.state('syncing');
   }
   receive(m) {
@@ -69,6 +70,26 @@ export class FreeplayConnection {
         this.callbacks.peers?.(m.players.filter(validPosition)); break;
       }
       case 'snapshot': this.append(m.edits, true); break;
+      case 'vehicle-snapshot': {
+        if(!this.stage||!(this.stage.snapshot||this.stage.meta.replace)||!validVehicle(m.vehicle)
+          ||this.stage.vehicles.has(m.vehicle.id)||this.stage.vehicles.size>=MAX_VEHICLES)throw Error('Invalid vehicle snapshot');
+        this.stage.vehicles.set(m.vehicle.id,m.vehicle);break;
+      }
+      case 'vehicle-delta': {
+        if(!this.stage||m.epoch!==this.stage.meta.epoch||m.revision!==this.stage.meta.revision
+          ||typeof m.vehicleId!=='string'||m.vehicleId.length>80
+          ||!(m.vehicle===null||validVehicle(m.vehicle)&&m.vehicle.id===m.vehicleId)
+          ||this.stage.vehicles.size>=MAX_VEHICLES)throw Error('Invalid vehicle change');
+        this.stage.vehicles.set(m.vehicleId,m.vehicle);break;
+      }
+      case 'vehicle-lease':
+        if(m.epoch===this.epoch&&typeof m.vehicleId==='string'
+          &&(m.pilot===null||typeof m.pilot==='string')&&(m.lease==null||typeof m.lease==='string')
+          &&(!m.pose||validPose(m.pose)))this.callbacks.vehicle?.(m);
+        break;
+      case 'vehicle-pos':
+        if(m.epoch===this.epoch&&typeof m.vehicleId==='string'&&validPose(m.pose)&&integer(m.seq,0,2**40))this.callbacks.vehicle?.(m);
+        break;
       case 'ready': {
         if (!this.stage?.snapshot || !versioned(m) || m.epoch !== this.epoch || m.revision !== this.revision) throw new Error('Invalid ready');
         this.finish(m); this.attempt = 0; break;
@@ -88,6 +109,10 @@ export class FreeplayConnection {
         this.history = m.history; this.checkpoint = m.checkpoint === true; this.finish(m); break;
       }
       case 'error': {
+        if(['vehicle-claim','vehicle-release','vehicle-drive'].includes(m.command)){
+          this.callbacks.vehicle?.({...m,type:'vehicle-error'});
+          this.callbacks.error(typeof m.message==='string'?m.message.slice(0,240):'Vehicle action could not be saved.');break;
+        }
         this.pending = null;
         this.callbacks.error(typeof m.message === 'string' ? m.message.slice(0, 240) : 'The change could not be saved.');
         if (m.code === 'stale') this.socket.close(4001, 'resync');
@@ -116,10 +141,11 @@ export class FreeplayConnection {
   finish(commit) {
     const stage = this.stage;
     if (stage.received !== stage.meta.count || stage.store.size !== stage.received) throw new Error('Incomplete or duplicate cells');
+    if((stage.snapshot||stage.meta.replace)&&stage.vehicles.size!==stage.meta.vehicleCount)throw Error('Incomplete vehicles');
     this.stage = null; this.epoch = commit.epoch; this.revision = commit.revision; this.connected = true;
     if (stage.meta.replace) this.callbacks.peers?.([]);
     if (commit.requestId === this.pending || stage.snapshot) this.pending = null;
-    this.callbacks.transaction({ ...stage.meta, ...commit, snapshot: stage.snapshot, edits: stage.store });
+    this.callbacks.transaction({ ...stage.meta, ...commit, snapshot: stage.snapshot, edits: stage.store, vehicles:stage.vehicles });
     this.callbacks.state('ready');
   }
   command(type, fields = {}) {
@@ -133,6 +159,10 @@ export class FreeplayConnection {
     if (point) this.lastPosition = point;
     if (!point || !this.connected || this.socket?.readyState !== 1) return;
     this.socket.send(JSON.stringify({ type: 'pos', epoch: this.epoch, x: point.x, y: point.y, z: point.z, yaw: point.yaw }));
+  }
+  vehicle(type,fields){
+    if(!this.connected||this.stage||this.socket?.readyState!==1)return false;
+    this.socket.send(JSON.stringify({...fields,type,epoch:this.epoch}));return true;
   }
   reconnect() { this.attempt = 0; this.socket?.close(); this.connect(); }
   dispose() {

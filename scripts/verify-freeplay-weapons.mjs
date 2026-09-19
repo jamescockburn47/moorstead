@@ -10,7 +10,8 @@ function fixture() {
   const game = { scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(75, 1, .08, 800),
     connection: { connected: true, epoch: 2, socket: {} }, settings: { plain: true },
     player: { pos: { x: 0, y: 35, z: 0 } }, paused: false, ready: true, accepted: true,
-    world: { setBlock() { throw new Error('Weapon visuals must not mutate authoritative terrain'); } },
+    world: { loaded: true, depth: 30, isLoaded() { return this.loaded; }, getBlock(x, y) { return y <= this.depth ? B.STONE : B.AIR; },
+      setBlock() { throw new Error('Weapon visuals must not mutate authoritative terrain'); } },
     canEdit() { return this.ready; }, send(type, fields) { sent.push({ type, ...fields }); return this.accepted; },
     ui: { message(value) { messages.push(value); } }, unlockAudio() {},
     effects: { audio: {}, detonate(event) { explosions.push(event); } },
@@ -31,6 +32,7 @@ const advance = (controller, steps = 15) => { for (let i = 0; i < steps; i++) co
   game.ready = false; assert.equal(controller.fire(WEAPONS[0], target), false);
   game.ready = true; const canEdit = game.canEdit; game.canEdit = undefined;
   assert.equal(controller.fire(WEAPONS[0], target), false, 'missing gate never permits a shot'); game.canEdit = canEdit;
+  game.camera.position.set(0, 35, 0); game.camera.updateMatrixWorld();
   for (const weapon of WEAPONS) {
     controller.update(.01, { type: 'weapon', id: weapon.id });
     assert.equal(controller.gun.visible, true);
@@ -55,6 +57,7 @@ const advance = (controller, steps = 15) => { for (let i = 0; i < steps; i++) co
   const count = sent.length; advance(controller); assert.equal(sent.length, count, 'successful shot is never sent twice');
   assert.equal(controller.fire(WEAPONS[0], { x: 0, y: 63, z: 0 }), true); advance(controller);
   assert.deepEqual(sent.at(-1).center, [0, 63, 0], 'ceiling remains within terrain height');
+  game.camera.position.set(0, 35, 0); game.camera.updateMatrixWorld();
   for (const weapon of WEAPONS) {
     assert.equal(controller.fire(weapon, target), true); advance(controller);
     assert.equal(sent.at(-1).weapon, weapon.id); assert.equal(controller.stats().pending, false);
@@ -62,6 +65,44 @@ const advance = (controller, steps = 15) => { for (let i = 0; i < steps; i++) co
   let disposed = 0; controller.box.addEventListener('dispose', () => disposed++);
   controller.dispose(); controller.dispose(); assert.equal(disposed, 1); assert.equal(game.scene.children.length, 0);
   assert.equal(controller.fire(WEAPONS[0], target), false);
+}
+
+{
+  const { game, controller, sent, blasts, explosions } = fixture();
+  const machinegun = weaponById('machinegun'), sheep = weaponById('sheep');
+  assert.equal(machinegun.automatic, true); assert.equal(machinegun.cooldown, .25);
+  for (let frame = 0; frame < 120; frame++) {
+    controller.fire(machinegun, target); controller.update(1 / 60, { type: 'weapon', id: 'machinegun' });
+  }
+  assert.ok(sent.length >= 7 && sent.length <= 8, 'two seconds held fire makes at most eight authoritative bursts');
+  assert.ok(sent.every(message => message.weapon === 'machinegun' && !('origin' in message)));
+  advance(controller); sent.length = 0;
+  assert.equal(controller.fire(sheep, target), true);
+  assert.equal(sent.length, 1, 'sheep dispatches immediately so both clients receive the same flight');
+  assert.ok(sent[0].origin.every(Number.isSafeInteger)); assert.equal(controller.projectile.visible, false);
+  assert.equal(controller.sheep.stats().active, 0, 'no unconfirmed live animal preview');
+  const launch = { ...transfer('sheep', 9), origin: [0, 35, -1], center: [12, 31, -20] };
+  assert.equal(controller.impact({ ...launch, origin: undefined }), false);
+  assert.equal(controller.impact({ ...launch, origin: [0, 35.5, 0] }), false);
+  assert.equal(controller.impact({ ...launch, origin: [90, 35, 0] }), false);
+  assert.equal(controller.impact(launch), true); assert.equal(controller.impact(launch), false);
+  assert.equal(blasts.length, 0); assert.equal(explosions.length, 0, 'sheep never detonates or flings residents');
+  const rig = controller.sheep.slots[0].rig;
+  assert.equal(rig.key, 'sheep:0'); assert.equal(rig.legs.length, 4); assert.ok(rig.group.children.length > 4);
+  advance(controller, 4); assert.equal(controller.sheep.stats().flying, 1); assert.ok(rig.group.position.y > 35);
+  advance(controller, 6); assert.equal(controller.sheep.stats().landed, 1); assert.equal(rig.group.position.y, 31);
+  const start = rig.group.position.clone(); advance(controller, 10);
+  assert.ok(rig.group.position.distanceTo(start) > .4, 'the living landed sheep walks rather than becoming debris');
+  game.world.depth = 5; advance(controller, 1); assert.equal(rig.group.position.y, 6, 'new crater ground governs recovery');
+  for (let revision = 10; revision < 100; revision++) controller.impact({ ...launch, revision });
+  assert.equal(controller.sheep.stats().active, 8); assert.equal(controller.sheep.stats().allocated, 8);
+  assert.equal(controller.sheep.group.children.length, 8, 'rapid shared sheep events reuse a bounded real flock');
+  game.connection.epoch++; controller.update(.1); assert.equal(controller.sheep.stats().active, 0, 'reset removes old shared flight');
+  controller.impact({ ...launch, epoch: 3, revision: 100 }); game.world.loaded = false; advance(controller, 10);
+  assert.equal(controller.sheep.stats().active, 0, 'missing loaded ground never invents a safe landing');
+  game.world.loaded = true; controller.impact({ ...launch, epoch: 3, revision: 101 }); advance(controller, 115);
+  assert.equal(controller.sheep.stats().active, 0, 'temporary flock retires to the reusable pool');
+  controller.dispose(); assert.equal(game.scene.children.length, 0);
 }
 
 for (const change of [game => game.connection.epoch++, game => game.connection.socket = {}, game => game.connection.connected = false]) {
@@ -123,4 +164,4 @@ for (const change of [game => game.connection.epoch++, game => game.connection.s
   assert.equal(disconnects, nodes.length * 2, 'all oscillator and gain connections are released');
   assert.equal(stops, nodes.length * 2, 'each oscillator receives its scheduled stop and one cleanup');
 }
-console.log('Free-play weapons: PASS (distinct held models, gated flight, reconnect cancellation, bounded impacts/audio, actual gravity recovery, disposal).');
+console.log('Free-play weapons: PASS (five held models, gated/capped automatic fire, reconnect cancellation, bounded impacts/audio, gravity recovery, live shared sheep flight/landing/amble, disposal).');

@@ -23,6 +23,7 @@ const ui=new FreeplayUI(root,{
   },
   continue:()=>start(),pause:value=>game?.pause(value),
   map:parent=>game?.map.open(parent),
+  vehicles:parent=>game?.vehicles.panel(parent),park:()=>game?.vehicles.park(),vehicleView:()=>game?.vehicles.toggleView(),
   fly:()=>game?.fly(),use:()=>game?.use(),break:()=>game?.break(),
   select:value=>game?.actions.choose(value),
   undo:()=>game?.send('undo'),reset:()=>game?.send('reset',{confirm:true}),restore:()=>game?.send('restore',{confirm:true}),
@@ -50,7 +51,7 @@ function start(){
       if(!current())return;
       const text={connecting:'Joining…',syncing:'Receiving world…',saving:'Saving…',ready:'Shared · ∞ health · ∞ supplies',offline:'Offline · reconnecting',denied:'Login required',replaced:'Playing on another device'}[state]||state;
       ui.status(text);
-      if(['connecting','offline','denied','replaced'].includes(state)){peerCache=[];game?.peers.replace([]);}
+      if(['connecting','offline','denied','replaced'].includes(state)){peerCache=[];game?.peers.replace([]);game?.vehicles.disconnected();}
       if(state==='offline')ui.message('Connection lost. Changes wait until the saved world reconnects.');
       if(state==='denied'){ui.login.hidden=false;ui.hud.hidden=true;ui.loginError('Enter thi free-play code again.');}
     },
@@ -58,6 +59,7 @@ function start(){
     progress:(n,total)=>{if(current()&&!game)ui.loading('Receiving our moor · '+Math.round(n/Math.max(1,total)*100)+'%');},
     peers:values=>{peerCache=values;if(current())game?.peers.replace(values);},
     peer:value=>{if(current())game?.peers.put(value);},leave:id=>{if(current())game?.peers.remove(id);},
+    vehicle:value=>{if(current())game?.vehicles.event(value);},
     transaction:transfer=>{
       if(!current())return;
       if(!game){game=new FreeplayGame(ui,connection,settings);game.peers.replace(peerCache);ui.playing(auth.name);}

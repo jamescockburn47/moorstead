@@ -7,3 +7,5 @@
 @media(max-height:520px){.fp-entry-card{padding:15px 25px;max-width:630px}.fp-entry h1{font-size:30px}.fp-edition{font-size:20px;margin:0}.fp-intro,.fp-badges,.fp-eyebrow{display:none}.fp-login-form{grid-template-columns:1fr 1fr;gap:6px}.fp-who{grid-column:1/-1}.fp-bottom{bottom:12px}.fp-notice{top:55px;padding:5px 10px}.fp-move{bottom:12px}.fp-touch-actions{bottom:12px}.fp-panel{max-height:94vh}}
 .fp-build-choices{display:flex;flex-wrap:wrap;gap:6px}.fp-build-choices [aria-pressed=true]{background:#e9be66}.fp-build-size select{min-height:44px;padding:8px 16px;font:inherit;border:1px solid #9aab9f;border-radius:8px;background:#fffaf0}.fp-selection{max-width:90vw;text-align:center}.fp-tools{white-space:nowrap}@media(max-width:440px){.fp-tools button{min-width:56px;padding:9px 8px;font-size:12px}}
 @media(max-width:700px){.fp-bottom{bottom:180px}}
+
+.fp-vehicle-drive{display:flex;gap:8px}.fp-vehicle-drive[hidden]{display:none}.fp-vehicle-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;border-bottom:1px solid #46606b}

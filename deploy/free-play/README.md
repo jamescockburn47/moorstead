@@ -1,8 +1,9 @@
 # Private Free Play — server and release tools
 
-Updated 19 September 2026 for the **content 2 release**. No real
+Updated 19 September 2026. **Content 3 release.** No real
 invites, sessions, player records or production database are included. The upgrade
-adds private sci-fi materials, brushes, prefabs and three fictional weapons.
+adds movable authored builds, three vehicle modes, a machinegun and live cartoon
+sheep projectiles. It increases the bounded override capacity to eight million.
 
 This package serves exactly `family-freeplay` at `/freeplay/ws`, using the existing
 relay's token-ledger authentication. A dedicated dashboard claim route refuses an
@@ -15,6 +16,9 @@ route refuses this room before reading or creating ordinary room state.
 |---|---|
 | `worldsvc/freeplay_rules.py` | Relay directory; protocol limits, validators and deterministic blast cells |
 | `worldsvc/freeplay_builds.py` | Relay directory; bounded brushes and fixed sci-fi prefab cells |
+| `worldsvc/freeplay_chunks.py` | Transactional chunk/cell counts without full-world scans per shot |
+| `worldsvc/freeplay_vehicles.py` | Lossless authored-block transfer, parked bodies and pose validation |
+| `worldsvc/freeplay_vehicle_control.py` | Exclusive pilot leases and bounded movement saves |
 | `worldsvc/freeplay_store.py` | Relay directory; transactional SQLite persistence/history/recovery |
 | `worldsvc/freeplay_stream.py` | Relay directory; bounded snapshot and operation frames |
 | `worldsvc/freeplay_service.py` | Relay directory; session validation and exact-room WebSocket endpoint |
@@ -23,6 +27,7 @@ route refuses this room before reading or creating ordinary room state.
 | `fixture.py` | Loopback-only synthetic login/server for browser tests; never install in production |
 | `verify.py` | Canonical offline backend check |
 | `upgrade_pack.py` | Explicit content-1 → content-2 release, after backup and migration rehearsal |
+| `upgrade_vehicles.py` | Explicit content-2 → content-3 release, preserving all old rows |
 
 Live sources were read over `evo-tailscale`, without writes or service changes.
 `integrate.py` refuses sources whose SHA-256 differs from these inspected baselines:
@@ -45,9 +50,9 @@ inspected dashboard, used to execute the actual transformed login function.
 The only world store is `DATA/freeplay/world.sqlite3`; it is outside ordinary room
 JSON, pockets, companion records and pruning. SQLite transactions atomically commit
 overrides, revision, inverse history and idempotency receipts with synchronous FULL
-and WAL journalling. Content 2 migrates `user_version=1` to `2` without changing
-saved rows; the old adapter refuses version 2, preventing unsafe rollback against
-new materials. Versions above 2 are refused. The fixed seed is
+and WAL journalling. Content 3 migrates older `user_version` values to `3` while
+preserving existing rows, adds parked vehicle/checkpoint tables and derives chunk
+counts. Older adapters refuse version 3. Versions above 3 are refused. The fixed seed is
 `419947177`, the existing Moorstead `strSeed('t-moors-1900')` value.
 
 An absent override means procedural baseline. A stored `0` means air. Undo sends
@@ -57,8 +62,9 @@ advances epoch and clears peer positions. Resetting pristine terrain again retai
 the useful previous checkpoint. Restore swaps the active world and checkpoint,
 advances epoch and clears history; the replaced world remains recoverable.
 
-Limits are explicit: 2,000,000 override cells; 1,024 touched 16×16 chunks;
+Limits are explicit: 8,000,000 override cells; 1,024 touched 16×16 chunks;
 20 recent actions and at most 400,000 inverse cells; 4,096 idempotency receipts;
+16 parked/driven vehicles of at most 512 solid blocks and 16×12×16 extent each;
 8 simultaneous identities; 64 blocks per direct stroke; 1,024 generated cells per
 brush/prefab command; 512 rows per outgoing
 batch; 16 KiB incoming command; one command per peer per 100 ms. Each peer may have
@@ -72,7 +78,7 @@ limits remain unchanged so ordinary player saves are not silently truncated.
 
 World changes are serialized and computed on a worker thread. Frames yield between
 batches. Each socket send has a three-second deadline and a complete transfer a
-30-second deadline; slow or broken peers close and recover from the durable
+30-second deadline (120 seconds for snapshots/replacements); slow or broken peers close and recover from the durable
 snapshot on reconnect. Receipt identity is stable account pid plus requestId;
 reused IDs with changed content are refused. Even after old receipts are pruned,
 the original exact epoch/revision makes a delayed duplicate stale.
@@ -81,7 +87,15 @@ No player pockets are read or saved. Positions are ephemeral, bounded and checke
 against the exact epoch. Token expiry/revocation is rechecked on operations and
 approximately every second when idle. Authentication comes only from the existing
 server callback and the exact room-bound session, never a client capability flag.
-The hello handshake additionally requires content version 2 before any snapshot.
+The hello handshake additionally requires content version 3 before any snapshot.
+
+Vehicle conversion selects only authored non-air overrides and exactly one control
+block 206. Conversion, explicit block editing, undo and checkpoint recovery include
+both voxel and vehicle state in one transaction. Parking retains an object until
+the player explicitly edits it. One authenticated socket holds a vehicle's pilot
+lease; either child can take unpiloted controls. Validated poses persist at about
+4 Hz without changing terrain revision; disconnect retains the last accepted pose.
+See `PROTOCOL.md` for exact frames, movement bounds and baseline-collision limits.
 
 ## Stylised damage rules
 
@@ -136,7 +150,33 @@ Browser interception may redirect only those fixture requests; the shipped clien
 has no bypass or test login. The fixture authenticates synthetic in-memory sessions
 through the same production adapter. It does not establish live invite validity.
 
-## Content-2 upgrade — after the matching client is verified
+## Content-3 upgrade — after the matching client is verified
+
+Stage all **eight** adapter modules alongside `backup.py`, `upgrade_pack.py` and
+`upgrade_vehicles.py` in a new private directory outside `worldsvc`. The executable
+source guards pin the five actual content-2 modules; new vehicle module names must
+not already exist. Run the current relay Python only after release is authorised:
+
+```sh
+/home/james/moorstead/venv/bin/python /path/to/private-stage/upgrade_vehicles.py --install
+```
+
+Only the relay stops. The helper saves original modules and a consistent SQLite
+backup, restores a separate rehearsal copy, migrates to version 3 and verifies all
+old table counts/hashes are identical. Derived chunk counts must match saved cells,
+new vehicle tables must be empty, and the actual old adapter must refuse version 3.
+It repeats preservation checks on the stopped live database before restarting.
+After migration, failure preserves the current database and requires roll-forward.
+There is no automatic restoration of older world data or version-marker downgrade.
+Do not touch invites, dashboard, Caddy, ordinary saves, or disabled model services.
+
+An isolated EVO benchmark with 8,000,000 rows delivered/decoded a snapshot in 7.809s
+(130,042,819 uncompressed bytes; ≤8,513 bytes/frame). Machinegun transactions at that
+capacity took median 2.336ms, maximum 6.216ms. This establishes bounded server work,
+not physical tablet/network performance. The actual live content-2 backup also
+migrated on an isolated copy with every pre-existing table hash preserved.
+
+## Content-2 upgrade record — already performed
 
 The existing relay/dashboard/Caddy integration stays unchanged. Do not re-run the
 initial integration transformer, mint replacement codes or start disabled services.

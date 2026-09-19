@@ -6,9 +6,9 @@ import re
 ROOM = "family-freeplay"
 SEED = 419947177  # strSeed('t-moors-1900'), the client generator's MOORS_SEED.
 PROTOCOL = 1
-CONTENT_VERSION = 2
+CONTENT_VERSION = 3
 LIMIT = 8192
-MAX_CELLS = 2_000_000
+MAX_CELLS = 8_000_000
 MAX_CHUNKS = 1024
 MAX_EDIT = 64
 BATCH_SIZE = 512
@@ -24,7 +24,8 @@ BOMBS = {
     "mega": (24, 13, 24),
     "atom": (40, 18, 30),
 }
-WEAPONS = {"plasma": (2, 2, 3), "rocket": (7, 5, 10), "gravity": None}
+WEAPONS = {"plasma": (2, 2, 3), "rocket": (7, 5, 10), "gravity": None,
+           "machinegun": (1, 1, 1), "sheep": None}
 REQUEST_ID = re.compile(r"[A-Za-z0-9_-]{8,80}\Z")
 
 
@@ -46,7 +47,7 @@ def coordinate(value):
 
 
 def block_id(value, air=True):
-    return integer(value, 0 if air else 1, 62) or integer(value, 200, 205)
+    return integer(value, 0 if air else 1, 62) or integer(value, 200, 206)
 
 
 def validate_command(value):
@@ -56,6 +57,7 @@ def validate_command(value):
     extra = {
         "edit": {"edits"}, "blast": {"bomb", "center"},
         "weapon": {"weapon", "center"}, "build": {"shape", "origin", "rotation", "block"},
+        "vehicle-convert": {"core", "from", "to", "mode"}, "vehicle-edit": {"vehicleId"},
         "undo": set(), "reset": {"confirm"}, "restore": {"confirm"},
     }
     if not isinstance(kind, str) or kind not in extra:
@@ -63,6 +65,8 @@ def validate_command(value):
     allowed = {"type", "requestId", "epoch", "baseRevision"} | extra[kind]
     if kind == "build" and value.get("shape") in ("line", "wall", "floor", "box"):
         allowed.add("size")
+    if kind == "weapon" and value.get("weapon") == "sheep":
+        allowed.add("origin")
     if set(value) != allowed:
         raise Refused("shape", "Unexpected or missing command fields.")
     rid = value.get("requestId")
@@ -78,9 +82,23 @@ def validate_command(value):
             raise Refused(key, "Unknown " + key + ".")
         if not coordinate(value["center"]):
             raise Refused("coordinate", "Blast is outside the playable world.")
+        if value.get("weapon") == "sheep":
+            origin = value["origin"]
+            if (not isinstance(origin, list) or len(origin) != 3
+                    or not integer(origin[0], -LIMIT, LIMIT) or not integer(origin[2], -LIMIT, LIMIT)
+                    or not integer(origin[1], 1, 182)
+                    or sum((origin[i] - value["center"][i]) ** 2 for i in range(3)) > 48**2):
+                raise Refused("coordinate", "Aim the sheep within 48 blocks.")
     elif kind == "build":
         from freeplay_builds import validate_build
         validate_build(value)
+    elif kind == "vehicle-convert":
+        from freeplay_vehicles import validate_conversion
+        validate_conversion(value)
+    elif kind == "vehicle-edit":
+        from freeplay_vehicles import valid_id
+        if not valid_id(value["vehicleId"]):
+            raise Refused("vehicle", "Invalid vehicle identifier.")
     elif kind == "edit":
         edits = value["edits"]
         if not isinstance(edits, list) or not 1 <= len(edits) <= MAX_EDIT:

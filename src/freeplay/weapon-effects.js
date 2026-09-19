@@ -1,6 +1,7 @@
 // Local flight is a preview. Only a completed server transaction produces impact.
 import * as THREE from 'three';
 import { WEAPONS, weaponById } from './weapons.js';
+import { SheepProjectiles, validSheepOrigin } from './weapon-sheep.js';
 
 const TRAIL = 12, DEBRIS = 16, IMPACTS = 3;
 const validCenter = value => Array.isArray(value) && value.length === 3 && value.every(Number.isSafeInteger)
@@ -8,7 +9,7 @@ const validCenter = value => Array.isArray(value) && value.length === 3 && value
 
 export class WeaponController {
   constructor(game) {
-    this.game = game; this.disposed = false; this.shot = null; this.recoil = 0;
+    this.game = game; this.disposed = false; this.shot = null; this.recoil = 0; this.cooldown = 0;
     this.seen = new Set(); this.voices = []; this.materials = [];
     this.root = new THREE.Group(); this.root.name = 'freeplay-weapons'; game.scene.add(this.root);
     this.box = new THREE.BoxGeometry(1, 1, 1); this.sphere = new THREE.SphereGeometry(1, 12, 8);
@@ -25,6 +26,7 @@ export class WeaponController {
     this.trail = new THREE.Line(this.trailGeometry, new THREE.LineBasicMaterial({ transparent: true, opacity: .7, depthWrite: false }));
     this.trail.frustumCulled = false; this.trail.visible = false; this.root.add(this.trail);
     this.slots = Array.from({ length: IMPACTS }, () => this.buildImpact());
+    this.sheep = new SheepProjectiles(game);
   }
 
   material(colour, overlay = false) {
@@ -44,7 +46,18 @@ export class WeaponController {
     part('body', this.box, metal, [0, 0, 0], [.19, .16, .32]);
     part('grip', this.box, dark, [0, -.12, .08], [.09, .22, .11], -.25);
     part('sight', this.box, glow, [0, .105, -.04], [.035, .025, .12]);
-    if (weapon.id === 'rocket') {
+    if (weapon.id === 'machinegun') {
+      for (const x of [-.04, .04]) part('burst-barrel', this.cylinder, rim, [x, .03, -.27], [.035, .45, .035], Math.PI / 2);
+      part('ammo-drum', this.cylinder, metal, [0, -.12, -.02], [.13, .14, .13], Math.PI / 2);
+      part('tracer-muzzle', this.box, glow, [0, .025, -.51], [.1, .04, .03]);
+      part('stock', this.box, rim, [0, -.02, .23], [.14, .14, .17]);
+    } else if (weapon.id === 'sheep') {
+      part('flock-tube', this.cylinder, rim, [0, .015, -.19], [.16, .43, .16], Math.PI / 2);
+      part('green-muzzle', this.torus, glow, [0, .015, -.415], [.163, .163, .163]);
+      part('hollow-barrel', this.cylinder, dark, [0, .015, -.409], [.138, .01, .138], Math.PI / 2);
+      part('wool-chamber', this.sphere, this.material(0xf9f1d7, true), [0, .07, .03], [.18, .16, .18]);
+      for (const side of [-1, 1]) part('little-ear', this.box, glow, [side * .18, .11, .02], [.1, .035, .07]);
+    } else if (weapon.id === 'rocket') {
       part('launch-tube', this.cylinder, metal, [0, .02, -.2], [.135, .65, .135], Math.PI / 2);
       part('orange-muzzle', this.torus, glow, [0, .02, -.525], [.139, .139, .139]);
       part('hollow-barrel', this.cylinder, dark, [0, .02, -.52], [.115, .012, .115], Math.PI / 2);
@@ -78,16 +91,21 @@ export class WeaponController {
   fire(candidate, hit) {
     const g = this.game, weapon = weaponById(candidate?.id);
     const center = hit && [hit.x, Math.min(63, hit.y + 1), hit.z];
-    if (this.disposed || this.shot || !weapon || !validCenter(center) || !Number.isSafeInteger(hit.y)
+    if (this.disposed || this.busy || !weapon || !validCenter(center) || !Number.isSafeInteger(hit.y)
       || hit.y < 0 || hit.y > 63 || !g.connection?.connected || !g.canEdit?.()) return false;
     const origin = new THREE.Vector3(.32, -.2, -.8).applyQuaternion(g.camera.quaternion).add(g.camera.position);
+    const sharedOrigin = origin.toArray().map(Math.round);
+    if (weapon.id === 'sheep' && (!validSheepOrigin(sharedOrigin)
+      || Math.hypot(...sharedOrigin.map((value, i) => value - center[i])) > weapon.range)) return false;
     this.shot = { weapon, center, origin, target: new THREE.Vector3(...center), elapsed: 0,
-      socket: g.connection.socket, epoch: g.connection.epoch };
+      sharedOrigin, socket: g.connection.socket, epoch: g.connection.epoch };
     this.projectile.position.copy(origin); this.projectile.material.color.set(weapon.colour);
-    this.projectile.scale.set(.14, .14, weapon.id === 'rocket' ? .38 : .14);
-    this.projectile.lookAt(this.shot.target); this.projectile.visible = this.trail.visible = true;
+    const size = weapon.id === 'machinegun' ? .045 : .14;
+    this.projectile.scale.set(size, size, weapon.id === 'rocket' ? .38 : size);
+    this.projectile.lookAt(this.shot.target); this.projectile.visible = this.trail.visible = weapon.id !== 'sheep';
     this.trail.material.color.set(weapon.colour); this.recoil = 1;
-    g.unlockAudio?.(); this.tone(weapon); this.updateShot(0); return true;
+    this.cooldown = weapon.cooldown || 0;
+    g.unlockAudio?.(); if (weapon.id !== 'sheep') this.tone(weapon); this.updateShot(0); return true;
   }
 
   updateShot(dt) {
@@ -96,7 +114,7 @@ export class WeaponController {
       this.cancel(); g.ui.message('Shot cancelled while the shared world reconnected.'); return;
     }
     shot.elapsed += dt;
-    const t = Math.min(1, shot.elapsed / shot.weapon.flight), positions = this.trailGeometry.attributes.position;
+    const t = shot.weapon.flight ? Math.min(1, shot.elapsed / shot.weapon.flight) : 1, positions = this.trailGeometry.attributes.position;
     this.projectile.position.lerpVectors(shot.origin, shot.target, t);
     for (let i = 0; i < TRAIL; i++) {
       const fraction = Math.max(0, t - .2 * i / (TRAIL - 1));
@@ -105,7 +123,9 @@ export class WeaponController {
     }
     positions.needsUpdate = true;
     if (t === 1) {
-      if (g.canEdit?.() && g.send('weapon', { weapon: shot.weapon.id, center: shot.center })) this.cancel();
+      const fields = { weapon: shot.weapon.id, center: shot.center };
+      if (shot.weapon.id === 'sheep') fields.origin = shot.sharedOrigin;
+      if (g.canEdit?.() && g.send('weapon', fields)) this.cancel();
       else g.ui.message(shot.weapon.name + ' queued · waiting for the shared world…');
     }
   }
@@ -114,9 +134,12 @@ export class WeaponController {
     const weapon = weaponById(transfer?.weapon);
     if (this.disposed || !weapon || transfer.snapshot || transfer.kind !== 'weapon' || !validCenter(transfer.center)
       || !Number.isSafeInteger(transfer.revision)) return false;
+    if (weapon.id === 'sheep' && (!validSheepOrigin(transfer.origin)
+      || Math.hypot(...transfer.origin.map((value, i) => value - transfer.center[i])) > weapon.range)) return false;
     const id = `weapon:${transfer.epoch ?? this.game.connection.epoch}:${transfer.revision}`;
     if (this.seen.has(id)) return false;
     this.seen.add(id); if (this.seen.size > 128) this.seen.delete(this.seen.values().next().value);
+    if (weapon.id === 'sheep') { const launched = this.sheep.launch(transfer.origin, transfer.center); if (launched) this.tone(weapon, true); return launched; }
     const [x, y, z] = transfer.center, event = { id, x, y, z, radius: weapon.radius, depth: weapon.depth };
     this.game.population.blast(event);
     if (weapon.id === 'rocket') this.game.effects.detonate({ ...event, kind: 'dynamite' });
@@ -156,11 +179,17 @@ export class WeaponController {
     if (!ctx || ctx.state !== 'running' || this.game.settings?.muted || audio.muted || audio.audio?.muted) return;
     while (this.voices.length >= 3) this.releaseVoice(this.voices[0]);
     const oscillator = ctx.createOscillator(), gain = ctx.createGain(), now = ctx.currentTime;
-    const gravity = weapon.id === 'gravity', rocket = weapon.id === 'rocket', duration = gravity ? .32 : .17;
-    oscillator.type = rocket ? 'sawtooth' : gravity ? 'sine' : 'triangle';
-    oscillator.frequency.setValueAtTime(gravity ? 160 : rocket ? 110 : impact ? 650 : 1250, now);
-    oscillator.frequency.exponentialRampToValueAtTime(gravity ? 420 : rocket ? 45 : 170, now + duration);
-    gain.gain.setValueAtTime(.001, now); gain.gain.exponentialRampToValueAtTime(impact ? .025 : .05, now + .012);
+    const gravity = weapon.id === 'gravity', rocket = weapon.id === 'rocket', sheep = weapon.id === 'sheep', burst = weapon.id === 'machinegun';
+    const duration = sheep ? .55 : gravity ? .32 : burst ? .12 : .17;
+    oscillator.type = rocket || sheep ? 'sawtooth' : gravity ? 'sine' : burst ? 'square' : 'triangle';
+    oscillator.frequency.setValueAtTime(sheep ? 180 : gravity ? 160 : rocket ? 110 : burst ? 260 : impact ? 650 : 1250, now);
+    oscillator.frequency.exponentialRampToValueAtTime(gravity ? 420 : rocket ? 45 : burst ? 80 : 170, now + duration);
+    gain.gain.setValueAtTime(.001, now); gain.gain.exponentialRampToValueAtTime(sheep ? .016 : impact ? .025 : .05, now + .012);
+    if (sheep) for (let i = 1; i < 14; i++) {
+      oscillator.frequency.setValueAtTime(175 + Math.sin(i * 2) * 22, now + i * .035);
+      gain.gain.setValueAtTime(.01 + Math.sin(i * 2) * .005, now + i * .035);
+    }
+    if (burst) for (const offset of [.035, .075]) { gain.gain.setValueAtTime(.004, now + offset); gain.gain.setValueAtTime(.035, now + offset + .008); }
     gain.gain.exponentialRampToValueAtTime(.001, now + duration);
     oscillator.connect(gain).connect(audio.audio?.master || ctx.destination);
     const voice = { oscillator, gain, stopped: false }; this.voices.push(voice);
@@ -176,7 +205,7 @@ export class WeaponController {
 
   update(dt, selected) {
     if (this.disposed || !Number.isFinite(dt) || dt < 0) return;
-    dt = Math.min(dt, .1); this.recoil = Math.max(0, this.recoil - dt * 7);
+    dt = Math.min(dt, .1); this.recoil = Math.max(0, this.recoil - dt * 7); this.cooldown = Math.max(0, this.cooldown - dt);
     const g = this.game, weapon = selected?.type === 'weapon' && weaponById(selected.id);
     this.gun.visible = !!weapon && !g.paused;
     if (weapon) {
@@ -186,14 +215,15 @@ export class WeaponController {
         .applyQuaternion(g.camera.quaternion).add(g.camera.position);
     }
     if (g.settings?.muted) for (const voice of [...this.voices]) this.releaseVoice(voice);
-    this.updateShot(dt); for (const slot of this.slots) this.updateImpact(slot, dt);
+    this.updateShot(dt); for (const slot of this.slots) this.updateImpact(slot, dt); this.sheep.update(dt);
   }
 
   cancel() { this.shot = null; this.projectile.visible = this.trail.visible = false; }
-  stats() { return { pending: !!this.shot, impacts: this.slots.filter(slot => slot.group.visible).length, capacity: IMPACTS, seen: this.seen.size, voices: this.voices.length }; }
+  get busy() { return !!this.shot || this.cooldown > 0; }
+  stats() { return { pending: !!this.shot, impacts: this.slots.filter(slot => slot.group.visible).length, capacity: IMPACTS, seen: this.seen.size, voices: this.voices.length, sheep: this.sheep.stats() }; }
   dispose() {
     if (this.disposed) return; this.disposed = true; this.cancel();
-    this.root.removeFromParent();
+    this.root.removeFromParent(); this.sheep.dispose();
     for (const voice of [...this.voices]) this.releaseVoice(voice);
     for (const geometry of this.geometries) geometry.dispose();
     for (const material of this.materials) material.dispose();

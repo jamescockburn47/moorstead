@@ -11,6 +11,7 @@ from freeplay_rules import (CONTENT_VERSION, MAX_PACKET, MAX_PLAYERS, PROTOCOL, 
                             validate_position)
 from freeplay_store import Store
 from freeplay_stream import Peer, bounded_delivery, send_operation, send_snapshot
+from freeplay_vehicle_control import COMMANDS, VehicleControl
 
 log = logging.getLogger("moorstead.freeplay")
 IDENTITY = re.compile(r"a[a-z0-9-]{1,39}\Z")
@@ -22,6 +23,7 @@ class Hub:
         self.lock = asyncio.Lock()
         self.peers = {}
         self.epoch = store.state()["epoch"]
+        self.control = VehicleControl(self)
 
     def session(self, pid, token):
         ok, session, _ = self.authenticate(ROOM, pid, "", token)
@@ -43,17 +45,25 @@ class Hub:
             if self.peers.get(peer.pid) is not peer:
                 raise Refused("session", "This account connected somewhere else.")
             peer.name = self.session(peer.pid, peer.token)
+            self.control.check_edit(value)
+            machinegun = value.get("type") == "weapon" and value.get("weapon") == "machinegun"
+            if machinegun and time.monotonic() - peer.last_machinegun < 0.249:
+                raise Refused("weapon-rate", "The machinegun is ready four times a second.")
             result = await asyncio.to_thread(self.store.apply, peer.pid, value, peer.name)
             if result["type"] == "ack":
                 await peer.send(result)
                 return
+            if machinegun:
+                peer.last_machinegun = time.monotonic()
             self.epoch = result["epoch"]
+            self.control.changed(result)
             if result["replace"]:
                 for other in self.peers.values():
                     other.position = None
             targets = list(self.peers.values())
             await asyncio.gather(*(
-                bounded_delivery(other, lambda other=other: send_operation(other, result, self.store)) for other in targets))
+                bounded_delivery(other, lambda other=other: send_operation(other, result, self.store, self.control.pilots()),
+                                 timeout=120 if result["replace"] else 30) for other in targets))
 
     async def error(self, peer, error, value=None):
         state = self.store.state()
@@ -61,6 +71,10 @@ class Hub:
                     "epoch": state["epoch"], "revision": state["revision"]}
         if isinstance(value, dict) and isinstance(value.get("requestId"), str):
             response["requestId"] = value["requestId"][:80]
+        if isinstance(value, dict) and isinstance(value.get("type"), str) and value["type"] in COMMANDS:
+            response["command"] = value["type"]
+            if isinstance(value.get("vehicleId"), str):
+                response["vehicleId"] = value["vehicleId"][:32]
         await peer.send(response)
 
     async def receive(self, peer):
@@ -91,6 +105,8 @@ class Hub:
                     peer.last_position, peer.position = now, position
                     await self.notice({"type": "pos", "pid": peer.pid, "name": peer.name,
                                        "epoch": value["epoch"], **position}, skip=peer)
+                elif isinstance(value.get("type"), str) and value["type"] in COMMANDS:
+                    await self.control.handle(peer, value)
                 else:
                     if now - peer.last_command < 0.10:
                         raise Refused("busy", "Wait a moment before the next shared action.")
@@ -130,7 +146,7 @@ class Hub:
                 self.peers[pid] = peer
                 players = [{"pid": other.pid, "name": other.name, **other.position}
                            for other in self.peers.values() if other is not peer and other.position]
-                if not await bounded_delivery(peer, lambda: send_snapshot(peer, self.store, players)):
+                if not await bounded_delivery(peer, lambda: send_snapshot(peer, self.store, players, self.control.pilots()), timeout=120):
                     return
                 await self.notice({"type": "join", "pid": peer.pid, "name": peer.name}, skip=peer)
             await self.receive(peer)
@@ -145,6 +161,7 @@ class Hub:
             await peer.close(1011)
             raise
         finally:
+            await self.control.disconnect(peer)
             if self.peers.get(peer.pid) is peer:
                 self.peers.pop(peer.pid, None)
                 await self.notice({"type": "leave", "pid": peer.pid})

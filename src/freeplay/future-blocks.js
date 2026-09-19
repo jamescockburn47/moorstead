@@ -8,6 +8,7 @@ export const FUTURE_BLOCKS = Object.freeze([
   { id: 203, tile: 123, name: 'Energy window', description: 'A solid blue patterned pane; decorative, not see-through.' },
   { id: 204, tile: 124, name: 'Circuit panel', description: 'Green circuit traces, copper contacts and a central chip.' },
   { id: 205, tile: 125, name: 'Landing pad', description: 'A marked landing deck with yellow hazard edges.' },
+  { id: 206, tile: 126, name: 'Vehicle control', description: 'Place on your build, press E or Use core, highlight it, then choose Car, Plane or Submarine.' },
 ].map(Object.freeze));
 
 const byId = new Map(FUTURE_BLOCKS.map(row => [row.id, row]));
@@ -80,6 +81,10 @@ export function futureTilePixels(id) {
     }
     rect(5, 5, 6, 6, 0x9ecbac); rect(6, 6, 4, 4, 0x14252d);
     dot(7, 7, 0x5bedd6); dot(8, 8, 0x5bedd6);
+  } else if(id===206){
+    rect(1,1,14,14,0x386276);frame(2,0xe5bb54);rect(4,4,8,8,0x092638);
+    frame(5,0x56f4df);rect(7,3,2,10,0x7cffe1);rect(3,7,10,2,0x7cffe1);
+    rect(6,6,4,4,0xffffff);for(const x of [1,14])for(const y of [1,14])dot(x,y,0xe5bb54);
   } else {
     rect(0, 0, 16, 16, 0x303f51); frame(2, 0x73818a);
     for (let i = 0; i < 16; i++) {

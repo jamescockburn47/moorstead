@@ -14,6 +14,7 @@ import { FREEPLAY } from './config.js';
 import { bombById } from './catalogue.js';
 import { FreeplayMap } from './map.js';
 import { paintFutureAtlas } from './future-blocks.js';
+import { FreeplayVehicles } from './vehicles.js';
 
 export class FreeplayGame {
   constructor(ui,connection,settings) {
@@ -34,6 +35,7 @@ export class FreeplayGame {
     this.peers=new FreeplayPeers(this.scene,'a'+connection.auth.acct);
     this.map=new FreeplayMap(this);
     this.input=new FreeplayInput(this,ui.canvas,ui.root);this.actions=new FreeplayActions(this);
+    this.vehicles=new FreeplayVehicles(this);
     this.resize=()=>{this.renderer.setPixelRatio(Math.min(devicePixelRatio,settings.plain?1:1.5));this.renderer.setSize(innerWidth,innerHeight,false);this.camera.aspect=innerWidth/innerHeight;this.camera.updateProjectionMatrix();};
     window.addEventListener('resize',this.resize);this.resize();
     this.onLost=e=>{e.preventDefault();this.ui.report('Graphics paused. Reload to return to the saved world.');this.pause(true);};
@@ -41,6 +43,7 @@ export class FreeplayGame {
     this.previous=performance.now();this.frameId=requestAnimationFrame(now=>this.frame(now));
   }
   home(){
+    if(this.vehicles?.driving){this.vehicles.afterPark=()=>this.home();this.vehicles.park();return;}
     const spawn=this.world.gen.findSpawn();Object.assign(this.player.pos,spawn);this.player.pos.y=Math.max(spawn.y,45);
     this.player.flying=true;this.player.vel={x:0,y:0,z:0};this.player.yaw=Math.PI;this.player.pitch=-.35;
     if(this.ui.fly){this.ui.fly.textContent='Fly: on';this.ui.fly.setAttribute('aria-pressed','true');}
@@ -68,8 +71,8 @@ export class FreeplayGame {
       const transfer=this.transactions.shift();
       if(transfer.snapshot||transfer.replace){
         this.actions.cancel();this.world.replaceOverrides(transfer.edits);this.scenery.invalidate();
-        if(transfer.replace||!this.ready)this.home();
-        this.complete(transfer);return;
+        const returnHome=transfer.replace||!this.ready;
+        this.complete(transfer);if(returnHome)this.home();return;
       }
       this.applying={transfer,iterator:transfer.edits.cells(),done:0};
     }
@@ -82,6 +85,7 @@ export class FreeplayGame {
   }
   complete(transfer){
     this.ready=true;
+    this.vehicles?.apply(transfer);
     if(!transfer.snapshot&&transfer.kind==='weapon')this.actions.weapons.impact(transfer);
     if(!transfer.snapshot&&transfer.kind==='blast'){
       const bomb=bombById(transfer.bomb),[x,y,z]=transfer.center;
@@ -101,7 +105,7 @@ export class FreeplayGame {
     try{this.connection.command(type,fields);return true;}catch(error){this.ui.report(error.message);return false;}
   }
   use(){this.actions.use();}break(){this.actions.break();}primary(){this.actions.primary();}
-  fly(){this.player.flying=!this.player.flying;this.player.vel.y=0;this.ui.fly.textContent=this.player.flying?'Fly: on':'Fly';this.ui.fly.setAttribute('aria-pressed',String(this.player.flying));}
+  fly(){if(this.vehicles?.driving)return;this.player.flying=!this.player.flying;this.player.vel.y=0;this.ui.fly.textContent=this.player.flying?'Fly: on':'Fly';this.ui.fly.setAttribute('aria-pressed',String(this.player.flying));}
   pause(value){this.paused=value;this.input?.pause(value);}
   unlockAudio(){this.effects.unlockAudio().catch(()=>this.ui.message('Sound is unavailable; play can continue.'));}
   setting(key,value){
@@ -118,11 +122,13 @@ export class FreeplayGame {
       const p=this.player;
       this.world.update(p.pos.x,p.pos.z);
       p.creative=true;p.god=true;p.fatigue=0;p.wetness=0;p.temperature=20;p.health=20;p.hunger=20;p.air=10;
-      if(!this.paused&&this.ready){this.input.update(dt);p.update(dt,this.input,null,this.season);}
+      if(!this.paused&&this.ready){this.input.update(dt);if(!this.vehicles.driving)p.update(dt,this.input,null,this.season);}
+      this.vehicles.update(dt);
       p.pos.y=Math.min(180,Math.max(1,p.pos.y));
       p.pos.x=Math.max(-FREEPLAY.worldLimit+1,Math.min(FREEPLAY.worldLimit-1,p.pos.x));
       p.pos.z=Math.max(-FREEPLAY.worldLimit+1,Math.min(FREEPLAY.worldLimit-1,p.pos.z));
       this.camera.position.set(p.pos.x,p.pos.y+p.eye,p.pos.z);this.camera.rotation.set(p.pitch,p.yaw,0,'YXZ');this.camera.updateMatrixWorld();
+      this.vehicles.camera();this.camera.updateMatrixWorld();
       this.sky.update(0,p.pos,this.season);this.sky.time=.38;this.sky.gfx=this.settings.plain?'plain':'fine';
       // Keep the generation edge hidden while letting the atom cloud rise beyond it.
       if(this.scene.fog){this.scene.fog.near=25;this.scene.fog.far=this.world.renderDist*16-5;}
@@ -134,13 +140,14 @@ export class FreeplayGame {
     }catch(error){this.ui.report('The world paused after an error. Reconnect or reload to recover.');console.error('freeplay-runtime',error);this.pause(true);this.active=false;return;}
     this.frameId=requestAnimationFrame(time=>this.frame(time));
   }
-  snapshot(){return{ready:this.ready,applying:!!this.applying,queued:this.transactions.length,epoch:this.connection.epoch,revision:this.connection.revision,
+  snapshot(){return{ready:this.ready,paused:this.paused,applying:!!this.applying,queued:this.transactions.length,epoch:this.connection.epoch,revision:this.connection.revision,
     player:{...this.player.pos,health:this.player.health,flying:this.player.flying},overrides:this.world.overrides.size,chunks:this.world.chunks.size,
     meshes:[...this.world.chunks.values()].filter(c=>c.meshes).length,drawCalls:this.renderer.info.render.calls,triangles:this.renderer.info.render.triangles,
+    vehicles:[...this.vehicles.vehicles.values()].map(v=>({id:v.id,mode:v.mode,pose:{...v.pose},cells:v.cells,core:v.core,pilot:v.pilot})),driving:this.vehicles.driving,
     effects:this.effects.stats(),population:this.population.stats(),frameTimes:[...this.frameTimes]};}
   dispose(){
     this.active=false;cancelAnimationFrame(this.frameId);window.removeEventListener('resize',this.resize);this.ui.canvas.removeEventListener('webglcontextlost',this.onLost);
     this.transactions.length=0;this.applying=null;this.resyncPending=false;
-    this.map.dispose();this.input.dispose();this.actions.dispose();this.peers.dispose();this.population.dispose();this.effects.dispose();this.scenery.dispose();this.world.dispose();this.sky.dispose();this.renderer.dispose();
+    this.vehicles.dispose();this.map.dispose();this.input.dispose();this.actions.dispose();this.peers.dispose();this.population.dispose();this.effects.dispose();this.scenery.dispose();this.world.dispose();this.sky.dispose();this.renderer.dispose();
   }
 }
