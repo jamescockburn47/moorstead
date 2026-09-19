@@ -137,6 +137,11 @@ stylised voxel mechanics, with no real-world explosive calculations.
 
 Tested locally with Python **3.13.7**; deployed EVO Python is **3.12.3**. The runtime
 modules use the standard library and the relay's existing FastAPI dependency.
+The EVO currently uses FastAPI **0.136.3**; the local fixture pins **0.115.12**.
+Lifecycle registration uses the router API supported by both. The content-4
+release exercised task startup/shutdown with the actual EVO dependency before
+its compatibility roll-forward; a regression rejects reliance on the removed
+top-level `app.add_event_handler` helper.
 Create an isolated environment using the fully pinned test dependency file:
 
 ```powershell

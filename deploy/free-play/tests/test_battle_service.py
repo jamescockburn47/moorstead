@@ -1,10 +1,14 @@
 import asyncio
 from pathlib import Path
 import sys
+import tempfile
+from types import SimpleNamespace
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "worldsvc"))
 from freeplay_battle import Battle
+from freeplay_service import mount_freeplay
+from fastapi import FastAPI
 from test_battle import flat_arena
 import test_service as original
 
@@ -128,6 +132,21 @@ class BattleServiceTests(unittest.TestCase):
             self.collect(henry, "vehicle-lease")
             self.send(henry, self.henry, "join", team="blue")
             self.assertEqual(henry.receive_json()["code"], "battle-vehicle")
+
+
+class LifecycleTests(unittest.TestCase):
+    def test_router_lifecycle_starts_and_stops_without_app_event_helper(self):
+        async def run():
+            with tempfile.TemporaryDirectory() as directory:
+                app = FastAPI()
+                boundary = SimpleNamespace(router=app.router, add_api_websocket_route=app.add_api_websocket_route)
+                hub = mount_freeplay(boundary, lambda *args: None, lambda *args: False, Path(directory))
+                hub.battle.core = Battle(flat_arena())
+                async with app.router.lifespan_context(app):
+                    self.assertIsNotNone(hub.battle.task)
+                    self.assertFalse(hub.battle.task.done())
+                self.assertTrue(hub.battle.task.done())
+        asyncio.run(run())
 
 
 if __name__ == "__main__":
