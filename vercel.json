@@ -22,6 +22,14 @@
   ],
   "rewrites": [
     {
+      "source": "/freeplay",
+      "destination": "/freeplay/index.html"
+    },
+    {
+      "source": "/freeplay/",
+      "destination": "/freeplay/index.html"
+    },
+    {
       "source": "/brain/:path*",
       "destination": "https://moorstead.sovren.xyz/brain/:path*"
     },

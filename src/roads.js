@@ -62,10 +62,11 @@ function clearAndGround(world, geo, x, z) {
 }
 
 export class RoadLayer {
-  constructor(scene, world, geo) {
+  constructor(scene, world, geo, { groundAt = null } = {}) {
     this.scene = scene;
     this.world = world;          // chunk world — surfaceHeight needs it for the REAL (built) surface
     this.geo = geo;
+    this.groundAt = groundAt;
     this.meshes = [];
     this.timer = 0;
     this.lastPos = null;
@@ -131,7 +132,7 @@ export class RoadLayer {
     const place = [];
     for (const { x, z } of cols.values()) {
       if (hasRiver && this.geo.riverColumn(x, z)) continue;   // ford — no tile over the beck
-      const y = clearAndGround(this.world, this.geo, x, z);
+      const y = this.groundAt ? this.groundAt(x, z) : clearAndGround(this.world, this.geo, x, z);
       if (y == null) continue;                                 // building/structure column — skirt (no tile)
       place.push([x, y, z]);
     }

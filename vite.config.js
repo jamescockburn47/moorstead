@@ -50,9 +50,10 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== location.origin) return;
   if (NETWORK_ONLY.some((rx) => rx.test(url.pathname))) return;
   if (req.mode === 'navigate') {
+    const shell = /^\\/freeplay(?:\\/|$)/.test(url.pathname) ? '/freeplay/index.html' : '/index.html';
     e.respondWith(fetch(req).then((r) => {
-      const cp = r.clone(); caches.open(CACHE).then((c) => c.put('/index.html', cp)); return r;
-    }).catch(() => caches.match('/index.html')));
+      if (r.ok) { const cp = r.clone(); caches.open(CACHE).then((c) => c.put(shell, cp)); } return r;
+    }).catch(() => caches.match(shell)));
     return;
   }
   e.respondWith(caches.match(req).then((hit) => hit || fetch(req).then((r) => {
@@ -70,7 +71,7 @@ function emitServiceWorker() {
     generateBundle(_, bundle) {
       const hashed = Object.keys(bundle).filter((f) => f.startsWith('assets/'));
       const precache = [
-        '/', '/index.html', '/about.html', '/about-tabs.js', '/feedback.js',
+        '/', '/index.html', '/freeplay/index.html', '/about.html', '/about-tabs.js', '/feedback.js',
         '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png',
         ...hashed.map((f) => '/' + f),
       ];
@@ -115,6 +116,10 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        freeplay: fileURLToPath(new URL('./freeplay/index.html', import.meta.url)),
+      },
       output: {
         manualChunks: {
           three: ['three'],

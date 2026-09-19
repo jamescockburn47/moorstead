@@ -5,6 +5,7 @@ import { currentWeather } from './weather-live.js';
 import { winterPrecip, overcastGrey, snowfallIntensity } from './snow.js';
 import { mulberry32, noise2 } from './noise.js';
 import { YEAR } from './season.js';
+import { disposeSky } from './sky-dispose.js';
 
 const DAY_LENGTH = 1800; // seconds per full day — a proper half-hour, not a rush
 // (t' shared-moor relay must agree: worldsvc/server.py DAY_LENGTH)
@@ -608,7 +609,8 @@ export class Sky {
     this.ambient = new THREE.AmbientLight(0xbfcfdd, 0.55);
     scene.add(this.ambient);
 
-    scene.fog = new THREE.Fog(SKY.day.clone(), 10, 90);
+    this._fog = new THREE.Fog(SKY.day.clone(), 10, 90);
+    scene.fog = this._fog;
     this._bg = new THREE.Color(); // persistent background Color — update() copies into it ([22]: no per-frame clone)
 
     // sun & moon discs
@@ -913,6 +915,8 @@ export class Sky {
     this.snow.frustumCulled = false;
     scene.add(this.snow);
   }
+
+  dispose() { disposeSky(this); }
 
   // [SOLAR] night now ends/starts a fixed ~0.07 twilight past t' SOLAR horizon
   // crossings (equinox: 0.18/0.82 \u2014 byte-identical to t' owd literals; winter

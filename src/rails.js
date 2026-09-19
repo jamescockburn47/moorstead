@@ -34,9 +34,10 @@ const UV_ROT4 = [
 const lerp3 = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
 
 export class Rails {
-  constructor(scene, geo) {
+  constructor(scene, geo, { supported = null } = {}) {
     this.scene = scene;
     this.geo = geo;
+    this.supported = supported;
     this.center = null;
     this.meshes = [];
     this.timer = 0;
@@ -69,6 +70,11 @@ export class Rails {
       const c = new Float32Array(this.pierGeom.attributes.position.count * 3).fill(0.85);
       this.pierGeom.setAttribute('color', new THREE.BufferAttribute(c, 3));
     }
+  }
+
+  sectionSupported(a, b, kind) {
+    return !this.supported || [a, b, { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2, deck: (a.deck + b.deck) / 2 }]
+      .every(p => this.supported(p.x, p.z, p.deck, kind));
   }
 
   // Is this column part o' a water crossing? T' EXACT signal worldgen.js stampRail
@@ -125,6 +131,7 @@ export class Rails {
     let ri = 0;
     for (let i = i0; i < i1; i++) {
       const a = pts[i], b = pts[i + 1];
+      if (!this.sectionSupported(a, b, 'rails')) continue;
       const ds = Math.max(b.s - a.s, 0.001);
       const tx = (b.x - a.x) / ds, tz = (b.z - a.z) / ds;
       const yaw = Math.atan2(b.x - a.x, b.z - a.z);
@@ -159,6 +166,7 @@ export class Rails {
       const bTint = (x, z) => { const j = 0.9 + hash2i(Math.round(x), Math.round(z), 11) * 0.16; return [j, j * 0.99, j * 0.96]; };
       for (let i = i0; i < i1; i++) {
         const a = pts[i], b = pts[i + 1];
+        if (!this.sectionSupported(a, b, 'crown')) continue;
         const ds = Math.max(b.s - a.s, 0.001);
         const nx = (b.z - a.z) / ds, nz = -(b.x - a.x) / ds; // unit perpendicular
         for (let k = 0; k < BANDS; k++) {
@@ -283,6 +291,7 @@ export class Rails {
         for (let i = i0; i < i1; i++) {
           const k = i - i0;
           const a = pts[i], b = pts[i + 1];
+          if (!this.sectionSupported(a, b, 'skirt')) continue;
           const ea = edgeAt(k), eb = edgeAt(k + 1);
           if (Math.abs(ea.dh) < 0.15 && Math.abs(eb.dh) < 0.15) continue;   // truly at grade — nowt to dress
           // bridge span: strike t' skirt where t' centreline OR t' skirt foot stands
@@ -369,6 +378,7 @@ export class Rails {
       if (this.geo.realWorld) {
         for (let s = Math.ceil(s0 / PIER_EVERY) * PIER_EVERY; s <= s1; s += PIER_EVERY) {
           const sp = this.geo.samplePosOn(path, s);
+          if (this.supported && !this.supported(sp.x, sp.z, sp.deck, 'piers')) continue;
           if (!this.crossingAt(sp.x, sp.z)) continue;
           const rx = Math.round(sp.x), rz = Math.round(sp.z);
           if (this.geo.coastT && this.geo.coastT(rx, rz) > 0.5) continue;   // sea piers are stamped blocks
@@ -406,6 +416,7 @@ export class Rails {
     let si = 0;
     for (let k = 0; k < nSleep; k++) {
       const sp = this.geo.samplePosOn(path,s0 + k * SLEEPER_EVERY);
+      if (this.supported && !this.supported(sp.x, sp.z, sp.deck, 'sleepers')) continue;
       e.set(-Math.atan(sp.grade), Math.atan2(sp.tx, sp.tz), 0);
       q.setFromEuler(e);
       m.compose(new THREE.Vector3(sp.x, sp.deck + 1.06, sp.z), q, new THREE.Vector3(1, 1, 1));
@@ -427,6 +438,7 @@ export class Rails {
       let pi = 0, fri = 0;
       for (let k = 0; k < nP; k++) {
         const sp = this.geo.samplePosOn(path,s0 + k * EVERY);
+        if (this.supported && !this.supported(sp.x, sp.z, sp.deck, 'posts')) continue;
         for (const side of [-1, 1]) {
           m.compose(new THREE.Vector3(sp.x + sp.tz * side * FOFF, sp.deck + 1.0 + FH / 2, sp.z - sp.tx * side * FOFF), idq, new THREE.Vector3(1, 1, 1));
           posts.setMatrixAt(pi++, m);
@@ -434,6 +446,7 @@ export class Rails {
       }
       for (let i = i0; i < i1; i++) {
         const a = pts[i], b = pts[i + 1];
+        if (!this.sectionSupported(a, b, 'frails')) continue;
         const ds = Math.max(b.s - a.s, 0.001);
         const tx = (b.x - a.x) / ds, tz = (b.z - a.z) / ds;
         e.set(0, Math.atan2(b.x - a.x, b.z - a.z), 0); q.setFromEuler(e);

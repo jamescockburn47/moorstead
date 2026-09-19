@@ -51,7 +51,8 @@ check(vite.includes("fileName: 'sw.js'"), 'vite.config emits sw.js at build');
 for (const route of ['brain', 'dash', 'version\\\\.json']) {
   check(vite.includes(route), `sw template leaves /${route.replace(/\\+\./g, '.')} to the network`);
 }
-check(vite.includes("caches.match('/index.html')"), 'sw template falls back to the cached shell offline');
+check(vite.includes('caches.match(shell)') && vite.includes("? '/freeplay/index.html' : '/index.html'"),
+  'sw template selects the correct ordinary or free-play shell offline');
 check(vite.includes('NETWORK_ONLY'), 'sw template gates network-only routes before caching');
 
 if (failures) {
