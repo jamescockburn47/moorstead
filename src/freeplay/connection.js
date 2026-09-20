@@ -129,6 +129,13 @@ export class FreeplayConnection {
       case 'ack':
         if (m.duplicate && m.requestId === this.pending) { this.pending = null; this.socket.close(4001, 'resync'); }
         break;
+      case 'reset-vote':
+        if(m.epoch!==this.epoch)break;
+        if(!Array.isArray(m.voters)||m.voters.length>2||new Set(m.voters).size!==m.voters.length
+          ||!m.voters.every(id=>typeof id==='string'&&/^a[a-z0-9-]{1,39}$/.test(id))
+          ||![null,'reset','restore'].includes(m.kind)||!integer(m.remaining,0,30))throw Error('Invalid reset vote');
+        if(this.pending&&m.requestId===this.pending){this.pending=null;this.callbacks.state('ready');}
+        this.callbacks.resetVote?.(m);break;
       case 'pos': if (m.epoch === this.epoch && validPosition(m)) this.callbacks.peer?.(m); break;
       case 'battle-state':
         if(m.epoch===this.epoch){if(!validBattleState(m.battle))throw Error('Invalid battlefield state');this.callbacks.battle?.(m);}break;
@@ -154,7 +161,7 @@ export class FreeplayConnection {
     if (stage.received !== stage.meta.count || stage.store.size !== stage.received) throw new Error('Incomplete or duplicate cells');
     if((stage.snapshot||stage.meta.replace)&&stage.vehicles.size!==stage.meta.vehicleCount)throw Error('Incomplete vehicles');
     this.stage = null; this.epoch = commit.epoch; this.revision = commit.revision; this.connected = true;
-    if (stage.meta.replace) this.callbacks.peers?.([]);
+    if (stage.meta.replace) {this.callbacks.peers?.([]);this.callbacks.resetVote?.({voters:[],remaining:0});}
     if (commit.requestId === this.pending || stage.snapshot) this.pending = null;
     this.callbacks.transaction({ ...stage.meta, ...commit, snapshot: stage.snapshot, edits: stage.store, vehicles:stage.vehicles });
     this.callbacks.state('ready');

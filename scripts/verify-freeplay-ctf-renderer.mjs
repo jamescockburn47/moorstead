@@ -38,7 +38,7 @@ for (let i = 0; i < 300; i++) renderer.update(.1, viewer);
 assert.equal(mesh.count, 8, 'renderer never invents a return-to-base transition when a timer expires');
 renderer.apply(snapshot(active)); renderer.update(.016, viewer); assert.equal(center(mesh, 4).x, 20, 'authoritative return restores the home flag');
 assert.equal(flags.geometry, geometry); assert.equal(flags.material, material); assert.equal(flags.mesh, mesh);
-assert.equal(renderer.root.children.length, 18, 'flag motion never allocates scene objects');
+assert.equal(renderer.root.children.length, 21, 'flag motion never allocates scene objects');
 
 renderer.apply(snapshot({ phase: 'setup', bases: { blue: null, red: null }, flags: {} })); renderer.update(.016, viewer);
 assert.equal(mesh.count, 0); assert.equal(renderer.campMesh.count, 0, 'unset bases do not fabricate origin flags or old camp markers');

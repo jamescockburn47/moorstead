@@ -23,11 +23,6 @@ class FlagTests(unittest.TestCase):
         self.battle.flags.set_ready("ared")
         self.assertEqual(self.battle.flags.phase, "active")
 
-    def pickup(self):
-        self.blue.update(x=49, y=1, z=10)
-        self.battle.flags.tick()
-        self.assertEqual(self.battle.flags.flags["red"]["carrier"], "ablue")
-
     def test_setup_combat_refused_bases_use_supported_position_and_lock(self):
         with self.assertRaises(Refused):
             self.battle.shoot(self.blue, [1, 0, 0], "plasma")
@@ -50,12 +45,9 @@ class FlagTests(unittest.TestCase):
             self.battle.flags.base("ablue")
         self.assertEqual(self.battle.arena.camps["red"], [50, 1, 10])
 
-    def test_pickup_capture_and_winner_freezes_combat(self):
+    def test_zone_capture_needs_no_return_trip_and_freezes_combat(self):
         self.activate()
-        self.pickup()
-        with self.assertRaises(Refused):
-            self.battle.rally("ablue")
-        self.blue.update(x=10, z=10)
+        self.blue.update(x=47, y=1, z=10)
         self.battle.flags.tick()
         self.assertEqual((self.battle.flags.phase, self.battle.flags.winner), ("won", "blue"))
         self.battle.damage(self.red, 999, "blue")
@@ -63,49 +55,35 @@ class FlagTests(unittest.TestCase):
         with self.assertRaises(Refused):
             self.battle.shoot(self.blue, [1, 0, 0], "plasma")
 
-    def test_wall_blocks_pickup_and_npcs_cannot_carry(self):
+    def test_soldier_enters_zone_below_high_flag_and_captures(self):
         self.activate()
-        self.blue.update(x=48.5, z=10)
-        self.battle.arena.changes([[49, y, 10, 208] for y in (1, 2, 3)])
-        self.battle.flags.tick()
-        self.assertEqual(self.battle.flags.flags["red"]["status"], "home")
+        self.battle.flags.bases["red"][1] = 50
+        self.battle.flags.home("red")
         self.battle.recruit("ablue", 1)
         unit = next(iter(self.battle.soldiers.values()))
-        unit.update(x=50, y=1, z=10)
+        unit.update(x=46.9, y=1, z=10)
         self.battle.flags.tick()
-        self.assertEqual(self.battle.flags.flags["red"]["status"], "home")
+        self.assertIsNone(self.battle.flags.winner, "outside radius cannot capture")
+        unit.update(x=48, hp=0)
+        self.battle.flags.tick()
+        self.assertIsNone(self.battle.flags.winner, "dead troops cannot capture")
+        unit.update(hp=50, y=20)
+        self.battle.flags.tick()
+        self.assertIsNone(self.battle.flags.winner, "airborne troops cannot capture")
+        unit.update(y=1)
+        self.battle.flags.tick()
+        self.assertEqual(self.battle.flags.winner, "blue")
 
-    def test_knockout_drops_teammate_returns_and_timeout_returns(self):
+    def test_solid_wall_outside_zone_prevents_capture_until_reached(self):
         self.activate()
-        self.pickup()
-        self.battle.damage(self.blue, 999, "red")
-        flag = self.battle.flags.flags["red"]
-        self.assertEqual((flag["status"], flag["carrier"]), ("dropped", None))
-        self.battle.flags.tick()  # Red is near its dropped flag.
-        self.assertEqual(self.battle.flags.flags["red"]["status"], "home")
-        self.battle.spawn(self.blue)
-        self.pickup()
-        self.red.update(x=90)
-        self.battle.damage(self.blue, 999, "red")
-        self.battle.now += 20
-        self.battle.flags.tick()
-        self.assertEqual(self.battle.flags.flags["red"]["status"], "home")
-
-    def test_own_flag_must_be_home_and_absent_team_cannot_lose(self):
-        self.activate()
-        self.pickup()
-        self.red.update(x=10)
-        self.battle.flags.tick()
-        self.blue.update(x=10)
-        self.battle.flags.tick()
+        self.battle.recruit("ablue", 1)
+        unit = next(iter(self.battle.soldiers.values()))
+        unit.update(x=45, y=1, z=10, order="attack")
+        self.battle.arena.changes([[46, y, z, 208] for y in (1, 2, 3) for z in range(1, 127)])
+        for _ in range(20):
+            step(self.battle, .2)
         self.assertIsNone(self.battle.flags.winner)
-        self.battle.leave("ared")  # Red's carried blue flag returns automatically.
-        self.assertEqual(self.battle.flags.flags["blue"]["status"], "home")
-        self.battle.flags.tick()
-        self.assertIsNone(self.battle.flags.winner)  # No red participant remains.
-        self.battle.leave("ablue")
-        self.assertEqual(self.battle.flags.phase, "setup")
-        self.assertEqual(self.battle.flags.flags, {})
+        self.assertLess(unit["x"], 46)
 
     def test_only_last_participant_leaving_resets_bases_and_round(self):
         self.activate()
@@ -118,9 +96,9 @@ class FlagTests(unittest.TestCase):
         self.battle.arena.changes([[30, 1, 30, 208]])
         self.battle.leave("ablue")
         state = self.battle.state()
-        self.assertEqual(state["ctf"], {"phase": "setup", "winner": None,
-                                       "bases": {"blue": None, "red": None}, "flags": {},
-                                       "ready": {"blue": False, "red": False}, "reason": None, "paused": False})
+        self.assertEqual(state["ctf"], {"phase": "setup", "winner": None, "captureRadius": 3, "objective": "zone",
+                                       "ready": {"blue": False, "red": False}, "reason": None, "paused": False,
+                                       "bases": {"blue": None, "red": None}, "flags": {}})
         self.assertEqual(state["scores"], {"blue": 0, "red": 0})
         self.assertEqual(state["camps"]["red"], [16, 1, 10])
         self.assertTrue(self.battle.arena.solid(30, 1, 30))

@@ -96,41 +96,23 @@ class Flags:
     def tick(self):
         if self.phase != "active" or self.battle.paused() or not all(self.bases.values()):
             return
-        for team, flag in list(self.flags.items()):
-            if flag["status"] == "dropped" and flag["until"] <= self.battle.now:
-                self.home(team)
-            elif flag["carrier"]:
-                carrier = self.battle.players.get(flag["carrier"])
-                if carrier is None:
-                    self.home(team)
-                elif carrier["hp"] <= 0:
-                    self.release(carrier["id"], dropped=True)
-                else:
-                    flag.update({key: carrier[key] for key in ("x", "y", "z")})
-        present = {player["team"] for player in self.battle.players.values()}
-        for player in self.battle.players.values():
-            if player["hp"] <= 0:
+        # A ground footprint, not a pickup at the flag's vertical position.
+        # Infantry and players can capture; equipment cannot win by placement.
+        for actor in [*self.battle.players.values(), *self.battle.soldiers.values()]:
+            if actor["hp"] <= 0:
                 continue
-            team = player["team"]
-            own = self.flags[team]
-            if own["status"] == "dropped" and self.touch(player, [own[k] for k in ("x", "y", "z")]):
-                self.home(team)
-                own = self.flags[team]
-            enemy = self.flags["red" if team == "blue" else "blue"]
-            if len(present) != 2:
+            enemy = "red" if actor["team"] == "blue" else "blue"
+            base = self.bases[enemy]
+            if math.hypot(actor["x"] - base[0], actor["z"] - base[2]) > 3:
                 continue
-            if (enemy["status"] != "carried" and not self.carrying(player["id"])
-                    and self.touch(player, [enemy[k] for k in ("x", "y", "z")])):
-                enemy.update(status="carried", carrier=player["id"], until=0,
-                             **{key: player[key] for key in ("x", "y", "z")})
-            if (enemy["carrier"] == player["id"] and own["status"] == "home"
-                    and self.touch(player, self.bases[team])):
-                self.phase, self.winner, self.reason = "won", team, "capture"
+            ground = self.battle.arena.ground(actor["x"], actor["z"], actor["y"])
+            if ground is not None and abs(actor["y"] - ground) <= 1:
+                self.phase, self.winner, self.reason = "won", actor["team"], "capture"
                 return
 
     def state(self):
-        return {"phase": self.phase, "winner": self.winner, "ready": self.ready.copy(),
-                "reason": self.reason, "paused": self.battle.paused(),
+        return {"phase": self.phase, "winner": self.winner, "captureRadius": 3, "objective": "zone",
+                "ready": self.ready.copy(), "reason": self.reason, "paused": self.battle.paused(),
                 "bases": {team: point[:] if point else None for team, point in self.bases.items()},
                 "flags": {team: {**{k: v for k, v in flag.items() if k != "until"},
                                   "returnIn": min(20, max(0, flag["until"] - self.battle.now))}

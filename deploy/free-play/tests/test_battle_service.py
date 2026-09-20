@@ -92,13 +92,16 @@ class BattleServiceTests(unittest.TestCase):
             self.assertEqual(self.hub.store.state()["count"], 0)
 
     def test_reset_world_rehomes_battle_after_world_commit(self):
-        self.hub.battle.core.flags.phase = "setup"
-        with self.socket(self.henry) as henry:
+        with self.socket(self.henry) as henry, self.socket(self.james) as james:
             self.start(henry)
+            self.start(james)
             self.send(henry, self.henry, "join", team="blue")
             self.collect(henry, "battle-state")
             before = self.hub.battle.core.players["a" + self.henry["acct"]]["spawnSeq"]
             henry.send_json(self.command("reset", confirm=True))
+            self.collect(henry, "reset-vote")
+            self.collect(james, "reset-vote")
+            james.send_json(self.command("reset", confirm=True))
             frames = self.collect(henry, "battle-state")
             self.assertLess(next(i for i, row in enumerate(frames) if row["type"] == "commit"), len(frames) - 1)
             self.assertEqual(frames[-1]["epoch"], 2)

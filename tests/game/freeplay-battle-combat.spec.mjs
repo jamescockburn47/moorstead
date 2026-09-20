@@ -141,8 +141,8 @@ test('battle combat: UI ready, real opponent HP loss, identical fire blocked by 
     const hitStart = peer.events.length;
     peer.send('battle-recruit', { count: 6 });
     await page.getByRole('button', { name: 'Army', exact: true }).click();
-    await page.getByRole('button', { name: 'Recruit 6 soldiers', exact: true }).click();
-    await expect.poll(() => peer.battle.soldiers.length).toBe(12);
+    await page.getByRole('button', { name: 'Recruit 10 soldiers', exact: true }).click();
+    await expect.poll(() => peer.battle.soldiers.length).toBe(16);
     const initial = new Map(peer.battle.soldiers.map(row => [row.id, [row.x, row.z]]));
     await expect.poll(() => peer.battle.soldiers.some(row => Math.hypot(row.x - initial.get(row.id)[0], row.z - initial.get(row.id)[1]) > 12), { timeout: 20000 }).toBe(true);
     await expect.poll(() => peer.events.slice(hitStart).some(event => event.type === 'hit' && event.sourceId?.startsWith('soldier-')), { timeout: 30000 }).toBe(true);

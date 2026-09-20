@@ -84,8 +84,16 @@ test('battlefield: two-team flag bases, recruit, shared shots, shield, bunker an
   expect((await state(page)).battle.ctf.flags.red.status).toBe('home');
 
   await page.getByRole('button', { name: 'Army', exact: true }).click();
-  await page.getByRole('button', { name: 'Recruit 6 soldiers', exact: true }).click();
-  await expect.poll(async () => (await state(page)).battle.soldiers.length).toBe(6);
+  await page.getByRole('button', { name: 'Recruit 10 soldiers', exact: true }).click();
+  await expect.poll(async () => (await state(page)).battle.soldiers.length).toBe(10);
+  await page.getByRole('button', { name: 'Army', exact: true }).click();
+  await expect(page.getByRole('button', { name: /Recruit refresh:/ })).toBeDisabled();
+  await page.getByLabel('Command group').selectOption('2');
+  await page.getByRole('button', { name: 'Hold this position', exact: true }).click();
+  expect((await state(page)).battle.soldiers.every(row => row.squad === 1 && row.order === 'attack')).toBe(true);
+  await page.getByRole('button', { name: 'Army', exact: true }).click();
+  await page.getByLabel('Command group').selectOption('1');
+  await page.getByRole('button', { name: 'Back to play', exact: true }).click();
   for (const [label, order] of [['Hold this position', 'hold'], ['Attack the enemy', 'attack'], ['Follow me', 'follow']]) {
     await page.getByRole('button', { name: 'Army', exact: true }).click();
     await page.getByRole('button', { name: new RegExp('^' + label) }).click();

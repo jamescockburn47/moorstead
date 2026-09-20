@@ -3,8 +3,10 @@ import * as THREE from 'three';
 import { BattleModels, BattleLabels, BATTLE_TEAMS } from './battle-models.js';
 import { BattleEffects } from './battle-effects.js';
 import { BattleFlags } from './battle-flags.js';
+import { BattleEquipment } from './battle-equipment.js';
+import { BattleZones } from './battle-zones.js';
 
-const ACTORS = 56, SHIELDS = 8;
+const ACTORS = 80, SHIELDS = 8;
 const validActor = row => row && typeof row.id === 'string' && row.id.length > 0 && row.id.length <= 96
   && Object.hasOwn(BATTLE_TEAMS, row.team) && [row.x, row.y, row.z, row.yaw, row.hp, row.respawn].every(Number.isFinite);
 const validShield = row => row && typeof row.id === 'string' && Object.hasOwn(BATTLE_TEAMS, row.team)
@@ -16,6 +18,7 @@ export class BattleRenderer {
     this.settings = {}; this.root = new THREE.Group(); this.root.name = 'freeplay-battle'; scene.add(this.root);
     this.models = new BattleModels(this.root); this.labels = new BattleLabels(this.root); this.effects = new BattleEffects(this.root);
     this.flags = new BattleFlags(this.root);
+    this.equipment = new BattleEquipment(this.root); this.zones = new BattleZones(this.root);
     this.plane = new THREE.PlaneGeometry(1, 1); this.dummy = new THREE.Object3D(); this.colour = new THREE.Color();
     this.healthMaterial = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, depthWrite: false, toneMapped: false });
     this.health = new THREE.InstancedMesh(this.plane, this.healthMaterial, ACTORS * 4); this.health.frustumCulled = false; this.health.count = 0; this.root.add(this.health);
@@ -36,20 +39,21 @@ export class BattleRenderer {
     const next = new Map(), teamCounts = { blue: 0, red: 0 };
     const add = (row, player, number) => {
       if (!validActor(row)) return;
-      const key = `${player ? 'p' : 'n'}:${row.id}`; if (next.has(key)) return;
-      if (!player && teamCounts[row.team]++ >= 24) return;
+      const key = `${row.kind ? 'e' : player ? 'p' : 'n'}:${row.id}`; if (next.has(key)) return;
+      if (!player && !row.kind && teamCounts[row.team]++ >= 30) return;
       const knocked = row.hp <= 0 || row.respawn > 0, previous = this.actors.get(key);
       const current = previous?.current || new THREE.Vector3(row.x, row.y, row.z);
       if (previous && (previous.knocked && !knocked || current.distanceToSquared(new THREE.Vector3(row.x, row.y, row.z)) > 144)) current.set(row.x, row.y, row.z);
-      next.set(key, { id: row.id, team: row.team, player, hp: Math.max(0, row.hp), shield: Math.max(0, Number.isFinite(row.shield) ? row.shield : 0),
+      next.set(key, { id: row.id, team: row.team, player, kind: row.kind, hp: Math.max(0, row.hp), shield: Math.max(0, Number.isFinite(row.shield) ? row.shield : 0),
         respawn: Math.max(0, row.respawn), knocked, current, target: new THREE.Vector3(row.x, row.y, row.z),
         yaw: previous?.yaw ?? row.yaw, targetYaw: row.yaw, stride: previous?.stride || 0,
-        name: typeof row.name === 'string' && row.name ? row.name.slice(0, 22) : player ? row.team + ' player' : `${row.team === 'blue' ? 'Blue' : 'Red'} ${number + 1}` });
+        name: row.kind ? `Squad ${row.squad||1} ${row.kind}` : row.squad ? `Squad ${row.squad} · ${number+1}` : typeof row.name === 'string' && row.name ? row.name.slice(0, 22) : player ? row.team + ' player' : `${row.team === 'blue' ? 'Blue' : 'Red'} ${number + 1}` });
     };
     state.soldiers.slice(0, 96).forEach((row, i) => add(row, false, i));
+    (state.equipment||[]).slice(0,10).forEach((row,i)=>add(row,false,i));
     state.players.slice(0, 8).forEach((row, i) => add(row, true, i)); this.actors = next;
     this.shields = (Array.isArray(state.shields) ? state.shields : []).filter(validShield).slice(0, SHIELDS).map(row => ({ ...row, age: 0 }));
-    this.flags.apply(state.ctf);
+    this.flags.apply(state.ctf);this.ctf=state.ctf;
     this.camps = Object.keys(BATTLE_TEAMS).flatMap(team => {
       const pos = this.flags.enabled ? state.ctf.bases?.[team] : state.camps?.[team];
       return Array.isArray(pos) && pos.length === 3 && pos.every(Number.isFinite) ? [{ team, pos: [...pos] }] : [];
@@ -58,7 +62,8 @@ export class BattleRenderer {
   }
 
   bar(index, x, y, z, angle, width, height, colour, offset = 0) {
-    this.dummy.position.set(x + Math.cos(angle) * offset, y, z - Math.sin(angle) * offset);
+    const layer=colour===0x152735?0:.015;
+    this.dummy.position.set(x + Math.cos(angle) * offset + Math.sin(angle)*layer, y, z - Math.sin(angle) * offset + Math.cos(angle)*layer);
     this.dummy.rotation.set(0, angle, 0); this.dummy.scale.set(width, height, 1); this.dummy.updateMatrix();
     this.health.setMatrixAt(index, this.dummy.matrix); this.health.setColorAt(index, this.colour.set(colour));
   }
@@ -66,7 +71,7 @@ export class BattleRenderer {
   update(dt, playerPos) {
     if (this.disposed || !Number.isFinite(dt) || dt < 0 || !playerPos || ![playerPos.x, playerPos.y, playerPos.z].every(Number.isFinite)) return;
     dt = Math.min(dt, .1); this.clock += dt; let bars = 0;
-    this.models.begin(); this.labels.begin();
+    this.models.begin(); this.labels.begin(); this.equipment.begin();
     for (const actor of this.actors.values()) {
       const beforeX = actor.current.x, beforeZ = actor.current.z;
       actor.current.lerp(actor.target, Math.min(1, dt * 14));
@@ -75,9 +80,10 @@ export class BattleRenderer {
       const p = actor.current, distance = Math.hypot(p.x - playerPos.x, p.z - playerPos.z);
       const loaded = this.world?.isLoaded ? this.world.isLoaded(Math.floor(p.x), Math.floor(p.z)) : true;
       if (!loaded || distance > 170) continue;
-      if (!actor.player) this.models.put(actor.team, p, actor.yaw, actor.stride, actor.knocked, this.settings.reducedMotion ? 0 : Math.min(1, moved / Math.max(dt, .001)));
+      if(actor.kind)this.equipment.put(actor);
+      else if (!actor.player) this.models.put(actor.team, p, actor.yaw, actor.stride, actor.knocked, this.settings.reducedMotion ? 0 : Math.min(1, moved / Math.max(dt, .001)));
       if (distance < .9 && Math.abs(p.y - playerPos.y) < 2.2) continue;
-      const angle = Math.atan2(playerPos.x - p.x, playerPos.z - p.z), health = Math.min(1, actor.hp / (actor.player ? 100 : 50));
+      const angle = Math.atan2(playerPos.x - p.x, playerPos.z - p.z), health = Math.min(1, actor.hp / (actor.player || actor.kind==='tank' ? 100 : actor.kind==='turret' ? 75 : 50));
       const shield = Math.min(1, actor.shield / 100), y = p.y + (actor.knocked ? .7 : 1.94);
       this.bar(bars++, p.x, y, p.z, angle, .88, .14, 0x152735);
       this.bar(bars++, p.x, y + .001, p.z, angle, Math.max(.001, .84 * health), .08, actor.knocked ? 0xffd579 : 0x97e89d, -.42 * (1 - health));
@@ -85,7 +91,7 @@ export class BattleRenderer {
       this.bar(bars++, p.x, y + .1, p.z, angle, .15, .15, actor.knocked ? 0xffd579 : BATTLE_TEAMS[actor.team], -.58);
       this.labels.put(actor.knocked ? `Recovering ${Math.ceil(actor.respawn)}s` : actor.name, actor.team, p.x, y + .12, p.z, angle);
     }
-    this.models.end(); this.labels.end(); this.health.count = bars; this.health.instanceMatrix.needsUpdate = true;
+    this.models.end(); this.labels.end(); this.equipment.end(); this.health.count = bars; this.health.instanceMatrix.needsUpdate = true;
     if (this.health.instanceColor) this.health.instanceColor.needsUpdate = true;
     let shieldCount = 0;
     for (const shield of this.shields) {
@@ -96,7 +102,7 @@ export class BattleRenderer {
     }
     for (const mesh of [this.domes, this.rings]) { mesh.count = shieldCount; mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; }
     this.updateCamps();
-    this.flags.update(this.actors, this.world, playerPos);
+    this.flags.update(this.actors, this.world, playerPos);this.zones.update(this.ctf,this.world);
     this.effects.update(dt, this.settings);
   }
 
@@ -137,12 +143,12 @@ export class BattleRenderer {
 
   clear() {
     this.actors.clear(); this.shields = []; this.camps = []; this.models.begin(); this.models.end(); this.labels.begin(); this.labels.end();
-    this.health.count = this.domes.count = this.rings.count = this.campMesh.count = 0; this.effects.clear(); this.flags.clear();
+    this.health.count = this.domes.count = this.rings.count = this.campMesh.count = 0; this.effects.clear(); this.flags.clear();this.equipment.begin();this.equipment.end();this.zones.clear();this.ctf=null;
   }
   stats() { return { soldiers: [...this.actors.values()].filter(actor => !actor.player).length, players: [...this.actors.values()].filter(actor => actor.player).length,
     knocked: [...this.actors.values()].filter(actor => actor.knocked).length, shields: this.domes.count, batches: this.root.children.length, effects: this.effects.stats() }; }
   dispose() {
-    if (this.disposed) return; this.clear(); this.disposed = true; this.root.removeFromParent(); this.models.dispose(); this.labels.dispose(); this.effects.dispose(); this.flags.dispose();
+    if (this.disposed) return; this.clear(); this.disposed = true; this.root.removeFromParent(); this.models.dispose(); this.labels.dispose(); this.effects.dispose(); this.flags.dispose();this.equipment.dispose();this.zones.dispose();
     for (const mesh of [this.health, this.domes, this.rings, this.campMesh]) mesh.dispose();
     for (const geometry of [this.plane, this.domeGeometry, this.ringGeometry, this.campGeometry]) geometry.dispose();
     for (const material of [this.healthMaterial, this.domeMaterial, this.ringMaterial, this.campMaterial]) material.dispose();

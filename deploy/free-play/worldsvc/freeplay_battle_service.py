@@ -6,13 +6,15 @@ import time
 
 from freeplay_battle import Battle, TEAMS, WEAPONS
 from freeplay_battle_ai import step
+from freeplay_battle_breach import commit_breaches
 from freeplay_battle_terrain import Arena
 from freeplay_rules import BOMBS, Refused, integer
 
 COMMANDS = {"battle-join", "battle-leave", "battle-recruit", "battle-order", "battle-shot",
-            "battle-shield", "battle-rally", "battle-reset", "battle-base", "battle-ready", "battle-forfeit"}
+            "battle-shield", "battle-rally", "battle-reset", "battle-base", "battle-ready", "battle-forfeit", "battle-deploy"}
 FIELDS = {"battle-join": {"team"}, "battle-recruit": {"count"},
-          "battle-order": {"order", "rally"}, "battle-shot": {"weapon", "direction"}}
+          "battle-order": {"order", "rally"}, "battle-shot": {"weapon", "direction"},
+          "battle-deploy": {"kind", "point", "squad"}}
 
 
 def vector(value):
@@ -48,6 +50,7 @@ class BattleService:
             async with self.hub.lock:
                 if self.core.players:
                     step(self.core, now - previous)
+                    await commit_breaches(self)
                     await self.flush(state=True)
             previous = now
 
@@ -64,7 +67,8 @@ class BattleService:
 
     async def handle(self, peer, command):
         kind = command["type"]
-        if set(command) != {"type", "epoch"} | FIELDS.get(kind, set()):
+        fields = set(command) - ({"squad"} if kind == "battle-order" else set())
+        if fields != {"type", "epoch"} | FIELDS.get(kind, set()):
             raise Refused("battle-shape", "Invalid battlefield command fields.")
         if not integer(command.get("epoch"), 1, 2**53 - 1):
             raise Refused("battle-epoch", "Invalid battlefield generation.")
@@ -98,15 +102,25 @@ class BattleService:
         elif kind == "battle-forfeit":
             self.core.forfeit(peer.pid)
         elif kind == "battle-recruit":
-            if not integer(command["count"], 1, 6):
-                raise Refused("battle-army", "Recruit one to six soldiers at a time.")
+            if not integer(command["count"], 1, 10):
+                raise Refused("battle-army", "Recruit one to ten soldiers at a time.")
             self.core.recruit(peer.pid, command["count"])
         elif kind == "battle-order":
             order, rally = command["order"], command["rally"]
             if (not isinstance(order, str) or order not in {"follow", "hold", "attack", "defend"} or not vector(rally)
                     or not self.core.arena.inside(rally[0], rally[2]) or not 1 <= rally[1] <= 192):
-                raise Refused("battle-order", "Choose attack, defend, follow or hold inside the battlefield.")
-            self.core.order(peer.pid, order, rally)
+                raise Refused("battle-order", "Choose follow, hold, defend or attack inside the battlefield.")
+            squad = command.get("squad", 0)
+            if not integer(squad, 0, 3):
+                raise Refused("battle-order", "Choose all squads or squad 1, 2 or 3.")
+            self.core.order(peer.pid, order, rally, squad)
+        elif kind == "battle-deploy":
+            point, squad, equipment = command["point"], command["squad"], command["kind"]
+            if (not vector(point) or not integer(squad, 1, 3) or not isinstance(equipment, str)
+                    or equipment not in {"turret", "tank"} or not self.core.arena.inside(point[0], point[2])
+                    or not 1 <= point[1] <= 192):
+                raise Refused("battle-equipment", "Choose valid ground, equipment and squad.")
+            self.core.deploy(peer.pid, equipment, point, squad)
         elif kind == "battle-shot":
             weapon, direction = command["weapon"], command["direction"]
             if not isinstance(weapon, str) or weapon not in WEAPONS or not vector(direction):
@@ -145,8 +159,6 @@ class BattleService:
             return accepted
 
     def plan_damage(self, peer, command):
-        if self.core and self.core.players and self.core.flags.phase == "active" and command.get("type") in {"reset", "restore"}:
-            raise Refused("battle-locked", "Finish or forfeit the active round before resetting the world.")
         self.block_large_bombs(peer, command)
         if not self.core or peer.pid not in self.core.players:
             return []

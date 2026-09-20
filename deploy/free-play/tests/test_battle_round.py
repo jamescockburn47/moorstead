@@ -76,7 +76,7 @@ class RoundTests(unittest.TestCase):
             battle.leave("ablue")
             self.assertEqual(battle.flags.phase, "setup")
 
-    def test_active_exit_and_global_reset_cannot_bypass_forfeit(self):
+    def test_active_exit_and_match_reset_cannot_bypass_forfeit(self):
         battle = started()
         service = object.__new__(BattleService)
         service.core = battle
@@ -84,10 +84,6 @@ class RoundTests(unittest.TestCase):
         for kind in ("battle-leave", "battle-reset"):
             with self.assertRaises(Refused):
                 service.execute(peer, {"type": kind})
-        for pid in ("ablue", "aspectator"):
-            for kind in ("reset", "restore"):
-                with self.assertRaises(Refused):
-                    service.plan_damage(SimpleNamespace(pid=pid), {"type": kind})
         self.assertFalse(battle.move("ablue", {"x": -1, "y": 1, "z": 10, "yaw": 0}))
         self.assertEqual(len(battle.soldiers), 12)
 
@@ -144,8 +140,9 @@ class GeneratedArenaTests(unittest.TestCase):
         for team in ("blue", "red"):
             pid = "a" + team
             battle.join(pid, team, team)
-            for _ in range(4):
-                battle.recruit(pid, 6)
+            for _ in range(3):
+                battle.now += 25
+                battle.recruit(pid, 10)
         for _ in range(20):
             step(battle, 0.2)
         self.assertFalse(any(event["type"] == "hit" for event in battle.events))
@@ -158,7 +155,7 @@ class GeneratedArenaTests(unittest.TestCase):
             battle.events.clear()
         self.assertGreater(hits, 50)
         self.assertGreater(sum(battle.scores.values()), 5)
-        self.assertEqual(len(battle.soldiers), 48)
+        self.assertEqual(len(battle.soldiers), 60)
 
     def test_real_terrain_crosshair_shot_knockout_and_cover(self):
         arena = Arena.load(self.header)

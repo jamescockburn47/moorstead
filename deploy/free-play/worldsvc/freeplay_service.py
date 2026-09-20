@@ -13,6 +13,7 @@ from freeplay_store import Store
 from freeplay_stream import Peer, bounded_delivery, send_operation, send_snapshot
 from freeplay_vehicle_control import COMMANDS, VehicleControl
 from freeplay_battle_service import COMMANDS as BATTLE_COMMANDS, BattleService
+from freeplay_reset_vote import ResetVote
 
 log = logging.getLogger("moorstead.freeplay")
 IDENTITY = re.compile(r"a[a-z0-9-]{1,39}\Z")
@@ -26,6 +27,7 @@ class Hub:
         self.epoch = store.state()["epoch"]
         self.control = VehicleControl(self)
         self.battle = BattleService(self, battlefield or store.path.with_name("battlefield.json"))
+        self.reset_vote = ResetVote(self)
 
     def session(self, pid, token):
         ok, session, _ = self.authenticate(ROOM, pid, "", token)
@@ -48,6 +50,8 @@ class Hub:
             if self.peers.get(peer.pid) is not peer:
                 return
             self.peers.pop(peer.pid)
+            if self.reset_vote.clear():
+                await self.notice(self.reset_vote.state())
             await self.battle.disconnect(peer)
             await self.notice({"type": "leave", "pid": peer.pid})
 
@@ -57,11 +61,18 @@ class Hub:
                 raise Refused("session", "This account connected somewhere else.")
             peer.name = self.session(peer.pid, peer.token)
             validate_command(value)
+            if value["type"] in {"reset", "restore"}:
+                state = self.store.state()
+                if value["epoch"] != state["epoch"] or value["baseRevision"] != state["revision"]:
+                    raise Refused("stale", "Reconnect before approving a reset of this world.")
+                if not self.reset_vote.approve(peer, value["requestId"], value["type"]):
+                    await self.notice(self.reset_vote.state(value["requestId"]))
+                    return
             self.control.check_edit(value)
             machinegun = value.get("type") == "weapon" and value.get("weapon") == "machinegun"
             if machinegun and time.monotonic() - peer.last_machinegun < 0.249:
                 raise Refused("weapon-rate", "The machinegun is ready four times a second.")
-            damage = self.battle.plan_damage(peer, value)
+            damage = [] if value["type"] in {"reset", "restore"} else self.battle.plan_damage(peer, value)
             result = await asyncio.to_thread(self.store.apply, peer.pid, value, peer.name)
             if result["type"] == "ack":
                 await peer.send(result)
@@ -71,6 +82,7 @@ class Hub:
             self.epoch = result["epoch"]
             self.control.changed(result)
             if result["replace"]:
+                self.reset_vote.clear()
                 for other in self.peers.values():
                     other.position = None
             targets = list(self.peers.values())
@@ -98,8 +110,10 @@ class Hub:
             except asyncio.TimeoutError:
                 # Check revocation/expiry even while a player is idle.
                 self.session(peer.pid, peer.token)
+                await self.reset_vote.expire()
                 continue
             self.session(peer.pid, peer.token)
+            await self.reset_vote.expire()
             if len(text.encode("utf-8")) > MAX_PACKET:
                 raise Refused("size", "That message is too large.")
             try:
@@ -164,6 +178,8 @@ class Hub:
                     raise Refused("full", "This world is full. Try again shortly.")
                 self.peers[pid] = peer
                 self.battle.reconnect(peer)
+                if self.reset_vote.clear():
+                    await self.notice(self.reset_vote.state(), skip=peer)
                 players = [{"pid": other.pid, "name": other.name, **other.position}
                            for other in self.peers.values() if other is not peer and other.position]
                 if not await bounded_delivery(peer, lambda: send_snapshot(peer, self.store, players, self.control.pilots()), timeout=120):

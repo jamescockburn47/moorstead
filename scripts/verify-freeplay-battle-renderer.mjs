@@ -15,7 +15,7 @@ const inputCopy = JSON.stringify(state);
 assert.equal(renderer.apply(state), true); renderer.update(.016, viewer);
 assert.equal(JSON.stringify(state), inputCopy, 'render state remains an immutable authoritative input');
 assert.deepEqual([renderer.stats().soldiers, renderer.stats().players], [48, 2]);
-assert.equal(renderer.stats().batches, 18, 'draw object count stays fixed independent of army size');
+assert.equal(renderer.stats().batches, 21, 'draw object count stays fixed independent of army size');
 assert.equal(renderer.campMesh.count, 10, 'two teams receive five-metre flags in one fixed batch');
 renderer.campMesh.getMatrixAt(1, matrix); assert.equal(matrix.elements[12], -20); assert.equal(matrix.elements[13], 32.5);
 const campBlue = new THREE.Color(), campRed = new THREE.Color();
@@ -59,8 +59,8 @@ assert.equal(renderer.actors.get('n:one').hp, 50, 'visual hit cannot locally alt
 const oversized = Array.from({ length: 90 }, (_, i) => actor(`limit-${i}`, i < 45 ? 'blue' : 'red'));
 const domes = Array.from({ length: 12 }, (_, i) => ({ id: `d${i}`, team: 'blue', x: i, y: 30, z: 10, radius: 6, remaining: .05 }));
 renderer.apply({ soldiers: oversized, players: Array.from({ length: 20 }, (_, i) => actor(`p${i}`)), shields: domes });
-renderer.update(.016, viewer); assert.equal(renderer.stats().soldiers, 48); assert.equal(renderer.stats().players, 8);
-assert.equal(renderer.domes.count, 8); assert.equal(renderer.health.count, 224);
+renderer.update(.016, viewer); assert.equal(renderer.stats().soldiers, 60); assert.equal(renderer.stats().players, 8);
+assert.equal(renderer.domes.count, 8); assert.equal(renderer.health.count, 272);
 renderer.update(.05, viewer); assert.equal(renderer.domes.count, 0, 'expired shields do not linger without a new snapshot');
 renderer.apply({ soldiers: [actor('good'), actor('good'), { ...actor('bad'), x: NaN }, { ...actor('bad-team'), team: 'green' }], players: [] });
 assert.equal(renderer.stats().soldiers, 1); assert.equal(renderer.apply({}), false);
@@ -77,15 +77,31 @@ renderer.settings = { reducedMotion: true, reducedFlash: true }; renderer.update
 assert.equal(renderer.effects.geometry.drawRange.count, 96); assert.equal(renderer.effects.mesh.count, 32);
 assert.equal(renderer.effects.material.opacity, .4); assert.equal(renderer.effects.hitMaterial.opacity, .22);
 renderer.effects.update(.5); assert.equal(renderer.effects.geometry.drawRange.count, 0); assert.equal(renderer.effects.mesh.count, 0);
-assert.equal(renderer.root.children.length, 18, 'bursts do not allocate extra meshes');
+assert.equal(renderer.root.children.length, 21, 'bursts do not allocate extra meshes');
 
 let sharedDisposed = 0, ownDisposed = 0;
 renderer.models.rig.group.traverse(node => { node.geometry?.addEventListener('dispose', () => sharedDisposed++); });
 renderer.models.teams.get('blue').geometries[0].addEventListener('dispose', () => ownDisposed++);
 renderer.clear(); assert.equal(renderer.actors.size, 0); assert.equal(renderer.health.count, 0); assert.equal(renderer.labels.geometry.drawRange.count, 0);
-assert.equal(renderer.root.children.length, 18, 'clear reuses pools');
+assert.equal(renderer.root.children.length, 21, 'clear reuses pools');
 renderer.dispose(); renderer.dispose(); assert.equal(scene.children.length, 0); assert.equal(ownDisposed, 1);
 assert.equal(sharedDisposed, 0, 'battlefield disposal must preserve shared Moorstead villager assets');
+
+const machines=new BattleRenderer(scene,world);
+machines.apply({...state,soldiers:[],players:[],equipment:[
+  {...actor('tank'),kind:'tank',squad:2,hp:100},
+  {...actor('turret','red',5),kind:'turret',squad:1,hp:75}],
+  ctf:{objective:'zone',captureRadius:3,phase:'active',bases:state.camps,flags:{}}});
+machines.update(.016,viewer);
+assert.equal(machines.equipment.mesh.count,9,'both distinct machine models are rendered');
+assert.equal(machines.health.count,8,'machines retain health bars');
+assert.equal(machines.zones.mesh.count,2,'both full-height capture boundaries are visible');
+machines.zones.mesh.getMatrixAt(0,matrix);
+assert.equal(matrix.elements[0],3);assert.equal(matrix.elements[5],64,'elevated flags keep a ground-reaching zone');
+machines.health.getMatrixAt(0,matrix);const backgroundZ=matrix.elements[14];
+machines.health.getMatrixAt(1,matrix);assert(matrix.elements[14]<backgroundZ,'health fill sits in front of its background');
+machines.clear();assert.equal(machines.equipment.mesh.count,0);assert.equal(machines.zones.mesh.count,0);
+machines.dispose();assert.equal(scene.children.length,0);
 
 const previousDocument = globalThis.document, painted = [];
 try {

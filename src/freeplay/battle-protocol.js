@@ -5,6 +5,7 @@ const finite=(value,min,max)=>Number.isFinite(value)&&value>=min&&value<=max;
 const team=value=>value==='blue'||value==='red';
 const point=row=>row&&finite(row.x,-8192,8192)&&finite(row.z,-8192,8192)&&finite(row.y,0,192);
 export function validCaptureState(ctf){
+  if(ctf?.objective!==undefined&&(ctf.objective!=='zone'||ctf.captureRadius!==3))return false;
   if(!ctf||!['setup','active','won'].includes(ctf.phase)||!(ctf.winner===null||team(ctf.winner))||!ctf.bases||!ctf.flags)return false;
   if((ctf.phase==='won')!==(ctf.winner!==null))return false;
   if(ctf.ready!==undefined&&(!ctf.ready||!['blue','red'].every(key=>typeof ctf.ready[key]==='boolean')))return false;
@@ -22,21 +23,24 @@ export function validCaptureState(ctf){
 export function validBattleState(s){
   if(s?.available===false)return Object.keys(s).length===1;
   if(s?.ctf!==undefined&&!validCaptureState(s.ctf))return false;
-  if(!s||!Array.isArray(s.players)||s.players.length>8||!Array.isArray(s.soldiers)||s.soldiers.length>48
+  if(!s||!Array.isArray(s.players)||s.players.length>8||!Array.isArray(s.soldiers)||s.soldiers.length>60
     ||!Array.isArray(s.shields)||s.shields.length>8||!s.camps||!s.bounds)return false;
   const {origin,width}=BATTLE_REGION;
   if(s.bounds.minX!==origin[0]||s.bounds.minZ!==origin[1]||s.bounds.maxX!==origin[0]+width-1||s.bounds.maxZ!==origin[1]+width-1)return false;
-  const all=[...s.players,...s.soldiers],seen=new Set();
+  if(s.equipment!==undefined&&(!Array.isArray(s.equipment)||s.equipment.length>10))return false;
+  const all=[...s.players,...s.soldiers,...(s.equipment||[])],seen=new Set();
   if(!['blue','red'].every(key=>Array.isArray(s.camps[key])&&s.camps[key].length===3&&s.camps[key].every(Number.isFinite)
     &&Number.isSafeInteger(s.scores?.[key])&&s.scores[key]>=0))return false;
   for(const row of all){
     if(!id(row.id)||seen.has(row.id)||!team(row.team)||!point(row)||!finite(row.hp,0,100)||!finite(row.yaw,-1000,1000)
-      ||!finite(row.shield,0,100)||!finite(row.respawn,0,8)||!Number.isSafeInteger(row.spawnSeq)||row.spawnSeq<1)return false;
+      ||!finite(row.shield,0,100)||!finite(row.respawn,0,33)||!Number.isSafeInteger(row.spawnSeq)||row.spawnSeq<1)return false;
+    if(row.squad!==undefined&&(!Number.isInteger(row.squad)||row.squad<1||row.squad>3))return false;
     seen.add(row.id);
   }
   if(!s.players.every(row=>finite(row.shieldCooldown,0,25)&&(row.correctionSeq===undefined||Number.isSafeInteger(row.correctionSeq)&&row.correctionSeq>=0)
     &&(row.connected===undefined||typeof row.connected==='boolean')&&(row.reconnectIn===undefined||finite(row.reconnectIn,0,60)))
     ||!s.soldiers.every(row=>id(row.owner)))return false;
+  if(!(s.equipment||[]).every(row=>id(row.owner)&&['turret','tank'].includes(row.kind)))return false;
   return s.shields.every(row=>id(row.id)&&team(row.team)&&point(row)&&finite(row.radius,0,12)&&finite(row.remaining,0,12));
 }
 export function validBattleEvent(e){

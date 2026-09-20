@@ -69,20 +69,14 @@ arena.camps={'blue':[x+10,1,z+10],'red':[x+16,1,z+10]}
 b=Battle(arena); b.join('ablue','Blue','blue');b.join('ared','Red','red')
 states=[]
 def save(label): states.append([label,json.loads(json.dumps(b.state()))])
-save('setup');b.flags.set_ready('ablue');save('one base')
-red=b.players['ared'];red.update(x=x+50,y=1,z=z+10);b.flags.set_ready('ared');save('active')
-blue=b.players['ablue'];blue.update(x=x+49,y=1,z=z+10);b.flags.tick();save('carried')
-b.damage(blue,999,'red');save('dropped');b.flags.tick();save('returned')
-b.spawn(blue);blue.update(x=x+49,y=1,z=z+10);b.flags.tick()
-blue.update(x=x+10,z=z+10);b.flags.tick();save('won')
+save('setup');b.flags.base('ablue');save('one base')
+red=b.players['ared'];red.update(x=x+50,y=1,z=z+10);b.flags.base('ared');b.flags.set_ready('ablue');b.flags.set_ready('ared');save('active')
+blue=b.players['ablue'];blue.update(x=x+49,y=1,z=z+10);b.flags.tick();save('won')
 print(json.dumps(states))
 `, JSON.stringify(BATTLE_REGION.origin)], { encoding: 'utf8', timeout: 15000 });
 assert.equal(python.status, 0, python.stderr);
 const emitted = JSON.parse(python.stdout);
-assert.deepEqual(emitted.map(([label]) => label), ['setup', 'one base', 'active', 'carried', 'dropped', 'returned', 'won']);
+assert.deepEqual(emitted.map(([label]) => label), ['setup', 'one base', 'active', 'won']);
 for (const [label, state] of emitted) assert(validBattleState(state), 'actual server state accepted: ' + label);
-assert.equal(emitted[3][1].ctf.flags.red.carrier, 'ablue');
-assert.equal(emitted[4][1].ctf.flags.red.status, 'dropped');
-assert.equal(emitted[5][1].ctf.flags.red.status, 'home');
-assert.equal(emitted[6][1].ctf.winner, 'blue');
-console.log('Free-play CTF client: PASS (actual Python setup/carry/drop/return/win states, bomb restrictions and combat-phase controls).');
+assert.equal(emitted[3][1].ctf.winner, 'blue');
+console.log('Free-play CTF: PASS (actual Python zone capture states, validation and combat phase controls).');

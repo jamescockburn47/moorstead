@@ -12,6 +12,7 @@ export class FreeplayBattle{
     this.renderer.settings=game.settings;
     this.hud=new BattleHud(this);this.boundary=new BattleBoundary(game.scene,game.world);
     this.state=null;this.me=null;this.spawnSeq=null;this.correctionSeq=0;this.cooldown=0;this.savedPosition=null;
+    this.squad=0;
   }
   panel(parent){battlePanel(this,parent);}
   receive(message){
@@ -67,7 +68,11 @@ export class FreeplayBattle{
   order(order,aim=false){
     if(!this.me)return;const p=this.game.player.pos,hit=aim?this.game.actions.target():null;
     if(aim&&!hit)return this.game.ui.message('Aim at a loaded patch of ground first.');
-    const rally=hit?[hit.x+.5,hit.y+1,hit.z+.5]:[p.x,p.y,p.z];this.command('battle-order',{order,rally});
+    const rally=hit?[hit.x+.5,hit.y+1,hit.z+.5]:[p.x,p.y,p.z];this.command('battle-order',{order,rally,squad:this.squad||0});
+  }
+  deploy(kind){
+    const hit=this.game.actions.target();if(!hit)return this.game.ui.message('Aim at clear ground within 18 blocks.');
+    if(this.command('battle-deploy',{kind,point:[hit.x+.5,hit.y+1,hit.z+.5],squad:this.squad||1}))this.game.ui.panel.close();
   }
   shield(){if(this.me)this.command('battle-shield');else this.game.ui.open('battle');}
   fire(weapon){

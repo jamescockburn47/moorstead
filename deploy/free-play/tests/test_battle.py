@@ -75,18 +75,19 @@ class BattleTests(unittest.TestCase):
             self.battle.alive("aspectator")
 
     def test_army_caps_orders_move_under_fire_and_disconnect_dismisses(self):
-        for _ in range(4):
-            self.battle.recruit("ablue", 6)
-            self.battle.recruit("ared", 6)
-        self.assertEqual(len(self.battle.soldiers), 48)
+        for _ in range(3):
+            self.battle.recruit("ablue", 10)
+            self.battle.recruit("ared", 10)
+            self.battle.now += 25
+        self.assertEqual(len(self.battle.soldiers), 60)
         blue_positions = {(unit["x"], unit["z"]) for unit in self.battle.soldiers.values() if unit["team"] == "blue"}
-        self.assertEqual(len(blue_positions), 24)
+        self.assertEqual(len(blue_positions), 30)
         for order in ("follow", "hold"):
             self.battle.order("ablue", order, [30, 1, 30])
             with patch("freeplay_battle_ai.move") as moved, patch.object(self.battle, "shoot"):
                 step(self.battle, 0.2)
             goals = {tuple(call.args[2]) for call in moved.call_args_list if call.args[1]["owner"] == "ablue"}
-            self.assertEqual(len(goals), 24)
+            self.assertEqual(len(goals), 30)
         with self.assertRaises(Refused):
             self.battle.recruit("ablue", 1)
         unit = next(unit for unit in self.battle.soldiers.values() if unit["owner"] == "ablue")
@@ -95,13 +96,14 @@ class BattleTests(unittest.TestCase):
         step(self.battle, 0.2)
         self.assertNotEqual((unit["x"], unit["z"]), old)  # Visible enemies cannot cancel a move order.
         self.battle.leave("ablue")
-        self.assertEqual(len(self.battle.soldiers), 24)
+        self.assertEqual(len(self.battle.soldiers), 30)
 
     def test_recruit_reuses_vacant_team_slots_without_overlapping_survivors(self):
         self.battle.join("afriend", "Friend", "blue")
         self.battle.recruit("ablue", 6)
         self.battle.recruit("afriend", 6)
         self.battle.leave("ablue")
+        self.battle.now += 25
         self.battle.recruit("afriend", 6)
         self.assertEqual(len({unit["slot"] for unit in self.battle.soldiers.values()}), 12)
 

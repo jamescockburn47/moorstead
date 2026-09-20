@@ -3,6 +3,7 @@ import math
 
 from freeplay_rules import MAX_PLAYERS, Refused
 from freeplay_battle_flags import Flags
+from freeplay_battle_equipment import deploy_equipment
 
 TEAMS = {"blue", "red"}
 WEAPONS = {"machinegun": (12, 0.25), "plasma": (25, 0.5)}
@@ -12,6 +13,8 @@ class Battle:
     def __init__(self, arena):
         self.arena = arena
         self.players, self.soldiers, self.shields = {}, {}, {}
+        self.equipment = {}
+        self.wall_damage, self.breaches = {}, set()
         self.scores = {team: 0 for team in TEAMS}
         self.now, self.revision, self.serial = 0.0, 0, 0
         self.wall = 0.0
@@ -80,6 +83,7 @@ class Battle:
         self.soldiers = {key: unit for key, unit in self.soldiers.items() if unit["owner"] != pid}
         if removed and not any(p["team"] == removed["team"] for p in self.players.values()):
             self.flags.ready[removed["team"]] = False
+        self.equipment = {key: unit for key, unit in self.equipment.items() if unit["owner"] != pid}
         if participated and not self.players:
             self.reset()
 
@@ -92,30 +96,44 @@ class Battle:
     def reset(self):
         self.flags.reset()
         self.soldiers.clear()
+        self.equipment.clear()
+        self.wall_damage.clear()
+        self.breaches.clear()
         self.shields.clear()
         self.scores = {team: 0 for team in TEAMS}
         for player in self.players.values():
+            player.update(recruitAt=-999, equipmentAt=-999)
             self.spawn(player)
 
     def recruit(self, pid, count):
         player = self.alive(pid)
+        if type(count) is not int or not 1 <= count <= 10:
+            raise Refused("battle-army", "Recruit up to ten soldiers.")
+        if self.now - player.get("recruitAt", -999) < 25:
+            raise Refused("battle-army", "Reinforcements refresh every 25 seconds.")
         used = {unit["slot"] for unit in self.soldiers.values() if unit["team"] == player["team"]}
-        slots = [slot for slot in range(24) if slot not in used]
+        slots = [slot for slot in range(30) if slot not in used]
         if count > len(slots):
-            raise Refused("battle-army", "Each team can field 24 soldiers.")
+            raise Refused("battle-army", "Each team can field 30 soldiers.")
+        groups = {unit.get("squad", 1) for unit in self.soldiers.values() if unit["owner"] == pid}
+        squad = next((number for number in (1, 2, 3) if number not in groups), 3)
+        player["recruitAt"] = self.now
         for offset in range(count):
             self.serial += 1
             unit = {"id": f"soldier-{self.serial}", "owner": pid, "team": player["team"], "yaw": 0,
                     "order": "attack", "rally": [player[key] for key in ("x", "y", "z")],
-                    "shotAt": -999, "slot": slots[offset]}
+                    "shotAt": -999, "slot": slots[offset], "squad": squad}
             self.spawn(unit)
             self.soldiers[unit["id"]] = unit
 
-    def order(self, pid, order, rally):
+    def order(self, pid, order, rally, squad=0):
         self.alive(pid)
-        for unit in self.soldiers.values():
-            if unit["owner"] == pid:
+        for unit in [*self.soldiers.values(), *self.equipment.values()]:
+            if unit["owner"] == pid and (not squad or unit.get("squad", 1) == squad):
                 unit.update(order=order, rally=rally[:])
+
+    def deploy(self, pid, kind, point, squad=1):
+        deploy_equipment(self, pid, kind, point, squad)
 
     def shield(self, pid):
         player = self.alive(pid)
@@ -156,7 +174,7 @@ class Battle:
         return True
 
     def entities(self):
-        return [*self.players.values(), *self.soldiers.values()]
+        return [*self.players.values(), *self.soldiers.values(), *self.equipment.values()]
 
     def protected(self, target):
         return any(shield["team"] == target["team"] and shield["until"] > self.now
@@ -178,7 +196,10 @@ class Battle:
         if target["hp"] == 0:
             if target["id"] in self.players:
                 self.flags.release(target["id"], dropped=True)
-            target["respawn"] = 5 if target["id"] in self.players else 8
+            # Shared 25-second wave, with at least eight seconds out of action.
+            target["respawn"] = 5 if target["id"] in self.players else 25 - self.now % 25
+            if target["id"] not in self.players and target["respawn"] < 8:
+                target["respawn"] += 25
             self.scores[team] += 3 if target["id"] in self.players else 1
 
     def shoot(self, source, direction, weapon, ai=False, shot_time=None):
@@ -213,13 +234,15 @@ class Battle:
                 and self.arena.visible(origin, [target["x"], target["y"] + 1, target["z"]])]
 
     def state(self):
-        keys = ("id", "name", "team", "x", "y", "z", "yaw", "hp", "shield", "respawn", "spawnSeq", "correctionSeq", "owner", "order")
+        keys = ("id", "name", "team", "x", "y", "z", "yaw", "hp", "shield", "respawn", "spawnSeq", "correctionSeq", "owner", "order", "squad", "kind")
         def public(entity):
             result = {key: entity[key] for key in keys if key in entity}
             if entity["id"] in self.players:
                 result["shieldCooldown"] = min(25, max(0, 25 - self.now + entity["shieldAt"]))
                 result["connected"] = entity["connected"]
                 result["reconnectIn"] = 0 if entity["connected"] else min(60, max(0, entity["reconnectUntil"] - self.wall))
+                result["recruitCooldown"] = max(0, 25 - self.now + entity.get("recruitAt", -999))
+                result["equipmentCooldown"] = max(0, 20 - self.now + entity.get("equipmentAt", -999))
             return result
         x, z = self.arena.origin
         return {"available": True, "revision": self.revision,
@@ -228,5 +251,6 @@ class Battle:
                 "camps": self.arena.camps, "scores": self.scores.copy(),
                 "players": [public(entity) for entity in self.players.values()],
                 "soldiers": [public(entity) for entity in self.soldiers.values()],
+                "equipment": [public(entity) for entity in self.equipment.values()],
                 "shields": [{**{key: value for key, value in shield.items() if key != "until"},
                              "remaining": min(12, max(0, shield["until"] - self.now))} for shield in self.shields.values()]}

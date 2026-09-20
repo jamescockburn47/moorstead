@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PopulationModels } from './population-models.js';
 
 export const BATTLE_TEAMS = Object.freeze({ blue: 0x4eacff, red: 0xff696e });
-const CAPACITY = 24;
+const CAPACITY = 30;
 
 function compile(parts) {
   const positions = [], normals = [], colours = [], colour = new THREE.Color();
@@ -88,14 +88,14 @@ export class BattleLabels {
   constructor(parent) {
     this.labels = []; this.texture = null;
     if (typeof document !== 'undefined') {
-      this.canvas = document.createElement('canvas'); this.canvas.width = 1024; this.canvas.height = 256;
+      this.canvas = document.createElement('canvas'); this.canvas.width = 1024; this.canvas.height = 280;
       this.context = this.canvas.getContext('2d'); this.texture = new THREE.CanvasTexture(this.canvas);
       this.texture.colorSpace = THREE.SRGBColorSpace; this.texture.minFilter = THREE.LinearFilter; this.texture.generateMipmaps = false;
     }
     this.geometry = new THREE.BufferGeometry();
-    this.position = new THREE.Float32BufferAttribute(new Float32Array(56 * 12), 3);
-    this.uv = new THREE.Float32BufferAttribute(new Float32Array(56 * 8), 2); const indices = [];
-    for (let i = 0; i < 56; i++) indices.push(i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 2, i * 4 + 1, i * 4 + 3);
+    this.position = new THREE.Float32BufferAttribute(new Float32Array(80 * 12), 3);
+    this.uv = new THREE.Float32BufferAttribute(new Float32Array(80 * 8), 2); const indices = [];
+    for (let i = 0; i < 80; i++) indices.push(i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 2, i * 4 + 1, i * 4 + 3);
     this.geometry.setAttribute('position', this.position); this.geometry.setAttribute('uv', this.uv); this.geometry.setIndex(indices);
     this.material = new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, alphaTest: .15, depthWrite: false, side: THREE.DoubleSide });
     this.mesh = new THREE.Mesh(this.geometry, this.material); this.mesh.frustumCulled = false; this.mesh.visible = !!this.texture;
@@ -103,7 +103,7 @@ export class BattleLabels {
   }
   begin() { this.count = 0; this.dirty = false; }
   put(text, team, x, y, z, angle) {
-    const index = this.count++; if (index >= 56) return;
+    const index = this.count++; if (index >= 80) return;
     const label = `${team}:${text}`, col = index % 8, row = Math.floor(index / 8);
     if (this.labels[index] !== label) {
       this.labels[index] = label; this.dirty = true;
@@ -116,11 +116,11 @@ export class BattleLabels {
     const rightX = Math.cos(angle) * .72, rightZ = -Math.sin(angle) * .72;
     for (const [corner, side, height] of [[0, -1, 0], [1, 1, 0], [2, -1, .36], [3, 1, .36]]) {
       this.position.setXYZ(index * 4 + corner, x + rightX * side, y + height, z + rightZ * side);
-      this.uv.setXY(index * 4 + corner, (col + (side + 1) / 2) / 8, 1 - (row + (height ? 0 : 1)) / 8);
+      this.uv.setXY(index * 4 + corner, (col + (side + 1) / 2) / 8, 1 - (row + (height ? 0 : 1)) / 16);
     }
   }
   end() {
-    this.geometry.setDrawRange(0, Math.min(56, this.count) * 6); this.position.needsUpdate = this.uv.needsUpdate = true;
+    this.geometry.setDrawRange(0, Math.min(80, this.count) * 6); this.position.needsUpdate = this.uv.needsUpdate = true;
     if (this.dirty && this.texture) this.texture.needsUpdate = true;
   }
   dispose() { this.mesh.removeFromParent(); this.geometry.dispose(); this.material.dispose(); this.texture?.dispose(); }

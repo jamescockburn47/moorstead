@@ -15,6 +15,8 @@ export async function prepare(page){
     // Playwright 1.58 connectToServer cannot change URL. Bridge exclusively to
     // the loopback real adapter, rather than attempting the production socket.
     const upstream=new WebSocket(url.href),pending=[];
+    // The Node-side bridge is owned by this page, including context teardown.
+    page.once('close',()=>upstream.close());
     ws.onMessage(data=>{if(upstream.readyState===WebSocket.OPEN)upstream.send(data);else pending.push(data);});
     ws.onClose(()=>upstream.close());
     upstream.onopen=()=>{for(const data of pending)upstream.send(data);pending.length=0;};

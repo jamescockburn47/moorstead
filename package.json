@@ -102,7 +102,7 @@
     "verify:gfxprobe": "node scripts/verify-gfxprobe.mjs",
     "verify:pwa": "node scripts/verify-pwa.mjs",
     "verify:freeplay": "node scripts/verify-freeplay-client.mjs && node scripts/verify-freeplay-world.mjs && node scripts/verify-freeplay-effects.mjs && python deploy/free-play/verify.py",
-    "test:freeplay": "playwright test tests/game/freeplay-map.spec.mjs tests/game/freeplay-pack.spec.mjs tests/game/freeplay-layout.spec.mjs tests/game/freeplay-vehicle.spec.mjs tests/game/freeplay-vehicle-kits.spec.mjs tests/game/freeplay-battle.spec.mjs tests/game/freeplay-battle-combat.spec.mjs"
+    "test:freeplay": "playwright test tests/game/freeplay-map.spec.mjs tests/game/freeplay-pack.spec.mjs tests/game/freeplay-layout.spec.mjs tests/game/freeplay-vehicle.spec.mjs tests/game/freeplay-vehicle-kits.spec.mjs tests/game/freeplay-battle.spec.mjs tests/game/freeplay-battle-combat.spec.mjs tests/game/freeplay-reset.spec.mjs"
   },
   "dependencies": {
     "@tonejs/midi": "^2.0.28",

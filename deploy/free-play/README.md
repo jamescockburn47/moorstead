@@ -1,6 +1,6 @@
 # Private Free Play — server and release tools
 
-Updated 19 September 2026. **Content 6 release; SQLite schema 4.** No real
+Updated 20 September 2026. **Content 7 release; SQLite schema 4.** No real
 invites, sessions, player records or production database are included. The upgrade
 adds capture the flag with player-designated bases, grounded armies, real terrain
 cover, energy shields and cartoon knockouts/respawns. Existing movable builds and
@@ -27,7 +27,7 @@ route refuses this room before reading or creating ordinary room state.
 | `worldsvc/freeplay_battle_ai.py` | Grounded squad movement and line-of-sight shooting |
 | `worldsvc/freeplay_battle_terrain.py` | Verified procedural arena baseline plus saved overrides |
 | `worldsvc/freeplay_battle_service.py` | Authenticated match commands and five-Hz state delivery |
-| `worldsvc/freeplay_battle_flags.py` | Validated bases, flag carrying/return and round victory |
+| `worldsvc/freeplay_battle_flags.py` | Validated bases, highlighted capture zones and round victory |
 | `integrate.py` | Locally prepares the minimal relay/dashboard/Caddy modifications |
 | `backup.py` | Consistent, integrity-checked SQLite backup into a new file |
 | `fixture.py` | Loopback-only synthetic login/server for browser tests; never install in production |
@@ -36,7 +36,7 @@ route refuses this room before reading or creating ordinary room state.
 | `upgrade_vehicles.py` | Explicit content-2 → content-3 release, preserving all old rows |
 | `upgrade_battle.py` | Explicit content-3 → content-4 release, preserving all nine saved tables |
 | `upgrade_ctf.py` | Content-5 release plus explicitly authorised reset with recovery checkpoint |
-| `upgrade_war.py` | Content-6 update preserving all saved rows; no world reset |
+| `upgrade_war.py` | Content-7 update preserving all saved rows; no world reset |
 
 Live sources were read over `evo-tailscale`, without writes or service changes.
 `integrate.py` refuses sources whose SHA-256 differs from these inspected baselines:
@@ -96,7 +96,7 @@ No player pockets are read or saved. Positions are ephemeral, bounded and checke
 against the exact epoch. Token expiry/revocation is rechecked on operations and
 approximately every second when idle. Authentication comes only from the existing
 server callback and the exact room-bound session, never a client capability flag.
-The hello handshake additionally requires content version 6 before any snapshot.
+The hello handshake additionally requires content version 7 before any snapshot.
 
 Vehicle conversion selects only authored non-air overrides and exactly one control
 block 206. Conversion, explicit block editing, undo and checkpoint recovery include
@@ -106,8 +106,8 @@ lease; either child can take unpiloted controls. Validated poses persist at abou
 4 Hz without changing terrain revision; disconnect retains the last accepted pose.
 See `PROTOCOL.md` for exact frames, movement bounds and baseline-collision limits.
 
-Battlefield participants explicitly choose a team. There are at most 24 soldiers
-per team, with six recruited per command, and eight players. Match state is
+Battlefield participants explicitly choose a team. There are at most 30 soldiers
+per team, with ten recruited per command every 25 seconds, and eight players. Match state is
 ephemeral; terrain and fortifications use the existing durable world operations.
 The server loads a hash-checked 128×128×64 baseline exported from the actual client
 generator, then applies saved overrides. Bullet rays, movement and explosion cover

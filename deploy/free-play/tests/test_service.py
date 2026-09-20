@@ -42,7 +42,7 @@ class ServiceTests(unittest.TestCase):
                 return frames
 
     def start(self, ws):
-        ws.send_json({"type": "hello", "protocol": 1, "contentVersion": 6})
+        ws.send_json({"type": "hello", "protocol": 1, "contentVersion": 7})
         return self.collect(ws, "ready")
 
     def command(self, kind="edit", **fields):
@@ -82,7 +82,7 @@ class ServiceTests(unittest.TestCase):
     def test_two_players_build_then_gravity_share_committed_metadata(self):
         with self.socket(self.henry) as henry, self.socket(self.james) as james:
             init = self.start(henry)[0]
-            self.assertEqual((init["contentVersion"], init["minContentVersion"]), (6, 6))
+            self.assertEqual((init["contentVersion"], init["minContentVersion"]), (7, 7))
             self.assertEqual(init["limits"]["maxBuild"], 1024)
             self.assertEqual((init["limits"]["maxCells"], init["limits"]["maxChunks"]), (8_000_000, 1024))
             self.start(james)
@@ -152,13 +152,17 @@ class ServiceTests(unittest.TestCase):
             self.assertEqual(self.app.state.freeplay_hub.store.state()["revision"], 1)
 
     def test_reset_rehomes_and_rejects_delayed_positions(self):
-        with self.socket(self.henry) as henry:
+        with self.socket(self.henry) as henry, self.socket(self.james) as james:
             self.start(henry)
+            self.start(james)
             henry.send_json({"type": "pos", "epoch": 1, "x": 0, "y": 70, "z": 0, "yaw": 0})
             henry.send_json(self.command(edits=[[1, 20, 1, 8]]))
             self.collect(henry, "commit")
             time.sleep(0.11)
             henry.send_json(self.command("reset", confirm=True))
+            self.collect(henry, "reset-vote")
+            self.collect(james, "reset-vote")
+            james.send_json(self.command("reset", confirm=True))
             frames = self.collect(henry, "commit")
             begin = next(frame for frame in frames if frame["type"] == "begin")
             self.assertTrue(begin["replace"])

@@ -19,7 +19,7 @@ for(const change of [{hp:-1},{shield:NaN},{respawn:999},{spawnSeq:undefined},{te
   assert(!validBattleState({...state,players:[{...actor,...change}]}));
 assert(!validBattleState({...state,players:[actor,actor]}));
 assert(!validBattleState({...state,bounds:{...bounds,maxX:0}}));
-assert(!validBattleState({...state,soldiers:Array.from({length:49},()=>actor)}));
+assert(!validBattleState({...state,soldiers:Array.from({length:61},()=>actor)}));
 assert(validBattleEvent({type:'shot',from:[0,1,0],to:[1,2,3]}));
 assert(!validBattleEvent({type:'shot',from:[NaN,1,0]}));
 

@@ -28,10 +28,15 @@ Each build is one shared undo action; hollow interiors clear existing blocks.
 Energy windows are solid decorative panels. Futuristic content is private to this
 edition. Content-version negotiation refuses older clients before they receive it.
 
-Undo removes the latest shared terrain action, whichever player made it. Menu
-offers reset with a confirmation for both players, and recovery of the pre-reset
-world. Builds and craters persist across reconnects and server restarts. Either
-player can recover the world. Each account can play on one device at a time.
+Undo removes the latest shared terrain action, whichever player made it. The
+in-world **Full reset** button clears builds, craters, vehicles and armies only
+after both players approve. Exactly two distinct accounts must be online; each
+must press **Approve full reset** within 30 seconds. Repeated clicks by one player
+cannot count twice. A disconnect, device switch or expired vote cancels approval.
+The first press displays **Reset · 1/2** on both screens and play can continue.
+Menu also provides recovery of the pre-reset world, which likewise needs both
+players to approve restoration. Logins remain intact. Builds and craters persist
+across reconnects and server restarts. Each account can play on one device at a time.
 
 The world copies Moorstead's procedural terrain, including its towns and inns.
 Destruction also removes unsupported rail, road and scenery sections. Trains stop
@@ -116,7 +121,7 @@ Conversion, materialisation and undo are atomic server transactions. Vehicles
 survive reconnects and restart; reset recovery includes them. Driving uses an
 exclusive pilot lease and its own bounded pose stream so it does not interrupt
 the other boy's terrain edits. Disconnect releases the pilot and retains the last
-accepted pose. The backend schema is 4 and content negotiation is version 6;
+accepted pose. The backend schema is 4 and content negotiation is version 7;
 old clients must refresh. This does not alter ordinary Moorstead's protocol.
 
 Hold Fire (or left mouse with pointer lock) for machine-gun bursts. Sheep are
@@ -131,34 +136,51 @@ Free Play position. Battlefield participants use health, shields and quick
 cartoon respawns. Ordinary Free Play retains unlimited health. Park vehicles
 before joining; leave the battle before driving again.
 
-Army recruits six soldiers at a time, up to 24 per team. They automatically attack
-when the round starts. Attack, Defend our flag, Follow, Hold and Move squad to aimed
-point control the player's soldiers. Both players can fight
-with machine gun, plasma, rockets and bombs. Solid voxel terrain blocks bullets
-and shields against a blast before that blast removes the cover. Shield deploys
-a six-metre dome for 12 seconds, with a 25-second cooldown. Personal shields
-regenerate after three quiet seconds. Players respawn after five seconds;
-soldiers return after eight. The scoreboard counts enemy knockouts.
+Army recruits ten soldiers every 25 seconds, up to 30 per team. Each batch forms
+one of three squads. Choose All squads or Squad 1/2/3 before Follow, Hold, Attack, Defend
+or Move squad to aimed point. Orders also control tanks assigned to that squad.
+New recruits attack automatically when the round starts. Soldiers prioritise
+visible enemies and keep advancing when ordered to attack.
+Health bars and squad labels appear above soldiers. Players return after five
+seconds; soldiers return on shared 25-second waves, with at least eight seconds
+out of action (maximum 33 seconds). Personal shields
+regenerate after three quiet seconds. Shield deploys a six-metre dome for 12
+seconds, with a 25-second cooldown.
 
-War mode uses capture the flag in a marked 128×128 warzone. During setup, build a
-base, stand inside it on clear ground, and choose Army → Place flag & ready.
-Bases must be at least 32 blocks apart. Both sides ready starts the round and
-locks the base locations. The HUD shows each side's readiness, troop counts,
-reconnection pauses and the winner; a confirmed personal hit has visual feedback.
-Players pick up
-the enemy flag by approaching it, then carry it to their own base while their
-own flag is home. That capture wins; knockouts alone do not decide the winner.
-Knockouts drop a carried flag, defenders can touch it to return it, and dropped
-flags return automatically after 20 seconds. A flag carrier cannot teleport to
-base. The Map shows both flags, soldiers and the boundary. Play another round resets armies and base choices while
-preserving fortifications. Mega and atom bombs are hidden and refused in war
-mode; spectator blasts of those types cannot overlap an occupied battlefield.
+War uses capture zones in a marked 128×128 warzone. During setup, build a base,
+stand inside it on clear ground, and choose Army → Place flag & ready. Bases
+must be at least 32 blocks apart. Both sides ready starts the round and locks
+the base locations. The HUD shows readiness, troop counts, reconnection pauses
+and the winner; a confirmed personal hit has visual feedback. The highlighted
+three-block-radius column around each flag is the objective: a living enemy
+soldier or player entering on supported ground wins immediately. No pickup or
+return trip is needed. Flag height is irrelevant, so a flag on a tower can be
+captured from below. The map still shows both flag positions. Attack orders send
+soldiers toward the opposing zone. Obstacles take four hits per voxel to breach,
+with at most one hit per voxel per second; troops open enough space to walk
+through. Holes are committed and shared using ordinary undoable terrain changes.
+Play another round resets armies and bases, preserving fortifications. Mega and
+atom bombs are hidden and refused in war mode; spectator blasts of those types
+cannot overlap an occupied battlefield.
+
+Aim at level ground within 18 blocks and choose Place turret or Place tank.
+Each team can have three turrets and two tanks, with a 20-second equipment
+refresh. Turrets have 75 HP and deal six damage every two seconds within 28
+blocks. Tanks have 100 HP and fire 28-damage shots every 3.5 seconds within 38
+blocks; they move with squad orders. Walls block both weapons. Destroyed machines
+must be replaced. These are commanded units, not rideable creative vehicles.
+Equipment is temporary match state, not a saved structure.
+
+Resource harvesting is deferred: recruitment/equipment cooldowns and army caps
+supply a small tactical scarcity mechanic without adding an economy or grind.
+A future shared supply resource earned at contested depots would fit better than
+requiring mining during a short family match.
 
 Build includes excavating trenches with steps, bunkers with doors and firing
 ports, sandbag barricades and watchposts. Their terrain changes persist and use
 the existing shared undo. Armies, scores, shields and orders are session state;
 leaving after a round dismisses that player's soldiers. Active rounds require
-capture or explicit Forfeit to leave; world reset/restore cannot bypass the match.
+capture or explicit Forfeit to leave; a full world reset or restore requires both players to approve, including during a match.
 A dropped connection keeps the army for 60 seconds and pauses combat. Reconnecting
 resumes the round; expiry forfeits. No persistence format changes are needed.
 

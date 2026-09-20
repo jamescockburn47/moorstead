@@ -54,7 +54,7 @@ function start(){
       if(!current())return;
       const text={connecting:'Joining…',syncing:'Receiving world…',saving:'Saving…',ready:'Shared · ∞ health · ∞ supplies',offline:'Offline · reconnecting',denied:'Login required',replaced:'Playing on another device'}[state]||state;
       ui.connectionState=state;ui.status(text);
-      if(['connecting','offline','denied','replaced'].includes(state)){peerCache=[];game?.peers.replace([]);game?.vehicles.disconnected();game?.battle.disconnected();}
+      if(['connecting','offline','denied','replaced'].includes(state)){ui.resetVote({voters:[]});peerCache=[];game?.peers.replace([]);game?.vehicles.disconnected();game?.battle.disconnected();}
       if(state==='offline')ui.message('Connection lost. Changes wait until the saved world reconnects.');
       if(state==='denied'){ui.login.hidden=false;ui.hud.hidden=true;ui.loginError('Enter thi free-play code again.');}
     },
@@ -64,6 +64,7 @@ function start(){
     peer:value=>{if(current())game?.peers.put(value);},leave:id=>{if(current())game?.peers.remove(id);},
     vehicle:value=>{if(current())game?.vehicles.event(value);},
     battle:value=>{if(current())game?.battle.receive(value);},
+    resetVote:value=>{if(current())ui.resetVote(value);},
     transaction:transfer=>{
       if(!current())return;
       if(!game){game=new FreeplayGame(ui,connection,settings);game.peers.replace(peerCache);ui.playing(auth.name);}

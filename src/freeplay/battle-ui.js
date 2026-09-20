@@ -18,8 +18,8 @@ export function battlePanel(battle,parent){
     for(const [team,info]of Object.entries(BATTLE_TEAMS)){
       const b=button(parent,'Join '+info.name,()=>battle.join(team));b.style.borderLeft='8px solid '+info.colour;
     }
-    paragraph(parent,'Your soldiers attack automatically. Walls, trenches and bunkers block bullets. Bring the enemy flag home while yours is safe to win.');
-    paragraph(parent,'Once the fight begins, stay inside the gold boundary until a flag is captured or someone forfeits. Each side can recruit 24 soldiers.');
+    paragraph(parent,'Your soldiers attack automatically. Enter the highlighted enemy flag zone to win, yourself or with soldiers. Flag height offers no protection. Walls block bullets, but attacking soldiers slowly breach them.');
+    paragraph(parent,'Once the fight begins, stay inside the gold boundary until a flag is captured or someone forfeits. Each side can recruit 30 soldiers in three squads.');
     return;
   }
   element('h3','',BATTLE_TEAMS[me.team].name+' · '+(ctf?.phase==='setup'?'Get ready':ctf?.phase==='won'?'Round finished':'Battle on'),parent);
@@ -33,14 +33,25 @@ export function battlePanel(battle,parent){
   }
   if(ctf?.phase==='won')button(parent,'Play another round',()=>{battle.command('battle-reset');g.ui.panel.close();},'fp-primary');
   const own=(battle.state?.soldiers||[]).filter(row=>row.owner===battle.pid),active=own.filter(row=>row.hp>0);
-  paragraph(parent,`${active.length} soldiers fighting · ${own.length-active.length} recovering · ${own.length}/24 recruited`);
-  const recruit=button(parent,'Recruit 6 soldiers',()=>{battle.command('battle-recruit',{count:6});g.ui.panel.close();});recruit.disabled=own.length>=24;
-  paragraph(parent,'New recruits automatically attack when the battle starts. Choose one order for your whole squad:');
+  const teamCount=(battle.state?.soldiers||[]).filter(row=>row.team===me.team).length;
+  paragraph(parent,`${active.length} soldiers fighting · ${own.length-active.length} recovering · ${teamCount}/30 recruited by your team`);
+  const count=Math.max(0,Math.min(10,30-teamCount)),wait=Math.ceil(me.recruitCooldown||0);
+  const recruit=button(parent,wait?`Recruit refresh: ${wait}s`:`Recruit ${count} soldiers`,()=>{battle.command('battle-recruit',{count});g.ui.panel.close();});
+  recruit.disabled=wait>0||count===0;
+  paragraph(parent,'Ten recruits per 25 seconds. Each batch forms a squad and attacks automatically when the battle starts. Fallen troops return together in waves after 8–33 seconds.');
+  const label=element('label','','Command group ',parent),select=element('select','',null,label);select.setAttribute('aria-label','Command group');
+  for(const [value,text] of [[0,'All squads'],[1,'Squad 1'],[2,'Squad 2'],[3,'Squad 3']]){const option=element('option','',text,select);option.value=String(value);}
+  select.value=String(battle.squad||0);select.onchange=()=>{battle.squad=Number(select.value);g.ui.open('battle');};
+  const equipmentWait=Math.ceil(me.equipmentCooldown||0);
+  for(const kind of ['turret','tank']){const b=button(parent,`Place ${kind} at aimed point`,()=>battle.deploy(kind));b.disabled=equipmentWait>0;}
+  paragraph(parent,`Equipment: three turrets and two tanks per team. ${equipmentWait?`Refresh in ${equipmentWait}s.`:'Ready.'} Place within 18 blocks. Tanks follow squad orders and fire automatically; turrets hold their ground. Destroyed equipment must be replaced.`);
+  paragraph(parent,'Choose an order for your selected command group:');
+  const selected=own.filter(row=>!battle.squad||row.squad===battle.squad);
   const orders=element('div','fp-battle-orders',null,parent);
   for(const [order,label,help]of [['attack','Attack the enemy','Advance and fire at enemies.'],['defend','Defend our flag','Guard your base and fire from cover.'],['follow','Follow me','Stay with you and shoot nearby enemies.']]){
     const b=button(orders,label,()=>{battle.order(order);g.ui.panel.close();});element('small','',help,b);
     b.setAttribute('aria-label',label);
-    b.setAttribute('aria-pressed',String(own.length>0&&own.every(s=>s.order===order)));
+    b.setAttribute('aria-pressed',String(selected.length>0&&selected.every(s=>s.order===order)));
   }
   button(parent,'Hold this position',()=>{battle.order('hold');g.ui.panel.close();});
   button(parent,'Move squad to aimed point',()=>{battle.order('hold',true);g.ui.panel.close();});
@@ -57,7 +68,8 @@ export function battlePanel(battle,parent){
     'Watchposts give a clearer shot over hills and low walls, but expose you. Move forward until you can see the enemy — you cannot shoot through a hill.',
     'Shield domes block damage for 12 seconds and recharge in 25 seconds. A blue shield bar absorbs bullets before the green health bar falls.',
     'On a tablet, drag the world to aim and hold Fire. On a computer, click the world to capture the mouse, then hold left click to fire.',
-    'Players carry flags; soldiers fight. A knocked-out carrier drops the flag. Touch your dropped flag to return it, or wait 20 seconds.',
+    'A living player or soldier entering the enemy highlighted flag zone wins immediately. No return trip is needed. Flags on towers can be captured from below.',
+    'Attack squads advance toward the flag and gradually breach blocking walls. Four hits open each block, with at most one hit per second. Keep a route out of your own base.',
     'Mega and atom bombs are banned. A dropped connection pauses the battle for up to 60 seconds and keeps your army. Leaving for longer forfeits.'
   ])paragraph(help,text);
 }

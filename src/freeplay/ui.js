@@ -45,6 +45,7 @@ export class FreeplayUI {
     this.people = element('span', 'fp-people', '', top);
     button(top, 'Map', () => this.open('map'));
     button(top, 'Menu', () => this.open('menu'));
+    this.resetButton=button(top,'Full reset',()=>this.open(this.resetKind||'reset'),'fp-danger');
     this.crosshair = element('div', 'fp-crosshair', '+', this.hud);
     const bottom = element('div', 'fp-bottom', null, this.hud);
     this.selection = element('div', 'fp-selection', 'Planks · ∞', bottom);
@@ -87,6 +88,11 @@ export class FreeplayUI {
     if(text)this.noticeTimer=setTimeout(()=>{this.notice.textContent='';},4500);
   }
   status(text) { if(this.connection.textContent!==text)this.connection.textContent = text; }
+  resetVote(value){
+    this.resetKind=value.kind||'reset';
+    this.resetButton.textContent=value.voters.length?(this.resetKind==='restore'?'Restore · 1/2':'Reset · 1/2'):'Full reset';
+    this.resetButton.title=value.voters.length?'The other player must also approve within 30 seconds.':'Both players must approve.';
+  }
   select(value) {
     this.selected = value;
     const blocks=[...FUTURE_BLOCKS,...BLOCK_CATALOGUE];
@@ -116,6 +122,7 @@ export class FreeplayUI {
       el.style.setProperty('--bomb-colour',weapon.colour);element('strong','',weapon.name+' · ∞',el);element('span','',weapon.description,el);
     }
     if (kind === 'menu') this.menu();
+    if (kind === 'reset'||kind==='restore') this.confirm(kind);
     this.panel.showModal();
   }
   buildCatalogue() {
@@ -173,9 +180,9 @@ export class FreeplayUI {
   }
   confirm(kind) {
     this.panelContent.replaceChildren(); this.panelTitle.textContent = kind === 'reset' ? 'Start our moor afresh?' : 'Bring the saved moor back?';
-    element('p', '', kind === 'reset' ? 'This resets buildings and craters for BOTH players. Your logins stay. A recovery copy is saved first.'
-      : 'This replaces the shared world with its saved state from before the last reset. Both players return to the village.', this.panelContent);
-    button(this.panelContent, kind === 'reset' ? 'Reset for both of us' : 'Restore for both of us', () => { this.actions[kind](); this.panel.close(); }, 'fp-danger');
+    element('p', '', kind === 'reset' ? 'Full reset clears all buildings, craters, vehicles and armies for BOTH players. You must BOTH be online and each press Approve within 30 seconds. One player cannot reset it alone. Your logins stay; the pre-reset world can be restored.'
+      : 'This replaces the shared world with its saved state from before the last reset. BOTH players must approve restoration within 30 seconds. Both return to the village.', this.panelContent);
+    button(this.panelContent, kind === 'reset' ? 'Approve full reset' : 'Approve restoration', () => { this.actions[kind](); this.panel.close(); }, 'fp-danger');
     button(this.panelContent, 'Keep playing', () => this.panel.close());
   }
 }

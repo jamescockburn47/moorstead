@@ -64,14 +64,18 @@ class VehicleServiceTests(unittest.TestCase):
 
     def test_piloted_edit_refused_reset_releases_lease_and_old_drive(self):
         self.seed_vehicle()
-        with self.socket(self.henry) as henry:
+        with self.socket(self.henry) as henry, self.socket(self.james) as james:
             self.start(henry)
+            self.start(james)
             henry.send_json(self.control("claim"))
             lease = self.collect(henry, "vehicle-lease")[-1]
             henry.send_json(self.command("vehicle-edit", vehicleId=self.vehicle["id"]))
             self.assertEqual(henry.receive_json()["code"], "vehicle-pilot")
             time.sleep(0.11)
             henry.send_json(self.command("reset", confirm=True))
+            self.collect(henry, "reset-vote")
+            self.collect(james, "reset-vote")
+            james.send_json(self.command("reset", confirm=True))
             frames = self.collect(henry, "commit")
             self.assertEqual(frames[0]["vehicleCount"], 0)
             self.assertEqual(self.hub.control.leases, {})
