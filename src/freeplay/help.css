@@ -1,0 +1,18 @@
+.fp-guide{display:grid;gap:16px;min-width:0}
+.fp-guide-intro{font-size:14px;color:#40564f}
+.fp-guide-picker{display:grid;gap:7px;font-weight:750}
+.fp-guide-picker select{width:100%;min-width:0;min-height:48px;padding:10px;font:inherit;color:#19343a;background:#fffaf0;border:1px solid #8c9f90;border-radius:8px}
+.fp-guide-picker select:focus-visible{outline:3px solid #b48425;outline-offset:3px}
+.fp-guide .fp-guide-section{padding:20px;border:1px solid #c2c8b5;border-radius:10px;background:#fffaf0;overflow-wrap:anywhere}
+.fp-guide-section h3{font-size:23px;line-height:1.2}
+.fp-guide-section h4{margin:22px 0 8px;font-size:15px;color:#34594e}
+.fp-guide-section .fp-guide-lead{font-size:16px;line-height:1.6;margin-top:10px}
+.fp-guide-section ol,.fp-guide-section ul{padding-left:24px;margin:0}
+.fp-guide-section li{padding-left:4px;margin:12px 0;line-height:1.65}
+.fp-guide-section ol li::marker{font-weight:800;color:#6c531c}
+.fp-guide-section .fp-guide-tip{margin-top:20px;padding:14px;border-left:4px solid #b89036;background:#f3e7c9}
+.fp-guide-nav{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.fp-guide-nav span{white-space:nowrap;font-size:13px}
+.fp-guide-nav button{flex:1}
+@media(max-width:700px){.fp-top{gap:8px}.fp-top button{padding:10px}.fp-guide .fp-guide-section{padding:14px}.fp-guide-nav{gap:7px}.fp-guide-nav button{padding:10px 8px;font-size:13px}}
+@media(max-width:480px){.fp-top .fp-brand{display:none}}

@@ -44,6 +44,7 @@ export class FreeplayUI {
     this.connection = element('span', 'fp-connection', 'Joining…', top);
     this.people = element('span', 'fp-people', '', top);
     button(top, 'Map', () => this.open('map'));
+    button(top, 'Guide', () => this.open('help'));
     button(top, 'Menu', () => this.open('menu'));
     this.resetButton=button(top,'Full reset',()=>this.open(this.resetKind||'reset'),'fp-danger');
     this.crosshair = element('div', 'fp-crosshair', '+', this.hud);
@@ -105,10 +106,10 @@ export class FreeplayUI {
     this.actions.select(value); this.panel.close();
   }
   rotateBuild(){if(this.selected.type==='build')this.select({...this.selected,rotation:((this.selected.rotation||0)+1)%4});}
-  open(kind) {
+  open(kind, topic) {
     this.actions.pause(true); document.exitPointerLock?.(); this.panelContent.replaceChildren();
     this.panelTitle.textContent = {build:'Build anything',bombs:'The bomb cupboard',weapons:'The sci-fi armoury',menu:'Our shared moor',map:'Find each other',vehicles:'Build and drive',battle:'The battlefield',help:'How to play'}[kind];
-    if(kind==='help')playGuide(this.panelContent);
+    if(kind==='help')playGuide(this.panelContent,topic);
     if(kind==='battle')this.actions.battle(this.panelContent);
     if(kind==='vehicles')this.actions.vehicles(this.panelContent);
     if (kind === 'map') this.actions.map(this.panelContent);

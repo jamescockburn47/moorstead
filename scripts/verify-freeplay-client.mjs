@@ -104,3 +104,4 @@ await import('./verify-freeplay-battle-flow.mjs');
 await import('./verify-freeplay-vehicle-selection.mjs');
 await import('./verify-freeplay-vehicle-kits.mjs');
 await import('./verify-freeplay-reset.mjs');
+await import('./verify-freeplay-help.mjs');

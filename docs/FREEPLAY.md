@@ -198,3 +198,15 @@ protection from the identical shot behind a built wall, and damaging default-arm
 combat. A synthetic opponent walks accepted supported steps; exact camera aim is
 disclosed preparation, not a claim of natural touch accuracy. Synthetic accounts
 exercise the real adapter without entering the boys' production sessions.
+
+## In-game guide
+
+The top-bar **Guide** button opens an 11-topic handbook: quick start, controls,
+building, vehicles, battle setup, squads, capture/breaching, equipment, combat,
+saving/reset/recovery and troubleshooting. Menu → How to play opens the same
+guide; Army → Battle guide opens battle setup directly. The chapter picker and
+Previous/Next buttons support touch and keyboard navigation. Reading stops only
+your controls, not the shared match. Content lives in `src/freeplay/help-content.js`;
+rendering in `help-ui.js`, styling in `help.css`. The canonical Free Play gate
+checks the current rules, and `freeplay-help.spec.mjs` exercises all chapters and
+360px portrait through desktop layouts.

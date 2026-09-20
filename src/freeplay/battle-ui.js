@@ -12,6 +12,7 @@ function forfeitPanel(battle,parent){
 }
 export function battlePanel(battle,parent){
   const g=battle.game,me=battle.me,ctf=battle.state?.ctf;
+  button(parent,'Battle guide',()=>g.ui.open('help','battle'));
   if(!me){
     element('h3','','Build. Fight. Capture the flag.',parent);
     paragraph(parent,'Join opposite teams in the marked warzone. Build a base, place your flag, and get ready. Both sides ready starts the fight.');

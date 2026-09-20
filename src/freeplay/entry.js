@@ -1,4 +1,5 @@
 import './style.css';
+import './help.css';
 import { FreeplayUI } from './ui.js';
 import { FreeplayConnection } from './connection.js';
 import { FreeplayGame } from './runtime.js';

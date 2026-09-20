@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const css = readFileSync(new URL('../../src/freeplay/style.css', import.meta.url), 'utf8');
+const css = ['style.css','help.css'].map(name=>readFileSync(new URL('../../src/freeplay/'+name, import.meta.url), 'utf8')).join('\n');
 let script;
 
 test.use({ hasTouch: true, isMobile: true });
