@@ -31,3 +31,33 @@ adapter source and removes the three new modules, preserving the live database.
 Previous client deployment: moorcraft-im11jb85y-james-cockburns-projects.vercel.app.
 Final live results are appended after installation. Physical tablet performance
 has not been measured in this release.
+
+## Live result
+
+PASS: app **1.1.76 / content 7** shipped through `npm run deploy`; full canonical
+verification (93 backend tests) and production build passed. Implementation
+`04a9952`, release `f15111f`; deployment
+`moorcraft-avd5jfe0e-james-cockburns-projects.vercel.app`. The general stack probe
+confirmed 1.1.76 then encountered the deliberately disabled NPC brain (HTTP 502).
+Brain/model services remain off; relay and dashboard are active.
+
+Backend commit `aa0ab3b`: all 16 installed module hashes match the staged release.
+All nine saved tables remained identical: 739,625 active cells, 11 vehicles,
+377,822 checkpoint cells and 16 checkpoint vehicles. Epoch 5 / revision 10801
+remained unchanged. Integrity-checked backup:
+`/home/james/moorstead/freeplay-war-20260920-zone-reset/before/world.sqlite3`.
+
+Public browser probe passed actual login, visible Full reset, zone objective,
+vehicle choices, army join, flag readiness, ten automatic-Attack recruits,
+recruit cooldown, separate group controls, turret/tank controls, leave and sign
+out. Zero page/protocol errors or terrain mutations; revision stayed 10801.
+Disposable invite, account and sessions were revoked, and local credentials were
+removed. The first two smoke attempts exposed probe-only expected-count and UTF-8
+transcription errors; corrected probe then passed. No product change was needed.
+Evidence is retained under the release checkout's ignored `tests/.artifacts/`:
+`freeplay-warflow-live-result.json`, `warflow-probe-cleanup.json`,
+`war-postcheck.json`, `war-deploy.log` and `war-backend-install.log`.
+
+Both players should refresh before playing. Actual combat/capture and joint
+reset/restore were exercised against the isolated real adapter; the live smoke
+preserved the boys' world. Physical Fire tablet performance remains unmeasured.
